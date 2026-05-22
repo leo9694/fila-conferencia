@@ -493,7 +493,34 @@ function montarErroConfirmacao(payload) {
 }
 
 function obterCodigosItem(item) {
+  if (Array.isArray(item.codigosConferencia) && item.codigosConferencia.length > 0) {
+    return item.codigosConferencia
+      .map((entrada) => normalizarCodigo(entrada.codigo))
+      .filter(Boolean);
+  }
+
   return (item.codigos || []).map(normalizarCodigo).filter(Boolean);
+}
+
+function obterEntradaCodigoItem(item, codigo) {
+  const codigoNormalizado = normalizarCodigo(codigo);
+  const entradas = Array.isArray(item.codigosConferencia) && item.codigosConferencia.length > 0
+    ? item.codigosConferencia
+    : (item.codigos || []).map((valor) => ({
+      codigo: valor,
+      tipo: 'CODIGO_BARRAS',
+      multiplicador: 1
+    }));
+
+  return entradas.find((entrada) => normalizarCodigo(entrada.codigo) === codigoNormalizado) || null;
+}
+
+function obterDescricaoEntradaCodigo(entrada) {
+  if (!entrada) return 'codigo';
+  if (entrada.tipo === 'UNIDADE_ALTERNATIVA') return entrada.descricao || 'unidade alternativa';
+  if (entrada.tipo === 'REFERENCIA') return 'referencia';
+  if (entrada.tipo === 'CODIGO_PRODUTO') return 'codigo do produto';
+  return entrada.descricao || 'codigo de barras';
 }
 
 function itemEstaOk(item) {
@@ -1247,10 +1274,14 @@ function adicionarConferenciaPorCodigo() {
     return;
   }
 
-  const itensCompativeis = itensPedidoSelecionado.filter((candidate) => {
-    return obterCodigosItem(candidate).includes(codigo);
-  });
-  const item = itensCompativeis.find((candidate) => quantidadePendenteItem(candidate) > 0) || itensCompativeis[0];
+  const itensCompativeis = itensPedidoSelecionado
+    .map((candidate) => ({
+      item: candidate,
+      entrada: obterEntradaCodigoItem(candidate, codigo)
+    }))
+    .filter((candidate) => candidate.entrada);
+  const match = itensCompativeis.find((candidate) => quantidadePendenteItem(candidate.item) > 0) || itensCompativeis[0];
+  const item = match?.item;
 
   if (!item) {
     scanStatus.innerHTML = `<span class="danger-text">Codigo ${codigo} nao encontrado neste pedido.</span>`;
@@ -1258,14 +1289,21 @@ function adicionarConferenciaPorCodigo() {
     return;
   }
 
-  if (qtd > quantidadePendenteItem(item)) {
-    scanStatus.innerHTML = `<span class="danger-text">Quantidade maior que o pendente do item. Pendente: ${formatarQuantidade(quantidadePendenteItem(item))}.</span>`;
+  const multiplicador = Math.max(0, Number(match.entrada.multiplicador) || 1);
+  const qtdConvertida = qtd * multiplicador;
+  const pendente = quantidadePendenteItem(item);
+
+  if (qtdConvertida > pendente) {
+    scanStatus.innerHTML = `<span class="danger-text">Quantidade maior que o pendente do item. Pendente: ${formatarQuantidade(pendente)}.</span>`;
     scanQtd.select();
     return;
   }
 
-  item.qtdConferida += qtd;
-  scanStatus.innerHTML = `<span class="success-text">${item.codProd} conferido: ${formatarQuantidade(item.qtdConferida)} de ${formatarQuantidade(item.qtdNeg)}.</span>`;
+  item.qtdConferida += qtdConvertida;
+  const detalheConversao = multiplicador !== 1
+    ? ` (${formatarQuantidade(qtd)} x ${formatarQuantidade(multiplicador)} = ${formatarQuantidade(qtdConvertida)} un.)`
+    : '';
+  scanStatus.innerHTML = `<span class="success-text">${item.codProd} conferido por ${obterDescricaoEntradaCodigo(match.entrada)}${detalheConversao}: ${formatarQuantidade(item.qtdConferida)} de ${formatarQuantidade(item.qtdNeg)}.</span>`;
   scanCodigo.value = '';
   scanQtd.value = '1';
   renderizarItensConferencia();

@@ -57,6 +57,27 @@ function normalizarNumero(valor) {
   return Number.isFinite(numero) ? numero : 0;
 }
 
+function valorPreenchido(valor) {
+  return valor !== null && valor !== undefined && String(valor).trim() !== '';
+}
+
+function adicionarCodigoConferencia(lista, codigo, tipo, multiplicador = 1, descricao = '') {
+  if (!valorPreenchido(codigo)) return;
+
+  const codigoNormalizado = String(codigo).trim();
+  const fator = normalizarNumero(multiplicador) || 1;
+  const jaExiste = lista.some((item) => String(item.codigo).trim().toUpperCase() === codigoNormalizado.toUpperCase());
+
+  if (!jaExiste) {
+    lista.push({
+      codigo: codigoNormalizado,
+      tipo,
+      multiplicador: fator,
+      descricao
+    });
+  }
+}
+
 function formatarDataHoraSankhya(data = new Date()) {
   const dia = String(data.getDate()).padStart(2, '0');
   const mes = String(data.getMonth() + 1).padStart(2, '0');
@@ -540,29 +561,77 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
       ORDER BY ITE.SEQUENCIA
     `);
 
+    const codigosProduto = [...new Set(rows.map((row) => Number(row.CODPROD)).filter(Boolean))];
+    let unidadesAlternativas = [];
+
+    if (codigosProduto.length > 0) {
+      unidadesAlternativas = await executeQuery(`
+        SELECT
+          VOA.CODPROD,
+          VOA.CODVOL,
+          VOA.CODBARRA,
+          VOA.DIVIDEMULTIPLICA,
+          CAST(NVL(VOA.QUANTIDADE, 1) AS NUMBER(15,6)) AS QUANTIDADE
+        FROM TGFVOA VOA
+        WHERE VOA.CODPROD IN (${codigosProduto.join(',')})
+          AND NVL(VOA.ATIVO, 'S') = 'S'
+          AND VOA.CODBARRA IS NOT NULL
+      `);
+    }
+
+    const unidadesPorProduto = new Map();
+    unidadesAlternativas.forEach((row) => {
+      const codProd = Number(row.CODPROD);
+      if (!unidadesPorProduto.has(codProd)) {
+        unidadesPorProduto.set(codProd, []);
+      }
+
+      unidadesPorProduto.get(codProd).push(row);
+    });
+
     res.json({
       nunota,
-      itens: rows.map((row) => ({
-        nunota: row.NUNOTA,
-        sequencia: row.SEQUENCIA,
-        codProd: row.CODPROD,
-        descrProd: row.DESCRPROD || `Produto ${row.CODPROD}`,
-        controle: row.CONTROLE || '',
-        codVol: row.CODVOL || 'UN',
-        qtdNeg: normalizarNumero(row.QTDNEG),
-        vlrUnit: normalizarNumero(row.VLRUNIT),
-        codigoBarras: row.CODIGO_BARRAS || '',
-        codigos: [
-          row.CODPROD,
-          row.GTINNFE,
-          row.GTINTRIBNFE,
-          row.PRODUTONFE,
-          row.REFERENCIA,
-          row.AD_CODBAR,
-          row.AD_CBARANT
-        ].filter((valor) => valor !== null && valor !== undefined && String(valor).trim() !== '')
-          .map((valor) => String(valor).trim())
-      }))
+      itens: rows.map((row) => {
+        const codigosConferencia = [];
+
+        (unidadesPorProduto.get(Number(row.CODPROD)) || []).forEach((unidade) => {
+          const quantidade = normalizarNumero(unidade.QUANTIDADE) || 1;
+          const operacao = String(unidade.DIVIDEMULTIPLICA || '').trim().toUpperCase();
+          const multiplicador = operacao.startsWith('D') && quantidade !== 0
+            ? 1 / quantidade
+            : quantidade;
+
+          adicionarCodigoConferencia(
+            codigosConferencia,
+            unidade.CODBARRA,
+            'UNIDADE_ALTERNATIVA',
+            multiplicador,
+            unidade.CODVOL ? `Unidade alternativa ${unidade.CODVOL}` : 'Unidade alternativa'
+          );
+        });
+
+        adicionarCodigoConferencia(codigosConferencia, row.REFERENCIA, 'REFERENCIA', 1, 'Referencia');
+        adicionarCodigoConferencia(codigosConferencia, row.GTINNFE, 'CODIGO_BARRAS', 1, 'Codigo de barras');
+        adicionarCodigoConferencia(codigosConferencia, row.GTINTRIBNFE, 'CODIGO_BARRAS', 1, 'Codigo de barras tributavel');
+        adicionarCodigoConferencia(codigosConferencia, row.PRODUTONFE, 'CODIGO_BARRAS', 1, 'Codigo do produto na NFe');
+        adicionarCodigoConferencia(codigosConferencia, row.AD_CODBAR, 'CODIGO_BARRAS', 1, 'Codigo de barras adicional');
+        adicionarCodigoConferencia(codigosConferencia, row.AD_CBARANT, 'CODIGO_BARRAS', 1, 'Codigo de barras anterior');
+        adicionarCodigoConferencia(codigosConferencia, row.CODPROD, 'CODIGO_PRODUTO', 1, 'Codigo do produto');
+
+        return {
+          nunota: row.NUNOTA,
+          sequencia: row.SEQUENCIA,
+          codProd: row.CODPROD,
+          descrProd: row.DESCRPROD || `Produto ${row.CODPROD}`,
+          controle: row.CONTROLE || '',
+          codVol: row.CODVOL || 'UN',
+          qtdNeg: normalizarNumero(row.QTDNEG),
+          vlrUnit: normalizarNumero(row.VLRUNIT),
+          codigoBarras: row.CODIGO_BARRAS || '',
+          codigos: codigosConferencia.map((item) => item.codigo),
+          codigosConferencia
+        };
+      })
     });
   } catch (err) {
     console.error(err);
