@@ -853,8 +853,8 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
   const razaoTexto = etiqueta.razaoSocial || etiqueta.nomeParc || '-';
   const nomeParc = escaparHtml(nomeTexto);
   const razaoSocial = escaparHtml(razaoTexto);
-  const classeNome = nomeTexto.length > 48 ? 'fit-xsmall' : nomeTexto.length > 38 ? 'fit-small' : '';
-  const classeRazao = razaoTexto.length > 48 ? 'fit-xsmall' : razaoTexto.length > 38 ? 'fit-small' : '';
+  const classeNome = nomeTexto.length > 52 ? 'fit-xsmall' : nomeTexto.length > 42 ? 'fit-small' : '';
+  const classeRazao = razaoTexto.length > 52 ? 'fit-xsmall' : razaoTexto.length > 42 ? 'fit-small' : '';
   const cidadeUf = escaparHtml([etiqueta.cidade, etiqueta.uf].filter(Boolean).join('-') || '-');
   const endereco = escaparHtml(etiqueta.endereco || '-');
   const transportadora = escaparHtml(etiqueta.transportadora || 'TRANSPORTADORA NAO INFORMADA');
@@ -865,20 +865,69 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
     return `
       <section class="label">
         <div class="top">
-          <div class="pedido-box">
-            <strong>Pedido: ${pedido}</strong>
-            <small>Informacao consta no rodape da NFe</small>
+          <div class="icon-box package-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5z"/>
+              <path d="M4 7.5 12 12l8-4.5"/>
+              <path d="M12 12v9"/>
+            </svg>
           </div>
-          <div class="volume-big">${volumes}</div>
+          <div class="pedido-area">
+            <div class="section-label">Pedido</div>
+            <div class="pedido-numero">${pedido}</div>
+            <div class="pedido-info">Informacao consta no rodape da NF-e</div>
+          </div>
+          <div class="separator"></div>
+          <div class="volume-area">
+            <div class="section-label">Volume</div>
+            <div class="volume-big">${volumes}</div>
+          </div>
+          <div class="separator small"></div>
           <div class="volume-text">Vol: ${volumeAtual}</div>
         </div>
+
         <div class="cliente">
-          <strong class="${classeNome}">${nomeParc}</strong>
-          <em class="${classeRazao}">${razaoSocial}</em>
+          <div class="icon-box inverse user-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <circle cx="12" cy="8" r="4"/>
+              <path d="M4 21c.8-4.5 4-7 8-7s7.2 2.5 8 7z"/>
+            </svg>
+          </div>
+          <div class="cliente-texto">
+            <div class="section-label inverse-label">Destino</div>
+            <strong class="${classeNome}">${nomeParc}</strong>
+            <em class="${classeRazao}">${razaoSocial}</em>
+          </div>
         </div>
-        <div class="endereco">${endereco}</div>
-        <div class="cidade">${cidadeUf}</div>
-        <div class="transportadora">${transportadora}</div>
+
+        <div class="endereco-bloco">
+          <div class="icon-box pin-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M12 22s7-7.1 7-13a7 7 0 0 0-14 0c0 5.9 7 13 7 13z"/>
+              <circle cx="12" cy="9" r="2.6"/>
+            </svg>
+          </div>
+          <div class="endereco-texto">
+            <div class="section-label">Endereco</div>
+            <div class="endereco">${endereco}</div>
+            <div class="cidade">${cidadeUf}</div>
+          </div>
+        </div>
+
+        <div class="transportadora-bloco">
+          <div class="icon-box truck-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24">
+              <path d="M3 7h11v9H3z"/>
+              <path d="M14 10h3l3 3v3h-6z"/>
+              <circle cx="7" cy="18" r="2"/>
+              <circle cx="17" cy="18" r="2"/>
+            </svg>
+          </div>
+          <div>
+            <div class="section-label">Transportadora</div>
+            <div class="transportadora">${transportadora}</div>
+          </div>
+        </div>
       </section>
     `;
   }).join('');
@@ -895,31 +944,182 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
     .label {
       width: 100mm;
       height: 50mm;
-      padding: 2.2mm 4mm;
+      padding: 2.7mm 3.2mm 2mm;
       background: #fff;
-      border: 1px solid #000;
+      border: 0.45mm solid #000;
+      border-radius: 2.6mm;
       page-break-after: always;
       overflow: hidden;
     }
-    .top { display: grid; grid-template-columns: 45mm 24mm 1fr; align-items: center; gap: 2mm; height: 11mm; }
-    .pedido-box { border: 1px solid #000; border-radius: 4mm; text-align: center; padding: 1.2mm 1mm 0.8mm; line-height: 1; }
-    .pedido-box strong { display: block; font-size: 11pt; }
-    .pedido-box small { display: block; margin-top: 1mm; font-size: 4.5pt; }
-    .volume-big { height: 10mm; background: #000 !important; color: #fff !important; display: grid; place-items: center; font-size: 20pt; font-weight: 900; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-    .volume-text { font-size: 13pt; font-weight: 900; text-align: right; }
-    .cliente { margin-top: 1.5mm; background: #000 !important; color: #fff !important; padding: 1mm 1.2mm; height: 13.5mm; overflow: hidden; print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-    .cliente strong, .cliente em { display: block; white-space: nowrap; overflow: visible; text-overflow: clip; transform-origin: left center; }
-    .cliente strong { font-size: 9.2pt; line-height: 1.12; }
-    .cliente em { margin-top: 1.6mm; font-size: 9pt; font-weight: 900; }
-    .cliente .fit-small { font-size: 7.8pt; }
-    .cliente .fit-xsmall { font-size: 6.6pt; }
-    .endereco { text-align: center; font-size: 8.5pt; margin-top: 1mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .cidade { text-align: center; font-size: 12pt; font-weight: 900; margin-top: 3mm; }
-    .transportadora { text-align: center; font-size: 7.5pt; font-weight: 900; margin-top: 3mm; }
+    .top {
+      display: grid;
+      grid-template-columns: 9mm 43mm 0.35mm 20mm 0.35mm 14mm;
+      align-items: center;
+      gap: 2mm;
+      height: 12.5mm;
+    }
+    .icon-box {
+      width: 7.8mm;
+      height: 7.8mm;
+      border-radius: 1.5mm;
+      background: #000 !important;
+      color: #fff !important;
+      display: grid;
+      place-items: center;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }
+    .icon-box svg {
+      width: 5.3mm;
+      height: 5.3mm;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    .icon-box.inverse {
+      background: #fff !important;
+      color: #000 !important;
+    }
+    .user-icon svg { fill: currentColor; stroke: none; }
+    .truck-icon svg { width: 5.4mm; height: 5.4mm; }
+    .section-label {
+      font-size: 6.8pt;
+      line-height: 1;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 900;
+    }
+    .pedido-numero {
+      font-size: 26pt;
+      line-height: 0.9;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+    .pedido-info {
+      margin-top: 0.6mm;
+      color: #3d3d3d;
+      font-size: 5.2pt;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+    .separator {
+      width: 0.35mm;
+      height: 10.5mm;
+      background: #999;
+    }
+    .separator.small { height: 9.6mm; }
+    .volume-area .section-label { margin-bottom: 0.9mm; }
+    .volume-big {
+      height: 8.7mm;
+      border-radius: 1.6mm;
+      background: #000 !important;
+      color: #fff !important;
+      display: grid;
+      place-items: center;
+      font-size: 24pt;
+      line-height: 1;
+      font-weight: 900;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }
+    .volume-text {
+      font-size: 16pt;
+      line-height: 1;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+    .cliente {
+      display: grid;
+      grid-template-columns: 9mm minmax(0, 1fr);
+      gap: 2mm;
+      align-items: center;
+      margin-top: 2mm;
+      background: #000 !important;
+      color: #fff !important;
+      border-radius: 1.1mm;
+      padding: 1.6mm 1.8mm;
+      height: 12.3mm;
+      overflow: hidden;
+      print-color-adjust: exact;
+      -webkit-print-color-adjust: exact;
+    }
+    .cliente strong,
+    .cliente em {
+      display: block;
+      white-space: nowrap;
+      overflow: visible;
+      text-overflow: clip;
+      transform-origin: left center;
+    }
+    .cliente strong {
+      font-size: 12pt;
+      line-height: 1;
+      font-weight: 900;
+    }
+    .cliente em {
+      margin-top: 1.1mm;
+      font-size: 8.4pt;
+      line-height: 1;
+      font-weight: 900;
+    }
+    .cliente .fit-small { font-size: 9.2pt; }
+    .cliente .fit-xsmall { font-size: 7.6pt; }
+    .inverse-label {
+      color: #fff !important;
+      margin-bottom: 0.8mm;
+    }
+    .endereco-bloco {
+      display: grid;
+      grid-template-columns: 9mm minmax(0, 1fr);
+      gap: 2mm;
+      align-items: start;
+      margin-top: 1.8mm;
+      min-height: 15.2mm;
+    }
+    .endereco-texto { min-width: 0; }
+    .endereco {
+      margin-top: 0.7mm;
+      font-size: 8.4pt;
+      line-height: 1;
+      font-weight: 800;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .cidade {
+      margin-top: 1.6mm;
+      font-size: 22pt;
+      line-height: 0.92;
+      font-weight: 900;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: clip;
+    }
+    .transportadora-bloco {
+      display: grid;
+      grid-template-columns: 9mm minmax(0, 1fr);
+      gap: 2mm;
+      align-items: center;
+      border-top: 0.25mm solid #999;
+      padding-top: 1.1mm;
+      margin-top: 0.8mm;
+    }
+    .transportadora {
+      margin-top: 0.8mm;
+      font-size: 12.5pt;
+      line-height: 1;
+      font-weight: 900;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
     @media print {
       body { background: #fff; }
       .label { border: none; }
-      .volume-big, .cliente { background: #000 !important; color: #fff !important; }
+      .volume-big, .cliente, .icon-box { background: #000 !important; color: #fff !important; }
+      .icon-box.inverse { background: #fff !important; color: #000 !important; }
     }
   </style>
 </head>
