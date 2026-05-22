@@ -16,6 +16,12 @@ const app = express();
 app.use(express.json());
 
 app.use((req, res, next) => {
+  if (req.method === 'GET' || req.method === 'HEAD') {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+
   if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
     next();
     return;
