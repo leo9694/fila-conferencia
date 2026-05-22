@@ -944,7 +944,7 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
     .label {
       width: 100mm;
       height: 50mm;
-      padding: 2.7mm 3.2mm 2mm;
+      padding: 1.6mm 3mm 1.4mm;
       background: #fff;
       border: 0.45mm solid #000;
       border-radius: 2.6mm;
@@ -953,14 +953,14 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
     }
     .top {
       display: grid;
-      grid-template-columns: 9mm 43mm 0.35mm 20mm 0.35mm 14mm;
+      grid-template-columns: 8mm 42mm 0.3mm 20mm 0.3mm 15mm;
       align-items: center;
-      gap: 2mm;
-      height: 12.5mm;
+      gap: 1.7mm;
+      height: 10.8mm;
     }
     .icon-box {
-      width: 7.8mm;
-      height: 7.8mm;
+      width: 7mm;
+      height: 7mm;
       border-radius: 1.5mm;
       background: #000 !important;
       color: #fff !important;
@@ -970,8 +970,8 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
       -webkit-print-color-adjust: exact;
     }
     .icon-box svg {
-      width: 5.3mm;
-      height: 5.3mm;
+      width: 4.8mm;
+      height: 4.8mm;
       fill: none;
       stroke: currentColor;
       stroke-width: 1.8;
@@ -985,62 +985,62 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
     .user-icon svg { fill: currentColor; stroke: none; }
     .truck-icon svg { width: 5.4mm; height: 5.4mm; }
     .section-label {
-      font-size: 6.8pt;
+      font-size: 6pt;
       line-height: 1;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       font-weight: 900;
     }
     .pedido-numero {
-      font-size: 26pt;
-      line-height: 0.9;
+      font-size: 23pt;
+      line-height: 0.86;
       font-weight: 900;
       letter-spacing: 0;
     }
     .pedido-info {
-      margin-top: 0.6mm;
+      margin-top: 0.3mm;
       color: #3d3d3d;
-      font-size: 5.2pt;
+      font-size: 4.7pt;
       font-weight: 800;
       white-space: nowrap;
     }
     .separator {
-      width: 0.35mm;
-      height: 10.5mm;
+      width: 0.3mm;
+      height: 9.2mm;
       background: #999;
     }
-    .separator.small { height: 9.6mm; }
-    .volume-area .section-label { margin-bottom: 0.9mm; }
+    .separator.small { height: 8.8mm; }
+    .volume-area .section-label { margin-bottom: 0.4mm; }
     .volume-big {
-      height: 8.7mm;
-      border-radius: 1.6mm;
+      height: 7.5mm;
+      border-radius: 1.3mm;
       background: #000 !important;
       color: #fff !important;
       display: grid;
       place-items: center;
-      font-size: 24pt;
+      font-size: 21pt;
       line-height: 1;
       font-weight: 900;
       print-color-adjust: exact;
       -webkit-print-color-adjust: exact;
     }
     .volume-text {
-      font-size: 16pt;
+      font-size: 14pt;
       line-height: 1;
       font-weight: 900;
       white-space: nowrap;
     }
     .cliente {
       display: grid;
-      grid-template-columns: 9mm minmax(0, 1fr);
-      gap: 2mm;
+      grid-template-columns: 8mm minmax(0, 1fr);
+      gap: 1.8mm;
       align-items: center;
-      margin-top: 2mm;
+      margin-top: 1.2mm;
       background: #000 !important;
       color: #fff !important;
       border-radius: 1.1mm;
-      padding: 1.6mm 1.8mm;
-      height: 12.3mm;
+      padding: 1mm 1.6mm;
+      height: 10mm;
       overflow: hidden;
       print-color-adjust: exact;
       -webkit-print-color-adjust: exact;
@@ -1054,34 +1054,34 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
       transform-origin: left center;
     }
     .cliente strong {
-      font-size: 12pt;
+      font-size: 10.6pt;
       line-height: 1;
       font-weight: 900;
     }
     .cliente em {
-      margin-top: 1.1mm;
-      font-size: 8.4pt;
+      margin-top: 0.8mm;
+      font-size: 7.2pt;
       line-height: 1;
       font-weight: 900;
     }
-    .cliente .fit-small { font-size: 9.2pt; }
-    .cliente .fit-xsmall { font-size: 7.6pt; }
+    .cliente .fit-small { font-size: 8.4pt; }
+    .cliente .fit-xsmall { font-size: 6.9pt; }
     .inverse-label {
       color: #fff !important;
-      margin-bottom: 0.8mm;
+      margin-bottom: 0.55mm;
     }
     .endereco-bloco {
       display: grid;
-      grid-template-columns: 9mm minmax(0, 1fr);
-      gap: 2mm;
+      grid-template-columns: 8mm minmax(0, 1fr);
+      gap: 1.8mm;
       align-items: start;
-      margin-top: 1.8mm;
-      min-height: 15.2mm;
+      margin-top: 1.1mm;
+      min-height: 13.2mm;
     }
     .endereco-texto { min-width: 0; }
     .endereco {
-      margin-top: 0.7mm;
-      font-size: 8.4pt;
+      margin-top: 0.45mm;
+      font-size: 7.8pt;
       line-height: 1;
       font-weight: 800;
       white-space: nowrap;
@@ -1089,9 +1089,9 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
       text-overflow: ellipsis;
     }
     .cidade {
-      margin-top: 1.6mm;
-      font-size: 22pt;
-      line-height: 0.92;
+      margin-top: 1.1mm;
+      font-size: 18pt;
+      line-height: 0.9;
       font-weight: 900;
       white-space: nowrap;
       overflow: hidden;
@@ -1099,16 +1099,16 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
     }
     .transportadora-bloco {
       display: grid;
-      grid-template-columns: 9mm minmax(0, 1fr);
-      gap: 2mm;
+      grid-template-columns: 8mm minmax(0, 1fr);
+      gap: 1.8mm;
       align-items: center;
       border-top: 0.25mm solid #999;
-      padding-top: 1.1mm;
-      margin-top: 0.8mm;
+      padding-top: 0.8mm;
+      margin-top: 0.3mm;
     }
     .transportadora {
-      margin-top: 0.8mm;
-      font-size: 12.5pt;
+      margin-top: 0.45mm;
+      font-size: 10.5pt;
       line-height: 1;
       font-weight: 900;
       white-space: nowrap;
