@@ -1,0 +1,1092 @@
+const express = require('express');
+const router = express.Router();
+const { executeQuery, executeService } = require('./api/sankhyaApi');
+const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
+
+const conferenciaTimerStore = criarConferenciaTimerStore();
+
+function obterDataHoje() {
+  const agora = new Date();
+  const ano = agora.getFullYear();
+  const mes = String(agora.getMonth() + 1).padStart(2, '0');
+  const dia = String(agora.getDate()).padStart(2, '0');
+
+  return `${ano}-${mes}-${dia}`;
+}
+
+function obterIntervaloDatas(dataInicial, dataFinal) {
+  const inicioValido = typeof dataInicial === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dataInicial);
+  const fimValido = typeof dataFinal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dataFinal);
+  const hoje = obterDataHoje();
+
+  let inicio = inicioValido ? dataInicial : hoje;
+  let fim = fimValido ? dataFinal : inicio;
+
+  if (inicio > fim) {
+    [inicio, fim] = [fim, inicio];
+  }
+
+  return { inicio, fim };
+}
+
+function obterFiltroEmpresa(empresa) {
+  if (empresa === undefined || empresa === null) {
+    return null;
+  }
+
+  const valor = String(empresa).trim();
+  return /^\d+$/.test(valor) ? valor : null;
+}
+
+function sqlFiltroEmpresa(empresa) {
+  return empresa ? `AND TO_CHAR(CAB.CODEMP) = '${empresa}'` : '';
+}
+
+function obterNumeroInteiro(valor) {
+  const numero = Number(valor);
+  return Number.isInteger(numero) && numero > 0 ? numero : null;
+}
+
+function obterCodigoUsuario(valor) {
+  const numero = Number(valor);
+  return Number.isInteger(numero) && numero >= 0 ? numero : null;
+}
+
+function normalizarNumero(valor) {
+  const numero = Number(valor);
+  return Number.isFinite(numero) ? numero : 0;
+}
+
+function formatarDataHoraSankhya(data = new Date()) {
+  const dia = String(data.getDate()).padStart(2, '0');
+  const mes = String(data.getMonth() + 1).padStart(2, '0');
+  const ano = data.getFullYear();
+  const hora = String(data.getHours()).padStart(2, '0');
+  const minuto = String(data.getMinutes()).padStart(2, '0');
+  const segundo = String(data.getSeconds()).padStart(2, '0');
+
+  return `${dia}/${mes}/${ano} ${hora}:${minuto}:${segundo}`;
+}
+
+function campoApi(valor) {
+  return {
+    $: valor === null || valor === undefined ? '' : String(valor)
+  };
+}
+
+async function salvarRegistroApi(rootEntity, campos) {
+  return executeService('CRUDServiceProvider.saveRecord', {
+    dataSet: {
+      rootEntity,
+      includePresentationFields: 'N',
+      entity: {
+        path: '',
+        fieldset: {
+          list: Object.keys(campos).join(',')
+        }
+      },
+      dataRow: {
+        localFields: Object.fromEntries(
+          Object.entries(campos).map(([campo, valor]) => [campo, campoApi(valor)])
+        )
+      }
+    }
+  });
+}
+
+async function atualizarRegistroApi(rootEntity, chave, campos) {
+  return executeService('CRUDServiceProvider.saveRecord', {
+    dataSet: {
+      rootEntity,
+      includePresentationFields: 'N',
+      entity: {
+        path: '',
+        fieldset: {
+          list: [...Object.keys(chave), ...Object.keys(campos)].join(',')
+        }
+      },
+      dataRow: {
+        key: Object.fromEntries(
+          Object.entries(chave).map(([campo, valor]) => [campo, campoApi(valor)])
+        ),
+        localFields: Object.fromEntries(
+          Object.entries(campos).map(([campo, valor]) => [campo, campoApi(valor)])
+        )
+      }
+    }
+  });
+}
+
+async function finalizarConferenciaNativa(nuconf, nunota) {
+  return executeService(
+    'ConferenciaSP.finalizarConferencia',
+    {
+      params: {
+        nuConf: nuconf,
+        nuNota: nunota
+      }
+    },
+    { modulePath: 'mgecom' }
+  );
+}
+
+function coletarDetalhesSankhya(valor, prefixo = '') {
+  if (!valor || typeof valor !== 'object') {
+    return [];
+  }
+
+  const nomesRelevantes = new Set([
+    'status',
+    'statusMessage',
+    'message',
+    'mensagem',
+    'msg',
+    'erro',
+    'error',
+    'descricao',
+    'podeCortar',
+    'podeRecontar',
+    'existeConferenciaHaMenor',
+    'nuConf',
+    'nuNota'
+  ]);
+
+  return Object.entries(valor).flatMap(([chave, conteudo]) => {
+    const caminho = prefixo ? `${prefixo}.${chave}` : chave;
+
+    if (conteudo && typeof conteudo === 'object') {
+      return coletarDetalhesSankhya(conteudo, caminho);
+    }
+
+    if (!nomesRelevantes.has(chave) && !/erro|msg|mens|status|diverg|conf/i.test(chave)) {
+      return [];
+    }
+
+    if (conteudo === null || conteudo === undefined || conteudo === '') {
+      return [];
+    }
+
+    return [`${caminho}: ${conteudo}`];
+  });
+}
+
+function traduzirStatusConferencia(status) {
+  const statusNormalizado = String(status || '').toUpperCase();
+
+  if (statusNormalizado === 'D') {
+    return 'Status D: o Sankhya classificou a conferencia como divergente/nao finalizada.';
+  }
+
+  if (statusNormalizado === 'A') {
+    return 'Status A: a conferencia continua em andamento no Sankhya.';
+  }
+
+  if (statusNormalizado === 'F') {
+    return 'Status F: conferencia finalizada.';
+  }
+
+  return status ? `Status ${status}: status retornado pelo Sankhya.` : null;
+}
+
+function finalizacaoPermiteFechamentoOperacional(resultadoFinalizacao) {
+  const body = resultadoFinalizacao?.responseBody || {};
+  return String(body.status || '').toUpperCase() === 'D' && String(body.podeCortar || '').toLowerCase() === 'true';
+}
+
+function numeroApi(valor) {
+  const numero = normalizarNumero(valor);
+  return Number.isInteger(numero) ? String(numero) : numero.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
+}
+
+async function alterarItemNotaApi(nunota, item, novaQuantidade) {
+  const vlrUnit = normalizarNumero(item.VLRUNIT);
+  const vlrTot = normalizarNumero(novaQuantidade) * vlrUnit;
+
+  return executeService(
+    'CACSP.incluirAlterarItemNota',
+    {
+      nota: {
+        NUNOTA: String(nunota),
+        itens: {
+          item: {
+            CODPROD: campoApi(item.CODPROD),
+            NUNOTA: campoApi(nunota),
+            SEQUENCIA: campoApi(item.SEQUENCIA),
+            QTDNEG: campoApi(numeroApi(novaQuantidade)),
+            VLRUNIT: campoApi(numeroApi(vlrUnit)),
+            VLRTOT: campoApi(numeroApi(vlrTot)),
+            CODVOL: campoApi(item.CODVOL || 'UN'),
+            CODLOCALORIG: campoApi(item.CODLOCALORIG || 0),
+            CONTROLE: campoApi(item.CONTROLE || ''),
+            VLRDESC: campoApi(numeroApi(item.VLRDESC || 0)),
+            PERCDESC: campoApi(numeroApi(item.PERCDESC || 0))
+          }
+        }
+      }
+    },
+    { modulePath: 'mgecom' }
+  );
+}
+
+async function excluirItemNotaApi(nunota, sequencia) {
+  return executeService(
+    'CACSP.excluirItemNota',
+    {
+      nota: {
+        itens: {
+          item: {
+            NUNOTA: campoApi(nunota),
+            SEQUENCIA: campoApi(sequencia)
+          }
+        }
+      }
+    },
+    { modulePath: 'mgecom' }
+  );
+}
+
+async function aplicarCortesNoPedido({ nunota, itensPedido, conferidosPorSequencia, cortadosPorSequencia }) {
+  const cortes = itensPedido
+    .map((item) => {
+      const sequencia = Number(item.SEQUENCIA);
+      const qtdOriginal = normalizarNumero(item.QTDNEG);
+      const qtdConferida = conferidosPorSequencia.get(sequencia) ?? 0;
+      const qtdCortada = cortadosPorSequencia.get(sequencia) ?? 0;
+      const novaQuantidade = Math.max(0, qtdOriginal - qtdCortada);
+
+      return {
+        sequencia,
+        qtdOriginal,
+        qtdConferida,
+        qtdCortada,
+        novaQuantidade
+      };
+    })
+    .filter((item) => item.qtdCortada > 0);
+
+  for (const corte of cortes) {
+    if (Math.abs(corte.novaQuantidade - corte.qtdConferida) > 0.0001) {
+      throw new Error(`Corte invalido no item ${corte.sequencia}: a quantidade restante precisa bater com a quantidade conferida.`);
+    }
+
+    if (corte.novaQuantidade <= 0) {
+      await excluirItemNotaApi(nunota, corte.sequencia);
+    } else {
+      const itemPedido = itensPedido.find((item) => Number(item.SEQUENCIA) === corte.sequencia);
+      await alterarItemNotaApi(nunota, itemPedido, corte.novaQuantidade);
+    }
+  }
+
+  return cortes;
+}
+
+async function finalizarConferenciaOperacional(nuconf, nunota, codUsu) {
+  await atualizarRegistroApi(
+    'CabecalhoConferencia',
+    { NUCONF: nuconf },
+    {
+      STATUS: 'F',
+      DHFINCONF: formatarDataHoraSankhya(),
+      CODUSUCONF: codUsu
+    }
+  );
+
+  await atualizarRegistroApi(
+    'CabecalhoNota',
+    { NUNOTA: nunota },
+    { NUCONFATUAL: nuconf }
+  );
+}
+
+function normalizarDataSankhya(valor) {
+  if (!valor) {
+    return null;
+  }
+
+  if (valor instanceof Date) {
+    return valor.toISOString();
+  }
+
+  const texto = String(valor).trim();
+  const sankhyaMatch = texto.match(/^(\d{2})(\d{2})(\d{4})(?:\s+(\d{2}):(\d{2}):(\d{2}))?$/);
+
+  if (sankhyaMatch) {
+    const [, dia, mes, ano, hora = '00', minuto = '00', segundo = '00'] = sankhyaMatch;
+    return `${ano}-${mes}-${dia}T${hora}:${minuto}:${segundo}`;
+  }
+
+  const brMatch = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}):(\d{2}))?$/);
+
+  if (brMatch) {
+    const [, dia, mes, ano, hora = '00', minuto = '00', segundo = '00'] = brMatch;
+    return `${ano}-${mes}-${dia}T${hora}:${minuto}:${segundo}`;
+  }
+
+  return texto;
+}
+
+function normalizarLinhaConferencia(row) {
+  return {
+    ...row,
+    DTNEG: normalizarDataSankhya(row.DTNEG)
+  };
+}
+
+function montarSqlConferencias(intervalo, empresa) {
+  return `
+    SELECT
+      CAB.DTNEG,
+      CAB.NUNOTA,
+      CAB.CODEMP,
+      PAR.RAZAOSOCIAL AS EMPRESA,
+      CAB.CODPARC AS CODIGO_PARCEIRO,
+      CAST(NVL(CAB.VLRNOTA, 0) AS NUMBER(15,2)) AS VLRNOTA,
+      CONF.STATUS AS STATUS_CONF_BD,
+      USU.NOMEUSU AS NOME_CONFERENTE,
+      CASE
+        WHEN CAB.NUCONFATUAL IS NULL THEN 'AGUARDANDO CONFERENCIA'
+        WHEN CONF.STATUS = 'F' THEN 'CONFERIDO'
+        WHEN CONF.STATUS = 'A' THEN 'EM ANDAMENTO'
+        ELSE 'STATUS DESCONHECIDO'
+      END AS STATUS_CONFERENCIA
+    FROM TGFCAB CAB
+    LEFT JOIN TGFCON2 CONF
+      ON CONF.NUCONF = CAB.NUCONFATUAL
+    LEFT JOIN TGFPAR PAR
+      ON PAR.CODPARC = CAB.CODPARC
+    LEFT JOIN TSIUSU USU
+      ON USU.CODUSU = CONF.CODUSUCONF
+    WHERE CAB.DTNEG >= TO_DATE('${intervalo.inicio}', 'YYYY-MM-DD')
+      AND CAB.DTNEG < TO_DATE('${intervalo.fim}', 'YYYY-MM-DD') + 1
+      AND CAB.CODTIPOPER IN (5, 6)
+      AND CAB.STATUSNOTA = 'L'
+      ${sqlFiltroEmpresa(empresa)}
+  `;
+}
+
+router.get('/empresas', async (req, res) => {
+  try {
+    const rows = await executeQuery(`
+      SELECT DISTINCT
+        TO_CHAR(CAB.CODEMP) AS CODEMP,
+        EMP.RAZAOSOCIAL AS EMPRESA
+      FROM TGFCAB CAB
+      LEFT JOIN TSIEMP EMP
+        ON EMP.CODEMP = CAB.CODEMP
+      WHERE CAB.CODTIPOPER IN (5, 6)
+        AND CAB.STATUSNOTA = 'L'
+        AND CAB.CODEMP IS NOT NULL
+      ORDER BY EMP.RAZAOSOCIAL, TO_CHAR(CAB.CODEMP)
+    `);
+
+    res.json({
+      itens: rows.map((row) => ({
+        codEmp: row.CODEMP,
+        empresa: row.EMPRESA || `Empresa ${row.CODEMP}`
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar empresas' });
+  }
+});
+
+router.get('/conferencias', async (req, res) => {
+  try {
+    const intervalo = obterIntervaloDatas(req.query.dataInicial, req.query.dataFinal);
+    const empresa = obterFiltroEmpresa(req.query.empresa);
+    const rows = await executeQuery(montarSqlConferencias(intervalo, empresa));
+
+    const resultado = conferenciaTimerStore.atualizarComItens(rows.map(normalizarLinhaConferencia));
+
+    res.json({
+      dataInicial: intervalo.inicio,
+      dataFinal: intervalo.fim,
+      empresa,
+      itens: resultado
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar conferencias' });
+  }
+});
+
+router.get('/fila-conferencia/conferentes', async (req, res) => {
+  try {
+    const rows = await executeQuery(`
+      SELECT CODUSU, NOMEUSU
+      FROM TSIUSU
+      WHERE CODUSU IS NOT NULL
+        AND NOMEUSU IS NOT NULL
+      ORDER BY NOMEUSU
+    `);
+
+    res.json({
+      itens: rows.map((row) => ({
+        codUsu: row.CODUSU,
+        nome: row.NOMEUSU
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar conferentes' });
+  }
+});
+
+router.get('/fila-conferencia/pedidos', async (req, res) => {
+  try {
+    const intervalo = obterIntervaloDatas(req.query.dataInicial, req.query.dataFinal);
+    const empresa = obterFiltroEmpresa(req.query.empresa);
+    const pedidoBusca = obterNumeroInteiro(req.query.pedido);
+    const filtroBusca = pedidoBusca
+      ? `CAB.NUNOTA = ${pedidoBusca}`
+      : `CAB.DTNEG >= TO_DATE('${intervalo.inicio}', 'YYYY-MM-DD')
+        AND CAB.DTNEG < TO_DATE('${intervalo.fim}', 'YYYY-MM-DD') + 1
+        AND (CAB.NUCONFATUAL IS NULL OR CONF.STATUS = 'A')
+        ${sqlFiltroEmpresa(empresa)}`;
+
+    const rows = await executeQuery(`
+      SELECT
+        CAB.DTNEG,
+        CAB.NUNOTA,
+        CAB.CODEMP,
+        PAR.RAZAOSOCIAL AS EMPRESA,
+        CAB.CODPARC AS CODIGO_PARCEIRO,
+        CAST(NVL(CAB.VLRNOTA, 0) AS NUMBER(15,2)) AS VLRNOTA,
+        CAST(NVL(CAB.QTDVOL, 0) AS NUMBER(15,0)) AS QTDVOL,
+        CAB.NUCONFATUAL,
+        CONF.STATUS AS STATUS_CONF,
+        USU.NOMEUSU AS NOME_CONFERENTE,
+        CASE
+          WHEN CAB.NUCONFATUAL IS NULL THEN 'AGUARDANDO CONFERENCIA'
+          WHEN CONF.STATUS = 'A' THEN 'EM ANDAMENTO'
+          WHEN CONF.STATUS = 'F' THEN 'CONFERIDO'
+          ELSE 'STATUS DESCONHECIDO'
+        END AS STATUS_CONFERENCIA,
+        COUNT(ITE.SEQUENCIA) AS QTD_ITENS,
+        SUM(NVL(ITE.QTDNEG, 0)) AS QTD_TOTAL
+      FROM TGFCAB CAB
+      LEFT JOIN TGFCON2 CONF
+        ON CONF.NUCONF = CAB.NUCONFATUAL
+      LEFT JOIN TGFPAR PAR
+        ON PAR.CODPARC = CAB.CODPARC
+      LEFT JOIN TSIUSU USU
+        ON USU.CODUSU = CONF.CODUSUCONF
+      LEFT JOIN TGFITE ITE
+        ON ITE.NUNOTA = CAB.NUNOTA
+      WHERE ${filtroBusca}
+        AND CAB.CODTIPOPER IN (5, 6)
+        AND CAB.STATUSNOTA = 'L'
+      GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.CODEMP, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA, CAB.QTDVOL,
+        CAB.NUCONFATUAL, CONF.STATUS, USU.NOMEUSU
+      ORDER BY
+        CASE WHEN CONF.STATUS = 'A' THEN 0 ELSE 1 END,
+        CAB.DTNEG,
+        CAB.NUNOTA
+    `);
+
+    res.json({
+      dataInicial: intervalo.inicio,
+      dataFinal: intervalo.fim,
+      empresa,
+      pedido: pedidoBusca,
+      itens: rows.map((row) => ({
+        ...row,
+        DTNEG: normalizarDataSankhya(row.DTNEG),
+        NUCONFATUAL: row.NUCONFATUAL ? Number(row.NUCONFATUAL) : null,
+        STATUS_CONF: row.STATUS_CONF || null,
+        STATUS_CONFERENCIA: row.STATUS_CONFERENCIA,
+        NOME_CONFERENTE: row.NOME_CONFERENTE || null,
+        QTDVOL: normalizarNumero(row.QTDVOL),
+        QTD_ITENS: normalizarNumero(row.QTD_ITENS),
+        QTD_TOTAL: normalizarNumero(row.QTD_TOTAL)
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar fila de conferencia' });
+  }
+});
+
+router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
+  try {
+    const nunota = obterNumeroInteiro(req.params.nunota);
+    if (!nunota) {
+      res.status(400).json({ erro: 'Pedido invalido' });
+      return;
+    }
+
+    const rows = await executeQuery(`
+      SELECT
+        ITE.NUNOTA,
+        ITE.SEQUENCIA,
+        ITE.CODPROD,
+        PRO.DESCRPROD,
+        ITE.CONTROLE,
+        ITE.CODVOL,
+        CAST(NVL(ITE.QTDNEG, 0) AS NUMBER(15,3)) AS QTDNEG,
+        CAST(NVL(ITE.VLRUNIT, 0) AS NUMBER(15,2)) AS VLRUNIT,
+        NVL(ITE.GTINNFE, PRO.REFERENCIA) AS CODIGO_BARRAS,
+        ITE.GTINNFE,
+        ITE.GTINTRIBNFE,
+        ITE.PRODUTONFE,
+        PRO.REFERENCIA,
+        PRO.AD_CODBAR,
+        PRO.AD_CBARANT
+      FROM TGFITE ITE
+      LEFT JOIN TGFPRO PRO
+        ON PRO.CODPROD = ITE.CODPROD
+      WHERE ITE.NUNOTA = ${nunota}
+      ORDER BY ITE.SEQUENCIA
+    `);
+
+    res.json({
+      nunota,
+      itens: rows.map((row) => ({
+        nunota: row.NUNOTA,
+        sequencia: row.SEQUENCIA,
+        codProd: row.CODPROD,
+        descrProd: row.DESCRPROD || `Produto ${row.CODPROD}`,
+        controle: row.CONTROLE || '',
+        codVol: row.CODVOL || 'UN',
+        qtdNeg: normalizarNumero(row.QTDNEG),
+        vlrUnit: normalizarNumero(row.VLRUNIT),
+        codigoBarras: row.CODIGO_BARRAS || '',
+        codigos: [
+          row.CODPROD,
+          row.GTINNFE,
+          row.GTINTRIBNFE,
+          row.PRODUTONFE,
+          row.REFERENCIA,
+          row.AD_CODBAR,
+          row.AD_CBARANT
+        ].filter((valor) => valor !== null && valor !== undefined && String(valor).trim() !== '')
+          .map((valor) => String(valor).trim())
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar itens do pedido' });
+  }
+});
+
+router.post('/fila-conferencia/iniciar', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.body?.nunota);
+  const codUsu = obterCodigoUsuario(req.usuario?.codUsu);
+
+  if (!nunota || codUsu === null) {
+    res.status(400).json({ erro: 'Informe pedido e usuario logado' });
+    return;
+  }
+
+  try {
+    const pedidoRows = await executeQuery(`
+      SELECT CAB.NUNOTA, CAB.NUCONFATUAL, CONF.STATUS
+      FROM TGFCAB CAB
+      LEFT JOIN TGFCON2 CONF
+        ON CONF.NUCONF = CAB.NUCONFATUAL
+      WHERE NUNOTA = ${nunota}
+        AND CODTIPOPER IN (5, 6)
+        AND STATUSNOTA = 'L'
+    `);
+
+    const pedido = pedidoRows[0];
+    if (!pedido) {
+      res.status(404).json({ erro: 'Pedido nao encontrado ou nao esta liberado para conferencia' });
+      return;
+    }
+
+    if (pedido.NUCONFATUAL) {
+      const [conferenciaAtual] = await executeQuery(`
+        SELECT NUCONF, STATUS
+        FROM TGFCON2
+        WHERE NUCONF = ${Number(pedido.NUCONFATUAL)}
+      `);
+
+      if (conferenciaAtual?.STATUS === 'A') {
+        res.json({
+          ok: true,
+          nunota,
+          nuconf: Number(pedido.NUCONFATUAL),
+          status: 'EM ANDAMENTO'
+        });
+        return;
+      }
+
+      res.status(409).json({ erro: 'Pedido ja possui conferencia finalizada ou em outro status no Sankhya' });
+      return;
+    }
+
+    const [conferenciaAberta] = await executeQuery(`
+      SELECT NUCONF, STATUS
+      FROM TGFCON2
+      WHERE NUNOTAORIG = ${nunota}
+        AND STATUS = 'A'
+      ORDER BY NUCONF DESC
+    `);
+
+    if (conferenciaAberta) {
+      await atualizarRegistroApi(
+        'CabecalhoConferencia',
+        { NUCONF: conferenciaAberta.NUCONF },
+        { CODUSUCONF: codUsu }
+      );
+
+      await atualizarRegistroApi(
+        'CabecalhoNota',
+        { NUNOTA: nunota },
+        { NUCONFATUAL: conferenciaAberta.NUCONF }
+      );
+
+      res.json({
+        ok: true,
+        nunota,
+        nuconf: Number(conferenciaAberta.NUCONF),
+        status: 'EM ANDAMENTO'
+      });
+      return;
+    }
+
+    const usuarioRows = await executeQuery(`
+      SELECT CODUSU
+      FROM TSIUSU
+      WHERE CODUSU = ${codUsu}
+    `);
+
+    if (usuarioRows.length === 0) {
+      res.status(400).json({ erro: 'Conferente nao encontrado no Sankhya' });
+      return;
+    }
+
+    const nuconfRows = await executeQuery(`
+      SELECT NVL(MAX(NUCONF), 0) + 1 AS NUCONF
+      FROM (
+        SELECT NUCONF FROM TGFCON2
+        UNION ALL
+        SELECT NUCONF FROM TGFCON
+      )
+    `);
+    const nuconf = nuconfRows[0].NUCONF;
+
+    await salvarRegistroApi('CabecalhoConferencia', {
+      NUCONF: nuconf,
+      NUNOTAORIG: nunota,
+      STATUS: 'A',
+      DHINICONF: formatarDataHoraSankhya(),
+      CODUSUCONF: codUsu,
+      QTDVOL: 0
+    });
+
+    await atualizarRegistroApi(
+      'CabecalhoNota',
+      { NUNOTA: nunota },
+      { NUCONFATUAL: nuconf }
+    );
+
+    res.json({
+      ok: true,
+      nunota,
+      nuconf,
+      status: 'EM ANDAMENTO'
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao iniciar conferencia' });
+  }
+});
+
+router.post('/fila-conferencia/confirmar', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.body?.nunota);
+  const nuconfInformado = obterNumeroInteiro(req.body?.nuconf);
+  const codUsu = obterCodigoUsuario(req.usuario?.codUsu);
+  const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
+
+  if (!nunota || codUsu === null || itens.length === 0) {
+    res.status(400).json({ erro: 'Informe pedido, usuario logado e itens conferidos' });
+    return;
+  }
+
+  try {
+    const pedidoRows = await executeQuery(`
+      SELECT CAB.NUNOTA, CAB.NUCONFATUAL, CONF.STATUS
+      FROM TGFCAB CAB
+      LEFT JOIN TGFCON2 CONF
+        ON CONF.NUCONF = CAB.NUCONFATUAL
+      WHERE CAB.NUNOTA = ${nunota}
+        AND CAB.CODTIPOPER IN (5, 6)
+        AND CAB.STATUSNOTA = 'L'
+    `);
+
+    const pedido = pedidoRows[0];
+    if (!pedido) {
+      res.status(404).json({ erro: 'Pedido nao encontrado ou nao esta liberado para conferencia' });
+      return;
+    }
+
+    if (pedido.NUCONFATUAL && pedido.STATUS !== 'A') {
+      res.status(409).json({ erro: 'Pedido ja possui conferencia finalizada ou em outro status no Sankhya' });
+      return;
+    }
+
+    const usuarioRows = await executeQuery(`
+      SELECT CODUSU
+      FROM TSIUSU
+      WHERE CODUSU = ${codUsu}
+    `);
+
+    if (usuarioRows.length === 0) {
+      res.status(400).json({ erro: 'Conferente nao encontrado no Sankhya' });
+      return;
+    }
+
+    const itensPedido = await executeQuery(`
+      SELECT
+        SEQUENCIA,
+        CODPROD,
+        CODVOL,
+        CODLOCALORIG,
+        CONTROLE,
+        NVL(QTDNEG, 0) AS QTDNEG,
+        NVL(VLRUNIT, 0) AS VLRUNIT,
+        NVL(VLRTOT, 0) AS VLRTOT,
+        NVL(VLRDESC, 0) AS VLRDESC,
+        NVL(PERCDESC, 0) AS PERCDESC,
+        NVL(GTINNFE, PRODUTONFE) AS CODBARRA
+      FROM TGFITE
+      WHERE NUNOTA = ${nunota}
+      ORDER BY SEQUENCIA
+    `);
+
+    const conferidosPorSequencia = new Map(
+      itens.map((item) => [Number(item.sequencia), normalizarNumero(item.qtdConferida)])
+    );
+    const cortadosPorSequencia = new Map(
+      itens.map((item) => [Number(item.sequencia), normalizarNumero(item.qtdCortada)])
+    );
+
+    const divergencias = itensPedido
+      .map((item) => {
+        const qtdEsperada = normalizarNumero(item.QTDNEG);
+        const qtdConferida = conferidosPorSequencia.get(Number(item.SEQUENCIA)) ?? 0;
+        const qtdCortada = cortadosPorSequencia.get(Number(item.SEQUENCIA)) ?? 0;
+
+        return {
+          sequencia: item.SEQUENCIA,
+          codProd: item.CODPROD,
+          qtdEsperada,
+          qtdConferida,
+          qtdCortada,
+          ok: Math.abs(qtdEsperada - (qtdConferida + qtdCortada)) < 0.0001
+        };
+      })
+      .filter((item) => !item.ok);
+
+    if (divergencias.length > 0) {
+      res.status(409).json({
+        erro: 'Existem divergencias na conferencia',
+        divergencias
+      });
+      return;
+    }
+
+    let nuconf = Number(pedido.NUCONFATUAL || nuconfInformado || 0);
+    if (!nuconf) {
+      const [conferenciaAberta] = await executeQuery(`
+        SELECT NUCONF
+        FROM TGFCON2
+        WHERE NUNOTAORIG = ${nunota}
+          AND STATUS = 'A'
+        ORDER BY NUCONF DESC
+      `);
+      nuconf = Number(conferenciaAberta?.NUCONF || 0);
+    }
+
+    const conferenciaJaIniciada = Boolean(nuconf);
+    const agoraSankhya = formatarDataHoraSankhya();
+
+    if (conferenciaJaIniciada) {
+      const [conferenciaAtual] = await executeQuery(`
+        SELECT NUCONF, NUNOTAORIG, STATUS
+        FROM TGFCON2
+        WHERE NUCONF = ${nuconf}
+      `);
+
+      if (!conferenciaAtual || Number(conferenciaAtual.NUNOTAORIG) !== nunota) {
+        res.status(409).json({ erro: 'Conferencia iniciada nao pertence a este pedido no Sankhya' });
+        return;
+      }
+
+      if (conferenciaAtual.STATUS && conferenciaAtual.STATUS !== 'A') {
+        res.status(409).json({ erro: 'Conferencia ja esta finalizada ou em outro status no Sankhya' });
+        return;
+      }
+    }
+
+    if (!conferenciaJaIniciada) {
+      const nuconfRows = await executeQuery(`
+        SELECT NVL(MAX(NUCONF), 0) + 1 AS NUCONF
+        FROM (
+          SELECT NUCONF FROM TGFCON2
+          UNION ALL
+          SELECT NUCONF FROM TGFCON
+        )
+      `);
+      nuconf = nuconfRows[0].NUCONF;
+
+      await salvarRegistroApi('CabecalhoConferencia', {
+        NUCONF: nuconf,
+        NUNOTAORIG: nunota,
+        STATUS: 'A',
+        DHINICONF: agoraSankhya,
+        CODUSUCONF: codUsu,
+        QTDVOL: 0
+      });
+    } else {
+      await atualizarRegistroApi(
+        'CabecalhoConferencia',
+        { NUCONF: nuconf },
+        {
+          CODUSUCONF: codUsu
+        }
+      );
+    }
+
+    const cortesAplicados = await aplicarCortesNoPedido({
+      nunota,
+      itensPedido,
+      conferidosPorSequencia,
+      cortadosPorSequencia
+    });
+
+    const itensPorCodigo = new Map();
+    itensPedido.forEach((item) => {
+      const codigoBarra = String(item.CODBARRA || item.CODPROD).trim();
+      const qtdConferida = conferidosPorSequencia.get(Number(item.SEQUENCIA)) ?? 0;
+      if (qtdConferida <= 0) {
+        return;
+      }
+
+      const itemAgrupado = itensPorCodigo.get(codigoBarra) || {
+        codigoBarra,
+        qtd: 0
+      };
+
+      itemAgrupado.qtd += qtdConferida;
+      itensPorCodigo.set(codigoBarra, itemAgrupado);
+    });
+
+    const linhasConferencia = await executeQuery(`
+      SELECT SEQUENCIA, CODBARRA
+      FROM TGFCON
+      WHERE NUCONF = ${nuconf}
+    `);
+    const linhasPorCodigo = new Map(
+      linhasConferencia.map((linha) => [String(linha.CODBARRA || '').trim(), Number(linha.SEQUENCIA)])
+    );
+    const codigosDoPedido = new Set(
+      itensPedido.map((item) => String(item.CODBARRA || item.CODPROD).trim())
+    );
+    let sequenciaConferencia = linhasConferencia.reduce((maior, linha) => {
+      return Math.max(maior, Number(linha.SEQUENCIA) || 0);
+    }, 0) + 1;
+
+    for (const [codigoBarra, sequenciaExistente] of linhasPorCodigo.entries()) {
+      if (!codigosDoPedido.has(codigoBarra) || itensPorCodigo.has(codigoBarra)) {
+        continue;
+      }
+
+      await atualizarRegistroApi(
+        'ConferenciaPedido',
+        {
+          NUCONF: nuconf,
+          SEQUENCIA: sequenciaExistente
+        },
+        {
+          CODBARRA: codigoBarra,
+          QTD: 0,
+          CODUSU: codUsu,
+          DHCONF: agoraSankhya,
+          TIPOCONF: 'P'
+        }
+      );
+    }
+
+    for (const item of itensPorCodigo.values()) {
+      const sequenciaExistente = linhasPorCodigo.get(item.codigoBarra);
+
+      if (sequenciaExistente) {
+        await atualizarRegistroApi(
+          'ConferenciaPedido',
+          {
+            NUCONF: nuconf,
+            SEQUENCIA: sequenciaExistente
+          },
+          {
+            CODBARRA: item.codigoBarra,
+            QTD: item.qtd,
+            CODUSU: codUsu,
+            DHCONF: agoraSankhya,
+            TIPOCONF: 'P'
+          }
+        );
+      } else {
+        await salvarRegistroApi('ConferenciaPedido', {
+          NUCONF: nuconf,
+          SEQUENCIA: sequenciaConferencia,
+          CODBARRA: item.codigoBarra,
+          QTD: item.qtd,
+          CODUSU: codUsu,
+          DHCONF: agoraSankhya,
+          TIPOCONF: 'P'
+        });
+        sequenciaConferencia += 1;
+      }
+    }
+
+    const resultadoFinalizacao = await finalizarConferenciaNativa(nuconf, nunota);
+
+    const [conferenciaFinal] = await executeQuery(`
+      SELECT NUCONF, NUNOTAORIG, STATUS, CODUSUCONF
+      FROM TGFCON2
+      WHERE NUCONF = ${nuconf}
+    `);
+
+    let conferenciaConferida = conferenciaFinal;
+    let fechamentoOperacionalAplicado = false;
+
+    if (conferenciaConferida?.STATUS !== 'F' && finalizacaoPermiteFechamentoOperacional(resultadoFinalizacao)) {
+      await finalizarConferenciaOperacional(nuconf, nunota, codUsu);
+      fechamentoOperacionalAplicado = true;
+      [conferenciaConferida] = await executeQuery(`
+        SELECT NUCONF, NUNOTAORIG, STATUS, CODUSUCONF
+        FROM TGFCON2
+        WHERE NUCONF = ${nuconf}
+      `);
+    }
+
+    if (conferenciaConferida?.STATUS !== 'F') {
+      const detalhesSankhya = [
+        traduzirStatusConferencia(conferenciaConferida?.STATUS),
+        ...coletarDetalhesSankhya(resultadoFinalizacao)
+      ].filter(Boolean);
+
+      res.status(409).json({
+        erro: 'O Sankhya recebeu a conferencia, mas nao finalizou como conferido',
+        statusSankhya: conferenciaConferida?.STATUS || null,
+        detalhesSankhya,
+        resultadoFinalizacao
+      });
+      return;
+    }
+
+    res.json({
+      ok: true,
+      nunota,
+      nuconf,
+      status: 'CONFERIDO',
+      fechamentoOperacionalAplicado,
+      cortesAplicados,
+      resultadoFinalizacao
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      erro: 'Erro ao confirmar conferencia',
+      detalhesSankhya: [err.message].filter(Boolean)
+    });
+  }
+});
+
+router.post('/fila-conferencia/pedidos/:nunota/etiquetas-volume', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+  const volumes = obterNumeroInteiro(req.body?.volumes);
+
+  if (!nunota || !volumes) {
+    res.status(400).json({ erro: 'Informe pedido e quantidade de volumes' });
+    return;
+  }
+
+  try {
+    const [pedido] = await executeQuery(`
+      SELECT
+        CAB.NUNOTA,
+        CAB.NUCONFATUAL,
+        CAB.CODPARC,
+        PAR.RAZAOSOCIAL,
+        PAR.NOMEPARC,
+        CAB.CODPARCTRANSP,
+        TRANSP.RAZAOSOCIAL AS TRANSPORTADORA,
+        ENDE.TIPO AS TIPO_ENDERECO,
+        ENDE.NOMEEND AS ENDERECO,
+        PAR.NUMEND,
+        BAI.NOMEBAI AS BAIRRO,
+        CID.NOMECID AS CIDADE,
+        UFS.UF
+      FROM TGFCAB CAB
+      LEFT JOIN TGFPAR PAR
+        ON PAR.CODPARC = CAB.CODPARC
+      LEFT JOIN TGFPAR TRANSP
+        ON TRANSP.CODPARC = CAB.CODPARCTRANSP
+      LEFT JOIN TSIEND ENDE
+        ON ENDE.CODEND = PAR.CODEND
+      LEFT JOIN TSIBAI BAI
+        ON BAI.CODBAI = PAR.CODBAI
+      LEFT JOIN TSICID CID
+        ON CID.CODCID = PAR.CODCID
+      LEFT JOIN TSIUFS UFS
+        ON UFS.CODUF = CID.UF
+      WHERE CAB.NUNOTA = ${nunota}
+    `);
+
+    if (!pedido) {
+      res.status(404).json({ erro: 'Pedido nao encontrado' });
+      return;
+    }
+
+    await atualizarRegistroApi(
+      'CabecalhoNota',
+      { NUNOTA: nunota },
+      { QTDVOL: volumes }
+    );
+
+    if (pedido.NUCONFATUAL) {
+      await atualizarRegistroApi(
+        'CabecalhoConferencia',
+        { NUCONF: pedido.NUCONFATUAL },
+        { QTDVOL: volumes }
+      );
+    }
+
+    res.json({
+      ok: true,
+      volumes,
+      etiqueta: {
+        nunota: pedido.NUNOTA,
+        codParc: pedido.CODPARC,
+        nomeParc: pedido.NOMEPARC || pedido.RAZAOSOCIAL || `Parceiro ${pedido.CODPARC}`,
+        razaoSocial: pedido.RAZAOSOCIAL || pedido.NOMEPARC || `Parceiro ${pedido.CODPARC}`,
+        cidade: pedido.CIDADE || '',
+        uf: pedido.UF || '',
+        endereco: [
+          [pedido.TIPO_ENDERECO, pedido.ENDERECO].filter(Boolean).join(' '),
+          pedido.NUMEND ? `Nº:${pedido.NUMEND}` : '',
+          pedido.BAIRRO
+        ].filter(Boolean).join(' - '),
+        transportadora: pedido.TRANSPORTADORA || 'TRANSPORTADORA NAO INFORMADA'
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      erro: 'Erro ao gerar etiqueta de volume',
+      detalhesSankhya: [err.message].filter(Boolean)
+    });
+  }
+});
+
+router._internals = {
+  normalizarDataSankhya,
+  obterIntervaloDatas
+};
+
+module.exports = router;

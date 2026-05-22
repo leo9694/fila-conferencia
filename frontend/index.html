@@ -1,0 +1,2352 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Fila de Conferencia</title>
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg-page: #eaf5f3;
+      --panel: rgba(255, 255, 255, 0.78);
+      --border: rgba(18, 66, 75, 0.10);
+      --text-main: #11303a;
+      --text-soft: #55727b;
+      --accent: #0d8a6a;
+      --warning: #f4b400;
+      --info: #18a7d8;
+      --fila-bg: linear-gradient(180deg, rgba(255, 246, 201, 0.92) 0%, rgba(255, 239, 170, 0.92) 100%);
+      --fila-border: rgba(220, 177, 33, 0.40);
+      --conf-bg: linear-gradient(180deg, rgba(223, 243, 229, 0.94) 0%, rgba(207, 235, 216, 0.94) 100%);
+      --conf-border: rgba(29, 131, 79, 0.22);
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at top left, rgba(255, 213, 79, 0.16), transparent 24%),
+        radial-gradient(circle at top right, rgba(13, 138, 106, 0.18), transparent 26%),
+        linear-gradient(180deg, #eff9f7 0%, var(--bg-page) 100%);
+      min-height: 100vh;
+      color: var(--text-main);
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .screen {
+      display: none;
+      min-height: 100vh;
+    }
+
+    .screen.active {
+      display: block;
+    }
+
+    .home-screen {
+      padding: 22px 18px;
+      background:
+        radial-gradient(circle at top left, rgba(255, 213, 79, 0.18), transparent 26%),
+        radial-gradient(circle at bottom right, rgba(13, 138, 106, 0.14), transparent 24%),
+        linear-gradient(180deg, #eff9f7 0%, #e7f2ef 100%);
+      place-items: center;
+    }
+
+    .login-screen {
+      padding: 18px;
+      background:
+        radial-gradient(circle at top right, rgba(13, 138, 106, 0.18), transparent 24%),
+        linear-gradient(180deg, #eff9f7 0%, #e7f2ef 100%);
+      place-items: center;
+    }
+
+    .login-screen.active {
+      display: grid;
+    }
+
+    .login-card {
+      width: min(430px, 100%);
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid rgba(18, 66, 75, 0.12);
+      border-radius: 24px;
+      padding: 24px;
+      box-shadow: 0 24px 48px rgba(16, 57, 66, 0.12);
+      backdrop-filter: blur(10px);
+    }
+
+    .login-card h1 {
+      font-size: 2rem;
+      font-weight: 900;
+      margin: 0 0 4px;
+      line-height: 1.05;
+    }
+
+    .login-card p {
+      color: var(--text-soft);
+      font-weight: 700;
+      margin: 0 0 20px;
+      line-height: 1.35;
+    }
+
+    .login-form {
+      display: grid;
+      gap: 12px;
+    }
+
+    .login-field label {
+      display: block;
+      color: var(--text-soft);
+      font-size: 0.72rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+
+    .login-field input {
+      width: 100%;
+      min-height: 44px;
+      border-radius: 13px;
+      border: 1px solid #bfd0e3;
+      padding: 0 13px;
+      font-size: 0.98rem;
+      font-weight: 800;
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.96);
+    }
+
+    .login-field input:focus,
+    .fila-field input:focus,
+    .fila-field select:focus {
+      border-color: rgba(13, 138, 106, 0.55);
+      box-shadow: 0 0 0 3px rgba(13, 138, 106, 0.12);
+      outline: none;
+    }
+
+    .login-status {
+      min-height: 18px;
+      color: #b42318;
+      font-size: 0.84rem;
+      font-weight: 900;
+    }
+
+    .home-user {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .home-user-name,
+    .fila-user-chip {
+      border: 1px solid rgba(13, 138, 106, 0.20);
+      border-radius: 13px;
+      background: rgba(232, 248, 241, 0.9);
+      color: var(--text-main);
+      font-weight: 900;
+      padding: 10px 12px;
+      line-height: 1.2;
+    }
+
+    .btn-logout {
+      border: 1px solid #9ec0f6;
+      border-radius: 13px;
+      min-height: 42px;
+      padding: 0 16px;
+      background: #fff;
+      color: var(--accent);
+      font-weight: 900;
+    }
+
+    .home-shell {
+      max-width: 1080px;
+      margin: 0 auto;
+      background: rgba(255, 255, 255, 0.84);
+      border: 1px solid var(--border);
+      border-radius: 30px;
+      padding: 24px;
+      box-shadow: 0 22px 42px rgba(15, 23, 42, 0.08);
+      backdrop-filter: blur(10px);
+    }
+
+    .home-screen.active {
+      display: grid;
+    }
+
+    .home-topbar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 26px;
+    }
+
+    .home-kicker {
+      color: var(--accent);
+      font-size: 0.74rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      margin-bottom: 4px;
+    }
+
+    .home-shell h1 {
+      font-size: 2.4rem;
+      font-weight: 900;
+      margin-bottom: 6px;
+    }
+
+    .home-shell p {
+      color: var(--text-soft);
+      font-size: 0.96rem;
+      margin-bottom: 0;
+      max-width: 620px;
+    }
+
+    .home-menu {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .home-menu-button {
+      min-height: 180px;
+      border: 1px solid rgba(18, 66, 75, 0.12);
+      border-radius: 22px;
+      padding: 22px;
+      text-align: left;
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.82);
+      box-shadow: 0 14px 28px rgba(16, 57, 66, 0.08);
+      transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+    }
+
+    .home-menu-button:hover,
+    .home-menu-button:focus-visible {
+      transform: translateY(-3px);
+      border-color: rgba(13, 138, 106, 0.36);
+      box-shadow: 0 20px 36px rgba(16, 57, 66, 0.13);
+      outline: none;
+    }
+
+    .home-menu-button.primary {
+      background: linear-gradient(180deg, rgba(230, 248, 241, 0.96) 0%, rgba(205, 236, 224, 0.96) 100%);
+    }
+
+    .home-menu-button.secondary {
+      background: linear-gradient(180deg, rgba(235, 246, 252, 0.96) 0%, rgba(210, 233, 244, 0.96) 100%);
+    }
+
+    .home-menu-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 16px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 18px;
+      color: #fff;
+      font-size: 1.5rem;
+      font-weight: 900;
+    }
+
+    .home-menu-button.primary .home-menu-icon {
+      background: #0d8a6a;
+    }
+
+    .home-menu-button.secondary .home-menu-icon {
+      background: #0e87ad;
+    }
+
+    .home-menu-title {
+      display: block;
+      font-size: 1.45rem;
+      line-height: 1.1;
+      font-weight: 900;
+      margin-bottom: 10px;
+    }
+
+    .home-menu-text {
+      display: block;
+      color: var(--text-soft);
+      font-size: 0.96rem;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    .home-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+
+    .form-card {
+      background: linear-gradient(180deg, rgba(246, 251, 252, 0.96) 0%, rgba(239, 247, 250, 0.96) 100%);
+      border: 1px solid rgba(18, 66, 75, 0.10);
+      border-radius: 22px;
+      padding: 16px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+    }
+
+    .form-card label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+    }
+
+    .form-card input,
+    .form-card select {
+      min-height: 48px;
+      border-radius: 14px;
+      border: 1px solid #bfd0e3;
+      width: 100%;
+      padding: 0 14px;
+      font-size: 0.96rem;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.94);
+    }
+
+    .home-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      margin-top: 6px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(18, 66, 75, 0.08);
+    }
+
+    .home-tip {
+      color: var(--text-soft);
+      font-size: 0.92rem;
+      font-weight: 700;
+    }
+
+    .btn-start,
+    .btn-back {
+      border: none;
+      border-radius: 14px;
+      min-height: 48px;
+      padding: 0 22px;
+      font-weight: 800;
+    }
+
+    .btn-start {
+      background: var(--accent);
+      color: #fff;
+      min-width: 250px;
+    }
+
+    .btn-back {
+      background: #fff;
+      color: var(--accent);
+      border: 1px solid #9ec0f6;
+    }
+
+    .conferencia-screen {
+      padding: 10px;
+    }
+
+    .acompanhamento-screen,
+    .fila-screen {
+      padding: 22px 18px;
+      background:
+        radial-gradient(circle at top right, rgba(24, 167, 216, 0.14), transparent 28%),
+        linear-gradient(180deg, #eff9f7 0%, #e7f2ef 100%);
+      place-items: center;
+    }
+
+    .acompanhamento-screen.active,
+    .fila-screen.active {
+      display: grid;
+    }
+
+    .placeholder-panel {
+      width: min(720px, 100%);
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 24px;
+      box-shadow: 0 18px 36px rgba(16, 57, 66, 0.08);
+    }
+
+    .placeholder-panel h2 {
+      margin: 0 0 8px;
+      font-weight: 900;
+    }
+
+    .placeholder-panel p {
+      margin: 0 0 20px;
+      color: var(--text-soft);
+      font-weight: 700;
+    }
+
+    .fila-screen {
+      display: none;
+      align-items: stretch;
+      padding: 12px;
+    }
+
+    .fila-screen.active {
+      display: block;
+    }
+
+    .fila-app {
+      min-height: calc(100vh - 24px);
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: 10px;
+    }
+
+    .fila-etapa {
+      display: none;
+      min-height: 0;
+    }
+
+    .fila-etapa.active {
+      display: block;
+    }
+
+    .fila-toolbar,
+    .fila-workspace,
+    .pedido-lista,
+    .conferencia-box {
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: 0 14px 28px rgba(16, 57, 66, 0.08);
+    }
+
+    .fila-toolbar {
+      padding: 14px;
+    }
+
+    .fila-screen.conferencia-mode .fila-toolbar {
+      padding: 8px 12px;
+    }
+
+    .fila-screen.conferencia-mode .fila-toolbar-top {
+      margin-bottom: 0;
+      align-items: center;
+    }
+
+    .fila-screen.conferencia-mode .fila-toolbar h2 {
+      font-size: 1rem;
+    }
+
+    .fila-screen.conferencia-mode .home-kicker,
+    .fila-screen.conferencia-mode .fila-pedidos-layout,
+    .fila-screen.conferencia-mode #voltar-home-fila {
+      display: none;
+    }
+
+    .fila-contexto {
+      display: none;
+      color: var(--text-soft);
+      font-size: 0.72rem;
+      font-weight: 900;
+      margin-top: 2px;
+    }
+
+    .fila-screen.conferencia-mode .fila-contexto {
+      display: block;
+    }
+
+    .fila-toolbar-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 12px;
+    }
+
+    .fila-toolbar h2 {
+      margin: 0;
+      font-size: 1.4rem;
+      font-weight: 900;
+    }
+
+    .fila-filtros {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .fila-pedidos-layout {
+      display: grid;
+      grid-template-columns: 300px 920px;
+      gap: 10px;
+      align-items: start;
+      width: 1230px;
+      max-width: calc(100vw - 32px);
+      margin: 0 auto;
+      overflow-x: auto;
+    }
+
+    .fila-operacao-panel {
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: 0 14px 28px rgba(16, 57, 66, 0.08);
+      position: sticky;
+      top: 10px;
+    }
+
+    .fila-operacao-panel h2 {
+      font-size: 1.9rem;
+      line-height: 1.08;
+    }
+
+    .fila-operacao-panel .fila-toolbar-top {
+      margin-bottom: 12px;
+    }
+
+    .fila-operacao-panel .btn-start,
+    .fila-operacao-panel .btn-back {
+      width: 100%;
+      min-width: 0;
+    }
+
+    .fila-pedido-search-panel {
+      padding: 10px;
+      border: 1px solid rgba(13, 148, 118, 0.22);
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(232, 249, 244, 0.96), rgba(255, 255, 255, 0.92));
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+    }
+
+    .fila-pedido-search-panel input {
+      border-color: rgba(13, 148, 118, 0.34);
+      background: #fff;
+    }
+
+    .fila-field label {
+      display: block;
+      font-size: 0.68rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      color: var(--text-soft);
+      margin-bottom: 6px;
+    }
+
+    .fila-field input,
+    .fila-field select,
+    .scan-input,
+    .qtd-input {
+      width: 100%;
+      min-height: 36px;
+      border: 1px solid #bfd0e3;
+      border-radius: 10px;
+      padding: 0 10px;
+      font-weight: 800;
+      font-size: 0.9rem;
+      color: var(--text-main);
+      background: #fff;
+    }
+
+    .fila-operacao-panel .fila-field label {
+      font-size: 0.62rem;
+      margin-bottom: 4px;
+    }
+
+    .fila-operacao-panel .fila-filtros {
+      gap: 8px;
+    }
+
+    .fila-operacao-panel .btn-start,
+    .fila-operacao-panel .btn-back {
+      min-height: 42px;
+      border-radius: 12px;
+    }
+
+    .scan-panel .fila-field label {
+      font-size: 0.62rem;
+      margin-bottom: 4px;
+    }
+
+    .scan-panel .scan-input,
+    .scan-panel .qtd-input {
+      min-height: 34px;
+      border-radius: 10px;
+      padding: 0 10px;
+      font-size: 0.86rem;
+    }
+
+    .fila-workspace {
+      display: grid;
+      grid-template-columns: 330px minmax(0, 1fr);
+      gap: 10px;
+      padding: 10px;
+      min-height: 0;
+    }
+
+    .fila-screen.conferencia-mode .fila-workspace {
+      height: calc(100vh - 96px);
+    }
+
+    .fila-pedidos-stage {
+      background: rgba(255, 255, 255, 0.86);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 12px;
+      box-shadow: 0 14px 28px rgba(16, 57, 66, 0.08);
+      min-height: 280px;
+      width: 100%;
+      min-width: 0;
+    }
+
+    .fila-pedidos-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: end;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .fila-pedidos-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      max-height: calc(100vh - 202px);
+      overflow-y: auto;
+      overflow-x: auto;
+      padding-right: 4px;
+      border: 1px solid rgba(18, 66, 75, 0.10);
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.68);
+      min-height: 180px;
+      width: 100%;
+    }
+
+    .fila-pedidos-grid > .empty-state {
+      min-width: 920px;
+    }
+
+    .pedido-list-header,
+    .pedido-operacao-card {
+      display: grid;
+      grid-template-columns: 42px 140px 110px minmax(260px, 1fr) 130px 120px 190px;
+      align-items: center;
+      gap: 0;
+    }
+
+    .pedido-list-header {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      border-bottom: 2px solid #59d66d;
+      background: #f8fbfc;
+      color: var(--text-soft);
+      font-size: 0.68rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .pedido-list-header > div,
+    .pedido-operacao-card > div,
+    .pedido-operacao-card > strong {
+      min-width: 0;
+      padding: 8px 10px;
+      border-right: 1px solid rgba(18, 66, 75, 0.10);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .pedido-lista,
+    .conferencia-box {
+      padding: 12px;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .conferencia-box {
+      display: grid;
+      grid-template-rows: auto auto auto minmax(0, 1fr);
+      gap: 6px;
+    }
+
+    .box-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 10px;
+      font-weight: 900;
+    }
+
+    .pedido-lista-scroll,
+    .itens-scroll {
+      overflow: auto;
+      max-height: calc(100vh - 400px);
+      padding-right: 4px;
+    }
+
+    .pedido-operacao-card {
+      border: none;
+      border-bottom: 1px solid rgba(18, 66, 75, 0.08);
+      border-left: 5px solid #0dcaf0;
+      border-radius: 0;
+      padding: 0;
+      margin-bottom: 0;
+      background: rgba(221, 242, 252, 0.82);
+      cursor: pointer;
+      min-height: 48px;
+    }
+
+    .pedido-operacao-card.active {
+      border-left-color: var(--accent);
+      background: rgba(214, 242, 232, 0.96);
+      box-shadow: 0 10px 18px rgba(16, 57, 66, 0.10);
+    }
+
+    .pedido-operacao-card.andamento {
+      border-left-color: #f4b400;
+      background: rgba(255, 246, 201, 0.92);
+    }
+
+    .pedido-operacao-card strong {
+      display: block;
+      font-size: 0.86rem;
+      margin-bottom: 0;
+    }
+
+    .pedido-side-card {
+      display: block;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border-bottom: none;
+      margin-bottom: 10px;
+      min-height: 0;
+      cursor: default;
+    }
+
+    .pedido-side-card > div,
+    .pedido-side-card > strong {
+      padding: 0;
+      border-right: none;
+      overflow: visible;
+      text-overflow: clip;
+      white-space: normal;
+    }
+
+    .pedido-side-card strong {
+      margin-bottom: 7px;
+      line-height: 1.1;
+    }
+
+    .pedido-side-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 10px;
+      color: var(--text-soft);
+      font-size: 0.74rem;
+      font-weight: 900;
+      line-height: 1.2;
+    }
+
+    .pedido-side-cliente {
+      margin: 6px 0;
+      color: var(--text-main);
+      font-size: 0.78rem;
+      font-weight: 900;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .pedido-meta {
+      color: var(--text-soft);
+      font-size: 0.76rem;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+
+    .pedido-cliente {
+      color: var(--text-main);
+      font-size: 0.78rem;
+      font-weight: 900;
+    }
+
+    .pedido-list-status {
+      display: flex;
+      justify-content: flex-start;
+      align-items: center;
+    }
+
+    .pedido-status-mini {
+      display: inline-block;
+      margin-top: 0;
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: #f4b400;
+      color: #17333c;
+      font-size: 0.6rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .pedido-status-mini.novo {
+      background: #0dcaf0;
+    }
+
+    .pedido-status-mini.conferido {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    .pedido-label-button {
+      width: 32px;
+      height: 32px;
+      border: none;
+      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(180deg, #13b58f 0%, #078965 100%);
+      color: #fff;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28), 0 5px 14px rgba(7, 137, 101, 0.26);
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    .pedido-label-button:hover {
+      transform: translateY(-1px);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.38), 0 8px 18px rgba(7, 137, 101, 0.34);
+    }
+
+    .pedido-label-button svg {
+      width: 18px;
+      height: 18px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .pedido-list-action {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: visible !important;
+      text-overflow: clip !important;
+      white-space: normal !important;
+    }
+
+    .scan-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 110px 160px;
+      gap: 7px;
+      align-items: end;
+      margin-bottom: 0;
+      padding: 7px 9px;
+      border-radius: 12px;
+      background: rgba(239, 247, 250, 0.96);
+      border: 1px solid rgba(18, 66, 75, 0.08);
+    }
+
+    .scan-panel .btn-start {
+      min-width: 0;
+      min-height: 34px;
+      border-radius: 10px;
+      padding: 0 14px;
+    }
+
+    .resumo-inline {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+      margin: 8px 0;
+      align-items: stretch;
+    }
+
+    .scan-status {
+      min-height: 0;
+      font-weight: 900;
+      color: var(--text-soft);
+      margin: 0;
+      font-size: 0.82rem;
+    }
+
+    .scan-status:empty {
+      display: none;
+    }
+
+    .itens-pools {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 10px;
+      min-height: 0;
+      height: 100%;
+    }
+
+    .itens-pool {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      border: 1px solid rgba(18, 66, 75, 0.12);
+      border-radius: 6px;
+      background: rgba(255, 255, 255, 0.62);
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .itens-pool-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding: 5px 8px;
+      border-bottom: 2px solid #59d66d;
+      font-weight: 900;
+      background: rgba(255, 255, 255, 0.86);
+      min-height: 34px;
+    }
+
+    .itens-pool-header span:last-child {
+      color: var(--text-soft);
+      font-size: 0.72rem;
+    }
+
+    .itens-grid-header,
+    .item-row {
+      display: grid;
+      grid-template-columns: var(--itens-grid-columns, 34px 82px 260px 140px 84px 74px 150px);
+      gap: 0;
+      align-items: center;
+      border: 1px solid rgba(18, 66, 75, 0.10);
+      border-left: 0;
+      border-radius: 0;
+      padding: 0;
+      margin: 0;
+      background: rgba(255, 255, 255, 0.78);
+      min-height: 25px;
+      min-width: 100%;
+      width: max-content;
+    }
+
+    .itens-grid-header {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f8fbfc;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+      color: var(--text-main);
+      font-size: 0.72rem;
+      font-weight: 900;
+    }
+
+    .itens-grid-header > div,
+    .item-row > div {
+      position: relative;
+      min-width: 0;
+      padding: 3px 6px;
+      border-right: 1px solid rgba(18, 66, 75, 0.12);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .itens-grid-header > div:first-child,
+    .item-row > div:first-child {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: visible;
+      text-overflow: clip;
+    }
+
+    .itens-grid-col-header {
+      user-select: none;
+    }
+
+    .itens-grid-col-header span {
+      pointer-events: none;
+    }
+
+    .column-resizer {
+      position: absolute;
+      top: 0;
+      right: -4px;
+      z-index: 3;
+      width: 8px;
+      height: 100%;
+      border: none;
+      padding: 0;
+      background: transparent;
+      cursor: col-resize;
+    }
+
+    .column-resizer::after {
+      content: "";
+      position: absolute;
+      top: 5px;
+      bottom: 5px;
+      left: 3px;
+      width: 2px;
+      border-radius: 999px;
+      background: rgba(18, 66, 75, 0.18);
+    }
+
+    .column-resizer:hover::after,
+    .resizing-columns .column-resizer::after {
+      background: var(--accent);
+    }
+
+    .resizing-columns {
+      cursor: col-resize;
+      user-select: none;
+    }
+
+    .item-row.ok {
+      background: rgba(207, 235, 216, 0.92);
+    }
+
+    .item-row.parcial {
+      background: rgba(255, 246, 201, 0.92);
+    }
+
+    .item-row.excesso {
+      background: rgba(255, 226, 226, 0.92);
+    }
+
+    .item-row.cortado {
+      background: rgba(255, 238, 214, 0.92);
+    }
+
+    .item-name {
+      font-weight: 700;
+      margin-bottom: 0;
+      font-size: 0.7rem;
+      line-height: 1;
+    }
+
+    .item-codes {
+      color: var(--text-soft);
+      font-size: 0.68rem;
+      font-weight: 800;
+    }
+
+    .item-qtd {
+      min-width: 0;
+      text-align: right;
+      font-weight: 900;
+      font-size: 0.7rem;
+    }
+
+    .item-code {
+      font-weight: 900;
+      color: var(--text-soft);
+      font-size: 0.7rem;
+      text-align: right;
+    }
+
+    .item-unit {
+      color: var(--text-soft);
+      font-size: 0.7rem;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .item-action {
+      border: none;
+      border-radius: 8px;
+      width: 24px;
+      height: 20px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(180deg, #fff7f7 0%, #ffe6e6 100%);
+      color: #b51d1d;
+      font-weight: 900;
+      line-height: 1;
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease, background 0.12s ease, color 0.12s ease;
+    }
+
+    .item-action svg {
+      width: 14px;
+      height: 14px;
+      display: block;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .item-action-return {
+      box-shadow: inset 0 0 0 1px rgba(181, 29, 29, 0.18), 0 2px 5px rgba(181, 29, 29, 0.10);
+    }
+
+    .item-action-return:hover {
+      background: linear-gradient(180deg, #ffeded 0%, #ffd7d7 100%);
+      color: #8f1111;
+      transform: translateX(-1px);
+      box-shadow: inset 0 0 0 1px rgba(181, 29, 29, 0.32), 0 4px 9px rgba(181, 29, 29, 0.16);
+    }
+
+    .item-action-return:active {
+      transform: translateX(-1px) scale(0.96);
+    }
+
+    .item-action-cut {
+      background: linear-gradient(180deg, #fffaf0 0%, #ffe9bf 100%);
+      color: #a96900;
+      box-shadow: inset 0 0 0 1px rgba(169, 105, 0, 0.18), 0 2px 5px rgba(169, 105, 0, 0.10);
+    }
+
+    .item-action-cut:hover {
+      background: linear-gradient(180deg, #fff3dc 0%, #ffdda3 100%);
+      color: #7d4b00;
+      transform: scale(1.04);
+      box-shadow: inset 0 0 0 1px rgba(169, 105, 0, 0.32), 0 4px 9px rgba(169, 105, 0, 0.16);
+    }
+
+    .item-action-cut:active {
+      transform: scale(0.96);
+    }
+
+    .corte-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(12, 34, 39, 0.36);
+    }
+
+    .corte-modal[hidden] {
+      display: none;
+    }
+
+    .corte-dialog {
+      width: min(460px, 100%);
+      border-radius: 16px;
+      border: 1px solid rgba(18, 66, 75, 0.14);
+      background: #fff;
+      box-shadow: 0 24px 60px rgba(16, 57, 66, 0.22);
+      overflow: hidden;
+    }
+
+    .corte-head {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid rgba(18, 66, 75, 0.10);
+    }
+
+    .corte-head strong {
+      display: block;
+      font-size: 1rem;
+      font-weight: 900;
+    }
+
+    .corte-head span {
+      display: block;
+      margin-top: 4px;
+      color: var(--text-soft);
+      font-size: 0.78rem;
+      font-weight: 800;
+      line-height: 1.25;
+    }
+
+    .corte-body {
+      padding: 14px 16px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .corte-body input {
+      width: 100%;
+      min-height: 40px;
+      border: 1px solid #bfd0e3;
+      border-radius: 10px;
+      padding: 0 12px;
+      font-weight: 900;
+      color: var(--text-main);
+    }
+
+    .corte-info {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .corte-info div {
+      border-radius: 8px;
+      padding: 8px;
+      background: rgba(239, 247, 250, 0.96);
+    }
+
+    .corte-info label {
+      display: block;
+      color: var(--text-soft);
+      font-size: 0.62rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .corte-info span {
+      display: block;
+      margin-top: 3px;
+      font-size: 0.92rem;
+      font-weight: 900;
+    }
+
+    .corte-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 12px 16px 16px;
+    }
+
+    .corte-actions .btn-back,
+    .corte-actions .btn-start {
+      min-width: 0;
+      min-height: 40px;
+      border-radius: 10px;
+      padding: 0 16px;
+    }
+
+    .pos-conferencia-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 55;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(12, 34, 39, 0.36);
+    }
+
+    .pos-conferencia-modal[hidden] {
+      display: none;
+    }
+
+    .pos-conferencia-dialog {
+      width: min(440px, 100%);
+      border-radius: 16px;
+      border: 1px solid rgba(18, 66, 75, 0.14);
+      background: #fff;
+      box-shadow: 0 24px 60px rgba(16, 57, 66, 0.22);
+      padding: 16px;
+    }
+
+    .pos-conferencia-dialog h3 {
+      margin: 0 0 6px;
+      font-size: 1.08rem;
+      font-weight: 900;
+    }
+
+    .pos-conferencia-dialog p {
+      margin: 0 0 12px;
+      color: var(--text-soft);
+      font-weight: 800;
+      line-height: 1.35;
+    }
+
+    .volume-panel {
+      display: none;
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 12px;
+      background: rgba(239, 247, 250, 0.96);
+      border: 1px solid rgba(18, 66, 75, 0.08);
+    }
+
+    .volume-panel.active {
+      display: block;
+    }
+
+    .pos-conferencia-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .pos-conferencia-actions .btn-start,
+    .pos-conferencia-actions .btn-back {
+      min-width: 0;
+      min-height: 42px;
+      border-radius: 12px;
+      padding: 0 14px;
+    }
+
+    .progress-line {
+      height: 8px;
+      border-radius: 999px;
+      background: rgba(18, 66, 75, 0.10);
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .progress-line span {
+      display: block;
+      height: 100%;
+      width: 0%;
+      background: var(--accent);
+    }
+
+    .resumo-metric {
+      border-radius: 8px;
+      padding: 7px 8px;
+      background: rgba(239, 247, 250, 0.96);
+    }
+
+    .resumo-metric label {
+      display: block;
+      color: var(--text-soft);
+      font-size: 0.58rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .resumo-metric strong {
+      display: block;
+      font-size: 0.9rem;
+      line-height: 1.1;
+      margin-top: 3px;
+    }
+
+    .btn-confirmar {
+      width: 100%;
+      min-height: 42px;
+      border: none;
+      border-radius: 14px;
+      color: #fff;
+      background: var(--accent);
+      font-weight: 900;
+    }
+
+    .btn-confirmar:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+
+    .danger-text {
+      color: #b42318;
+    }
+
+    .erro-detalhes {
+      margin-top: 6px;
+      color: #6f1d16;
+      font-size: 0.72rem;
+      line-height: 1.35;
+      font-weight: 800;
+    }
+
+    .success-text {
+      color: #18754d;
+    }
+
+    .dashboard-top {
+      display: grid;
+      grid-template-columns: 1.3fr 2fr;
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .hero-panel,
+    .metrics-panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 18px 36px rgba(16, 57, 66, 0.08);
+    }
+
+    .hero-panel {
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      min-height: 72px;
+    }
+
+    .hero-kicker {
+      color: var(--accent);
+      font-size: 0.64rem;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+
+    .hero-title {
+      font-size: 1.4rem;
+      line-height: 1;
+      font-weight: 900;
+      margin: 0 0 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .hero-title.is-long {
+      font-size: 1.18rem;
+    }
+
+    .hero-title.is-xlong {
+      font-size: 1rem;
+    }
+
+    .hero-subtitle {
+      color: var(--text-soft);
+      font-size: 0.72rem;
+      font-weight: 800;
+    }
+
+    .metrics-panel {
+      padding: 8px;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .metric-card {
+      border-radius: 14px;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(17, 48, 58, 0.07);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      min-height: 58px;
+    }
+
+    .metric-label {
+      font-size: 0.62rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-soft);
+    }
+
+    .metric-value {
+      font-size: 1.25rem;
+      line-height: 1;
+      font-weight: 900;
+      margin-top: 4px;
+    }
+
+    .metric-card.warning .metric-value {
+      color: #ba7a00;
+    }
+
+    .metric-card.info .metric-value {
+      color: #0e87ad;
+    }
+
+    .metric-card.success .metric-value {
+      color: #18754d;
+    }
+
+    .metric-card.revenue .metric-value {
+      color: #0f766e;
+      font-size: 1rem;
+      letter-spacing: -0.04em;
+      white-space: nowrap;
+    }
+
+    .metric-card.live .metric-value {
+      color: #0c6b89;
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      height: calc(100vh - 122px);
+    }
+
+    .pool {
+      border-radius: 20px;
+      padding: 10px;
+      overflow-y: auto;
+      border: 1px solid transparent;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    }
+
+    .pool-fila {
+      background: var(--fila-bg);
+      border-color: var(--fila-border);
+    }
+
+    .pool-conferidos {
+      background: var(--conf-bg);
+      border-color: var(--conf-border);
+    }
+
+    .pool-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+      padding: 2px 2px 0;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      backdrop-filter: blur(6px);
+    }
+
+    .pool-title {
+      font-size: 1.15rem;
+      font-weight: 800;
+      margin-bottom: 0;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .pool-dot {
+      width: 11px;
+      height: 11px;
+      border-radius: 999px;
+      flex: 0 0 auto;
+    }
+
+    .pool-dot.fila {
+      background: linear-gradient(180deg, #ffcf33 0%, #e7a800 100%);
+      box-shadow: 0 0 0 4px rgba(255, 191, 0, 0.16);
+    }
+
+    .pool-dot.conferidos {
+      background: linear-gradient(180deg, #2db36b 0%, #18754d 100%);
+      box-shadow: 0 0 0 4px rgba(24, 117, 77, 0.14);
+    }
+
+    .pool-count {
+      font-size: 0.68rem;
+      font-weight: 900;
+      color: var(--text-soft);
+      background: rgba(255, 255, 255, 0.62);
+      padding: 5px 9px;
+      border-radius: 999px;
+    }
+
+    .card-item {
+      position: relative;
+      border-radius: 16px;
+      padding: 8px 11px 27px;
+      margin-bottom: 6px;
+      background: rgba(255, 255, 255, 0.68);
+      border: 1px solid rgba(255, 255, 255, 0.75);
+      border-left: 5px solid transparent;
+      cursor: pointer;
+      box-shadow: 0 6px 12px rgba(26, 55, 63, 0.06);
+    }
+
+    .linha-flex {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 2px;
+    }
+
+    .nota-numero {
+      font-size: 0.98rem;
+      font-weight: 900;
+      text-align: left;
+      margin-bottom: 2px;
+      letter-spacing: 0.01em;
+    }
+
+    .nota-info,
+    .empresa-nome,
+    .conferente {
+      font-size: 0.74rem;
+      font-weight: 800;
+      line-height: 1.15;
+    }
+
+    .empresa-nome {
+      max-width: 78%;
+      text-transform: uppercase;
+    }
+
+    .nota-info {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .tempo-conferencia {
+      font-size: 0.9rem;
+      font-weight: 900;
+      color: #8b6a00;
+      white-space: nowrap;
+    }
+
+    .conferente {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+      text-align: right;
+    }
+
+    .tempo-total {
+      font-size: 0.58rem;
+      color: #335c43;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .status-text {
+      position: absolute;
+      left: 50%;
+      bottom: 5px;
+      transform: translateX(-50%);
+      font-size: 0.5rem;
+      font-weight: 900;
+      padding: 4px 10px;
+      border-radius: 999px;
+      white-space: nowrap;
+      letter-spacing: 0.04em;
+    }
+
+    .status-andamento {
+      background: linear-gradient(180deg, rgba(255, 239, 166, 0.95) 0%, rgba(255, 230, 133, 0.95) 100%);
+      border-left-color: #ffbf00;
+    }
+
+    .status-andamento .status-text {
+      background: linear-gradient(180deg, #ffc928 0%, #f0a900 100%);
+      color: #3e2a00;
+    }
+
+    .status-aguardando {
+      background: linear-gradient(180deg, rgba(221, 242, 252, 0.96) 0%, rgba(198, 233, 248, 0.96) 100%);
+      border-left-color: #0dcaf0;
+    }
+
+    .status-aguardando .status-text {
+      background: linear-gradient(180deg, #25bfe8 0%, #099fcb 100%);
+      color: #05445e;
+    }
+
+    .status-conferido {
+      background: linear-gradient(180deg, rgba(207, 235, 216, 0.98) 0%, rgba(191, 226, 202, 0.98) 100%);
+      border-left-color: #198754;
+    }
+
+    .status-conferido .status-text {
+      background: linear-gradient(180deg, #28a35e 0%, #18754d 100%);
+      color: #fff;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 28px 14px;
+      color: var(--text-soft);
+      font-weight: 700;
+    }
+
+    .pedido-preview {
+      position: fixed;
+      inset: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+      background: rgba(9, 34, 41, 0.42);
+      backdrop-filter: blur(4px);
+    }
+
+    .pedido-preview-dialog {
+      width: min(980px, 100%);
+      max-height: min(82vh, 760px);
+      display: flex;
+      flex-direction: column;
+      border: 1px solid rgba(18, 66, 75, 0.12);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 24px 70px rgba(16, 57, 66, 0.28);
+      overflow: hidden;
+    }
+
+    .pedido-preview[hidden] {
+      display: none;
+    }
+
+    .pedido-preview-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 12px;
+      border-bottom: 1px solid rgba(18, 66, 75, 0.10);
+    }
+
+    .pedido-preview-title {
+      font-weight: 900;
+      font-size: 1rem;
+    }
+
+    .pedido-preview-meta {
+      color: var(--text-soft);
+      font-size: 0.76rem;
+      font-weight: 800;
+      margin-top: 3px;
+    }
+
+    .pedido-preview-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .pedido-preview-summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(18, 66, 75, 0.10);
+    }
+
+    .pedido-preview-items {
+      flex: 1;
+      min-height: 220px;
+      overflow: auto;
+    }
+
+    @media (max-width: 900px) {
+      .home-grid,
+      .home-menu,
+      .scan-panel,
+      .dashboard-top,
+      .metrics-panel,
+      .board,
+      .fila-workspace,
+      .itens-pools,
+      .resumo-inline {
+        grid-template-columns: 1fr;
+      }
+
+      .screen {
+        padding: 8px;
+      }
+
+      .login-card {
+        padding: 18px;
+        border-radius: 18px;
+      }
+
+      .login-card h1 {
+        font-size: 1.55rem;
+      }
+
+      .home-topbar,
+      .home-user {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .fila-app {
+        min-height: auto;
+      }
+
+      .fila-pedidos-layout {
+        grid-template-columns: 1fr;
+        width: 100%;
+        max-width: 100%;
+        overflow-x: visible;
+      }
+
+      .fila-operacao-panel {
+        position: static;
+        padding: 12px;
+        border-radius: 14px;
+      }
+
+      .fila-operacao-panel h2 {
+        font-size: 1.45rem;
+        line-height: 1.05;
+      }
+
+      .fila-operacao-panel .fila-toolbar-top {
+        margin-bottom: 8px;
+      }
+
+      .fila-filtros {
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .fila-pedido-search-panel,
+      .fila-filtros .fila-field:nth-child(4),
+      .fila-filtros .fila-field:nth-child(5),
+      .fila-filtros .btn-start,
+      .fila-filtros .btn-back {
+        grid-column: 1 / -1;
+      }
+
+      .fila-field input,
+      .fila-field select,
+      .scan-input,
+      .qtd-input {
+        min-height: 38px;
+        font-size: 0.88rem;
+      }
+
+      .fila-pedidos-stage {
+        min-height: 300px;
+        padding: 10px;
+        border-radius: 14px;
+      }
+
+      .fila-pedidos-grid {
+        min-height: 220px;
+        max-height: none;
+        overflow-x: visible;
+        padding-right: 0;
+        border: none;
+        background: transparent;
+        gap: 8px;
+      }
+
+      .fila-pedidos-grid > .empty-state {
+        min-width: 0;
+        border: 1px solid rgba(18, 66, 75, 0.10);
+        border-radius: 10px;
+        background: rgba(255, 255, 255, 0.72);
+      }
+
+      .pedido-list-header {
+        display: none;
+      }
+
+      .pedido-operacao-card {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 4px 10px;
+        align-items: start;
+        border: 1px solid rgba(18, 66, 75, 0.10);
+        border-left: 5px solid #0dcaf0;
+        border-radius: 10px;
+        min-height: 0;
+        padding: 10px;
+      }
+
+      .pedido-operacao-card > div,
+      .pedido-operacao-card > strong {
+        padding: 0;
+        border-right: none;
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+      }
+
+      .pedido-operacao-card strong {
+        grid-column: 2 / 3;
+      }
+
+      .pedido-operacao-card .pedido-cliente {
+        grid-column: 1 / -1;
+      }
+
+      .pedido-list-status {
+        grid-column: 1 / -1;
+      }
+
+      .pedido-list-action {
+        grid-row: 1;
+      }
+
+      .pedido-preview {
+        align-items: stretch;
+        padding: 8px;
+      }
+
+      .pedido-preview-dialog {
+        max-height: calc(100vh - 16px);
+        border-radius: 12px;
+      }
+
+      .pedido-preview-head {
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .pedido-preview-actions {
+        width: 100%;
+      }
+
+      .pedido-preview-actions .btn-back,
+      .pedido-preview-actions .btn-start {
+        flex: 1 1 140px;
+        min-width: 0;
+      }
+
+      .pedido-preview-summary,
+      .corte-info {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .fila-screen.conferencia-mode .fila-workspace {
+        height: auto;
+      }
+
+      .fila-workspace {
+        padding: 8px;
+      }
+
+      .pedido-lista,
+      .conferencia-box {
+        padding: 10px;
+        border-radius: 14px;
+      }
+
+      .scan-panel {
+        grid-template-columns: minmax(0, 1fr) 92px;
+      }
+
+      .scan-panel .btn-start {
+        grid-column: 1 / -1;
+      }
+
+      .itens-pools {
+        height: auto;
+      }
+
+      .itens-pool {
+        min-height: 240px;
+      }
+
+      .itens-scroll {
+        max-height: 260px;
+      }
+
+      .itens-grid-header,
+      .item-row {
+        min-width: 744px;
+      }
+
+      .corte-modal {
+        padding: 10px;
+      }
+
+      .corte-actions {
+        flex-direction: column-reverse;
+      }
+
+      .home-actions,
+      .linha-flex {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .home-topbar {
+        flex-direction: column;
+      }
+
+      .board {
+        height: auto;
+      }
+
+      .pool {
+        min-height: 320px;
+      }
+
+      .btn-confirmar {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <section class="screen login-screen active" id="login-screen">
+    <div class="login-card">
+      <div class="home-kicker">Conferencia operacional</div>
+      <h1>Entrar no sistema</h1>
+      <p>Use o mesmo usuario e senha do Sankhya para acessar a fila de conferencia.</p>
+
+      <form class="login-form" id="login-form" autocomplete="on">
+        <div class="login-field">
+          <label for="login-usuario">Usuario Sankhya</label>
+          <input id="login-usuario" name="usuario" autocomplete="username" required>
+        </div>
+        <div class="login-field">
+          <label for="login-senha">Senha</label>
+          <input id="login-senha" name="senha" type="password" autocomplete="current-password" required>
+        </div>
+        <button class="btn-start" id="login-submit" type="submit">Entrar</button>
+        <div class="login-status" id="login-status" role="alert"></div>
+      </form>
+    </div>
+  </section>
+
+  <section class="screen home-screen" id="home-screen">
+    <div class="home-shell">
+      <div class="home-topbar">
+        <div>
+          <div class="home-kicker">Central de Conferencia</div>
+          <h1>Escolha uma tela</h1>
+          <p>Escolha entre a conferencia operacional e o acompanhamento visual da fila.</p>
+        </div>
+        <div class="home-user">
+          <div class="home-user-name" id="home-usuario-logado">-</div>
+          <button class="btn-logout" id="logout-button" type="button">Sair</button>
+        </div>
+      </div>
+
+      <div class="home-menu">
+        <button class="home-menu-button primary" id="abrir-conferencia" type="button">
+          <span class="home-menu-icon">CF</span>
+          <span class="home-menu-title">Fila de Conferencia</span>
+          <span class="home-menu-text">Confira pedidos por codigo de barras ou codigo do produto.</span>
+        </button>
+
+        <button class="home-menu-button secondary" id="abrir-acompanhamento" type="button">
+          <span class="home-menu-icon">AC</span>
+          <span class="home-menu-title">Acompanhamento de Conferencia</span>
+          <span class="home-menu-text">Selecione data e empresa para abrir o painel visual de acompanhamento.</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen fila-screen" id="fila-screen">
+    <div class="fila-app">
+      <div class="fila-etapa active" id="fila-etapa-pedidos">
+        <div class="fila-pedidos-layout">
+          <aside class="fila-operacao-panel">
+            <div class="fila-toolbar-top">
+              <div>
+                <div class="home-kicker">Conferencia operacional</div>
+                <h2>Fila de Conferencia</h2>
+                <div class="fila-contexto" id="fila-contexto">-</div>
+              </div>
+            </div>
+
+            <div class="fila-filtros">
+              <div class="fila-field fila-pedido-search-panel">
+                <label for="fila-busca-pedido">Buscar pedido</label>
+                <input id="fila-busca-pedido" inputmode="numeric" autocomplete="off" placeholder="Numero do pedido">
+              </div>
+
+              <div class="fila-field">
+                <label for="fila-data-inicial">Data inicial</label>
+                <input type="date" id="fila-data-inicial">
+              </div>
+
+              <div class="fila-field">
+                <label for="fila-data-final">Data final</label>
+                <input type="date" id="fila-data-final">
+              </div>
+
+              <div class="fila-field">
+                <label for="fila-empresa">Empresa</label>
+                <select id="fila-empresa">
+                  <option value="">Selecione a empresa</option>
+                </select>
+              </div>
+
+              <div class="fila-field">
+                <label>Conferente</label>
+                <div class="fila-user-chip" id="fila-usuario-logado">Usuario logado</div>
+              </div>
+
+              <button class="btn-start" id="buscar-fila-conferencia" type="button">Buscar pedidos</button>
+              <button class="btn-back" id="voltar-home-fila" type="button">Voltar</button>
+            </div>
+          </aside>
+
+          <div class="fila-pedidos-stage">
+            <div class="fila-pedidos-top">
+              <div class="box-title">
+                <span>Pedidos aguardando</span>
+                <span id="fila-count-pedidos">0</span>
+              </div>
+            </div>
+            <div class="fila-pedidos-grid" id="fila-pedidos-lista">
+              <div class="empty-state">Informe filtros e busque os pedidos.</div>
+            </div>
+          </div>
+          <section class="pedido-preview" id="pedido-preview" hidden>
+            <div class="pedido-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="pedido-preview-titulo">
+              <div class="pedido-preview-head">
+                <div>
+                  <div class="pedido-preview-title" id="pedido-preview-titulo">Pedido</div>
+                  <div class="pedido-preview-meta" id="pedido-preview-meta">-</div>
+                </div>
+                <div class="pedido-preview-actions">
+                  <button class="btn-back" id="cancelar-preview-pedido" type="button">Cancelar</button>
+                  <button class="btn-start" id="confirmar-preview-pedido" type="button">Iniciar conferencia</button>
+                </div>
+              </div>
+
+              <div class="pedido-preview-summary">
+                <div class="resumo-metric">
+                  <label>Valor</label>
+                  <strong id="pedido-preview-valor">R$ 0,00</strong>
+                </div>
+                <div class="resumo-metric">
+                  <label>Itens</label>
+                  <strong id="pedido-preview-itens">0</strong>
+                </div>
+                <div class="resumo-metric">
+                  <label>Unidades</label>
+                  <strong id="pedido-preview-unidades">0</strong>
+                </div>
+                <div class="resumo-metric">
+                  <label>Status</label>
+                  <strong id="pedido-preview-status">Novo</strong>
+                </div>
+              </div>
+
+              <div class="pedido-preview-items" id="pedido-preview-itens-lista"></div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <section class="corte-modal" id="corte-modal" hidden>
+        <div class="corte-dialog" role="dialog" aria-modal="true" aria-labelledby="corte-modal-titulo">
+          <div class="corte-head">
+            <strong id="corte-modal-titulo">Cortar item</strong>
+            <span id="corte-modal-produto">-</span>
+          </div>
+          <div class="corte-body">
+            <div class="corte-info">
+              <div>
+                <label>Total</label>
+                <span id="corte-total">0</span>
+              </div>
+              <div>
+                <label>Conferido</label>
+                <span id="corte-conferido">0</span>
+              </div>
+              <div>
+                <label>Disponivel</label>
+                <span id="corte-disponivel">0</span>
+              </div>
+            </div>
+            <div class="fila-field">
+              <label for="corte-qtd">Quantidade a cortar</label>
+              <input id="corte-qtd" type="number" min="0" step="1" value="1">
+            </div>
+            <div class="scan-status" id="corte-status"></div>
+          </div>
+          <div class="corte-actions">
+            <button class="btn-back" id="cancelar-corte" type="button">Cancelar</button>
+            <button class="btn-start" id="confirmar-corte" type="button">Confirmar corte</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="pos-conferencia-modal" id="pos-conferencia-modal" hidden>
+        <div class="pos-conferencia-dialog" role="dialog" aria-modal="true" aria-labelledby="pos-conferencia-titulo">
+          <h3 id="pos-conferencia-titulo">Conferencia concluida</h3>
+          <p id="pos-conferencia-texto">Pedido conferido com sucesso.</p>
+
+          <div class="volume-panel" id="volume-panel">
+            <div class="fila-field">
+              <label for="volume-qtd">Quantidade de volumes</label>
+              <input id="volume-qtd" type="number" min="1" step="1" value="1">
+            </div>
+            <div class="scan-status" id="volume-status"></div>
+          </div>
+
+          <div class="pos-conferencia-actions">
+            <button class="btn-start" id="imprimir-etiqueta-volume" type="button">Imprimir etiqueta</button>
+            <button class="btn-back" id="voltar-lista-pos-conferencia" type="button">Voltar para lista</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="fila-etapa" id="fila-etapa-conferencia">
+        <div class="fila-workspace">
+        <aside class="pedido-lista">
+          <div class="box-title">
+            <span>Pedido em conferencia</span>
+          </div>
+          <div id="pedido-em-conferencia-card">
+            <div class="empty-state">Nenhum pedido selecionado.</div>
+          </div>
+
+          <div class="resumo-inline">
+            <div class="resumo-metric">
+              <label>Itens conferidos</label>
+              <strong id="resumo-itens-ok">0/0</strong>
+            </div>
+
+            <div class="resumo-metric">
+              <label>Unidades conferidas</label>
+              <strong id="resumo-qtd-ok">0/0</strong>
+            </div>
+
+            <div class="resumo-metric">
+              <label>Faltando</label>
+              <strong id="resumo-faltando">0</strong>
+            </div>
+
+            <div class="resumo-metric">
+              <label>Divergencias</label>
+              <strong id="resumo-divergencias">0</strong>
+            </div>
+
+            <button class="btn-confirmar" id="confirmar-conferencia" type="button" disabled>Confirmar conferencia</button>
+          </div>
+          <div class="scan-status" id="confirmar-status"></div>
+          <button class="btn-back" id="voltar-lista-fila" type="button">Voltar para pedidos</button>
+        </aside>
+
+        <main class="conferencia-box">
+          <div class="box-title">
+            <span id="pedido-conferencia-titulo">Nenhum pedido selecionado</span>
+            <span id="pedido-conferencia-status">-</span>
+          </div>
+
+          <div class="scan-panel">
+            <div class="fila-field">
+              <label for="scan-codigo">Codigo de barras ou produto</label>
+              <input class="scan-input" id="scan-codigo" autocomplete="off" placeholder="Bipe ou digite o codigo" disabled>
+            </div>
+            <div class="fila-field">
+              <label for="scan-qtd">Qtd.</label>
+              <input class="qtd-input" id="scan-qtd" type="number" min="1" step="1" value="1" disabled>
+            </div>
+            <button class="btn-start" id="scan-adicionar" type="button" disabled>Conferir</button>
+          </div>
+
+          <div class="scan-status" id="scan-status"></div>
+          <div class="itens-pools" id="itens-conferencia-lista">
+            <section class="itens-pool">
+              <div class="itens-pool-header">
+                <strong>Itens em conferencia</strong>
+                <span id="itens-pendentes-count">0 itens</span>
+              </div>
+              <div class="itens-scroll" id="itens-pendentes-lista"></div>
+            </section>
+
+            <section class="itens-pool">
+              <div class="itens-pool-header">
+                <strong>Itens conferidos</strong>
+                <span id="itens-conferidos-count">0 itens</span>
+              </div>
+              <div class="itens-scroll" id="itens-conferidos-lista"></div>
+            </section>
+          </div>
+        </main>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen acompanhamento-screen" id="acompanhamento-screen">
+    <div class="home-shell">
+      <div class="home-topbar">
+        <div>
+          <div class="home-kicker">Acompanhamento</div>
+          <h1>Selecione os filtros</h1>
+          <p>Informe o periodo e a empresa antes de exibir o acompanhamento da fila.</p>
+        </div>
+      </div>
+
+      <div class="home-grid">
+        <div class="form-card">
+          <label for="data-inicial">Data inicial</label>
+          <input type="date" id="data-inicial">
+        </div>
+
+        <div class="form-card">
+          <label for="data-final">Data final</label>
+          <input type="date" id="data-final">
+        </div>
+
+        <div class="form-card">
+          <label for="empresa-filtro">Empresa</label>
+          <select id="empresa-filtro">
+            <option value="">Todas as empresas</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="home-actions">
+        <button class="btn-back" id="voltar-home-acompanhamento" type="button">Voltar</button>
+        <button class="btn-start" id="exibir-acompanhamento" type="button">Exibir acompanhamento</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen conferencia-screen" id="conferencia-screen">
+    <div class="dashboard-top">
+      <div class="hero-panel">
+        <div class="hero-kicker">Painel Ao Vivo</div>
+        <h2 class="hero-title" id="hero-titulo">Fila de Conferencia</h2>
+        <div class="hero-subtitle" id="hero-periodo">Periodo: -</div>
+      </div>
+
+      <div class="metrics-panel">
+        <div class="metric-card warning">
+          <div class="metric-label">Em andamento</div>
+          <div class="metric-value" id="metric-andamento">0</div>
+        </div>
+
+        <div class="metric-card info">
+          <div class="metric-label">Aguardando</div>
+          <div class="metric-value" id="metric-aguardando">0</div>
+        </div>
+
+        <div class="metric-card success">
+          <div class="metric-label">Conferidos</div>
+          <div class="metric-value" id="metric-conferidos">0</div>
+        </div>
+
+        <div class="metric-card revenue">
+          <div class="metric-label">Total faturado</div>
+          <div class="metric-value" id="metric-total-faturado">R$ 0,00</div>
+        </div>
+
+        <div class="metric-card live">
+          <div class="metric-label">Horario</div>
+          <div class="metric-value" id="metric-relogio">--:--</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="board">
+      <div class="pool pool-fila">
+        <div class="pool-header">
+          <div class="pool-title">
+            <span class="pool-dot fila"></span>
+            <span>Fila de Conferencia</span>
+          </div>
+          <div class="pool-count" id="count-pendentes">0 pedidos</div>
+        </div>
+        <div id="pool-pendentes"></div>
+      </div>
+
+      <div class="pool pool-conferidos">
+        <div class="pool-header">
+          <div class="pool-title">
+            <span class="pool-dot conferidos"></span>
+            <span>Conferidos</span>
+          </div>
+          <div class="pool-count" id="count-conferidos">0 pedidos</div>
+        </div>
+        <div id="pool-conferidos"></div>
+      </div>
+    </div>
+  </section>
+
+  <script src="asyncRefresh.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
