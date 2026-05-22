@@ -853,8 +853,8 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
   const razaoTexto = etiqueta.razaoSocial || etiqueta.nomeParc || '-';
   const nomeParc = escaparHtml(nomeTexto);
   const razaoSocial = escaparHtml(razaoTexto);
-  const classeNome = nomeTexto.length > 52 ? 'fit-xsmall' : nomeTexto.length > 42 ? 'fit-small' : '';
-  const classeRazao = razaoTexto.length > 52 ? 'fit-xsmall' : razaoTexto.length > 42 ? 'fit-small' : '';
+  const classeNome = nomeTexto.length > 46 ? 'fit-xsmall' : nomeTexto.length > 28 ? 'fit-small' : '';
+  const classeRazao = razaoTexto.length > 46 ? 'fit-xsmall' : razaoTexto.length > 34 ? 'fit-small' : '';
   const cidadeUf = escaparHtml([etiqueta.cidade, etiqueta.uf].filter(Boolean).join('-') || '-');
   const endereco = escaparHtml(etiqueta.endereco || '-');
   const transportadora = escaparHtml(etiqueta.transportadora || 'TRANSPORTADORA NAO INFORMADA');
@@ -1033,14 +1033,14 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
     .cliente {
       display: grid;
       grid-template-columns: 8mm minmax(0, 1fr);
-      gap: 1.8mm;
+      gap: 1.6mm;
       align-items: center;
-      margin-top: 1.2mm;
+      margin-top: 1.4mm;
       background: #000 !important;
       color: #fff !important;
       border-radius: 1.1mm;
       padding: 1mm 1.6mm;
-      height: 10mm;
+      height: 11.6mm;
       overflow: hidden;
       print-color-adjust: exact;
       -webkit-print-color-adjust: exact;
@@ -1054,18 +1054,18 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
       transform-origin: left center;
     }
     .cliente strong {
-      font-size: 10.6pt;
+      font-size: 10.2pt;
       line-height: 1;
       font-weight: 900;
     }
     .cliente em {
-      margin-top: 0.8mm;
+      margin-top: 0.65mm;
       font-size: 7.2pt;
       line-height: 1;
       font-weight: 900;
     }
-    .cliente .fit-small { font-size: 8.4pt; }
-    .cliente .fit-xsmall { font-size: 6.9pt; }
+    .cliente .fit-small { font-size: 8.8pt; }
+    .cliente .fit-xsmall { font-size: 7.2pt; }
     .inverse-label {
       color: #fff !important;
       margin-bottom: 0.55mm;
@@ -1075,8 +1075,8 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
       grid-template-columns: 8mm minmax(0, 1fr);
       gap: 1.8mm;
       align-items: start;
-      margin-top: 1.1mm;
-      min-height: 13.2mm;
+      margin-top: 0.9mm;
+      min-height: 12.2mm;
     }
     .endereco-texto { min-width: 0; }
     .endereco {
@@ -1089,8 +1089,8 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
       text-overflow: ellipsis;
     }
     .cidade {
-      margin-top: 1.1mm;
-      font-size: 18pt;
+      margin-top: 0.85mm;
+      font-size: 16.7pt;
       line-height: 0.9;
       font-weight: 900;
       white-space: nowrap;
@@ -1103,12 +1103,12 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
       gap: 1.8mm;
       align-items: center;
       border-top: 0.25mm solid #999;
-      padding-top: 0.8mm;
-      margin-top: 0.3mm;
+      padding-top: 0.65mm;
+      margin-top: 0.15mm;
     }
     .transportadora {
-      margin-top: 0.45mm;
-      font-size: 10.5pt;
+      margin-top: 0.3mm;
+      font-size: 9.8pt;
       line-height: 1;
       font-weight: 900;
       white-space: nowrap;
