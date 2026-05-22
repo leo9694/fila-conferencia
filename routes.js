@@ -579,14 +579,17 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
       `);
     }
 
-    const unidadesPorProduto = new Map();
+    const unidadesPorProdutoEVolume = new Map();
     unidadesAlternativas.forEach((row) => {
       const codProd = Number(row.CODPROD);
-      if (!unidadesPorProduto.has(codProd)) {
-        unidadesPorProduto.set(codProd, []);
+      const codVol = String(row.CODVOL || '').trim().toUpperCase();
+      const chave = `${codProd}|${codVol}`;
+
+      if (!unidadesPorProdutoEVolume.has(chave)) {
+        unidadesPorProdutoEVolume.set(chave, []);
       }
 
-      unidadesPorProduto.get(codProd).push(row);
+      unidadesPorProdutoEVolume.get(chave).push(row);
     });
 
     res.json({
@@ -594,7 +597,8 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
       itens: rows.map((row) => {
         const codigosConferencia = [];
 
-        (unidadesPorProduto.get(Number(row.CODPROD)) || []).forEach((unidade) => {
+        const chaveUnidadePedido = `${Number(row.CODPROD)}|${String(row.CODVOL || '').trim().toUpperCase()}`;
+        (unidadesPorProdutoEVolume.get(chaveUnidadePedido) || []).forEach((unidade) => {
           const quantidade = normalizarNumero(unidade.QUANTIDADE) || 1;
           const operacao = String(unidade.DIVIDEMULTIPLICA || '').trim().toUpperCase();
           const multiplicador = operacao.startsWith('D') && quantidade !== 0
