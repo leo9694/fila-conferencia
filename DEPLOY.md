@@ -1,6 +1,7 @@
 # Deploy VPS
 
 Substitua `fila.seudominio.com.br` pelo dominio completo que aponta para a VPS.
+O app abaixo usa a porta interna `3005` para evitar conflito com outros apps.
 
 ```bash
 ssh root@187.77.50.115
@@ -17,14 +18,14 @@ npm install -g pm2
 
 mkdir -p /var/www
 cd /var/www
-git clone https://github.com/leo9694/REPOSITORIO.git fila-conferencia
+git clone https://github.com/leo9694/fila-conferencia.git fila-conferencia
 cd fila-conferencia
 
 npm ci --omit=dev
 cp .env.example .env
 nano .env
 
-pm2 start server.js --name fila-conferencia --env production
+PORT=3005 pm2 start server.js --name fila-conferencia --env production
 pm2 save
 pm2 startup
 ```
@@ -38,7 +39,7 @@ server {
     server_name fila.seudominio.com.br;
 
     location / {
-        proxy_pass http://127.0.0.1:3000;
+        proxy_pass http://127.0.0.1:3005;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
