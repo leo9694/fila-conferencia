@@ -889,42 +889,21 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
     .endereco { text-align: center; font-size: 8.5pt; margin-top: 1mm; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .cidade { text-align: center; font-size: 12pt; font-weight: 900; margin-top: 3mm; }
     .transportadora { text-align: center; font-size: 7.5pt; font-weight: 900; margin-top: 3mm; }
-    .print-toolbar {
-      position: sticky;
-      top: 0;
-      z-index: 10;
-      display: flex;
-      justify-content: center;
-      gap: 8px;
-      padding: 10px;
-      background: #263238;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
-    }
-    .print-toolbar button {
-      min-height: 34px;
-      border: 0;
-      border-radius: 8px;
-      padding: 0 16px;
-      background: #0d8a6a;
-      color: #fff;
-      font-weight: 800;
-      cursor: pointer;
-    }
-    .print-toolbar button.secondary { background: #fff; color: #263238; }
     @media print {
       body { background: #fff; }
       .label { border: none; }
       .volume-big, .cliente { background: #000 !important; color: #fff !important; }
-      .print-toolbar { display: none; }
     }
   </style>
 </head>
 <body>
-  <div class="print-toolbar">
-    <button type="button" onclick="window.print()">Imprimir etiquetas</button>
-    <button class="secondary" type="button" onclick="window.close()">Fechar</button>
-  </div>
   ${paginas}
+  <script>
+    window.onload = () => {
+      window.focus();
+      window.print();
+    };
+  </script>
 </body>
 </html>`;
 }
