@@ -249,9 +249,10 @@ function obterMimeImagem(buffer) {
   return 'application/octet-stream';
 }
 
-async function alterarItemNotaApi(nunota, item, novaQuantidade) {
+async function atualizarCorteItemNotaApi(nunota, item, qtdCortada = 0) {
+  const qtdOriginal = normalizarNumero(item.QTDNEG);
   const vlrUnit = normalizarNumero(item.VLRUNIT);
-  const vlrTot = normalizarNumero(novaQuantidade) * vlrUnit;
+  const vlrTot = qtdOriginal * vlrUnit;
 
   return executeService(
     'CACSP.incluirAlterarItemNota',
@@ -263,31 +264,15 @@ async function alterarItemNotaApi(nunota, item, novaQuantidade) {
             CODPROD: campoApi(item.CODPROD),
             NUNOTA: campoApi(nunota),
             SEQUENCIA: campoApi(item.SEQUENCIA),
-            QTDNEG: campoApi(numeroApi(novaQuantidade)),
+            QTDNEG: campoApi(numeroApi(qtdOriginal)),
             VLRUNIT: campoApi(numeroApi(vlrUnit)),
             VLRTOT: campoApi(numeroApi(vlrTot)),
             CODVOL: campoApi(item.CODVOL || 'UN'),
             CODLOCALORIG: campoApi(item.CODLOCALORIG || 0),
             CONTROLE: campoApi(item.CONTROLE || ''),
+            QTDCONFERIDA: campoApi(numeroApi(qtdCortada)),
             VLRDESC: campoApi(numeroApi(item.VLRDESC || 0)),
             PERCDESC: campoApi(numeroApi(item.PERCDESC || 0))
-          }
-        }
-      }
-    },
-    { modulePath: 'mgecom', forceAccessSession: true }
-  );
-}
-
-async function excluirItemNotaApi(nunota, sequencia) {
-  return executeService(
-    'CACSP.excluirItemNota',
-    {
-      nota: {
-        itens: {
-          item: {
-            NUNOTA: campoApi(nunota),
-            SEQUENCIA: campoApi(sequencia)
           }
         }
       }
@@ -320,12 +305,8 @@ async function aplicarCortesNoPedido({ nunota, itensPedido, conferidosPorSequenc
       throw new Error(`Corte invalido no item ${corte.sequencia}: a quantidade restante precisa bater com a quantidade conferida.`);
     }
 
-    if (corte.novaQuantidade <= 0) {
-      await excluirItemNotaApi(nunota, corte.sequencia);
-    } else {
-      const itemPedido = itensPedido.find((item) => Number(item.SEQUENCIA) === corte.sequencia);
-      await alterarItemNotaApi(nunota, itemPedido, corte.novaQuantidade);
-    }
+    const itemPedido = itensPedido.find((item) => Number(item.SEQUENCIA) === corte.sequencia);
+    await atualizarCorteItemNotaApi(nunota, itemPedido, corte.qtdCortada);
   }
 
   return cortes;
@@ -342,12 +323,71 @@ async function finalizarConferenciaOperacional(nuconf, nunota, codUsu, qtdVol = 
       QTDVOL: Math.max(1, normalizarNumero(qtdVol))
     }
   );
+}
 
-  await atualizarRegistroApi(
-    'CabecalhoNota',
-    { NUNOTA: nunota },
-    { NUCONFATUAL: nuconf }
-  );
+async function salvarDetalhesConferenciaSankhya({ nuconf, nunota }) {
+  const itens = await executeQuery(`
+    SELECT
+      ITE.SEQUENCIA,
+      ITE.CODPROD,
+      ITE.CODVOL,
+      NVL(ITE.QTDNEG, 0) AS QTDNEG,
+      NVL(ITE.QTDCONFERIDA, 0) AS QTDCORTE,
+      NVL(ITE.GTINNFE, ITE.PRODUTONFE) AS CODBARRA,
+      VOA.CODVOL AS CODVOLCONF,
+      VOA.CODBARRA AS CODBARRACONF
+    FROM TGFITE ITE
+    LEFT JOIN TGFVOA VOA
+      ON VOA.CODPROD = ITE.CODPROD
+     AND VOA.CODBARRA = NVL(ITE.GTINNFE, ITE.PRODUTONFE)
+     AND NVL(VOA.ATIVO, 'S') = 'S'
+     AND NVL(VOA.QUANTIDADE, 1) = 1
+    WHERE ITE.NUNOTA = ${nunota}
+    ORDER BY ITE.SEQUENCIA
+  `);
+
+  let seqConf = 1;
+  const dhAlter = formatarDataHoraSankhya();
+  const detalhesExistentes = await executeQuery(`
+    SELECT SEQCONF
+    FROM TGFCOI2
+    WHERE NUCONF = ${nuconf}
+  `);
+  const sequenciasExistentes = new Set(detalhesExistentes.map((item) => Number(item.SEQCONF)));
+
+  for (const item of itens) {
+    const qtdConferida = Math.max(0, normalizarNumero(item.QTDNEG) - normalizarNumero(item.QTDCORTE));
+
+    if (qtdConferida <= 0) {
+      continue;
+    }
+
+    const campos = {
+      CODBARRA: item.CODBARRACONF || item.CODBARRA || item.CODPROD,
+      CODPROD: item.CODPROD,
+      CODVOL: item.CODVOLCONF || item.CODVOL || 'UN',
+      CONTROLE: ' ',
+      QTDCONFVOLPAD: numeroApi(qtdConferida),
+      QTDCONF: numeroApi(qtdConferida),
+      DHALTER: dhAlter
+    };
+
+    if (sequenciasExistentes.has(seqConf)) {
+      await atualizarRegistroApi(
+        'DetalhesConferencia',
+        { NUCONF: nuconf, SEQCONF: seqConf },
+        campos
+      );
+    } else {
+      await salvarRegistroApi('DetalhesConferencia', {
+        NUCONF: nuconf,
+        SEQCONF: seqConf,
+        ...campos
+      });
+    }
+
+    seqConf += 1;
+  }
 }
 
 function normalizarDataSankhya(valor) {
@@ -1093,6 +1133,8 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       conferidosPorSequencia,
       cortadosPorSequencia
     });
+
+    await salvarDetalhesConferenciaSankhya({ nuconf, nunota });
 
     const resultadoFinalizacao = await finalizarConferenciaNativa(nuconf, nunota);
 
