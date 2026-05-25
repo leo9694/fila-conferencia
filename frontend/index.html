@@ -667,6 +667,10 @@
       overflow: hidden;
     }
 
+    .pedido-lista {
+      overflow-y: auto;
+    }
+
     .conferencia-box {
       display: grid;
       grid-template-rows: auto auto auto minmax(0, 1fr);
@@ -865,6 +869,28 @@
       gap: 6px;
       margin: 8px 0;
       align-items: stretch;
+    }
+
+    .pedido-sidebar-actions {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 88px;
+      gap: 7px;
+      align-items: stretch;
+      margin: 8px 0;
+    }
+
+    .pedido-sidebar-actions .btn-confirmar,
+    .pedido-sidebar-actions .btn-back {
+      width: 100%;
+      min-height: 42px;
+      padding: 0 10px;
+      border-radius: 12px;
+      font-size: 0.78rem;
+      line-height: 1.08;
+    }
+
+    .pedido-sidebar-actions .btn-back-compact {
+      min-width: 0;
     }
 
     .scan-status {
@@ -1114,6 +1140,65 @@
 
     .item-action-cut:active {
       transform: scale(0.96);
+    }
+
+    .produto-foto-panel {
+      margin-top: 8px;
+      padding: 8px;
+      border: 1px solid rgba(18, 66, 75, 0.12);
+      border-radius: 14px;
+      background: linear-gradient(180deg, rgba(239, 250, 246, 0.96) 0%, rgba(255, 255, 255, 0.96) 100%);
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.58);
+    }
+
+    .produto-foto-head {
+      display: grid;
+      gap: 2px;
+      margin-bottom: 6px;
+    }
+
+    .produto-foto-head strong {
+      font-size: 0.74rem;
+      color: var(--text-main);
+    }
+
+    .produto-foto-head span {
+      color: var(--text-soft);
+      font-size: 0.62rem;
+      font-weight: 900;
+      line-height: 1.25;
+    }
+
+    .produto-foto-frame {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: visible;
+      height: auto;
+      min-height: 0;
+      border: 1px solid rgba(18, 66, 75, 0.12);
+      border-radius: 12px;
+      background: #f8fbfc;
+      padding: 6px;
+    }
+
+    .produto-foto-frame img {
+      width: auto;
+      max-width: 100%;
+      height: auto;
+      max-height: none;
+      display: block;
+      background: #fff;
+      border-radius: 8px;
+    }
+
+    .produto-foto-placeholder {
+      padding: 16px;
+      text-align: center;
+      color: var(--text-soft);
+      font-size: 0.78rem;
+      font-weight: 900;
+      line-height: 1.3;
     }
 
     .corte-modal {
@@ -1911,6 +1996,10 @@
         border-radius: 14px;
       }
 
+      .pedido-lista {
+        overflow-y: auto;
+      }
+
       .scan-panel {
         grid-template-columns: minmax(0, 1fr) 92px;
       }
@@ -1929,6 +2018,10 @@
 
       .itens-scroll {
         max-height: 260px;
+      }
+
+      .produto-foto-frame {
+        height: auto;
       }
 
       .itens-grid-header,
@@ -2200,11 +2293,23 @@
               <label>Divergencias</label>
               <strong id="resumo-divergencias">0</strong>
             </div>
-
-            <button class="btn-confirmar" id="confirmar-conferencia" type="button" disabled>Confirmar conferencia</button>
           </div>
           <div class="scan-status" id="confirmar-status"></div>
-          <button class="btn-back" id="voltar-lista-fila" type="button">Voltar para pedidos</button>
+
+          <div class="pedido-sidebar-actions">
+            <button class="btn-confirmar" id="confirmar-conferencia" type="button" disabled>Confirmar conferencia</button>
+            <button class="btn-back btn-back-compact" id="voltar-lista-fila" type="button">Voltar</button>
+          </div>
+
+          <section class="produto-foto-panel" id="produto-foto-panel" aria-live="polite">
+            <div class="produto-foto-head">
+              <strong>Foto do produto</strong>
+              <span id="produto-foto-legenda">Clique em um item ou confira um produto.</span>
+            </div>
+            <div class="produto-foto-frame" id="produto-foto-frame">
+              <div class="produto-foto-placeholder">Sem produto selecionado.</div>
+            </div>
+          </section>
         </aside>
 
         <main class="conferencia-box">

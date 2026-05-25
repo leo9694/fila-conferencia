@@ -49,11 +49,11 @@ function extractAccessToken(payload) {
   return payload.access_token || payload.accessToken || payload.bearerToken || payload.token;
 }
 
-async function authenticate() {
+async function authenticate(options = {}) {
   const config = getConfig();
   assertConfig(config);
 
-  if (cachedAccessToken && Date.now() < cachedAccessTokenExpiresAt - 60000) {
+  if (!options.forceNew && cachedAccessToken && Date.now() < cachedAccessTokenExpiresAt - 60000) {
     return cachedAccessToken;
   }
 
@@ -83,22 +83,24 @@ async function authenticate() {
     throw new Error('Falha ao autenticar na Sankhya API: token de acesso nao retornado');
   }
 
-  cachedAccessToken = accessToken;
-  cachedAccessTokenExpiresAt = getJwtExpiration(accessToken) || Date.now() + 25 * 60 * 1000;
+  if (!options.skipCache) {
+    cachedAccessToken = accessToken;
+    cachedAccessTokenExpiresAt = getJwtExpiration(accessToken) || Date.now() + 25 * 60 * 1000;
+  }
 
-  return cachedAccessToken;
+  return accessToken;
 }
 
 function campoApi(valor) {
   return { $: valor === null || valor === undefined ? '' : String(valor) };
 }
 
-async function ensureAccessSession(accessToken, config) {
+async function ensureAccessSession(accessToken, config, options = {}) {
   if (!config.accessUser || !config.accessPassword) {
     return;
   }
 
-  if (accessSessionToken === accessToken) {
+  if (!options.force && accessSessionToken === accessToken) {
     return;
   }
 
@@ -185,9 +187,12 @@ async function executeQuery(sql) {
 
 async function executeService(serviceName, requestBody, options = {}) {
   const config = getConfig();
-  const accessToken = await authenticate();
+  const accessToken = await authenticate({
+    forceNew: Boolean(options.isolatedSession),
+    skipCache: Boolean(options.isolatedSession)
+  });
   if (!options.skipAccessSession) {
-    await ensureAccessSession(accessToken, config);
+    await ensureAccessSession(accessToken, config, { force: Boolean(options.forceAccessSession) });
   }
   const modulePath = options.modulePath || 'mge';
   const url = `${config.baseUrl}/gateway/v1/${modulePath}/service.sbr?serviceName=${encodeURIComponent(serviceName)}&outputType=json`;

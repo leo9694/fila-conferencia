@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { clearAuthCache, executeService } = require('./sankhyaApi');
+const { executeService } = require('./sankhyaApi');
 
 const SESSION_COOKIE = 'fila_conf_session';
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
@@ -114,9 +114,10 @@ async function validarUsuarioSankhya(usuario, senha) {
     NOMUSU: campoApi(nomeUsuario.toUpperCase()),
     INTERNO: campoApi(senhaUsuario),
     KEEPCONNECTED: campoApi('N')
+  }, {
+    isolatedSession: true,
+    skipAccessSession: true
   });
-
-  clearAuthCache();
 
   const codUsuLogin = extrairIdUsuarioLogin(loginPayload);
 

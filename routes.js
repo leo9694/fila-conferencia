@@ -2,8 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { executeQuery, executeService } = require('./api/sankhyaApi');
 const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
+const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
 
 const conferenciaTimerStore = criarConferenciaTimerStore();
+const conferenciaProgressStore = criarConferenciaProgressStore();
 
 function obterDataHoje() {
   const agora = new Date();
@@ -112,6 +114,8 @@ async function salvarRegistroApi(rootEntity, campos) {
         )
       }
     }
+  }, {
+    forceAccessSession: true
   });
 }
 
@@ -135,6 +139,8 @@ async function atualizarRegistroApi(rootEntity, chave, campos) {
         )
       }
     }
+  }, {
+    forceAccessSession: true
   });
 }
 
@@ -147,7 +153,7 @@ async function finalizarConferenciaNativa(nuconf, nunota) {
         nuNota: nunota
       }
     },
-    { modulePath: 'mgecom' }
+    { modulePath: 'mgecom', forceAccessSession: true }
   );
 }
 
@@ -219,6 +225,30 @@ function numeroApi(valor) {
   return Number.isInteger(numero) ? String(numero) : numero.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
 }
 
+function obterMimeImagem(buffer) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 4) {
+    return 'application/octet-stream';
+  }
+
+  if (buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return 'image/jpeg';
+  }
+
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
+    return 'image/png';
+  }
+
+  if (buffer.slice(0, 4).toString('ascii') === 'GIF8') {
+    return 'image/gif';
+  }
+
+  if (buffer.slice(0, 4).toString('ascii') === 'RIFF' && buffer.slice(8, 12).toString('ascii') === 'WEBP') {
+    return 'image/webp';
+  }
+
+  return 'application/octet-stream';
+}
+
 async function alterarItemNotaApi(nunota, item, novaQuantidade) {
   const vlrUnit = normalizarNumero(item.VLRUNIT);
   const vlrTot = normalizarNumero(novaQuantidade) * vlrUnit;
@@ -245,7 +275,7 @@ async function alterarItemNotaApi(nunota, item, novaQuantidade) {
         }
       }
     },
-    { modulePath: 'mgecom' }
+    { modulePath: 'mgecom', forceAccessSession: true }
   );
 }
 
@@ -262,7 +292,7 @@ async function excluirItemNotaApi(nunota, sequencia) {
         }
       }
     },
-    { modulePath: 'mgecom' }
+    { modulePath: 'mgecom', forceAccessSession: true }
   );
 }
 
@@ -589,10 +619,16 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
       unidadesPorProduto.get(codProd).push(row);
     });
 
+    const progresso = conferenciaProgressStore.obter(nunota);
+    const progressoPorSequencia = new Map(
+      (progresso?.itens || []).map((item) => [Number(item.sequencia), item])
+    );
+
     res.json({
       nunota,
       itens: rows.map((row) => {
         const codigosConferencia = [];
+        const progressoItem = progressoPorSequencia.get(Number(row.SEQUENCIA)) || {};
 
         (unidadesPorProduto.get(Number(row.CODPROD)) || []).forEach((unidade) => {
           const quantidade = normalizarNumero(unidade.QUANTIDADE) || 1;
@@ -629,13 +665,85 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
           vlrUnit: normalizarNumero(row.VLRUNIT),
           codigoBarras: row.CODIGO_BARRAS || '',
           codigos: codigosConferencia.map((item) => item.codigo),
-          codigosConferencia
+          codigosConferencia,
+          qtdConferida: normalizarNumero(progressoItem.qtdConferida),
+          qtdCortada: normalizarNumero(progressoItem.qtdCortada)
         };
       })
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: 'Erro ao buscar itens do pedido' });
+  }
+});
+
+router.get('/fila-conferencia/produtos/:codprod/foto', async (req, res) => {
+  try {
+    const codprod = obterNumeroInteiro(req.params.codprod);
+    if (!codprod) {
+      res.status(400).json({ erro: 'Produto invalido' });
+      return;
+    }
+
+    const [produto] = await executeQuery(`
+      SELECT
+        CODPROD,
+        ENDIMAGEM,
+        CASE WHEN IMAGEM IS NULL THEN 0 ELSE DBMS_LOB.GETLENGTH(IMAGEM) END AS TAMIMG
+      FROM TGFPRO
+      WHERE CODPROD = ${codprod}
+    `);
+
+    if (!produto) {
+      res.status(404).json({ erro: 'Produto nao encontrado' });
+      return;
+    }
+
+    const endImagem = String(produto.ENDIMAGEM || '').trim();
+    if (endImagem && /^https?:\/\//i.test(endImagem)) {
+      res.redirect(endImagem);
+      return;
+    }
+
+    const tamanho = normalizarNumero(produto.TAMIMG);
+    if (tamanho <= 0) {
+      res.status(404).json({ erro: 'Produto sem foto cadastrada' });
+      return;
+    }
+
+    const tamanhoChunk = 2000;
+    const totalChunks = Math.ceil(tamanho / tamanhoChunk);
+    const chunks = await executeQuery(`
+      SELECT
+        NIVEL AS IDX,
+        RAWTOHEX(DBMS_LOB.SUBSTR(P.IMAGEM, ${tamanhoChunk}, ((N.NIVEL - 1) * ${tamanhoChunk}) + 1)) AS HEXIMG
+      FROM TGFPRO P
+      CROSS JOIN (
+        SELECT LEVEL NIVEL
+        FROM DUAL
+        CONNECT BY LEVEL <= ${totalChunks}
+      ) N
+      WHERE P.CODPROD = ${codprod}
+      ORDER BY N.NIVEL
+    `);
+
+    const hex = chunks
+      .sort((a, b) => Number(a.IDX) - Number(b.IDX))
+      .map((row) => String(row.HEXIMG || ''))
+      .join('');
+
+    if (!hex) {
+      res.status(404).json({ erro: 'Foto do produto nao encontrada' });
+      return;
+    }
+
+    const buffer = Buffer.from(hex, 'hex');
+    res.setHeader('Content-Type', obterMimeImagem(buffer));
+    res.setHeader('Cache-Control', 'private, max-age=300');
+    res.send(buffer);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar foto do produto' });
   }
 });
 
@@ -761,6 +869,51 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: 'Erro ao iniciar conferencia' });
+  }
+});
+
+router.post('/fila-conferencia/progresso', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.body?.nunota);
+  const nuconf = obterNumeroInteiro(req.body?.nuconf);
+  const codUsu = obterCodigoUsuario(req.usuario?.codUsu);
+  const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
+
+  if (!nunota || codUsu === null) {
+    res.status(400).json({ erro: 'Informe pedido e usuario logado' });
+    return;
+  }
+
+  try {
+    const [pedido] = await executeQuery(`
+      SELECT CAB.NUNOTA, CAB.NUCONFATUAL, CONF.STATUS
+      FROM TGFCAB CAB
+      LEFT JOIN TGFCON2 CONF
+        ON CONF.NUCONF = CAB.NUCONFATUAL
+      WHERE CAB.NUNOTA = ${nunota}
+    `);
+
+    if (!pedido) {
+      res.status(404).json({ erro: 'Pedido nao encontrado' });
+      return;
+    }
+
+    if (pedido.NUCONFATUAL && pedido.STATUS && pedido.STATUS !== 'A') {
+      conferenciaProgressStore.remover(nunota);
+      res.status(409).json({ erro: 'Conferencia ja finalizada ou em outro status no Sankhya' });
+      return;
+    }
+
+    const progresso = conferenciaProgressStore.salvar({
+      nunota,
+      nuconf: nuconf || pedido.NUCONFATUAL || null,
+      codUsu,
+      itens
+    });
+
+    res.json({ ok: true, progresso });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao salvar progresso da conferencia' });
   }
 });
 
@@ -1047,6 +1200,8 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       });
       return;
     }
+
+    conferenciaProgressStore.remover(nunota);
 
     res.json({
       ok: true,

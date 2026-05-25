@@ -46,6 +46,8 @@ const botaoCancelarPreviewPedido = document.getElementById('cancelar-preview-ped
 const botaoConfirmarPreviewPedido = document.getElementById('confirmar-preview-pedido');
 const pedidoEmConferenciaCard = document.getElementById('pedido-em-conferencia-card');
 const botaoVoltarListaFila = document.getElementById('voltar-lista-fila');
+const produtoFotoLegenda = document.getElementById('produto-foto-legenda');
+const produtoFotoFrame = document.getElementById('produto-foto-frame');
 const pedidoConferenciaTitulo = document.getElementById('pedido-conferencia-titulo');
 const pedidoConferenciaStatus = document.getElementById('pedido-conferencia-status');
 const scanCodigo = document.getElementById('scan-codigo');
@@ -95,8 +97,9 @@ let itensPedidoSelecionado = [];
 let itemCorteSelecionado = null;
 let pedidoConcluido = null;
 let volumePanelAberto = false;
-const itensGridMinimos = [34, 70, 180, 110, 70, 60, 100];
-const itensGridLarguras = [34, 82, 260, 140, 84, 74, 150];
+let produtoFotoAtual = null;
+const itensGridMinimos = [34, 70, 180, 70, 60, 110, 100];
+const itensGridLarguras = [34, 82, 260, 84, 74, 140, 150];
 
 function aplicarLargurasGridItens() {
   document.documentElement.style.setProperty(
@@ -463,6 +466,11 @@ function formatarQuantidade(valor) {
   });
 }
 
+function normalizarQuantidade(valor) {
+  const numero = Number(valor);
+  return Number.isFinite(numero) ? numero : 0;
+}
+
 function normalizarCodigo(valor) {
   return String(valor || '').trim().toUpperCase();
 }
@@ -610,6 +618,71 @@ function renderizarResumoConferencia() {
     : '-';
 }
 
+function renderizarFotoProdutoVazia(mensagem = 'Sem produto selecionado.') {
+  produtoFotoAtual = null;
+  if (produtoFotoLegenda) {
+    produtoFotoLegenda.textContent = 'Clique em um item ou confira um produto.';
+  }
+  if (produtoFotoFrame) {
+    produtoFotoFrame.innerHTML = `<div class="produto-foto-placeholder">${escaparHtml(mensagem)}</div>`;
+  }
+}
+
+function mostrarFotoProduto(item, origem = 'selecionado') {
+  if (!item || !produtoFotoFrame || !produtoFotoLegenda) {
+    return;
+  }
+
+  const codProd = Number(item.codProd);
+  if (!codProd) {
+    renderizarFotoProdutoVazia('Produto sem codigo para buscar foto.');
+    return;
+  }
+
+  const legendaOrigem = origem === 'ultimo' ? 'Ultimo produto conferido' : 'Produto selecionado';
+  const descricao = `${item.codProd} - ${item.descrProd || 'Produto'}`;
+  produtoFotoAtual = { codProd, origem };
+  produtoFotoLegenda.textContent = `${legendaOrigem}: ${descricao}`;
+  produtoFotoFrame.innerHTML = `
+    <img
+      src="/api/fila-conferencia/produtos/${codProd}/foto?v=${Date.now()}"
+      alt="Foto do produto ${escaparAtributo(descricao)}"
+      loading="lazy"
+    >
+  `;
+
+  const img = produtoFotoFrame.querySelector('img');
+  img.addEventListener('error', () => {
+    if (produtoFotoAtual?.codProd !== codProd) {
+      return;
+    }
+    produtoFotoFrame.innerHTML = `<div class="produto-foto-placeholder">Foto nao cadastrada para ${escaparHtml(descricao)}.</div>`;
+  }, { once: true });
+}
+
+function salvarProgressoConferencia() {
+  if (!pedidoSelecionado || !temUsuarioLogado()) {
+    return;
+  }
+
+  fetch('/api/fila-conferencia/progresso', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    keepalive: true,
+    body: JSON.stringify({
+      nunota: pedidoSelecionado.NUNOTA,
+      nuconf: pedidoSelecionado.nuconf || pedidoSelecionado.NUCONFATUAL || null,
+      itens: itensPedidoSelecionado.map((item) => ({
+        sequencia: item.sequencia,
+        qtdConferida: normalizarQuantidade(item.qtdConferida),
+        qtdCortada: quantidadeCortadaItem(item)
+      }))
+    })
+  }).catch((error) => {
+    console.error('Erro ao salvar progresso da conferencia:', error);
+  });
+}
+
 function criarLinhaItemConferencia(item, quantidade, classe, rotuloQuantidade, options = {}) {
   const row = document.createElement('div');
   row.className = `item-row ${classe}`;
@@ -622,18 +695,29 @@ function criarLinhaItemConferencia(item, quantidade, classe, rotuloQuantidade, o
     <div>${options.desfazer ? '<button class="item-action item-action-return" type="button" aria-label="Voltar item para conferencia" title="Voltar item para conferencia"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 4 12l6 6"/><path d="M5 12h15"/></svg></button>' : ''}${options.cortar ? '<button class="item-action item-action-cut" type="button" aria-label="Cortar quantidade do item" title="Cortar quantidade do item"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="M8.5 8.5 19 19"/><path d="M8.5 15.5 19 5"/></svg></button>' : ''}</div>
     <div class="item-code" title="${codigoProduto}">${item.codProd}</div>
     <div class="item-name" title="${descricao}">${item.descrProd}</div>
-    <div class="item-codes" title="${codigoBarras}">${item.codigoBarras || '-'}</div>
     <div class="item-qtd">${rotuloQuantidade || formatarQuantidade(quantidade)}</div>
     <div class="item-unit" title="${unidade}">${item.codVol}</div>
+    <div class="item-codes" title="${codigoBarras}">${item.codigoBarras || '-'}</div>
     <div class="item-codes" title="${controle}">${item.controle || '-'}</div>
   `;
 
   if (options.desfazer) {
-    row.querySelector('.item-action').addEventListener('click', () => desfazerConferenciaItem(item.sequencia));
+    row.querySelector('.item-action').addEventListener('click', (event) => {
+      event.stopPropagation();
+      desfazerConferenciaItem(item.sequencia);
+    });
   }
 
   if (options.cortar) {
-    row.querySelector('.item-action-cut').addEventListener('click', () => abrirModalCorte(item.sequencia));
+    row.querySelector('.item-action-cut').addEventListener('click', (event) => {
+      event.stopPropagation();
+      abrirModalCorte(item.sequencia);
+    });
+  }
+
+  if (options.selecionavel !== false) {
+    row.title = 'Clique para ver a foto do produto';
+    row.addEventListener('click', () => mostrarFotoProduto(item, 'selecionado'));
   }
 
   return row;
@@ -642,7 +726,7 @@ function criarLinhaItemConferencia(item, quantidade, classe, rotuloQuantidade, o
 function criarCabecalhoItens() {
   const header = document.createElement('div');
   header.className = 'itens-grid-header';
-  const colunas = ['', 'Produto', 'Descricao (Produto)', 'Cod. Barras', 'Quantidade', 'Unidade', 'Controle'];
+  const colunas = ['', 'Produto', 'Descricao (Produto)', 'Quantidade', 'Unidade', 'Cod. Barras', 'Controle'];
   header.innerHTML = colunas.map((coluna, index) => `
     <div class="itens-grid-col-header">
       <span>${coluna}</span>
@@ -669,7 +753,8 @@ function renderizarItensPlanilha(container, itens, modo = 'preview') {
       item,
       quantidade,
       '',
-      formatarQuantidade(quantidade)
+      formatarQuantidade(quantidade),
+      { selecionavel: false }
     ));
   });
 }
@@ -758,6 +843,7 @@ function desfazerConferenciaItem(sequencia) {
   item.qtdCortada = 0;
   scanStatus.innerHTML = `<span class="success-text">${item.codProd} voltou para itens em conferencia. Conferido removido: ${formatarQuantidade(quantidadeAnterior)}${corteAnterior > 0 ? ` | corte removido: ${formatarQuantidade(corteAnterior)}` : ''}.</span>`;
   renderizarItensConferencia();
+  salvarProgressoConferencia();
   scanCodigo.focus();
 }
 
@@ -811,6 +897,7 @@ function confirmarCorteItem() {
   scanStatus.innerHTML = `<span class="success-text">${itemCorteSelecionado.codProd} cortado: ${formatarQuantidade(itemCorteSelecionado.qtdCortada)} de ${formatarQuantidade(itemCorteSelecionado.qtdNeg)}.</span>`;
   fecharModalCorte();
   renderizarItensConferencia();
+  salvarProgressoConferencia();
   scanCodigo.focus();
 }
 
@@ -1294,6 +1381,7 @@ function limparPedidoConferencia(mensagem = 'Selecione um pedido para iniciar.')
   confirmarStatus.textContent = '';
   scanCodigo.value = '';
   scanQtd.value = '1';
+  renderizarFotoProdutoVazia();
   atualizarControlesConferencia();
   renderizarItensConferencia();
   renderizarPedidosFila();
@@ -1447,8 +1535,8 @@ async function selecionarPedidoConferencia(pedido) {
 
     itensPedidoSelecionado = (itensCarregados || itensPedidoPreview || []).map((item) => ({
       ...item,
-      qtdConferida: 0,
-      qtdCortada: 0
+      qtdConferida: normalizarQuantidade(item.qtdConferida),
+      qtdCortada: normalizarQuantidade(item.qtdCortada)
     }));
     fecharPreviewPedido();
     scanStatus.textContent = '';
@@ -1504,9 +1592,11 @@ function adicionarConferenciaPorCodigo() {
     ? ` (${formatarQuantidade(qtd)} x ${formatarQuantidade(multiplicador)} = ${formatarQuantidade(qtdConvertida)} un.)`
     : '';
   scanStatus.innerHTML = `<span class="success-text">${item.codProd} conferido por ${obterDescricaoEntradaCodigo(match.entrada)}${detalheConversao}: ${formatarQuantidade(item.qtdConferida)} de ${formatarQuantidade(item.qtdNeg)}.</span>`;
+  mostrarFotoProduto(item, 'ultimo');
   scanCodigo.value = '';
   scanQtd.value = '1';
   renderizarItensConferencia();
+  salvarProgressoConferencia();
   scanCodigo.focus();
 }
 
