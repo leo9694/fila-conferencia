@@ -1,6 +1,6 @@
 # Deploy VPS
 
-Substitua `fila.seudominio.com.br` pelo dominio completo que aponta para a VPS.
+O dominio de producao e `fila.nortesulsementes.com`.
 O app abaixo usa a porta interna `3005` para evitar conflito com outros apps.
 
 ```bash
@@ -36,7 +36,7 @@ Configure o Nginx:
 cat >/etc/nginx/sites-available/fila-conferencia <<'EOF'
 server {
     listen 80;
-    server_name fila.seudominio.com.br;
+    server_name fila.nortesulsementes.com;
 
     location / {
         proxy_pass http://127.0.0.1:3005;
@@ -58,8 +58,15 @@ HTTPS com Certbot:
 
 ```bash
 apt install -y certbot python3-certbot-nginx
-certbot --nginx -d fila.seudominio.com.br
+certbot --nginx -d fila.nortesulsementes.com
 ```
+
+## Ambientes
+
+Localmente, mantenha o arquivo `.env` com as credenciais de treinamento.
+Na VPS, mantenha sempre o arquivo `.env` com as credenciais de producao.
+
+Os arquivos `.env`, `.env.treinamento` e `.env.producao` nao sao enviados para o Git.
 
 Atualizar depois:
 
