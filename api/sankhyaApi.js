@@ -97,6 +97,9 @@ function campoApi(valor) {
 
 async function ensureAccessSession(accessToken, config, options = {}) {
   if (!config.accessUser || !config.accessPassword) {
+    if (options.required) {
+      throw new Error('Usuario tecnico Sankhya nao configurado: informe SANKHYA_ACCESS_USER e SANKHYA_ACCESS_PASSWORD');
+    }
     return;
   }
 
@@ -192,7 +195,10 @@ async function executeService(serviceName, requestBody, options = {}) {
     skipCache: Boolean(options.isolatedSession)
   });
   if (!options.skipAccessSession) {
-    await ensureAccessSession(accessToken, config, { force: Boolean(options.forceAccessSession) });
+    await ensureAccessSession(accessToken, config, {
+      force: Boolean(options.forceAccessSession),
+      required: Boolean(options.forceAccessSession)
+    });
   }
   const modulePath = options.modulePath || 'mge';
   const url = `${config.baseUrl}/gateway/v1/${modulePath}/service.sbr?serviceName=${encodeURIComponent(serviceName)}&outputType=json`;
