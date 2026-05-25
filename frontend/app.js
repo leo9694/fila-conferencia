@@ -7,18 +7,21 @@ const loginScreen = document.getElementById('login-screen');
 const loginForm = document.getElementById('login-form');
 const loginUsuario = document.getElementById('login-usuario');
 const loginSenha = document.getElementById('login-senha');
+const botaoToggleLoginSenha = document.getElementById('toggle-login-senha');
 const loginSubmit = document.getElementById('login-submit');
 const loginStatus = document.getElementById('login-status');
 const homeScreen = document.getElementById('home-screen');
 const conferenciaScreen = document.getElementById('conferencia-screen');
 const acompanhamentoScreen = document.getElementById('acompanhamento-screen');
 const filaScreen = document.getElementById('fila-screen');
+const consultaProdutosScreen = document.getElementById('consulta-produtos-screen');
 const filaContexto = document.getElementById('fila-contexto');
 const inputDataInicial = document.getElementById('data-inicial');
 const inputDataFinal = document.getElementById('data-final');
 const inputEmpresaFiltro = document.getElementById('empresa-filtro');
 const botaoAbrirConferencia = document.getElementById('abrir-conferencia');
 const botaoAbrirAcompanhamento = document.getElementById('abrir-acompanhamento');
+const botaoAbrirConsultaHome = document.getElementById('abrir-consulta-home');
 const botaoExibirAcompanhamento = document.getElementById('exibir-acompanhamento');
 const botaoVoltarHomeAcompanhamento = document.getElementById('voltar-home-acompanhamento');
 const botaoVoltarHomeFila = document.getElementById('voltar-home-fila');
@@ -51,6 +54,7 @@ const produtoFotoLegenda = document.getElementById('produto-foto-legenda');
 const produtoFotoFrame = document.getElementById('produto-foto-frame');
 const pedidoConferenciaTitulo = document.getElementById('pedido-conferencia-titulo');
 const pedidoConferenciaStatus = document.getElementById('pedido-conferencia-status');
+const botaoAbrirConsultaProdutos = document.getElementById('abrir-consulta-produtos');
 const scanCodigo = document.getElementById('scan-codigo');
 const scanQtd = document.getElementById('scan-qtd');
 const botaoScanAdicionar = document.getElementById('scan-adicionar');
@@ -90,6 +94,15 @@ const heroTitulo = document.getElementById('hero-titulo');
 const heroPeriodo = document.getElementById('hero-periodo');
 const countPendentes = document.getElementById('count-pendentes');
 const countConferidos = document.getElementById('count-conferidos');
+const consultaProdutoCodigo = document.getElementById('consulta-produto-codigo');
+const botaoConsultaProdutoBuscar = document.getElementById('consulta-produto-buscar');
+const consultaProdutoTitulo = document.getElementById('consulta-produto-titulo');
+const consultaProdutoLegenda = document.getElementById('consulta-produto-legenda');
+const consultaProdutoFoto = document.getElementById('consulta-produto-foto');
+const consultaProdutoResumo = document.getElementById('consulta-produto-resumo');
+const consultaProdutoDetalhes = document.getElementById('consulta-produto-detalhes');
+const consultaProdutoStatus = document.getElementById('consulta-produto-status');
+const consultaEstoqueStatus = document.getElementById('consulta-estoque-status');
 let filaPedidos = [];
 let pedidoSelecionado = null;
 let pedidoPreviewSelecionado = null;
@@ -182,6 +195,7 @@ function mostrarLogin(mensagem = '') {
   conferenciaScreen.classList.remove('active');
   acompanhamentoScreen.classList.remove('active');
   filaScreen.classList.remove('active');
+  consultaProdutosScreen.classList.remove('active');
   loginStatus.textContent = mensagem;
   atualizarUsuarioLogadoNaTela();
 
@@ -361,6 +375,7 @@ function mostrarHome() {
   conferenciaScreen.classList.remove('active');
   acompanhamentoScreen.classList.remove('active');
   filaScreen.classList.remove('active');
+  consultaProdutosScreen.classList.remove('active');
   homeScreen.classList.add('active');
 }
 
@@ -374,6 +389,7 @@ function mostrarConferencia() {
   homeScreen.classList.remove('active');
   acompanhamentoScreen.classList.remove('active');
   filaScreen.classList.remove('active');
+  consultaProdutosScreen.classList.remove('active');
   conferenciaScreen.classList.add('active');
 }
 
@@ -387,6 +403,7 @@ function mostrarAcompanhamento() {
   homeScreen.classList.remove('active');
   conferenciaScreen.classList.remove('active');
   filaScreen.classList.remove('active');
+  consultaProdutosScreen.classList.remove('active');
   acompanhamentoScreen.classList.add('active');
 }
 
@@ -400,7 +417,23 @@ function mostrarFila() {
   homeScreen.classList.remove('active');
   conferenciaScreen.classList.remove('active');
   acompanhamentoScreen.classList.remove('active');
+  consultaProdutosScreen.classList.remove('active');
   filaScreen.classList.add('active');
+}
+
+function mostrarConsultaProdutos() {
+  if (!usuarioLogado) {
+    mostrarLogin('Entre para acessar a consulta de produtos.');
+    return;
+  }
+
+  loginScreen.classList.remove('active');
+  homeScreen.classList.remove('active');
+  conferenciaScreen.classList.remove('active');
+  acompanhamentoScreen.classList.remove('active');
+  filaScreen.classList.remove('active');
+  consultaProdutosScreen.classList.add('active');
+  consultaProdutoCodigo.focus();
 }
 
 function criarCard(item) {
@@ -465,6 +498,22 @@ function formatarQuantidade(valor) {
     minimumFractionDigits: 0,
     maximumFractionDigits: 3
   });
+}
+
+function formatarTipoEstoque(tipo) {
+  const valor = String(tipo || '').trim().toUpperCase();
+  if (valor === 'P') return 'Proprio';
+  if (valor === 'T') return 'Terceiro';
+  return valor || '-';
+}
+
+function calcularDiasAte(dataValor) {
+  const timestamp = obterTimestamp(dataValor);
+  if (!timestamp) return '-';
+
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  return Math.ceil((timestamp - hoje.getTime()) / 86400000);
 }
 
 function normalizarQuantidade(valor) {
@@ -617,6 +666,147 @@ function renderizarResumoConferencia() {
   pedidoConferenciaStatus.textContent = pedidoSelecionado
     ? `${resumo.itensOk}/${resumo.totalItens} itens`
     : '-';
+}
+
+function renderizarConsultaVazia(mensagem = 'Digite o codigo do produto para visualizar o estoque.') {
+  consultaProdutoTitulo.textContent = 'Produto';
+  consultaProdutoLegenda.textContent = 'Informe um codigo para consultar.';
+  consultaProdutoFoto.innerHTML = '<div class="consulta-empty">Sem produto selecionado.</div>';
+  consultaProdutoResumo.innerHTML = `<div class="consulta-empty">${escaparHtml(mensagem)}</div>`;
+  consultaProdutoDetalhes.innerHTML = '<div class="consulta-empty">Nenhum detalhe carregado.</div>';
+  consultaProdutoStatus.textContent = 'Aguardando consulta';
+  consultaEstoqueStatus.textContent = '0 registros';
+}
+
+function montarTabelaConsulta(colunas, linhas) {
+  if (!linhas.length) {
+    return '<div class="consulta-empty">Nenhum estoque ativo com saldo positivo.</div>';
+  }
+
+  const cabecalho = colunas
+    .map((coluna) => `<th class="${coluna.numero ? 'numero' : ''}">${escaparHtml(coluna.titulo)}</th>`)
+    .join('');
+  const corpo = linhas
+    .map((linha) => `
+      <tr>
+        ${colunas.map((coluna) => {
+          const valor = coluna.render ? coluna.render(linha) : linha[coluna.campo];
+          return `<td class="${coluna.numero ? 'numero' : ''}">${escaparHtml(valor ?? '-')}</td>`;
+        }).join('')}
+      </tr>
+    `)
+    .join('');
+
+  return `<table class="consulta-table"><thead><tr>${cabecalho}</tr></thead><tbody>${corpo}</tbody></table>`;
+}
+
+function renderizarConsultaProduto(payload) {
+  const produto = payload.produto;
+  const estoquePorEmpresa = payload.estoquePorEmpresa || [];
+  const estoque = payload.estoque || [];
+
+  consultaProdutoTitulo.textContent = `${produto.CODPROD} - ${produto.DESCRPROD || 'Produto'}`;
+  consultaProdutoLegenda.textContent = `Grupo: ${produto.DESCRGRUPOPROD || produto.CODGRUPOPROD || '-'}`;
+  consultaProdutoFoto.innerHTML = `
+    <img
+      src="/api/fila-conferencia/produtos/${Number(produto.CODPROD)}/foto?v=${Date.now()}"
+      alt="Foto do produto ${escaparAtributo(produto.DESCRPROD || produto.CODPROD)}"
+      loading="lazy"
+    >
+  `;
+  const img = consultaProdutoFoto.querySelector('img');
+  img.addEventListener('error', () => {
+    consultaProdutoFoto.innerHTML = '<div class="consulta-empty">Foto nao cadastrada para este produto.</div>';
+  }, { once: true });
+
+  const colunasResumo = [
+    { titulo: 'Referencia', render: () => produto.REFERENCIA || '-' },
+    { titulo: 'Codigo', render: () => produto.CODPROD },
+    { titulo: 'Descricao', render: () => produto.DESCRPROD || '-' },
+    { titulo: 'Unidade', render: () => produto.CODVOL || '-' },
+    ...estoquePorEmpresa.map((empresa) => ({
+      titulo: empresa.NOMEEMPRESA || `Emp. ${empresa.CODEMP}`,
+      numero: true,
+      render: () => formatarQuantidade(empresa.DISPONIVEL)
+    })),
+    { titulo: 'Total estoque', numero: true, render: () => formatarQuantidade(estoquePorEmpresa.reduce((total, item) => total + Number(item.ESTOQUE || 0), 0)) },
+    { titulo: 'Total disponivel', numero: true, render: () => formatarQuantidade(estoquePorEmpresa.reduce((total, item) => total + Number(item.DISPONIVEL || 0), 0)) }
+  ];
+
+  consultaProdutoResumo.innerHTML = montarTabelaConsulta(colunasResumo, [produto]);
+
+  const colunasDetalhes = [
+    { titulo: 'Cod. empresa', campo: 'CODEMP', numero: true },
+    { titulo: 'Nome empresa', campo: 'NOMEEMPRESA' },
+    { titulo: 'Local', campo: 'CODLOCAL', numero: true },
+    { titulo: 'Descricao local', campo: 'DESCRLOCAL' },
+    { titulo: 'Estoque', numero: true, render: (linha) => formatarQuantidade(linha.ESTOQUE) },
+    { titulo: 'Reservado', numero: true, render: (linha) => formatarQuantidade(linha.RESERVADO) },
+    { titulo: 'Controle', campo: 'CONTROLE' },
+    { titulo: 'Disponivel', numero: true, render: (linha) => formatarQuantidade(linha.DISPONIVEL) },
+    { titulo: 'Dt. Validade', render: (linha) => formatarData(linha.DTVAL) },
+    { titulo: 'Tipo', render: (linha) => formatarTipoEstoque(linha.TIPO) },
+    { titulo: 'Poder', render: (linha) => formatarTipoEstoque(linha.TIPO) },
+    { titulo: 'Qtde de dias', numero: true, render: (linha) => calcularDiasAte(linha.DTVAL) }
+  ];
+
+  consultaProdutoDetalhes.innerHTML = montarTabelaConsulta(colunasDetalhes, estoque);
+  consultaProdutoStatus.textContent = `${estoquePorEmpresa.length} empresas com estoque positivo`;
+  consultaEstoqueStatus.textContent = `${estoque.length} registros`;
+}
+
+async function buscarConsultaProduto() {
+  const codigo = consultaProdutoCodigo.value.trim();
+
+  if (!codigo) {
+    renderizarConsultaVazia('Informe um codigo, referencia ou codigo de barras.');
+    consultaProdutoCodigo.focus();
+    return;
+  }
+
+  botaoConsultaProdutoBuscar.disabled = true;
+  consultaProdutoStatus.textContent = 'Consultando produto...';
+  consultaProdutoResumo.innerHTML = '<div class="consulta-empty">Buscando informacoes de estoque...</div>';
+  consultaProdutoDetalhes.innerHTML = '<div class="consulta-empty">Carregando detalhes...</div>';
+
+  try {
+    const res = await fetch(`/api/produtos/consulta?codigo=${encodeURIComponent(codigo)}`);
+    const payload = await res.json();
+
+    if (!res.ok) {
+      throw new Error(payload.erro || 'Produto nao encontrado');
+    }
+
+    renderizarConsultaProduto(payload);
+  } catch (error) {
+    consultaProdutoStatus.textContent = 'Erro na consulta';
+    renderizarConsultaVazia(error.message);
+  } finally {
+    botaoConsultaProdutoBuscar.disabled = false;
+  }
+}
+
+function abrirConsultaProdutos() {
+  const url = `${window.location.pathname}${window.location.search}#consulta-produtos`;
+  window.open(url, '_blank', 'noopener');
+}
+
+function abrirConsultaProdutosMesmaTela() {
+  renderizarConsultaVazia();
+  mostrarHomeESuspenderRefresh();
+  mostrarConsultaProdutos();
+  history.pushState({ tela: 'consulta-produtos' }, '', '#consulta-produtos');
+}
+
+function alternarVisibilidadeSenha() {
+  const estaVisivel = loginSenha.type === 'text';
+  loginSenha.type = estaVisivel ? 'password' : 'text';
+  botaoToggleLoginSenha.setAttribute('aria-label', estaVisivel ? 'Mostrar senha' : 'Ocultar senha');
+  botaoToggleLoginSenha.title = estaVisivel ? 'Mostrar senha' : 'Ocultar senha';
+  botaoToggleLoginSenha.innerHTML = estaVisivel
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"></path><circle cx="12" cy="12" r="3"></circle></svg>'
+    : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"></path><circle cx="12" cy="12" r="3"></circle><path d="M4 4l16 16"></path></svg>';
+  loginSenha.focus();
 }
 
 function renderizarFotoProdutoVazia(mensagem = 'Sem produto selecionado.') {
@@ -1839,6 +2029,13 @@ async function prepararSessaoAutenticada(usuario) {
   atualizarUsuarioLogadoNaTela();
   prepararTelaInicial();
   await carregarEmpresas();
+  if (window.location.hash === '#consulta-produtos') {
+    renderizarConsultaVazia();
+    mostrarConsultaProdutos();
+    history.replaceState({ tela: 'consulta-produtos' }, '', '#consulta-produtos');
+    return;
+  }
+
   mostrarHome();
   history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);
 }
@@ -1909,9 +2106,19 @@ async function inicializarApp() {
 }
 
 loginForm.addEventListener('submit', autenticarUsuario);
+botaoToggleLoginSenha.addEventListener('click', alternarVisibilidadeSenha);
 botaoLogout.addEventListener('click', encerrarSessao);
 botaoAbrirConferencia.addEventListener('click', abrirFila);
 botaoAbrirAcompanhamento.addEventListener('click', abrirAcompanhamento);
+botaoAbrirConsultaHome.addEventListener('click', abrirConsultaProdutosMesmaTela);
+botaoAbrirConsultaProdutos.addEventListener('click', abrirConsultaProdutos);
+botaoConsultaProdutoBuscar.addEventListener('click', buscarConsultaProduto);
+consultaProdutoCodigo.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    buscarConsultaProduto();
+  }
+});
 botaoExibirAcompanhamento.addEventListener('click', abrirConferencia);
 botaoVoltarHomeAcompanhamento.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeFila.addEventListener('click', voltarParaHomeViaHistorico);
@@ -2005,6 +2212,13 @@ window.addEventListener('popstate', (event) => {
   if (state?.tela === 'fila') {
     mostrarHomeESuspenderRefresh();
     mostrarFila();
+    return;
+  }
+
+  if (state?.tela === 'consulta-produtos' || window.location.hash === '#consulta-produtos') {
+    mostrarHomeESuspenderRefresh();
+    renderizarConsultaVazia();
+    mostrarConsultaProdutos();
     return;
   }
 

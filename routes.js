@@ -97,6 +97,10 @@ function campoApi(valor) {
   };
 }
 
+function textoSql(valor) {
+  return String(valor ?? '').replace(/'/g, "''");
+}
+
 async function salvarRegistroApi(rootEntity, campos) {
   return executeService('CRUDServiceProvider.saveRecord', {
     dataSet: {
@@ -785,6 +789,114 @@ router.get('/fila-conferencia/produtos/:codprod/foto', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: 'Erro ao buscar foto do produto' });
+  }
+});
+
+router.get('/produtos/consulta', async (req, res) => {
+  try {
+    const codigo = String(req.query.codigo || '').trim();
+
+    if (!codigo) {
+      res.status(400).json({ erro: 'Informe o codigo do produto' });
+      return;
+    }
+
+    const codigoSql = textoSql(codigo);
+    const codigoNumero = obterNumeroInteiro(codigo);
+    const filtroCodigoProduto = codigoNumero ? `OR PRO.CODPROD = ${codigoNumero}` : '';
+
+    const produtos = await executeQuery(`
+      SELECT
+        PRO.CODPROD,
+        PRO.DESCRPROD,
+        PRO.REFERENCIA,
+        PRO.CODVOL,
+        PRO.CODGRUPOPROD,
+        GRU.DESCRGRUPOPROD
+      FROM TGFPRO PRO
+      LEFT JOIN TGFGRU GRU
+        ON GRU.CODGRUPOPROD = PRO.CODGRUPOPROD
+      WHERE (
+        PRO.REFERENCIA = '${codigoSql}'
+        OR PRO.AD_CODBAR = '${codigoSql}'
+        OR PRO.AD_CBARANT = '${codigoSql}'
+        ${filtroCodigoProduto}
+        OR EXISTS (
+          SELECT 1
+          FROM TGFVOA VOA
+          WHERE VOA.CODPROD = PRO.CODPROD
+            AND VOA.CODBARRA = '${codigoSql}'
+            AND NVL(VOA.ATIVO, 'S') = 'S'
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM TGFEST EST
+          WHERE EST.CODPROD = PRO.CODPROD
+            AND EST.CODBARRA = '${codigoSql}'
+        )
+      )
+      ORDER BY PRO.CODPROD
+    `);
+
+    const produto = produtos[0];
+
+    if (!produto) {
+      res.status(404).json({ erro: 'Produto nao encontrado' });
+      return;
+    }
+
+    const codProd = Number(produto.CODPROD);
+    const estoque = await executeQuery(`
+      SELECT
+        EST.CODEMP,
+        NVL(EMP.NOMEFANTASIA, EMP.RAZAOSOCIAL) AS NOMEEMPRESA,
+        EST.CODLOCAL,
+        LOC.DESCRLOCAL,
+        EST.CONTROLE,
+        NVL(EST.ESTOQUE, 0) AS ESTOQUE,
+        NVL(EST.RESERVADO, 0) AS RESERVADO,
+        NVL(EST.ESTOQUE, 0) - NVL(EST.RESERVADO, 0) AS DISPONIVEL,
+        EST.DTVAL,
+        EST.TIPO,
+        EST.CODPARC,
+        EST.CODBARRA,
+        EST.STATUSLOTE
+      FROM TGFEST EST
+      LEFT JOIN TSIEMP EMP
+        ON EMP.CODEMP = EST.CODEMP
+      LEFT JOIN TGFLOC LOC
+        ON LOC.CODLOCAL = EST.CODLOCAL
+      WHERE EST.CODPROD = ${codProd}
+        AND NVL(EST.ATIVO, 'S') = 'S'
+        AND NVL(EST.ESTOQUE, 0) > 0
+      ORDER BY EST.CODEMP, EST.CODLOCAL, EST.CONTROLE
+    `);
+
+    const estoquePorEmpresa = await executeQuery(`
+      SELECT
+        EST.CODEMP,
+        NVL(EMP.NOMEFANTASIA, EMP.RAZAOSOCIAL) AS NOMEEMPRESA,
+        SUM(NVL(EST.ESTOQUE, 0)) AS ESTOQUE,
+        SUM(NVL(EST.RESERVADO, 0)) AS RESERVADO,
+        SUM(NVL(EST.ESTOQUE, 0) - NVL(EST.RESERVADO, 0)) AS DISPONIVEL
+      FROM TGFEST EST
+      LEFT JOIN TSIEMP EMP
+        ON EMP.CODEMP = EST.CODEMP
+      WHERE EST.CODPROD = ${codProd}
+        AND NVL(EST.ATIVO, 'S') = 'S'
+        AND NVL(EST.ESTOQUE, 0) > 0
+      GROUP BY EST.CODEMP, NVL(EMP.NOMEFANTASIA, EMP.RAZAOSOCIAL)
+      ORDER BY EST.CODEMP
+    `);
+
+    res.json({
+      produto,
+      estoquePorEmpresa,
+      estoque
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao consultar produto' });
   }
 });
 

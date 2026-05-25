@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Fila de Conferencia</title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="apple-touch-icon" href="/favicon.png">
 
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 
@@ -115,6 +117,45 @@
       background: rgba(255, 255, 255, 0.96);
     }
 
+    .password-field {
+      position: relative;
+    }
+
+    .password-field input {
+      padding-right: 48px;
+    }
+
+    .password-toggle {
+      position: absolute;
+      right: 8px;
+      bottom: 6px;
+      width: 34px;
+      height: 34px;
+      border: none;
+      border-radius: 10px;
+      display: inline-grid;
+      place-items: center;
+      background: transparent;
+      color: var(--text-soft);
+    }
+
+    .password-toggle:hover,
+    .password-toggle:focus-visible {
+      background: rgba(13, 138, 106, 0.10);
+      color: var(--accent);
+      outline: none;
+    }
+
+    .password-toggle svg {
+      width: 20px;
+      height: 20px;
+      stroke: currentColor;
+      stroke-width: 2.2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
     .login-field input:focus,
     .fila-field input:focus,
     .fila-field select:focus {
@@ -160,7 +201,7 @@
     }
 
     .home-shell {
-      max-width: 1080px;
+      max-width: 1180px;
       margin: 0 auto;
       background: rgba(255, 255, 255, 0.84);
       border: 1px solid var(--border);
@@ -206,15 +247,15 @@
 
     .home-menu {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 16px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
     }
 
     .home-menu-button {
-      min-height: 180px;
+      min-height: 158px;
       border: 1px solid rgba(18, 66, 75, 0.12);
       border-radius: 22px;
-      padding: 22px;
+      padding: 18px;
       text-align: left;
       color: var(--text-main);
       background: rgba(255, 255, 255, 0.82);
@@ -238,6 +279,10 @@
       background: linear-gradient(180deg, rgba(235, 246, 252, 0.96) 0%, rgba(210, 233, 244, 0.96) 100%);
     }
 
+    .home-menu-button.tertiary {
+      background: linear-gradient(180deg, rgba(255, 249, 224, 0.96) 0%, rgba(234, 244, 210, 0.96) 100%);
+    }
+
     .home-menu-icon {
       width: 48px;
       height: 48px;
@@ -251,6 +296,10 @@
       font-weight: 900;
     }
 
+    .home-menu-button .home-menu-icon {
+      margin-bottom: 14px;
+    }
+
     .home-menu-button.primary .home-menu-icon {
       background: #0d8a6a;
     }
@@ -259,9 +308,13 @@
       background: #0e87ad;
     }
 
+    .home-menu-button.tertiary .home-menu-icon {
+      background: #7aad1b;
+    }
+
     .home-menu-title {
       display: block;
-      font-size: 1.45rem;
+      font-size: 1.28rem;
       line-height: 1.1;
       font-weight: 900;
       margin-bottom: 10px;
@@ -270,7 +323,7 @@
     .home-menu-text {
       display: block;
       color: var(--text-soft);
-      font-size: 0.96rem;
+      font-size: 0.86rem;
       font-weight: 700;
       line-height: 1.35;
     }
@@ -353,7 +406,8 @@
     }
 
     .acompanhamento-screen,
-    .fila-screen {
+    .fila-screen,
+    .consulta-produtos-screen {
       padding: 22px 18px;
       background:
         radial-gradient(circle at top right, rgba(24, 167, 216, 0.14), transparent 28%),
@@ -362,7 +416,8 @@
     }
 
     .acompanhamento-screen.active,
-    .fila-screen.active {
+    .fila-screen.active,
+    .consulta-produtos-screen.active {
       display: grid;
     }
 
@@ -577,6 +632,36 @@
       border-radius: 10px;
       padding: 0 10px;
       font-size: 0.86rem;
+    }
+
+    .box-title-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .pedido-contagem-inline {
+      color: var(--accent);
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .btn-consulta-produtos {
+      border: 1px solid rgba(13, 138, 106, 0.26);
+      border-radius: 12px;
+      min-height: 34px;
+      padding: 0 14px;
+      background: linear-gradient(180deg, #ffffff, #edf8f5);
+      color: var(--accent);
+      font-size: 0.78rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .btn-consulta-produtos:hover {
+      background: var(--accent);
+      color: #fff;
     }
 
     .fila-workspace {
@@ -1025,6 +1110,158 @@
     .column-resizer:hover::after,
     .resizing-columns .column-resizer::after {
       background: var(--accent);
+    }
+
+    .consulta-produtos-screen {
+      align-items: stretch;
+      padding: 12px;
+    }
+
+    .consulta-produtos-app {
+      width: min(1480px, 100%);
+      min-height: calc(100vh - 24px);
+      margin: 0 auto;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      gap: 10px;
+    }
+
+    .consulta-toolbar,
+    .consulta-card {
+      background: rgba(255, 255, 255, 0.88);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      box-shadow: 0 16px 32px rgba(16, 57, 66, 0.08);
+    }
+
+    .consulta-toolbar {
+      display: grid;
+      grid-template-columns: minmax(220px, 1fr) minmax(280px, 520px) auto;
+      gap: 12px;
+      align-items: end;
+      padding: 14px;
+    }
+
+    .consulta-toolbar h1 {
+      margin: 0;
+      font-weight: 900;
+      font-size: 1.7rem;
+      letter-spacing: 0;
+    }
+
+    .consulta-grid {
+      display: grid;
+      grid-template-columns: 280px minmax(0, 1fr);
+      gap: 10px;
+      min-height: 0;
+    }
+
+    .consulta-foto-card {
+      padding: 12px;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 8px;
+      min-height: 310px;
+    }
+
+    .consulta-foto-card strong,
+    .consulta-card-title strong {
+      font-weight: 900;
+    }
+
+    .consulta-foto-frame {
+      border: 1px solid rgba(18, 66, 75, 0.12);
+      border-radius: 12px;
+      min-height: 230px;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      background: #f8fbfc;
+    }
+
+    .consulta-foto-frame img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .consulta-produto-info {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 1.2fr);
+      gap: 8px;
+      min-height: 0;
+      padding: 12px;
+    }
+
+    .consulta-card-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .consulta-status {
+      color: var(--text-soft);
+      font-size: 0.82rem;
+      font-weight: 800;
+    }
+
+    .consulta-table-scroll {
+      border: 1px solid rgba(18, 66, 75, 0.12);
+      border-radius: 8px;
+      min-height: 115px;
+      overflow: auto;
+      background: #fff;
+    }
+
+    .consulta-table {
+      width: 100%;
+      min-width: 760px;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .consulta-table th,
+    .consulta-table td {
+      border: 1px solid rgba(18, 66, 75, 0.12);
+      padding: 5px 7px;
+      white-space: nowrap;
+      text-align: left;
+    }
+
+    .consulta-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f8fbfc;
+      border-bottom: 2px solid #59d66d;
+      color: #3f6070;
+      font-weight: 900;
+    }
+
+    .consulta-table td.numero,
+    .consulta-table th.numero {
+      text-align: right;
+    }
+
+    .consulta-table tr:nth-child(even) td {
+      background: #f1f4f5;
+    }
+
+    .consulta-table tr:nth-child(odd) td {
+      background: #fff;
+    }
+
+    .consulta-empty {
+      min-height: 110px;
+      display: grid;
+      place-items: center;
+      color: var(--text-soft);
+      font-weight: 900;
+      text-align: center;
+      padding: 18px;
     }
 
     .resizing-columns {
@@ -1813,6 +2050,8 @@
       .home-grid,
       .home-menu,
       .scan-panel,
+      .consulta-toolbar,
+      .consulta-grid,
       .dashboard-top,
       .metrics-panel,
       .board,
@@ -2058,6 +2297,32 @@
       .btn-confirmar {
         width: 100%;
       }
+
+      .consulta-produtos-app {
+        min-height: auto;
+      }
+
+      .consulta-toolbar {
+        align-items: stretch;
+        padding: 12px;
+      }
+
+      .consulta-toolbar .btn-start {
+        min-width: 0;
+        width: 100%;
+      }
+
+      .consulta-grid {
+        min-height: auto;
+      }
+
+      .consulta-foto-card {
+        min-height: 260px;
+      }
+
+      .consulta-table-scroll {
+        min-height: 180px;
+      }
     }
   </style>
 </head>
@@ -2074,9 +2339,15 @@
           <label for="login-usuario">Usuario Sankhya</label>
           <input id="login-usuario" name="usuario" autocomplete="username" required>
         </div>
-        <div class="login-field">
+        <div class="login-field password-field">
           <label for="login-senha">Senha</label>
           <input id="login-senha" name="senha" type="password" autocomplete="current-password" required>
+          <button class="password-toggle" id="toggle-login-senha" type="button" aria-label="Mostrar senha" title="Mostrar senha">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </button>
         </div>
         <button class="btn-start" id="login-submit" type="submit">Entrar</button>
         <div class="login-status" id="login-status" role="alert"></div>
@@ -2109,6 +2380,12 @@
           <span class="home-menu-icon">AC</span>
           <span class="home-menu-title">Acompanhamento de Conferencia</span>
           <span class="home-menu-text">Selecione data e empresa para abrir o painel visual de acompanhamento.</span>
+        </button>
+
+        <button class="home-menu-button tertiary" id="abrir-consulta-home" type="button">
+          <span class="home-menu-icon">CP</span>
+          <span class="home-menu-title">Consulta de Produtos</span>
+          <span class="home-menu-text">Consulte foto, grupo e estoque positivo por empresa e lote.</span>
         </button>
       </div>
     </div>
@@ -2314,8 +2591,11 @@
 
         <main class="conferencia-box">
           <div class="box-title">
-            <span id="pedido-conferencia-titulo">Nenhum pedido selecionado</span>
-            <span id="pedido-conferencia-status">-</span>
+            <div class="box-title-actions">
+              <span class="pedido-contagem-inline" id="pedido-conferencia-status">-</span>
+              <span id="pedido-conferencia-titulo">Nenhum pedido selecionado</span>
+            </div>
+            <button class="btn-consulta-produtos" id="abrir-consulta-produtos" type="button">Consulta de Produtos</button>
           </div>
 
           <div class="scan-panel">
@@ -2350,6 +2630,52 @@
           </div>
         </main>
         </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="screen consulta-produtos-screen" id="consulta-produtos-screen">
+    <div class="consulta-produtos-app">
+      <div class="consulta-toolbar">
+        <div>
+          <div class="home-kicker">Consulta Operacional</div>
+          <h1>Consulta de Produtos</h1>
+        </div>
+        <div class="fila-field">
+          <label for="consulta-produto-codigo">Codigo do produto</label>
+          <input id="consulta-produto-codigo" autocomplete="off" placeholder="Digite codigo, referencia ou barras">
+        </div>
+        <button class="btn-start" id="consulta-produto-buscar" type="button">Buscar produto</button>
+      </div>
+
+      <div class="consulta-grid">
+        <section class="consulta-card consulta-foto-card">
+          <div>
+            <strong id="consulta-produto-titulo">Produto</strong>
+            <div class="consulta-status" id="consulta-produto-legenda">Informe um codigo para consultar.</div>
+          </div>
+          <div class="consulta-foto-frame" id="consulta-produto-foto">
+            <div class="consulta-empty">Sem produto selecionado.</div>
+          </div>
+        </section>
+
+        <section class="consulta-card consulta-produto-info">
+          <div class="consulta-card-title">
+            <strong>Produto e estoque por empresa</strong>
+            <span class="consulta-status" id="consulta-produto-status">Aguardando consulta</span>
+          </div>
+          <div class="consulta-table-scroll" id="consulta-produto-resumo">
+            <div class="consulta-empty">Digite o codigo do produto para visualizar o estoque.</div>
+          </div>
+
+          <div class="consulta-card-title">
+            <strong>Detalhes de estoque</strong>
+            <span class="consulta-status" id="consulta-estoque-status">0 registros</span>
+          </div>
+          <div class="consulta-table-scroll" id="consulta-produto-detalhes">
+            <div class="consulta-empty">Nenhum detalhe carregado.</div>
+          </div>
+        </section>
       </div>
     </div>
   </section>
