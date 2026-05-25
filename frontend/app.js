@@ -46,6 +46,7 @@ const botaoCancelarPreviewPedido = document.getElementById('cancelar-preview-ped
 const botaoConfirmarPreviewPedido = document.getElementById('confirmar-preview-pedido');
 const pedidoEmConferenciaCard = document.getElementById('pedido-em-conferencia-card');
 const botaoVoltarListaFila = document.getElementById('voltar-lista-fila');
+const produtoFotoTitulo = document.querySelector('#produto-foto-panel .produto-foto-head strong');
 const produtoFotoLegenda = document.getElementById('produto-foto-legenda');
 const produtoFotoFrame = document.getElementById('produto-foto-frame');
 const pedidoConferenciaTitulo = document.getElementById('pedido-conferencia-titulo');
@@ -620,6 +621,9 @@ function renderizarResumoConferencia() {
 
 function renderizarFotoProdutoVazia(mensagem = 'Sem produto selecionado.') {
   produtoFotoAtual = null;
+  if (produtoFotoTitulo) {
+    produtoFotoTitulo.textContent = 'Produto selecionado';
+  }
   if (produtoFotoLegenda) {
     produtoFotoLegenda.textContent = 'Clique em um item ou confira um produto.';
   }
@@ -639,10 +643,13 @@ function mostrarFotoProduto(item, origem = 'selecionado') {
     return;
   }
 
-  const legendaOrigem = origem === 'ultimo' ? 'Ultimo produto conferido' : 'Produto selecionado';
+  const legendaOrigem = origem === 'ultimo' ? 'Produto conferido' : 'Produto selecionado';
   const descricao = `${item.codProd} - ${item.descrProd || 'Produto'}`;
   produtoFotoAtual = { codProd, origem };
-  produtoFotoLegenda.textContent = `${legendaOrigem}: ${descricao}`;
+  if (produtoFotoTitulo) {
+    produtoFotoTitulo.textContent = legendaOrigem;
+  }
+  produtoFotoLegenda.textContent = descricao;
   produtoFotoFrame.innerHTML = `
     <img
       src="/api/fila-conferencia/produtos/${codProd}/foto?v=${Date.now()}"
