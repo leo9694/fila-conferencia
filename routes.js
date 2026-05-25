@@ -331,14 +331,15 @@ async function aplicarCortesNoPedido({ nunota, itensPedido, conferidosPorSequenc
   return cortes;
 }
 
-async function finalizarConferenciaOperacional(nuconf, nunota, codUsu) {
+async function finalizarConferenciaOperacional(nuconf, nunota, codUsu, qtdVol = 1) {
   await atualizarRegistroApi(
     'CabecalhoConferencia',
     { NUCONF: nuconf },
     {
       STATUS: 'F',
       DHFINCONF: formatarDataHoraSankhya(),
-      CODUSUCONF: codUsu
+      CODUSUCONF: codUsu,
+      QTDVOL: Math.max(1, normalizarNumero(qtdVol))
     }
   );
 
@@ -758,7 +759,7 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
 
   try {
     const pedidoRows = await executeQuery(`
-      SELECT CAB.NUNOTA, CAB.NUCONFATUAL, CONF.STATUS
+      SELECT CAB.NUNOTA, CAB.NUCONFATUAL, CAB.QTDVOL, CONF.STATUS
       FROM TGFCAB CAB
       LEFT JOIN TGFCON2 CONF
         ON CONF.NUCONF = CAB.NUCONFATUAL
@@ -781,6 +782,15 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
       `);
 
       if (conferenciaAtual?.STATUS === 'A') {
+        await atualizarRegistroApi(
+          'CabecalhoConferencia',
+          { NUCONF: pedido.NUCONFATUAL },
+          {
+            CODUSUCONF: codUsu,
+            QTDVOL: Math.max(1, normalizarNumero(pedido.QTDVOL))
+          }
+        );
+
         res.json({
           ok: true,
           nunota,
@@ -806,7 +816,10 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
       await atualizarRegistroApi(
         'CabecalhoConferencia',
         { NUCONF: conferenciaAberta.NUCONF },
-        { CODUSUCONF: codUsu }
+        {
+          CODUSUCONF: codUsu,
+          QTDVOL: Math.max(1, normalizarNumero(pedido.QTDVOL))
+        }
       );
 
       await atualizarRegistroApi(
@@ -851,7 +864,7 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
       STATUS: 'A',
       DHINICONF: formatarDataHoraSankhya(),
       CODUSUCONF: codUsu,
-      QTDVOL: 0
+      QTDVOL: Math.max(1, normalizarNumero(pedido.QTDVOL))
     });
 
     await atualizarRegistroApi(
@@ -930,7 +943,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
 
   try {
     const pedidoRows = await executeQuery(`
-      SELECT CAB.NUNOTA, CAB.NUCONFATUAL, CONF.STATUS
+      SELECT CAB.NUNOTA, CAB.NUCONFATUAL, CAB.QTDVOL, CONF.STATUS
       FROM TGFCAB CAB
       LEFT JOIN TGFCON2 CONF
         ON CONF.NUCONF = CAB.NUCONFATUAL
@@ -1061,14 +1074,15 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
         STATUS: 'A',
         DHINICONF: agoraSankhya,
         CODUSUCONF: codUsu,
-        QTDVOL: 0
+        QTDVOL: Math.max(1, normalizarNumero(pedido.QTDVOL))
       });
     } else {
       await atualizarRegistroApi(
         'CabecalhoConferencia',
         { NUCONF: nuconf },
         {
-          CODUSUCONF: codUsu
+          CODUSUCONF: codUsu,
+          QTDVOL: Math.max(1, normalizarNumero(pedido.QTDVOL))
         }
       );
     }
@@ -1092,7 +1106,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     let fechamentoOperacionalAplicado = false;
 
     if (conferenciaConferida?.STATUS !== 'F' && finalizacaoPermiteFechamentoOperacional(resultadoFinalizacao)) {
-      await finalizarConferenciaOperacional(nuconf, nunota, codUsu);
+      await finalizarConferenciaOperacional(nuconf, nunota, codUsu, pedido.QTDVOL);
       fechamentoOperacionalAplicado = true;
       [conferenciaConferida] = await executeQuery(`
         SELECT NUCONF, NUNOTAORIG, STATUS, CODUSUCONF
