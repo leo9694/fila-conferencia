@@ -225,6 +225,14 @@ function numeroApi(valor) {
   return Number.isInteger(numero) ? String(numero) : numero.toFixed(3).replace(/0+$/, '').replace(/\.$/, '');
 }
 
+function chaveLinhaConferencia(codigoBarra, codProd, controle) {
+  return [
+    String(codigoBarra || '').trim(),
+    String(codProd || '').trim(),
+    String(controle || '').trim()
+  ].join('|').toUpperCase();
+}
+
 function obterMimeImagem(buffer) {
   if (!Buffer.isBuffer(buffer) || buffer.length < 4) {
     return 'application/octet-stream';
@@ -1080,40 +1088,67 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       cortadosPorSequencia
     });
 
-    const itensPorCodigo = new Map();
+    const itensPorConferencia = new Map();
     itensPedido.forEach((item) => {
       const codigoBarra = String(item.CODBARRA || item.CODPROD).trim();
+      const codProdItem = Number(item.CODPROD);
+      const controleItem = item.CONTROLE === null || item.CONTROLE === undefined || String(item.CONTROLE).trim() === ''
+        ? ' '
+        : String(item.CONTROLE).trim();
       const qtdConferida = conferidosPorSequencia.get(Number(item.SEQUENCIA)) ?? 0;
       if (qtdConferida <= 0) {
         return;
       }
 
-      const itemAgrupado = itensPorCodigo.get(codigoBarra) || {
+      const chave = chaveLinhaConferencia(codigoBarra, codProdItem, controleItem);
+      const itemAgrupado = itensPorConferencia.get(chave) || {
         codigoBarra,
+        codProd: codProdItem,
+        controle: controleItem,
         qtd: 0
       };
 
       itemAgrupado.qtd += qtdConferida;
-      itensPorCodigo.set(codigoBarra, itemAgrupado);
+      itensPorConferencia.set(chave, itemAgrupado);
     });
 
     const linhasConferencia = await executeQuery(`
-      SELECT SEQUENCIA, CODBARRA
+      SELECT SEQUENCIA, CODBARRA, CODPROD, NUNOTA, CONTROLE
       FROM TGFCON
       WHERE NUCONF = ${nuconf}
     `);
-    const linhasPorCodigo = new Map(
-      linhasConferencia.map((linha) => [String(linha.CODBARRA || '').trim(), Number(linha.SEQUENCIA)])
+    const linhasPorChave = new Map(
+      linhasConferencia.map((linha) => [
+        chaveLinhaConferencia(linha.CODBARRA, linha.CODPROD, linha.CONTROLE),
+        Number(linha.SEQUENCIA)
+      ])
     );
-    const codigosDoPedido = new Set(
-      itensPedido.map((item) => String(item.CODBARRA || item.CODPROD).trim())
+    const linhasPorCodigoFallback = new Map();
+    linhasConferencia.forEach((linha) => {
+      const codigo = String(linha.CODBARRA || '').trim().toUpperCase();
+      if (!codigo || linhasPorCodigoFallback.has(codigo)) {
+        return;
+      }
+      linhasPorCodigoFallback.set(codigo, Number(linha.SEQUENCIA));
+    });
+    const chavesDoPedido = new Set(
+      itensPedido.map((item) => chaveLinhaConferencia(
+        item.CODBARRA || item.CODPROD,
+        item.CODPROD,
+        item.CONTROLE || ''
+      ))
     );
     let sequenciaConferencia = linhasConferencia.reduce((maior, linha) => {
       return Math.max(maior, Number(linha.SEQUENCIA) || 0);
     }, 0) + 1;
 
-    for (const [codigoBarra, sequenciaExistente] of linhasPorCodigo.entries()) {
-      if (!codigosDoPedido.has(codigoBarra) || itensPorCodigo.has(codigoBarra)) {
+    for (const linha of linhasConferencia) {
+      const codigoBarra = String(linha.CODBARRA || '').trim();
+      const codProdLinha = Number(linha.CODPROD || 0);
+      const controleLinha = String(linha.CONTROLE || '').trim();
+      const chave = chaveLinhaConferencia(codigoBarra, codProdLinha, controleLinha);
+
+      if (!chavesDoPedido.has(chave) || itensPorConferencia.has(chave)) {
         continue;
       }
 
@@ -1121,10 +1156,13 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
         'ConferenciaPedido',
         {
           NUCONF: nuconf,
-          SEQUENCIA: sequenciaExistente
+          SEQUENCIA: linha.SEQUENCIA
         },
         {
           CODBARRA: codigoBarra,
+          NUNOTA: nunota,
+          CODPROD: codProdLinha,
+          CONTROLE: controleLinha,
           QTD: 0,
           CODUSU: codUsu,
           DHCONF: agoraSankhya,
@@ -1133,8 +1171,9 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       );
     }
 
-    for (const item of itensPorCodigo.values()) {
-      const sequenciaExistente = linhasPorCodigo.get(item.codigoBarra);
+    for (const [chave, item] of itensPorConferencia.entries()) {
+      const sequenciaExistente = linhasPorChave.get(chave)
+        || linhasPorCodigoFallback.get(String(item.codigoBarra || '').trim().toUpperCase());
 
       if (sequenciaExistente) {
         await atualizarRegistroApi(
@@ -1145,6 +1184,9 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
           },
           {
             CODBARRA: item.codigoBarra,
+            NUNOTA: nunota,
+            CODPROD: item.codProd,
+            CONTROLE: item.controle,
             QTD: item.qtd,
             CODUSU: codUsu,
             DHCONF: agoraSankhya,
@@ -1156,6 +1198,9 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
           NUCONF: nuconf,
           SEQUENCIA: sequenciaConferencia,
           CODBARRA: item.codigoBarra,
+          NUNOTA: nunota,
+          CODPROD: item.codProd,
+          CONTROLE: item.controle,
           QTD: item.qtd,
           CODUSU: codUsu,
           DHCONF: agoraSankhya,
