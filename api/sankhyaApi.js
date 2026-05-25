@@ -3,6 +3,11 @@ const DEFAULT_BASE_URL = 'https://api.sankhya.com.br';
 let cachedAccessToken = null;
 let cachedAccessTokenExpiresAt = 0;
 
+function clearAuthCache() {
+  cachedAccessToken = null;
+  cachedAccessTokenExpiresAt = 0;
+}
+
 function getConfig() {
   return {
     baseUrl: process.env.SANKHYA_API_BASE_URL || DEFAULT_BASE_URL,
@@ -162,6 +167,7 @@ async function executeService(serviceName, requestBody, options = {}) {
 }
 
 module.exports = {
+  clearAuthCache,
   executeService,
   executeQuery,
   normalizeQueryRows

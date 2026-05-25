@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { executeQuery, executeService } = require('./sankhyaApi');
+const { clearAuthCache, executeService } = require('./sankhyaApi');
 
 const SESSION_COOKIE = 'fila_conf_session';
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
@@ -76,10 +76,6 @@ function cookieLogout() {
   return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
 
-function escaparSql(valor) {
-  return String(valor || '').replace(/'/g, "''");
-}
-
 function extrairIdUsuarioLogin(payload) {
   const idBase64 = payload?.responseBody?.idusu?.$ || payload?.responseBody?.idUsu?.$;
   if (!idBase64) return null;
@@ -91,6 +87,19 @@ function extrairIdUsuarioLogin(payload) {
   } catch {
     return null;
   }
+}
+
+function lerCampoResposta(payload, nomes) {
+  const responseBody = payload?.responseBody || {};
+
+  for (const nome of nomes) {
+    const valor = responseBody[nome]?.$ ?? responseBody[nome];
+    if (valor !== null && valor !== undefined && String(valor).trim() !== '') {
+      return String(valor).trim();
+    }
+  }
+
+  return null;
 }
 
 async function validarUsuarioSankhya(usuario, senha) {
@@ -107,24 +116,26 @@ async function validarUsuarioSankhya(usuario, senha) {
     KEEPCONNECTED: campoApi('N')
   });
 
+  clearAuthCache();
+
   const codUsuLogin = extrairIdUsuarioLogin(loginPayload);
-  const filtroUsuario = codUsuLogin !== null
-    ? `CODUSU = ${codUsuLogin}`
-    : `UPPER(NOMEUSU) = '${escaparSql(nomeUsuario.toUpperCase())}'`;
 
-  const [usuarioRow] = await executeQuery(`
-    SELECT CODUSU, NOMEUSU
-    FROM TSIUSU
-    WHERE ${filtroUsuario}
-  `);
-
-  if (!usuarioRow) {
-    throw new Error('Usuario autenticado, mas cadastro nao foi localizado no Sankhya');
+  if (codUsuLogin === null) {
+    throw new Error('Usuario autenticado, mas o Sankhya nao retornou o codigo do usuario');
   }
 
+  const nomeRetornado = lerCampoResposta(loginPayload, [
+    'nomeusu',
+    'NOMEUSU',
+    'nomusu',
+    'NOMUSU',
+    'nomeUsuario',
+    'NOMEUSUARIO'
+  ]);
+
   return {
-    codUsu: Number(usuarioRow.CODUSU),
-    nome: usuarioRow.NOMEUSU || nomeUsuario
+    codUsu: codUsuLogin,
+    nome: nomeRetornado || nomeUsuario.toUpperCase()
   };
 }
 
