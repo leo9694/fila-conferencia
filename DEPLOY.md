@@ -65,6 +65,8 @@ certbot --nginx -d fila.nortesulsementes.com
 
 Localmente, mantenha o arquivo `.env` com as credenciais de treinamento.
 Na VPS, mantenha sempre o arquivo `.env` com as credenciais de producao.
+Use `SANKHYA_ACCESS_USER` e `SANKHYA_ACCESS_PASSWORD` para um usuario tecnico com acesso as consultas/validacoes da API.
+O usuario logado no app continua sendo usado como conferente nas conferencias.
 
 Os arquivos `.env`, `.env.treinamento` e `.env.producao` nao sao enviados para o Git.
 
