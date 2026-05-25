@@ -1235,7 +1235,7 @@ function renderizarPedidosFila() {
       <div class="pedido-meta">${pedido.QTD_ITENS} | ${formatarQuantidade(pedido.QTD_TOTAL)} un.</div>
       <div class="pedido-list-status">
         ${emAndamento
-        ? `<span class="pedido-status-mini">Continuar${pedido.NOME_CONFERENTE ? ` | ${pedido.NOME_CONFERENTE}` : ''}</span>`
+        ? `<span class="pedido-status-mini">${pedido.NOME_CONFERENTE || 'Em andamento'}</span>`
           : pedido.STATUS_CONFERENCIA === 'CONFERIDO'
             ? '<span class="pedido-status-mini conferido">Conferido</span>'
           : '<span class="pedido-status-mini novo">Novo</span>'}
