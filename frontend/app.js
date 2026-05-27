@@ -307,6 +307,17 @@ function formatarTempoMinutos(totalMinutos) {
   return `${totalMinutos} min`;
 }
 
+function formatarResumoPedidoPainel(item) {
+  const qtdItens = Number(item.QTD_ITENS || 0);
+  const qtdTotal = Number(item.QTD_TOTAL || 0);
+
+  if (!qtdItens && !qtdTotal) {
+    return '-';
+  }
+
+  return `${formatarQuantidade(qtdItens)} itens / ${formatarQuantidade(qtdTotal)} un.`;
+}
+
 function formatarMoeda(valor) {
   return Number(valor || 0).toLocaleString('pt-BR', {
     style: 'currency',
@@ -495,6 +506,7 @@ function criarCard(item) {
   const valor = Number(item.VLRNOTA) || 0;
   const minutos = minutosDesdeInicio(item.DT_INICIO_CONFERENCIA);
   const mostrarTempoTotal = item.STATUS_CONFERENCIA === 'CONFERIDO';
+  const resumoPedido = formatarResumoPedidoPainel(item);
 
   div.className = `card-item ${statusClass}`;
   div.innerHTML = `
@@ -507,14 +519,15 @@ function criarCard(item) {
           minimumFractionDigits: 2,
           maximumFractionDigits: 2
         })}</span>
+        <span>${resumoPedido}</span>
       </div>
-      ${mostrarTempo ? `<div class="tempo-conferencia">${minutos} min</div>` : ''}
     </div>
 
     <div class="linha-flex">
       <div class="empresa-nome">${item.EMPRESA || '-'}</div>
       <div class="conferente">
         ${mostrarTempoTotal ? `<div class="tempo-total">${formatarTempoMinutos(item.TEMPO_TOTAL_CONFERENCIA_MIN)}</div>` : ''}
+        ${mostrarTempo ? `<div class="tempo-total tempo-total-andamento">${minutos} min</div>` : ''}
         <div>${item.NOME_CONFERENTE || '-'}</div>
       </div>
     </div>
