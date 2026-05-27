@@ -148,28 +148,6 @@ async function atualizarRegistroApi(rootEntity, chave, campos) {
   });
 }
 
-async function removerRegistroApi(rootEntity, chave) {
-  return executeService('CRUDServiceProvider.removeRecord', {
-    dataSet: {
-      rootEntity,
-      includePresentationFields: 'N',
-      entity: {
-        path: '',
-        fieldset: {
-          list: Object.keys(chave).join(',')
-        }
-      },
-      dataRow: {
-        key: Object.fromEntries(
-          Object.entries(chave).map(([campo, valor]) => [campo, campoApi(valor)])
-        )
-      }
-    }
-  }, {
-    forceAccessSession: true
-  });
-}
-
 async function finalizarConferenciaNativa(nuconf, nunota) {
   return executeService(
     'ConferenciaSP.finalizarConferencia',
@@ -383,15 +361,9 @@ async function salvarDetalhesConferenciaSankhya({ nuconf, nunota }) {
     SELECT SEQCONF
     FROM TGFCOI2
     WHERE NUCONF = ${nuconf}
-    ORDER BY SEQCONF DESC
+    ORDER BY SEQCONF
   `);
-
-  for (const detalhe of detalhesExistentes) {
-    await removerRegistroApi('DetalhesConferencia', {
-      NUCONF: nuconf,
-      SEQCONF: detalhe.SEQCONF
-    });
-  }
+  const sequenciasExistentes = new Set(detalhesExistentes.map((item) => Number(item.SEQCONF)));
 
   let seqConf = 1;
   for (const item of itens) {
@@ -412,11 +384,20 @@ async function salvarDetalhesConferenciaSankhya({ nuconf, nunota }) {
       DHALTER: dhAlter
     };
 
-    await salvarRegistroApi('DetalhesConferencia', {
-      NUCONF: nuconf,
-      SEQCONF: seqConf,
-      ...campos
-    });
+    if (sequenciasExistentes.has(seqConf)) {
+      await atualizarRegistroApi(
+        'DetalhesConferencia',
+        { NUCONF: nuconf, SEQCONF: seqConf },
+        campos
+      );
+    } else {
+      await salvarRegistroApi('DetalhesConferencia', {
+        NUCONF: nuconf,
+        SEQCONF: seqConf,
+        ...campos
+      });
+      sequenciasExistentes.add(seqConf);
+    }
 
     seqConf += 1;
   }
