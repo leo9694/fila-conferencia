@@ -6,6 +6,7 @@ const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStor
 
 const conferenciaTimerStore = criarConferenciaTimerStore();
 const conferenciaProgressStore = criarConferenciaProgressStore();
+const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Cuiaba';
 
 function obterDataHoje() {
   const agora = new Date();
@@ -89,6 +90,22 @@ function formatarDataHoraSankhya(data = new Date()) {
   const segundo = String(data.getSeconds()).padStart(2, '0');
 
   return `${dia}/${mes}/${ano} ${hora}:${minuto}:${segundo}`;
+}
+
+function formatarDataHoraLocalISO(data) {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  }).formatToParts(data);
+  const mapa = Object.fromEntries(partes.map((parte) => [parte.type, parte.value]));
+
+  return `${mapa.year}-${mapa.month}-${mapa.day}T${mapa.hour}:${mapa.minute}:${mapa.second}`;
 }
 
 function campoApi(valor) {
@@ -443,7 +460,7 @@ function normalizarDataSankhya(valor) {
   }
 
   if (valor instanceof Date) {
-    return valor.toISOString();
+    return formatarDataHoraLocalISO(valor);
   }
 
   const texto = String(valor).trim();

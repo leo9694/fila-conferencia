@@ -306,6 +306,17 @@ function formatarDataHora(dataISO) {
   if (!dataISO) return '-';
 
   const texto = String(dataISO);
+  if (/[zZ]$|[+-]\d{2}:?\d{2}$/.test(texto)) {
+    const dataComFuso = new Date(texto);
+    if (!Number.isNaN(dataComFuso.getTime())) {
+      return `${dataComFuso.toLocaleDateString('pt-BR', { timeZone: 'America/Cuiaba' })} ${dataComFuso.toLocaleTimeString('pt-BR', {
+        timeZone: 'America/Cuiaba',
+        hour: '2-digit',
+        minute: '2-digit'
+      })}`;
+    }
+  }
+
   const isoMatch = texto.match(/^(\d{4})-(\d{2})-(\d{2})T? ?(\d{2})?:?(\d{2})?/);
   if (isoMatch) {
     const [, ano, mes, dia, hora = '00', minuto = '00'] = isoMatch;
@@ -329,7 +340,7 @@ function formatarDataHora(dataISO) {
 
 function formatarTempoMinutos(totalMinutos) {
   if (totalMinutos === null || totalMinutos === undefined) return '-';
-  return `${totalMinutos} min`;
+  return `${Math.max(1, Number(totalMinutos) || 0)} min`;
 }
 
 function formatarResumoPedidoPainel(item) {
