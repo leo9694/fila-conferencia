@@ -302,6 +302,31 @@ function formatarData(dataISO) {
   return Number.isNaN(data.getTime()) ? '-' : data.toLocaleDateString('pt-BR');
 }
 
+function formatarDataHora(dataISO) {
+  if (!dataISO) return '-';
+
+  const texto = String(dataISO);
+  const isoMatch = texto.match(/^(\d{4})-(\d{2})-(\d{2})T? ?(\d{2})?:?(\d{2})?/);
+  if (isoMatch) {
+    const [, ano, mes, dia, hora = '00', minuto = '00'] = isoMatch;
+    return `${dia}/${mes}/${ano} ${hora}:${minuto}`;
+  }
+
+  const sankhyaMatch = texto.match(/^(\d{2})(\d{2})(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
+  if (sankhyaMatch) {
+    const [, dia, mes, ano, hora = '00', minuto = '00'] = sankhyaMatch;
+    return `${dia}/${mes}/${ano} ${hora}:${minuto}`;
+  }
+
+  const data = new Date(texto);
+  return Number.isNaN(data.getTime())
+    ? '-'
+    : `${data.toLocaleDateString('pt-BR')} ${data.toLocaleTimeString('pt-BR', {
+      hour: '2-digit',
+      minute: '2-digit'
+    })}`;
+}
+
 function formatarTempoMinutos(totalMinutos) {
   if (totalMinutos === null || totalMinutos === undefined) return '-';
   return `${totalMinutos} min`;
@@ -507,6 +532,9 @@ function criarCard(item) {
   const minutos = minutosDesdeInicio(item.DT_INICIO_CONFERENCIA);
   const mostrarTempoTotal = item.STATUS_CONFERENCIA === 'CONFERIDO';
   const resumoPedido = formatarResumoPedidoPainel(item);
+  const conclusao = mostrarTempoTotal && item.DT_FIM_CONFERENCIA
+    ? `Concluido: ${formatarDataHora(item.DT_FIM_CONFERENCIA)}`
+    : '';
 
   div.className = `card-item ${statusClass}`;
   div.innerHTML = `
@@ -520,6 +548,7 @@ function criarCard(item) {
           maximumFractionDigits: 2
         })}</span>
         <span>${resumoPedido}</span>
+        ${conclusao ? `<span>${conclusao}</span>` : ''}
       </div>
     </div>
 
