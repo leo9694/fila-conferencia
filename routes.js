@@ -148,6 +148,28 @@ async function atualizarRegistroApi(rootEntity, chave, campos) {
   });
 }
 
+async function removerRegistroApi(rootEntity, chave) {
+  return executeService('CRUDServiceProvider.removeRecord', {
+    dataSet: {
+      rootEntity,
+      includePresentationFields: 'N',
+      entity: {
+        path: '',
+        fieldset: {
+          list: Object.keys(chave).join(',')
+        }
+      },
+      dataRow: {
+        key: Object.fromEntries(
+          Object.entries(chave).map(([campo, valor]) => [campo, campoApi(valor)])
+        )
+      }
+    }
+  }, {
+    forceAccessSession: true
+  });
+}
+
 async function finalizarConferenciaNativa(nuconf, nunota) {
   return executeService(
     'ConferenciaSP.finalizarConferencia',
@@ -334,15 +356,6 @@ function normalizarControleConferencia(controle) {
   return valor || ' ';
 }
 
-function chaveDetalheConferencia(item) {
-  return [
-    Number(item.CODPROD),
-    String(item.CODBARRA || '').trim(),
-    String(item.CODVOL || '').trim(),
-    normalizarControleConferencia(item.CONTROLE)
-  ].join('|');
-}
-
 async function salvarDetalhesConferenciaSankhya({ nuconf, nunota }) {
   const itens = await executeQuery(`
     SELECT
@@ -367,21 +380,20 @@ async function salvarDetalhesConferenciaSankhya({ nuconf, nunota }) {
 
   const dhAlter = formatarDataHoraSankhya();
   const detalhesExistentes = await executeQuery(`
-    SELECT
-      SEQCONF,
-      CODPROD,
-      CODBARRA,
-      CODVOL,
-      NVL(TRIM(CONTROLE), ' ') AS CONTROLE
+    SELECT SEQCONF
     FROM TGFCOI2
     WHERE NUCONF = ${nuconf}
+    ORDER BY SEQCONF DESC
   `);
-  const sequenciasExistentes = new Set(detalhesExistentes.map((item) => Number(item.SEQCONF)));
-  const detalhesPorChave = new Map(
-    detalhesExistentes.map((item) => [chaveDetalheConferencia(item), Number(item.SEQCONF)])
-  );
-  const detalhesAgrupados = new Map();
 
+  for (const detalhe of detalhesExistentes) {
+    await removerRegistroApi('DetalhesConferencia', {
+      NUCONF: nuconf,
+      SEQCONF: detalhe.SEQCONF
+    });
+  }
+
+  let seqConf = 1;
   for (const item of itens) {
     const qtdConferida = Math.max(0, normalizarNumero(item.QTDNEG) - normalizarNumero(item.QTDCORTE));
 
@@ -389,60 +401,24 @@ async function salvarDetalhesConferenciaSankhya({ nuconf, nunota }) {
       continue;
     }
 
-    const detalhe = {
+    const qtdConferidaApi = numeroApi(qtdConferida);
+    const campos = {
       CODBARRA: item.CODBARRACONF || item.CODBARRA || item.CODPROD,
       CODPROD: item.CODPROD,
       CODVOL: item.CODVOLCONF || item.CODVOL || 'UN',
       CONTROLE: normalizarControleConferencia(item.CONTROLE),
-      QTDCONF_NUM: qtdConferida
-    };
-    const chave = chaveDetalheConferencia(detalhe);
-    const detalheAtual = detalhesAgrupados.get(chave);
-
-    if (detalheAtual) {
-      detalheAtual.QTDCONF_NUM += qtdConferida;
-    } else {
-      detalhesAgrupados.set(chave, detalhe);
-    }
-  }
-
-  let proximaSequencia = 1;
-  function obterProximaSequenciaLivre() {
-    while (sequenciasExistentes.has(proximaSequencia)) {
-      proximaSequencia += 1;
-    }
-
-    sequenciasExistentes.add(proximaSequencia);
-    return proximaSequencia;
-  }
-
-  for (const detalhe of detalhesAgrupados.values()) {
-    const chave = chaveDetalheConferencia(detalhe);
-    const seqConf = detalhesPorChave.get(chave) || obterProximaSequenciaLivre();
-    const qtdConferida = numeroApi(detalhe.QTDCONF_NUM);
-    const campos = {
-      CODBARRA: detalhe.CODBARRA,
-      CODPROD: detalhe.CODPROD,
-      CODVOL: detalhe.CODVOL,
-      CONTROLE: detalhe.CONTROLE,
-      QTDCONFVOLPAD: qtdConferida,
-      QTDCONF: qtdConferida,
+      QTDCONFVOLPAD: qtdConferidaApi,
+      QTDCONF: qtdConferidaApi,
       DHALTER: dhAlter
     };
 
-    if (detalhesPorChave.has(chave)) {
-      await atualizarRegistroApi(
-        'DetalhesConferencia',
-        { NUCONF: nuconf, SEQCONF: seqConf },
-        campos
-      );
-    } else {
-      await salvarRegistroApi('DetalhesConferencia', {
-        NUCONF: nuconf,
-        SEQCONF: seqConf,
-        ...campos
-      });
-    }
+    await salvarRegistroApi('DetalhesConferencia', {
+      NUCONF: nuconf,
+      SEQCONF: seqConf,
+      ...campos
+    });
+
+    seqConf += 1;
   }
 }
 
