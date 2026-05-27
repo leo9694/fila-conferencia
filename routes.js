@@ -329,16 +329,31 @@ async function finalizarConferenciaOperacional(nuconf, nunota, codUsu, qtdVol = 
   );
 }
 
-async function preservarConferenteFinalizacao(nuconf, codUsu, dhInicioOriginal = null) {
+function dataValida(valor) {
+  if (!valor) {
+    return null;
+  }
+
+  const data = new Date(normalizarDataSankhya(valor));
+  return Number.isNaN(data.getTime()) ? null : data;
+}
+
+async function preservarConferenteFinalizacao(nuconf, codUsu, dhInicioOriginal = null, dhFimAtual = null) {
   const campos = {
     CODUSUCONF: codUsu
   };
 
+  const dataInicio = dataValida(dhInicioOriginal);
+  const dataFim = dataValida(dhFimAtual);
+
   if (dhInicioOriginal) {
-    const dataInicio = new Date(normalizarDataSankhya(dhInicioOriginal));
-    campos.DHINICONF = Number.isNaN(dataInicio.getTime())
-      ? dhInicioOriginal
-      : formatarDataHoraSankhya(dataInicio);
+    campos.DHINICONF = dataInicio
+      ? formatarDataHoraSankhya(dataInicio)
+      : dhInicioOriginal;
+  }
+
+  if (!dataFim || (dataInicio && dataFim.getTime() <= dataInicio.getTime())) {
+    campos.DHFINCONF = formatarDataHoraSankhya();
   }
 
   await atualizarRegistroApi(
@@ -1287,7 +1302,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     const resultadoFinalizacao = await finalizarConferenciaNativa(nuconf, nunota);
 
     const [conferenciaFinal] = await executeQuery(`
-      SELECT NUCONF, NUNOTAORIG, STATUS, CODUSUCONF
+      SELECT NUCONF, NUNOTAORIG, STATUS, CODUSUCONF, DHFINCONF
       FROM TGFCON2
       WHERE NUCONF = ${nuconf}
     `);
@@ -1299,7 +1314,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       await finalizarConferenciaOperacional(nuconf, nunota, codUsu, pedido.QTDVOL);
       fechamentoOperacionalAplicado = true;
       [conferenciaConferida] = await executeQuery(`
-        SELECT NUCONF, NUNOTAORIG, STATUS, CODUSUCONF
+        SELECT NUCONF, NUNOTAORIG, STATUS, CODUSUCONF, DHFINCONF
         FROM TGFCON2
         WHERE NUCONF = ${nuconf}
       `);
@@ -1320,9 +1335,9 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       return;
     }
 
-    await preservarConferenteFinalizacao(nuconf, codUsu, dhInicioConferencia);
+    await preservarConferenteFinalizacao(nuconf, codUsu, dhInicioConferencia, conferenciaConferida.DHFINCONF);
     [conferenciaConferida] = await executeQuery(`
-      SELECT NUCONF, NUNOTAORIG, STATUS, CODUSUCONF
+      SELECT NUCONF, NUNOTAORIG, STATUS, CODUSUCONF, DHFINCONF
       FROM TGFCON2
       WHERE NUCONF = ${nuconf}
     `);
