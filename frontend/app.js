@@ -112,8 +112,9 @@ let itemCorteSelecionado = null;
 let pedidoConcluido = null;
 let volumePanelAberto = false;
 let produtoFotoAtual = null;
-const itensGridMinimos = [34, 70, 180, 70, 60, 110, 100];
-const itensGridLarguras = [34, 82, 260, 84, 74, 140, 150];
+let ordenacaoItens = { coluna: '', direcao: '' };
+const itensGridMinimos = [34, 78, 210, 122, 148, 118];
+const itensGridLarguras = [34, 92, 240, 142, 170, 132];
 
 function aplicarLargurasGridItens() {
   document.documentElement.style.setProperty(
@@ -156,6 +157,41 @@ function configurarRedimensionamentoColunas(header) {
       document.addEventListener('mousemove', mover);
       document.addEventListener('mouseup', soltar);
     });
+  });
+}
+
+function fecharMenusOrdenacaoItens() {
+  document.querySelectorAll('.itens-sort-menu.aberto').forEach((menu) => {
+    menu.classList.remove('aberto');
+  });
+}
+
+function compararItensPorColuna(a, b) {
+  if (ordenacaoItens.coluna === 'produto') {
+    const produtoA = Number(a.codProd || 0);
+    const produtoB = Number(b.codProd || 0);
+    return produtoA - produtoB;
+  }
+
+  return String(a.descrProd || '').localeCompare(String(b.descrProd || ''), 'pt-BR', {
+    sensitivity: 'base',
+    numeric: true
+  });
+}
+
+function ordenarItens(itens) {
+  if (!ordenacaoItens.coluna || !ordenacaoItens.direcao) {
+    return [...itens];
+  }
+
+  return [...itens].sort((a, b) => {
+    const comparacao = compararItensPorColuna(a, b);
+
+    if (comparacao !== 0) {
+      return ordenacaoItens.direcao === 'asc' ? comparacao : -comparacao;
+    }
+
+    return Number(a.sequencia || 0) - Number(b.sequencia || 0);
   });
 }
 
@@ -888,14 +924,15 @@ function criarLinhaItemConferencia(item, quantidade, classe, rotuloQuantidade, o
   const codigoBarras = escaparAtributo(item.codigoBarras || '-');
   const unidade = escaparAtributo(item.codVol);
   const controle = escaparAtributo(item.controle || '-');
+  const quantidadeTexto = rotuloQuantidade || formatarQuantidade(quantidade);
+  const quantidadeComUnidade = `${quantidadeTexto} - ${item.codVol || '-'}`;
   row.innerHTML = `
     <div>${options.desfazer ? '<button class="item-action item-action-return" type="button" aria-label="Voltar item para conferencia" title="Voltar item para conferencia"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 4 12l6 6"/><path d="M5 12h15"/></svg></button>' : ''}${options.cortar ? '<button class="item-action item-action-cut" type="button" aria-label="Cortar quantidade do item" title="Cortar quantidade do item"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="M8.5 8.5 19 19"/><path d="M8.5 15.5 19 5"/></svg></button>' : ''}</div>
     <div class="item-code" title="${codigoProduto}">${item.codProd}</div>
     <div class="item-name" title="${descricao}">${item.descrProd}</div>
-    <div class="item-qtd">${rotuloQuantidade || formatarQuantidade(quantidade)}</div>
-    <div class="item-unit" title="${unidade}">${item.codVol}</div>
+    <div class="item-qtd" title="${escaparAtributo(quantidadeComUnidade)}">${quantidadeComUnidade}</div>
+    <div class="item-unit" title="${controle}">${item.controle || '-'}</div>
     <div class="item-codes" title="${codigoBarras}">${item.codigoBarras || '-'}</div>
-    <div class="item-codes" title="${controle}">${item.controle || '-'}</div>
   `;
 
   if (options.desfazer) {
@@ -923,14 +960,45 @@ function criarLinhaItemConferencia(item, quantidade, classe, rotuloQuantidade, o
 function criarCabecalhoItens() {
   const header = document.createElement('div');
   header.className = 'itens-grid-header';
-  const colunas = ['', 'Produto', 'Descricao (Produto)', 'Quantidade', 'Unidade', 'Cod. Barras', 'Controle'];
+  const colunas = ['', 'Produto', 'Descricao (Produto)', 'Quantidade', 'Controle', 'Cod. Barras'];
   header.innerHTML = colunas.map((coluna, index) => `
-    <div class="itens-grid-col-header">
+    <div class="itens-grid-col-header${index === 1 || index === 2 ? ' coluna-ordenavel' : ''}">
       <span>${coluna}</span>
+      ${index === 1 || index === 2 ? `
+        <button class="itens-sort-toggle" type="button" data-sort-coluna="${index === 1 ? 'produto' : 'descricao'}" aria-label="Ordenar ${coluna}" title="Ordenar ${coluna}">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10"/><path d="M4 12h7"/><path d="M4 17h4"/><path d="m17 6 3 3 3-3"/><path d="M20 9v9"/></svg>
+        </button>
+        <div class="itens-sort-menu">
+          <button type="button" data-sort-direcao="asc"><span aria-hidden="true">A-Z</span> Ordenar Ascendente</button>
+          <button type="button" data-sort-direcao="desc"><span aria-hidden="true">Z-A</span> Ordenar Descendente</button>
+        </div>
+      ` : ''}
       <button class="column-resizer" type="button" data-col-index="${index}" aria-label="Redimensionar coluna ${coluna || 'acao'}"></button>
     </div>
   `).join('');
   configurarRedimensionamentoColunas(header);
+
+  header.querySelectorAll('.itens-sort-toggle').forEach((sortToggle) => {
+    const sortMenu = sortToggle.parentElement.querySelector('.itens-sort-menu');
+    sortToggle.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const menuAberto = sortMenu.classList.contains('aberto');
+      fecharMenusOrdenacaoItens();
+      sortMenu.classList.toggle('aberto', !menuAberto);
+    });
+
+    sortMenu.querySelectorAll('[data-sort-direcao]').forEach((botao) => {
+      botao.addEventListener('click', (event) => {
+        event.stopPropagation();
+        ordenacaoItens = {
+          coluna: sortToggle.dataset.sortColuna,
+          direcao: botao.dataset.sortDirecao
+        };
+        fecharMenusOrdenacaoItens();
+        renderizarItensConferencia();
+      });
+    });
+  });
 
   return header;
 }
@@ -944,7 +1012,7 @@ function renderizarItensPlanilha(container, itens, modo = 'preview') {
     return;
   }
 
-  itens.forEach((item) => {
+  ordenarItens(itens).forEach((item) => {
     const quantidade = modo === 'preview' ? item.qtdNeg : item.qtdConferida;
     container.appendChild(criarLinhaItemConferencia(
       item,
@@ -975,7 +1043,7 @@ function renderizarItensConferencia() {
   itensPendentesLista.appendChild(criarCabecalhoItens());
   itensConferidosLista.appendChild(criarCabecalhoItens());
 
-  itensPedidoSelecionado.forEach((item) => {
+  ordenarItens(itensPedidoSelecionado).forEach((item) => {
     const quantidadeConferida = Math.max(0, item.qtdConferida);
     const quantidadeCortada = quantidadeCortadaItem(item);
     const quantidadePendente = quantidadePendenteItem(item);
@@ -2181,6 +2249,7 @@ scanQtd.addEventListener('keydown', (event) => {
     adicionarConferenciaPorCodigo();
   }
 });
+document.addEventListener('click', fecharMenusOrdenacaoItens);
 
 window.addEventListener('popstate', (event) => {
   const state = event.state;
