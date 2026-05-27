@@ -329,6 +329,25 @@ async function finalizarConferenciaOperacional(nuconf, nunota, codUsu, qtdVol = 
   );
 }
 
+async function preservarConferenteFinalizacao(nuconf, codUsu, dhInicioOriginal = null) {
+  const campos = {
+    CODUSUCONF: codUsu
+  };
+
+  if (dhInicioOriginal) {
+    const dataInicio = new Date(normalizarDataSankhya(dhInicioOriginal));
+    campos.DHINICONF = Number.isNaN(dataInicio.getTime())
+      ? dhInicioOriginal
+      : formatarDataHoraSankhya(dataInicio);
+  }
+
+  await atualizarRegistroApi(
+    'CabecalhoConferencia',
+    { NUCONF: nuconf },
+    campos
+  );
+}
+
 function normalizarControleConferencia(controle) {
   const valor = String(controle ?? '').trim();
   return valor || ' ';
@@ -1203,10 +1222,11 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
 
     const conferenciaJaIniciada = Boolean(nuconf);
     const agoraSankhya = formatarDataHoraSankhya();
+    let dhInicioConferencia = null;
 
     if (conferenciaJaIniciada) {
       const [conferenciaAtual] = await executeQuery(`
-        SELECT NUCONF, NUNOTAORIG, STATUS
+        SELECT NUCONF, NUNOTAORIG, STATUS, DHINICONF
         FROM TGFCON2
         WHERE NUCONF = ${nuconf}
       `);
@@ -1220,6 +1240,8 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
         res.status(409).json({ erro: 'Conferencia ja esta finalizada ou em outro status no Sankhya' });
         return;
       }
+
+      dhInicioConferencia = conferenciaAtual.DHINICONF || null;
     }
 
     if (!conferenciaJaIniciada) {
@@ -1241,6 +1263,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
         CODUSUCONF: codUsu,
         QTDVOL: Math.max(1, normalizarNumero(pedido.QTDVOL))
       });
+      dhInicioConferencia = agoraSankhya;
     } else {
       await atualizarRegistroApi(
         'CabecalhoConferencia',
@@ -1296,6 +1319,13 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       });
       return;
     }
+
+    await preservarConferenteFinalizacao(nuconf, codUsu, dhInicioConferencia);
+    [conferenciaConferida] = await executeQuery(`
+      SELECT NUCONF, NUNOTAORIG, STATUS, CODUSUCONF
+      FROM TGFCON2
+      WHERE NUCONF = ${nuconf}
+    `);
 
     conferenciaProgressStore.remover(nunota);
 
