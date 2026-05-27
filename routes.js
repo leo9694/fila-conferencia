@@ -329,12 +329,27 @@ async function finalizarConferenciaOperacional(nuconf, nunota, codUsu, qtdVol = 
   );
 }
 
+function normalizarControleConferencia(controle) {
+  const valor = String(controle ?? '').trim();
+  return valor || ' ';
+}
+
+function chaveDetalheConferencia(item) {
+  return [
+    Number(item.CODPROD),
+    String(item.CODBARRA || '').trim(),
+    String(item.CODVOL || '').trim(),
+    normalizarControleConferencia(item.CONTROLE)
+  ].join('|');
+}
+
 async function salvarDetalhesConferenciaSankhya({ nuconf, nunota }) {
   const itens = await executeQuery(`
     SELECT
       ITE.SEQUENCIA,
       ITE.CODPROD,
       ITE.CODVOL,
+      NVL(TRIM(ITE.CONTROLE), ' ') AS CONTROLE,
       NVL(ITE.QTDNEG, 0) AS QTDNEG,
       NVL(ITE.QTDCONFERIDA, 0) AS QTDCORTE,
       NVL(ITE.GTINNFE, ITE.PRODUTONFE) AS CODBARRA,
@@ -350,14 +365,22 @@ async function salvarDetalhesConferenciaSankhya({ nuconf, nunota }) {
     ORDER BY ITE.SEQUENCIA
   `);
 
-  let seqConf = 1;
   const dhAlter = formatarDataHoraSankhya();
   const detalhesExistentes = await executeQuery(`
-    SELECT SEQCONF
+    SELECT
+      SEQCONF,
+      CODPROD,
+      CODBARRA,
+      CODVOL,
+      NVL(TRIM(CONTROLE), ' ') AS CONTROLE
     FROM TGFCOI2
     WHERE NUCONF = ${nuconf}
   `);
   const sequenciasExistentes = new Set(detalhesExistentes.map((item) => Number(item.SEQCONF)));
+  const detalhesPorChave = new Map(
+    detalhesExistentes.map((item) => [chaveDetalheConferencia(item), Number(item.SEQCONF)])
+  );
+  const detalhesAgrupados = new Map();
 
   for (const item of itens) {
     const qtdConferida = Math.max(0, normalizarNumero(item.QTDNEG) - normalizarNumero(item.QTDCORTE));
@@ -366,17 +389,48 @@ async function salvarDetalhesConferenciaSankhya({ nuconf, nunota }) {
       continue;
     }
 
-    const campos = {
+    const detalhe = {
       CODBARRA: item.CODBARRACONF || item.CODBARRA || item.CODPROD,
       CODPROD: item.CODPROD,
       CODVOL: item.CODVOLCONF || item.CODVOL || 'UN',
-      CONTROLE: ' ',
-      QTDCONFVOLPAD: numeroApi(qtdConferida),
-      QTDCONF: numeroApi(qtdConferida),
+      CONTROLE: normalizarControleConferencia(item.CONTROLE),
+      QTDCONF_NUM: qtdConferida
+    };
+    const chave = chaveDetalheConferencia(detalhe);
+    const detalheAtual = detalhesAgrupados.get(chave);
+
+    if (detalheAtual) {
+      detalheAtual.QTDCONF_NUM += qtdConferida;
+    } else {
+      detalhesAgrupados.set(chave, detalhe);
+    }
+  }
+
+  let proximaSequencia = 1;
+  function obterProximaSequenciaLivre() {
+    while (sequenciasExistentes.has(proximaSequencia)) {
+      proximaSequencia += 1;
+    }
+
+    sequenciasExistentes.add(proximaSequencia);
+    return proximaSequencia;
+  }
+
+  for (const detalhe of detalhesAgrupados.values()) {
+    const chave = chaveDetalheConferencia(detalhe);
+    const seqConf = detalhesPorChave.get(chave) || obterProximaSequenciaLivre();
+    const qtdConferida = numeroApi(detalhe.QTDCONF_NUM);
+    const campos = {
+      CODBARRA: detalhe.CODBARRA,
+      CODPROD: detalhe.CODPROD,
+      CODVOL: detalhe.CODVOL,
+      CONTROLE: detalhe.CONTROLE,
+      QTDCONFVOLPAD: qtdConferida,
+      QTDCONF: qtdConferida,
       DHALTER: dhAlter
     };
 
-    if (sequenciasExistentes.has(seqConf)) {
+    if (detalhesPorChave.has(chave)) {
       await atualizarRegistroApi(
         'DetalhesConferencia',
         { NUCONF: nuconf, SEQCONF: seqConf },
@@ -389,8 +443,6 @@ async function salvarDetalhesConferenciaSankhya({ nuconf, nunota }) {
         ...campos
       });
     }
-
-    seqConf += 1;
   }
 }
 
@@ -424,7 +476,9 @@ function normalizarDataSankhya(valor) {
 function normalizarLinhaConferencia(row) {
   return {
     ...row,
-    DTNEG: normalizarDataSankhya(row.DTNEG)
+    DTNEG: normalizarDataSankhya(row.DTNEG),
+    DT_INICIO_CONFERENCIA: normalizarDataSankhya(row.DT_INICIO_CONFERENCIA),
+    DT_FIM_CONFERENCIA: normalizarDataSankhya(row.DT_FIM_CONFERENCIA)
   };
 }
 
@@ -438,6 +492,8 @@ function montarSqlConferencias(intervalo, empresa) {
       CAB.CODPARC AS CODIGO_PARCEIRO,
       CAST(NVL(CAB.VLRNOTA, 0) AS NUMBER(15,2)) AS VLRNOTA,
       CONF.STATUS AS STATUS_CONF_BD,
+      CONF.DHINICONF AS DT_INICIO_CONFERENCIA,
+      CONF.DHFINCONF AS DT_FIM_CONFERENCIA,
       USU.NOMEUSU AS NOME_CONFERENTE,
       CASE
         WHEN CAB.NUCONFATUAL IS NULL THEN 'AGUARDANDO CONFERENCIA'
