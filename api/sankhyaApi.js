@@ -3,11 +3,15 @@ const DEFAULT_BASE_URL = 'https://api.sankhya.com.br';
 let cachedAccessToken = null;
 let cachedAccessTokenExpiresAt = 0;
 let accessSessionToken = null;
+let accessSessionPromise = null;
+let accessSessionPromiseToken = null;
 
 function clearAuthCache() {
   cachedAccessToken = null;
   cachedAccessTokenExpiresAt = 0;
   accessSessionToken = null;
+  accessSessionPromise = null;
+  accessSessionPromiseToken = null;
 }
 
 function getConfig() {
@@ -103,8 +107,49 @@ async function ensureAccessSession(accessToken, config, options = {}) {
     return;
   }
 
-  if (!options.force && accessSessionToken === accessToken) {
+  if (accessSessionToken === accessToken) {
     return;
+  }
+
+  if (accessSessionPromise && accessSessionPromiseToken === accessToken) {
+    await accessSessionPromise;
+    return;
+  }
+
+  accessSessionPromiseToken = accessToken;
+  accessSessionPromise = loginAccessSession(accessToken, config, options);
+
+  try {
+    await accessSessionPromise;
+  } finally {
+    accessSessionPromise = null;
+    accessSessionPromiseToken = null;
+  }
+}
+
+async function logoutAccessSession(accessToken, config) {
+  if (!accessToken) return;
+
+  const url = `${config.baseUrl}/gateway/v1/mge/service.sbr?serviceName=MobileLoginSP.logout&outputType=json`;
+
+  await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      serviceName: 'MobileLoginSP.logout',
+      requestBody: {}
+    })
+  }).catch(() => {});
+}
+
+async function loginAccessSession(accessToken, config, options = {}) {
+  const previousSessionToken = accessSessionToken;
+
+  if (previousSessionToken && previousSessionToken !== accessToken) {
+    await logoutAccessSession(previousSessionToken, config);
   }
 
   const url = `${config.baseUrl}/gateway/v1/mge/service.sbr?serviceName=MobileLoginSP.login&outputType=json`;
@@ -132,6 +177,10 @@ async function ensureAccessSession(accessToken, config, options = {}) {
   }
 
   accessSessionToken = accessToken;
+}
+
+function isSessionError(message) {
+  return /sess[aã]o|session|login|autentic|expirad|inativ/i.test(String(message || ''));
 }
 
 function normalizeFieldName(field, index) {
@@ -196,7 +245,6 @@ async function executeService(serviceName, requestBody, options = {}) {
   });
   if (!options.skipAccessSession) {
     await ensureAccessSession(accessToken, config, {
-      force: Boolean(options.forceAccessSession),
       required: Boolean(options.forceAccessSession)
     });
   }
@@ -219,6 +267,17 @@ async function executeService(serviceName, requestBody, options = {}) {
 
   if (!response.ok || payload.status === '0' || payload.status === '3') {
     const message = payload.statusMessage || `HTTP ${response.status}`;
+    if (!options.__retriedAccessSession && !options.skipAccessSession && isSessionError(message)) {
+      accessSessionToken = null;
+      await ensureAccessSession(accessToken, config, {
+        force: true,
+        required: Boolean(options.forceAccessSession)
+      });
+      return executeService(serviceName, requestBody, {
+        ...options,
+        __retriedAccessSession: true
+      });
+    }
     throw new Error(`Falha ao executar servico ${serviceName}: ${message}`);
   }
 
