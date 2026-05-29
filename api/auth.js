@@ -116,7 +116,8 @@ async function validarUsuarioSankhya(usuario, senha) {
     KEEPCONNECTED: campoApi('N')
   }, {
     isolatedSession: true,
-    skipAccessSession: true
+    skipAccessSession: true,
+    logoutAfterService: true
   });
 
   const codUsuLogin = extrairIdUsuarioLogin(loginPayload);

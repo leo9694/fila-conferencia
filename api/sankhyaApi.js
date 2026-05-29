@@ -251,37 +251,43 @@ async function executeService(serviceName, requestBody, options = {}) {
   const modulePath = options.modulePath || 'mge';
   const url = `${config.baseUrl}/gateway/v1/${modulePath}/service.sbr?serviceName=${encodeURIComponent(serviceName)}&outputType=json`;
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({
-      serviceName,
-      requestBody
-    })
-  });
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        serviceName,
+        requestBody
+      })
+    });
 
-  const payload = await response.json().catch(() => ({}));
+    const payload = await response.json().catch(() => ({}));
 
-  if (!response.ok || payload.status === '0' || payload.status === '3') {
-    const message = payload.statusMessage || `HTTP ${response.status}`;
-    if (!options.__retriedAccessSession && !options.skipAccessSession && isSessionError(message)) {
-      accessSessionToken = null;
-      await ensureAccessSession(accessToken, config, {
-        force: true,
-        required: Boolean(options.forceAccessSession)
-      });
-      return executeService(serviceName, requestBody, {
-        ...options,
-        __retriedAccessSession: true
-      });
+    if (!response.ok || payload.status === '0' || payload.status === '3') {
+      const message = payload.statusMessage || `HTTP ${response.status}`;
+      if (!options.__retriedAccessSession && !options.skipAccessSession && isSessionError(message)) {
+        accessSessionToken = null;
+        await ensureAccessSession(accessToken, config, {
+          force: true,
+          required: Boolean(options.forceAccessSession)
+        });
+        return executeService(serviceName, requestBody, {
+          ...options,
+          __retriedAccessSession: true
+        });
+      }
+      throw new Error(`Falha ao executar servico ${serviceName}: ${message}`);
     }
-    throw new Error(`Falha ao executar servico ${serviceName}: ${message}`);
-  }
 
-  return payload;
+    return payload;
+  } finally {
+    if (options.logoutAfterService) {
+      await logoutAccessSession(accessToken, config);
+    }
+  }
 }
 
 module.exports = {
