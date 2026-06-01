@@ -88,8 +88,13 @@ async function authenticate(options = {}) {
   }
 
   if (!options.skipCache) {
+    const previousAccessToken = cachedAccessToken;
     cachedAccessToken = accessToken;
     cachedAccessTokenExpiresAt = getJwtExpiration(accessToken) || Date.now() + 25 * 60 * 1000;
+
+    if (previousAccessToken && previousAccessToken !== accessToken) {
+      await logoutAccessSession(previousAccessToken, config);
+    }
   }
 
   return accessToken;
@@ -136,10 +141,13 @@ async function logoutAccessSession(accessToken, config) {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
+      'appkey': config.clientId,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
       serviceName: 'MobileLoginSP.logout',
+      status: '1',
+      pendingPrinting: 'false',
       requestBody: {}
     })
   }).catch(() => {});
