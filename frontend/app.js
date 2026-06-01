@@ -53,6 +53,11 @@ const produtoFotoPanel = document.getElementById('produto-foto-panel');
 const produtoFotoTitulo = document.querySelector('#produto-foto-panel .produto-foto-head strong');
 const produtoFotoLegenda = document.getElementById('produto-foto-legenda');
 const produtoFotoFrame = document.getElementById('produto-foto-frame');
+const produtoFotoModal = document.getElementById('produto-foto-modal');
+const produtoFotoModalTitulo = document.getElementById('produto-foto-modal-titulo');
+const produtoFotoModalLegenda = document.getElementById('produto-foto-modal-legenda');
+const produtoFotoModalBody = document.getElementById('produto-foto-modal-body');
+const produtoFotoModalFechar = document.getElementById('produto-foto-modal-fechar');
 const pedidoConferenciaTitulo = document.getElementById('pedido-conferencia-titulo');
 const pedidoConferenciaStatus = document.getElementById('pedido-conferencia-status');
 const botaoAbrirConsultaProdutos = document.getElementById('abrir-consulta-produtos');
@@ -994,8 +999,39 @@ function renderizarFotoProdutoVazia(mensagem = 'Sem produto selecionado.') {
     produtoFotoLegenda.textContent = 'Clique em um item ou confira um produto.';
   }
   if (produtoFotoFrame) {
+    produtoFotoFrame.classList.remove('has-image');
     produtoFotoFrame.innerHTML = `<div class="produto-foto-placeholder">${escaparHtml(mensagem)}</div>`;
   }
+}
+
+function fecharModalFotoProduto() {
+  if (produtoFotoModal) {
+    produtoFotoModal.hidden = true;
+  }
+  if (produtoFotoModalBody) {
+    produtoFotoModalBody.innerHTML = '';
+  }
+}
+
+function abrirModalFotoProduto() {
+  if (!produtoFotoAtual?.src || !produtoFotoModal || !produtoFotoModalBody) {
+    return;
+  }
+
+  if (produtoFotoModalTitulo) {
+    produtoFotoModalTitulo.textContent = produtoFotoAtual.titulo || 'Foto do produto';
+  }
+  if (produtoFotoModalLegenda) {
+    produtoFotoModalLegenda.textContent = produtoFotoAtual.descricao || '-';
+  }
+  produtoFotoModalBody.innerHTML = `
+    <img
+      src="${escaparAtributo(produtoFotoAtual.src)}"
+      alt="Foto do produto ${escaparAtributo(produtoFotoAtual.descricao || '')}"
+    >
+  `;
+  produtoFotoModal.hidden = false;
+  atualizarIcones();
 }
 
 function mostrarFotoProduto(item, origem = 'selecionado') {
@@ -1012,7 +1048,8 @@ function mostrarFotoProduto(item, origem = 'selecionado') {
   const legendaOrigem = origem === 'ultimo' ? 'Ultimo produto conferido' : 'Produto selecionado';
   const descricaoProduto = item.descrProd || 'Produto';
   const descricao = `${item.codProd} - ${descricaoProduto}`;
-  produtoFotoAtual = { codProd, origem };
+  const fotoSrc = `/api/fila-conferencia/produtos/${codProd}/foto?v=${Date.now()}`;
+  produtoFotoAtual = { codProd, origem, src: fotoSrc, titulo: legendaOrigem, descricao };
   produtoFotoPanel?.classList.remove('produto-foto-vazio', 'produto-foto-ultimo', 'produto-foto-selecionado');
   produtoFotoPanel?.classList.add(origem === 'ultimo' ? 'produto-foto-ultimo' : 'produto-foto-selecionado');
   if (produtoFotoTitulo) {
@@ -1024,17 +1061,20 @@ function mostrarFotoProduto(item, origem = 'selecionado') {
   `;
   produtoFotoFrame.innerHTML = `
     <img
-      src="/api/fila-conferencia/produtos/${codProd}/foto?v=${Date.now()}"
+      src="${escaparAtributo(fotoSrc)}"
       alt="Foto do produto ${escaparAtributo(descricao)}"
       loading="lazy"
     >
   `;
+  produtoFotoFrame.classList.add('has-image');
 
   const img = produtoFotoFrame.querySelector('img');
   img.addEventListener('error', () => {
     if (produtoFotoAtual?.codProd !== codProd) {
       return;
     }
+    produtoFotoAtual = null;
+    produtoFotoFrame.classList.remove('has-image');
     produtoFotoFrame.innerHTML = `<div class="produto-foto-placeholder">Foto nao cadastrada para ${escaparHtml(descricao)}.</div>`;
   }, { once: true });
 }
@@ -2345,6 +2385,13 @@ botaoVoltarListaFila.addEventListener('click', () => {
   limparPedidoConferencia('Selecione um pedido para iniciar.');
   buscarFilaConferencia();
 });
+produtoFotoFrame.addEventListener('click', abrirModalFotoProduto);
+produtoFotoModalFechar.addEventListener('click', fecharModalFotoProduto);
+produtoFotoModal.addEventListener('click', (event) => {
+  if (event.target === produtoFotoModal) {
+    fecharModalFotoProduto();
+  }
+});
 botaoBuscarFilaConferencia.addEventListener('click', buscarFilaConferencia);
 filaBuscaPedido.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
@@ -2400,6 +2447,11 @@ scanQtd.addEventListener('keydown', (event) => {
   }
 });
 document.addEventListener('click', fecharMenusOrdenacaoItens);
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && produtoFotoModal && !produtoFotoModal.hidden) {
+    fecharModalFotoProduto();
+  }
+});
 
 window.addEventListener('popstate', (event) => {
   const state = event.state;
