@@ -49,6 +49,7 @@ const botaoCancelarPreviewPedido = document.getElementById('cancelar-preview-ped
 const botaoConfirmarPreviewPedido = document.getElementById('confirmar-preview-pedido');
 const pedidoEmConferenciaCard = document.getElementById('pedido-em-conferencia-card');
 const botaoVoltarListaFila = document.getElementById('voltar-lista-fila');
+const produtoFotoPanel = document.getElementById('produto-foto-panel');
 const produtoFotoTitulo = document.querySelector('#produto-foto-panel .produto-foto-head strong');
 const produtoFotoLegenda = document.getElementById('produto-foto-legenda');
 const produtoFotoFrame = document.getElementById('produto-foto-frame');
@@ -354,6 +355,16 @@ function formatarResumoPedidoPainel(item) {
   return `${formatarQuantidade(qtdItens)} itens / ${formatarQuantidade(qtdTotal)} un.`;
 }
 
+function formatarResumoItensUnidadesPainel(item) {
+  const qtdItens = Number(item.QTD_ITENS || 0);
+  const qtdTotal = Number(item.QTD_TOTAL || 0);
+
+  return {
+    itens: qtdItens ? `${formatarQuantidade(qtdItens)} ${qtdItens === 1 ? 'item' : 'itens'}` : '-',
+    unidades: qtdTotal ? `${formatarQuantidade(qtdTotal)} un.` : '-'
+  };
+}
+
 function formatarMoeda(valor) {
   return Number(valor || 0).toLocaleString('pt-BR', {
     style: 'currency',
@@ -383,14 +394,14 @@ function atualizarTituloPainel() {
   const empresaLimpa = limparNomeEmpresaParaTitulo(empresaSelecionada);
 
   heroTitulo.textContent = empresaSelecionada === 'Todas as empresas'
-    ? 'Fila de Conferencia'
-    : `Fila de Conferencia - ${empresaLimpa}`;
+    ? 'Fila de Conferência'
+    : `Fila de Conferência - ${empresaLimpa}`;
 
   heroTitulo.classList.remove('is-long', 'is-xlong');
 
-  if (heroTitulo.textContent.length > 54) {
+  if (heroTitulo.textContent.length > 70) {
     heroTitulo.classList.add('is-xlong');
-  } else if (heroTitulo.textContent.length > 40) {
+  } else if (heroTitulo.textContent.length > 48) {
     heroTitulo.classList.add('is-long');
   }
 }
@@ -410,7 +421,8 @@ function iniciarRelogio() {
 
   metricRelogio.textContent = formatarHoraAtual();
   relogioInterval = setInterval(() => {
-    metricRelogio.textContent = formatarHoraAtual();
+    const horaAtual = formatarHoraAtual();
+    metricRelogio.textContent = horaAtual;
   }, 1000);
 }
 
@@ -524,6 +536,9 @@ function criarCard(item) {
 
   let statusClass = 'status-aguardando';
   let mostrarTempo = false;
+  let statusLabel = 'AGUARDANDO';
+  let tempoLabel = '';
+  let tipoCard = 'aguardando';
 
   if (
     item.STATUS_CONFERENCIA === 'EM ANDAMENTO' ||
@@ -531,10 +546,16 @@ function criarCard(item) {
   ) {
     statusClass = 'status-andamento';
     mostrarTempo = true;
+    statusLabel = 'EM ANDAMENTO';
+    tempoLabel = '';
+    tipoCard = 'aguardando';
   }
 
   if (item.STATUS_CONFERENCIA === 'CONFERIDO') {
     statusClass = 'status-conferido';
+    statusLabel = 'CONFERIDO';
+    tempoLabel = 'Duracao';
+    tipoCard = 'conferido';
   }
 
   const dataFormatada = formatarData(item.DTNEG);
@@ -543,43 +564,107 @@ function criarCard(item) {
   const minutos = minutosDesdeInicio(item.DT_INICIO_CONFERENCIA);
   const mostrarTempoTotal = item.STATUS_CONFERENCIA === 'CONFERIDO';
   const resumoPedido = formatarResumoPedidoPainel(item);
+  const resumoItensUnidades = formatarResumoItensUnidadesPainel(item);
   const conclusao = mostrarTempoTotal && item.DT_FIM_CONFERENCIA
     ? `Concluido: ${formatarDataHora(item.DT_FIM_CONFERENCIA)}`
     : '';
+  const tempo = mostrarTempoTotal
+    ? formatarTempoMinutos(item.TEMPO_TOTAL_CONFERENCIA_MIN)
+    : mostrarTempo
+      ? `${minutos} min`
+      : 'recente';
+  const operador = item.NOME_CONFERENTE || '-';
+  const conclusaoValor = mostrarTempoTotal && item.DT_FIM_CONFERENCIA
+    ? formatarDataHora(item.DT_FIM_CONFERENCIA)
+    : '-';
 
-  div.className = `card-item ${statusClass}`;
-  div.innerHTML = `
-    <div class="nota-numero">Nota ${item.NUNOTA}</div>
+  div.className = `card-item ${statusClass} card-${tipoCard}`;
 
-    <div class="linha-flex">
-      <div class="nota-info">
-        <span>Data: ${dataFormatada}</span>
-        <span>Valor: R$ ${valor.toLocaleString('pt-BR', {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2
-        })}</span>
-        <span>${resumoPedido}</span>
-        ${conclusao ? `<span>${conclusao}</span>` : ''}
+  if (tipoCard === 'conferido') {
+    div.innerHTML = `
+      <div class="pedido-card-top">
+        <div>
+          <div class="nota-numero">Nota ${item.NUNOTA}</div>
+          <div class="empresa-nome">${item.EMPRESA || '-'}</div>
+        </div>
       </div>
-    </div>
 
-    <div class="linha-flex">
-      <div class="empresa-nome">${item.EMPRESA || '-'}</div>
-      <div class="conferente">
-        ${mostrarTempoTotal ? `<div class="tempo-total">${formatarTempoMinutos(item.TEMPO_TOTAL_CONFERENCIA_MIN)}</div>` : ''}
-        ${mostrarTempo ? `<div class="tempo-total tempo-total-andamento">${minutos} min</div>` : ''}
-        <div>${item.NOME_CONFERENTE || '-'}</div>
+      <div class="pedido-meta-row">
+        <div class="pedido-meta-item">
+          <i data-lucide="circle-dollar-sign" class="meta-icon"></i>
+          <span><strong>Valor</strong>R$ ${valor.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          })}</span>
+        </div>
+        <div class="pedido-meta-item">
+          <span class="meta-dupla">
+            <span><i data-lucide="package" class="meta-icon"></i>${resumoItensUnidades.itens}</span>
+            <span><i data-lucide="package-open" class="meta-icon"></i>${resumoItensUnidades.unidades}</span>
+          </span>
+        </div>
+        <div class="pedido-meta-item">
+          <i data-lucide="calendar-check" class="meta-icon"></i>
+          <span><strong>Concluido</strong>${conclusaoValor}<br><b>Operador: ${operador}</b></span>
+        </div>
+        <div class="pedido-meta-item">
+          <i data-lucide="clock" class="meta-icon"></i>
+          <span><strong>${tempoLabel}</strong>${tempo}</span>
+        </div>
+        <div class="pedido-status-cell">
+          <div class="status-text">${statusLabel}</div>
+        </div>
       </div>
-    </div>
+    `;
+  } else {
+    div.innerHTML = `
+      <div class="pedido-card-top">
+        <div>
+          <div class="nota-cliente-linha">
+            <span class="nota-numero">Nota ${item.NUNOTA}</span>
+            <span class="empresa-nome">${item.EMPRESA || '-'}</span>
+          </div>
+        </div>
+        <div class="status-text">${statusLabel}</div>
+      </div>
 
-    <div class="status-text">${item.STATUS_CONFERENCIA}</div>
-  `;
+      <div class="pedido-meta-row">
+        <div class="pedido-meta-item">
+          <i data-lucide="calendar-days" class="meta-icon"></i>
+          <span><strong>Data:</strong> ${dataFormatada}</span>
+        </div>
+        <div class="pedido-meta-item">
+          <i data-lucide="circle-dollar-sign" class="meta-icon"></i>
+          <span><strong>Valor:</strong> R$ ${valor.toLocaleString('pt-BR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          })}</span>
+        </div>
+        <div class="pedido-meta-item">
+          <span class="meta-dupla">
+            <span><i data-lucide="package" class="meta-icon"></i>${resumoItensUnidades.itens}</span>
+            <span><i data-lucide="package-open" class="meta-icon"></i>${resumoItensUnidades.unidades}</span>
+          </span>
+        </div>
+        <div class="pedido-meta-item">
+          <i data-lucide="clock" class="meta-icon"></i>
+          <span>${tempoLabel ? `${tempoLabel}: ` : ''}${tempo}</span>
+        </div>
+      </div>
+    `;
+  }
 
   return div;
 }
 
 function renderizarEstadoVazio(container, mensagem) {
   container.innerHTML = `<div class="empty-state">${mensagem}</div>`;
+}
+
+function atualizarIcones() {
+  if (window.lucide) {
+    window.lucide.createIcons();
+  }
 }
 
 function formatarQuantidade(valor) {
@@ -900,6 +985,8 @@ function alternarVisibilidadeSenha() {
 
 function renderizarFotoProdutoVazia(mensagem = 'Sem produto selecionado.') {
   produtoFotoAtual = null;
+  produtoFotoPanel?.classList.add('produto-foto-vazio');
+  produtoFotoPanel?.classList.remove('produto-foto-ultimo', 'produto-foto-selecionado');
   if (produtoFotoTitulo) {
     produtoFotoTitulo.textContent = 'Produto selecionado';
   }
@@ -922,13 +1009,19 @@ function mostrarFotoProduto(item, origem = 'selecionado') {
     return;
   }
 
-  const legendaOrigem = origem === 'ultimo' ? 'Produto conferido' : 'Produto selecionado';
-  const descricao = `${item.codProd} - ${item.descrProd || 'Produto'}`;
+  const legendaOrigem = origem === 'ultimo' ? 'Ultimo produto conferido' : 'Produto selecionado';
+  const descricaoProduto = item.descrProd || 'Produto';
+  const descricao = `${item.codProd} - ${descricaoProduto}`;
   produtoFotoAtual = { codProd, origem };
+  produtoFotoPanel?.classList.remove('produto-foto-vazio', 'produto-foto-ultimo', 'produto-foto-selecionado');
+  produtoFotoPanel?.classList.add(origem === 'ultimo' ? 'produto-foto-ultimo' : 'produto-foto-selecionado');
   if (produtoFotoTitulo) {
     produtoFotoTitulo.textContent = legendaOrigem;
   }
-  produtoFotoLegenda.textContent = descricao;
+  produtoFotoLegenda.innerHTML = `
+    <span class="produto-foto-code">${escaparHtml(item.codProd)}</span>
+    <span class="produto-foto-name">${escaparHtml(descricaoProduto)}</span>
+  `;
   produtoFotoFrame.innerHTML = `
     <img
       src="/api/fila-conferencia/produtos/${codProd}/foto?v=${Date.now()}"
@@ -1666,19 +1759,20 @@ function renderizarPedidoEmConferencia() {
 
   pedidoEmConferenciaCard.innerHTML = `
     <div class="pedido-operacao-card pedido-side-card active ${pedidoSelecionado.STATUS_CONFERENCIA === 'EM ANDAMENTO' ? 'andamento' : ''}">
-      <strong>Pedido ${pedidoSelecionado.NUNOTA}</strong>
+      <strong class="pedido-side-title"><i data-lucide="clipboard-list"></i>Pedido ${pedidoSelecionado.NUNOTA}</strong>
       <div class="pedido-side-meta">
-        <span>${formatarData(pedidoSelecionado.DTNEG)}</span>
-        <span>${formatarMoeda(pedidoSelecionado.VLRNOTA)}</span>
+        <span><i data-lucide="calendar-days"></i>${formatarData(pedidoSelecionado.DTNEG)}</span>
+        <span><i data-lucide="tag"></i>${formatarMoeda(pedidoSelecionado.VLRNOTA)}</span>
       </div>
       <div class="pedido-side-cliente">${pedidoSelecionado.EMPRESA || '-'}</div>
       <div class="pedido-side-meta">
-        <span>${pedidoSelecionado.QTD_ITENS} itens</span>
-        <span>${formatarQuantidade(pedidoSelecionado.QTD_TOTAL)} un.</span>
+        <span><i data-lucide="package"></i>${pedidoSelecionado.QTD_ITENS} itens</span>
+        <span><i data-lucide="boxes"></i>${formatarQuantidade(pedidoSelecionado.QTD_TOTAL)} un.</span>
       </div>
       ${pedidoSelecionado.STATUS_CONFERENCIA === 'EM ANDAMENTO' ? '<span class="pedido-status-mini">Conferencia em andamento</span>' : ''}
     </div>
   `;
+  atualizarIcones();
 }
 
 function fecharPreviewPedido() {
@@ -2045,6 +2139,8 @@ async function carregarFila() {
         poolConferidos.appendChild(criarCard(item));
       });
     }
+
+    atualizarIcones();
   } catch (err) {
     console.error('Erro ao carregar fila:', err);
   }
@@ -2208,6 +2304,7 @@ async function encerrarSessao() {
 
 async function inicializarApp() {
   iniciarRelogio();
+  atualizarIcones();
 
   try {
     const res = await fetch('/api/auth/me');

@@ -402,7 +402,8 @@
     }
 
     .conferencia-screen {
-      padding: 10px;
+      padding: 16px;
+      background: #f4f7f6;
     }
 
     .acompanhamento-screen,
@@ -449,6 +450,11 @@
 
     .fila-screen.active {
       display: block;
+    }
+
+    .fila-screen.conferencia-mode {
+      height: 100vh;
+      overflow: hidden;
     }
 
     .fila-app {
@@ -673,7 +679,8 @@
     }
 
     .fila-screen.conferencia-mode .fila-workspace {
-      height: calc(100vh - 96px);
+      height: calc(100vh - 24px);
+      align-items: stretch;
     }
 
     .fila-pedidos-stage {
@@ -756,10 +763,21 @@
       overflow-y: auto;
     }
 
+    .fila-screen.conferencia-mode .pedido-lista {
+      background: rgba(255, 255, 255, 0.94);
+      border-radius: 16px;
+      padding: 14px;
+    }
+
     .conferencia-box {
       display: grid;
       grid-template-rows: auto auto auto minmax(0, 1fr);
       gap: 5px;
+    }
+
+    .fila-screen.conferencia-mode .pedido-lista,
+    .fila-screen.conferencia-mode .conferencia-box {
+      height: 100%;
     }
 
     .box-title {
@@ -771,11 +789,41 @@
       font-weight: 900;
     }
 
+    .pedido-lista > .box-title {
+      justify-content: flex-start;
+      margin-bottom: 10px;
+      font-size: 0.96rem;
+    }
+
+    .pedido-lista > .box-title .sidebar-title-icon {
+      width: 24px;
+      height: 24px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #078965;
+      background: #eafaf3;
+      border: 1px solid rgba(7, 137, 101, 0.12);
+    }
+
+    .pedido-lista > .box-title .sidebar-title-icon svg {
+      width: 15px;
+      height: 15px;
+      stroke-width: 2.3;
+    }
+
     .pedido-lista-scroll,
     .itens-scroll {
       overflow: auto;
       max-height: calc(100vh - 400px);
       padding-right: 4px;
+    }
+
+    .fila-screen.conferencia-mode .itens-scroll {
+      max-height: none;
+      height: 100%;
+      min-height: 0;
     }
 
     .pedido-operacao-card {
@@ -809,12 +857,15 @@
 
     .pedido-side-card {
       display: block;
-      padding: 10px 12px;
+      padding: 13px 14px;
       border-radius: 10px;
       border-bottom: none;
       margin-bottom: 10px;
       min-height: 0;
       cursor: default;
+      background: linear-gradient(135deg, rgba(232, 249, 242, 0.96) 0%, rgba(248, 253, 251, 0.96) 100%);
+      border-left-width: 4px;
+      box-shadow: 0 10px 24px rgba(16, 57, 66, 0.07);
     }
 
     .pedido-side-card > div,
@@ -831,18 +882,48 @@
       line-height: 1.1;
     }
 
+    .pedido-side-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      font-size: 0.84rem;
+      margin-bottom: 10px;
+    }
+
+    .pedido-side-title svg {
+      width: 14px;
+      height: 14px;
+      color: #078965;
+      stroke-width: 2.5;
+    }
+
     .pedido-side-meta {
       display: flex;
       flex-wrap: wrap;
-      gap: 4px 10px;
+      gap: 8px 14px;
       color: var(--text-soft);
-      font-size: 0.74rem;
+      font-size: 0.68rem;
       font-weight: 900;
       line-height: 1.2;
     }
 
+    .pedido-side-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .pedido-side-meta svg {
+      width: 13px;
+      height: 13px;
+      color: #078965;
+      stroke-width: 2.4;
+      flex: 0 0 auto;
+    }
+
     .pedido-side-cliente {
-      margin: 6px 0;
+      margin: 8px 0;
       color: var(--text-main);
       font-size: 0.78rem;
       font-weight: 900;
@@ -951,15 +1032,15 @@
     .resumo-inline {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 6px;
-      margin: 8px 0;
+      gap: 8px;
+      margin: 10px 0 8px;
       align-items: stretch;
     }
 
     .pedido-sidebar-actions {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 88px;
-      gap: 7px;
+      grid-template-columns: 1fr;
+      gap: 8px;
       align-items: stretch;
       margin: 8px 0;
     }
@@ -967,15 +1048,25 @@
     .pedido-sidebar-actions .btn-confirmar,
     .pedido-sidebar-actions .btn-back {
       width: 100%;
-      min-height: 42px;
+      min-height: 34px;
       padding: 0 10px;
-      border-radius: 12px;
-      font-size: 0.78rem;
+      border-radius: 7px;
+      font-size: 0.74rem;
       line-height: 1.08;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
     }
 
     .pedido-sidebar-actions .btn-back-compact {
       min-width: 0;
+    }
+
+    .pedido-sidebar-actions svg {
+      width: 14px;
+      height: 14px;
+      stroke-width: 2.5;
     }
 
     .scan-status {
@@ -1475,23 +1566,46 @@
     }
 
     .produto-foto-panel {
-      margin-top: 8px;
-      padding: 8px;
+      margin-top: 10px;
+      padding: 10px 12px;
       border: 1px solid rgba(18, 66, 75, 0.12);
       border-radius: 14px;
       background: linear-gradient(180deg, rgba(239, 250, 246, 0.96) 0%, rgba(255, 255, 255, 0.96) 100%);
       box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.58);
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 96px;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      gap: 7px 10px;
+      align-items: start;
     }
 
     .produto-foto-head {
-      display: grid;
-      gap: 2px;
-      margin-bottom: 6px;
+      display: contents;
     }
 
     .produto-foto-head strong {
-      font-size: 0.74rem;
+      grid-column: 1 / -1;
+      grid-row: 1;
+      font-size: 0.7rem;
       color: var(--text-main);
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 6px;
+      min-width: 0;
+      white-space: nowrap;
+    }
+
+    .produto-foto-head strong::after {
+      content: "";
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-left: 4px;
+      background: #0f9d72;
+      box-shadow: inset 0 0 0 4px #d9f7e8;
+      flex: 0 0 auto;
     }
 
     .produto-foto-head span {
@@ -1499,26 +1613,77 @@
       font-size: 0.62rem;
       font-weight: 900;
       line-height: 1.25;
+      grid-column: 1;
+      grid-row: 2;
+      align-self: center;
+      min-width: 0;
+    }
+
+    .produto-foto-code {
+      display: block;
+      color: var(--text-main);
+      font-size: 0.68rem;
+      margin-bottom: 4px;
+    }
+
+    .produto-foto-name {
+      display: -webkit-box;
+      color: var(--text-main);
+      font-size: 0.62rem;
+      line-height: 1.25;
+      text-transform: uppercase;
+      overflow: hidden;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+
+    .produto-foto-panel.produto-foto-vazio .produto-foto-head strong::after {
+      display: none;
+    }
+
+    .produto-foto-panel::after {
+      content: "Produto selecionado";
+      justify-self: start;
+      align-self: start;
+      grid-column: 1;
+      grid-row: 3;
+      border-radius: 999px;
+      padding: 5px 10px 4px;
+      color: #078965;
+      background: #dff8e9;
+      font-size: 0.58rem;
+      font-weight: 900;
+    }
+
+    .produto-foto-panel.produto-foto-ultimo::after {
+      content: "Conferido corretamente";
+    }
+
+    .produto-foto-panel.produto-foto-vazio::after {
+      display: none;
     }
 
     .produto-foto-frame {
       display: flex;
       align-items: center;
       justify-content: center;
-      overflow: visible;
-      height: auto;
-      min-height: 0;
+      overflow: hidden;
+      height: 98px;
+      min-height: 98px;
       border: 1px solid rgba(18, 66, 75, 0.12);
       border-radius: 12px;
       background: #f8fbfc;
       padding: 6px;
+      grid-column: 2;
+      grid-row: 2 / span 2;
     }
 
     .produto-foto-frame img {
-      width: auto;
+      width: 100%;
       max-width: 100%;
-      height: auto;
-      max-height: none;
+      height: 100%;
+      max-height: 100%;
+      object-fit: contain;
       display: block;
       background: #fff;
       border-radius: 8px;
@@ -1531,6 +1696,24 @@
       font-size: 0.78rem;
       font-weight: 900;
       line-height: 1.3;
+    }
+
+    .produto-foto-panel.produto-foto-vazio .produto-foto-frame {
+      grid-column: 1 / -1;
+      grid-row: auto;
+      height: auto;
+      min-height: 64px;
+    }
+
+    .produto-foto-panel.produto-foto-vazio .produto-foto-head {
+      display: grid;
+      gap: 4px;
+    }
+
+    .produto-foto-panel.produto-foto-vazio .produto-foto-head strong,
+    .produto-foto-panel.produto-foto-vazio .produto-foto-head span {
+      grid-column: auto;
+      grid-row: auto;
     }
 
     .corte-modal {
@@ -1714,24 +1897,36 @@
     }
 
     .resumo-metric {
-      border-radius: 8px;
-      padding: 7px 8px;
-      background: rgba(239, 247, 250, 0.96);
+      border-radius: 7px;
+      padding: 9px 10px;
+      background: linear-gradient(180deg, #fbfdfe 0%, #f6fafb 100%);
+      border: 1px solid rgba(18, 66, 75, 0.10);
+      box-shadow: 0 4px 12px rgba(16, 57, 66, 0.04);
     }
 
     .resumo-metric label {
       display: block;
       color: var(--text-soft);
-      font-size: 0.58rem;
+      font-size: 0.56rem;
       font-weight: 900;
       text-transform: uppercase;
     }
 
     .resumo-metric strong {
       display: block;
-      font-size: 0.9rem;
+      font-size: 1rem;
       line-height: 1.1;
       margin-top: 3px;
+      color: #078965;
+    }
+
+    .resumo-metric:nth-child(3) strong {
+      color: var(--text-main);
+    }
+
+    .resumo-metric:nth-child(4) label,
+    .resumo-metric:nth-child(4) strong {
+      color: #d92d20;
     }
 
     .btn-confirmar {
@@ -1740,8 +1935,9 @@
       border: none;
       border-radius: 14px;
       color: #fff;
-      background: var(--accent);
+      background: linear-gradient(180deg, #11a97e 0%, #078965 100%);
       font-weight: 900;
+      box-shadow: 0 8px 16px rgba(7, 137, 101, 0.18);
     }
 
     .btn-confirmar:disabled {
@@ -1766,93 +1962,145 @@
     }
 
     .dashboard-top {
-      display: grid;
-      grid-template-columns: 1.3fr 2fr;
-      gap: 10px;
-      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 0 auto 12px;
+      max-width: 1600px;
+      background: #fff;
+      border: 1px solid rgba(17, 48, 58, 0.08);
+      border-radius: 16px;
+      padding: 10px 12px;
+      box-shadow: 0 14px 28px rgba(16, 57, 66, 0.08);
     }
 
     .hero-panel,
-    .metrics-panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 24px;
-      backdrop-filter: blur(8px);
-      box-shadow: 0 18px 36px rgba(16, 57, 66, 0.08);
+    .pool {
+      background: #fff;
+      border: 1px solid rgba(17, 48, 58, 0.08);
+      border-radius: 16px;
+      box-shadow: 0 14px 28px rgba(16, 57, 66, 0.08);
     }
 
     .hero-panel {
-      padding: 10px 14px;
+      min-height: 64px;
+      padding: 0;
       display: flex;
-      flex-direction: column;
-      justify-content: center;
-      min-height: 72px;
+      align-items: center;
+      border: 0;
+      box-shadow: none;
+      flex: 1 1 430px;
+      min-width: 0;
     }
 
     .hero-kicker {
-      color: var(--accent);
-      font-size: 0.64rem;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: #087f5b;
+      font-size: 0.68rem;
       font-weight: 900;
-      letter-spacing: 0.12em;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
-      margin-bottom: 2px;
+      margin-bottom: 4px;
+    }
+
+    .hero-kicker::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #12b886;
+      box-shadow: 0 0 0 4px rgba(18, 184, 134, 0.14);
     }
 
     .hero-title {
       font-size: 1.4rem;
       line-height: 1;
       font-weight: 900;
-      margin: 0 0 4px;
+      margin: 0 0 7px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      letter-spacing: 0;
     }
 
     .hero-title.is-long {
-      font-size: 1.18rem;
+      font-size: 1.12rem;
     }
 
     .hero-title.is-xlong {
-      font-size: 1rem;
+      font-size: 0.96rem;
     }
 
     .hero-subtitle {
+      display: flex;
+      align-items: center;
+      gap: 6px;
       color: var(--text-soft);
-      font-size: 0.72rem;
+      font-size: 0.76rem;
       font-weight: 800;
     }
 
-    .metrics-panel {
-      padding: 8px;
-      display: grid;
-      grid-template-columns: repeat(5, minmax(0, 1fr));
-      gap: 8px;
+    .hero-subtitle::before {
+      content: "";
+      width: 14px;
+      height: 14px;
+      border: 1.8px solid #6b8188;
+      border-radius: 4px;
+      background:
+        linear-gradient(#6b8188, #6b8188) 50% 26% / 8px 1.6px no-repeat,
+        linear-gradient(#6b8188, #6b8188) 50% 60% / 8px 1.6px no-repeat;
     }
 
-    .metric-card {
-      border-radius: 14px;
-      padding: 10px 12px;
-      background: rgba(255, 255, 255, 0.72);
-      border: 1px solid rgba(17, 48, 58, 0.07);
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      min-height: 58px;
+    .metric-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 12px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
     }
 
     .metric-label {
-      font-size: 0.62rem;
+      font-size: 0.68rem;
       font-weight: 900;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
       color: var(--text-soft);
     }
 
+    .metrics-panel {
+      padding: 0;
+      display: grid;
+      grid-template-columns: repeat(5, minmax(112px, 1fr));
+      gap: 8px;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+      flex: 1.8 1 650px;
+      min-width: 0;
+    }
+
+    .metric-card {
+      border-radius: 12px;
+      padding: 8px 10px;
+      background: #fbfdfd;
+      border: 1px solid rgba(17, 48, 58, 0.08);
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      min-height: 64px;
+      box-shadow: none;
+    }
+
+    .metric-label {
+      margin-bottom: 5px;
+      line-height: 1;
+    }
+
     .metric-value {
-      font-size: 1.25rem;
+      font-size: 1.2rem;
       line-height: 1;
       font-weight: 900;
-      margin-top: 4px;
     }
 
     .metric-card.warning .metric-value {
@@ -1869,8 +2117,7 @@
 
     .metric-card.revenue .metric-value {
       color: #0f766e;
-      font-size: 1rem;
-      letter-spacing: -0.04em;
+      font-size: 0.98rem;
       white-space: nowrap;
     }
 
@@ -1878,29 +2125,111 @@
       color: #0c6b89;
     }
 
+    .visually-hidden {
+      position: absolute !important;
+      width: 1px !important;
+      height: 1px !important;
+      padding: 0 !important;
+      margin: -1px !important;
+      overflow: hidden !important;
+      clip: rect(0, 0, 0, 0) !important;
+      white-space: nowrap !important;
+      border: 0 !important;
+    }
+
+    .meta-icon {
+      width: 14px;
+      height: 14px;
+      color: #526a72;
+      flex: 0 0 auto;
+      stroke-width: 2.2;
+    }
+
+    .metric-icon.warning {
+      background: #fff4cc;
+      color: #b7791f;
+    }
+
+    .metric-icon.info {
+      background: #e7f5ff;
+      color: #1971c2;
+    }
+
+    .metric-icon.success {
+      background: #e6fcf5;
+      color: #087f5b;
+    }
+
+    .metric-icon.revenue {
+      background: #ebfbee;
+      color: #2b8a3e;
+    }
+
+    .metric-icon.live {
+      background: #f3f0ff;
+      color: #6741d9;
+    }
+
+    .metric-icon::before {
+      font-size: 1.2rem;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .metric-icon.warning::before {
+      content: ">";
+      transform: rotate(90deg);
+    }
+
+    .metric-icon.info::before {
+      content: "⌛";
+      font-size: 1rem;
+    }
+
+    .metric-icon.success::before {
+      content: "✓";
+    }
+
+    .metric-icon.revenue::before {
+      content: "$";
+    }
+
+    .metric-icon.live::before {
+      content: "◷";
+    }
+
+    .metric-icon::before {
+      content: none !important;
+    }
+
+    .metric-icon svg {
+      width: 18px;
+      height: 18px;
+      stroke-width: 2.6;
+    }
+
     .board {
       display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      height: calc(100vh - 122px);
+      grid-template-columns: minmax(390px, 0.92fr) minmax(560px, 1.38fr);
+      gap: 12px;
+      height: calc(100vh - 126px);
+      max-width: 1600px;
+      margin: 0 auto;
     }
 
     .pool {
-      border-radius: 20px;
-      padding: 10px;
+      padding: 12px;
       overflow-y: auto;
-      border: 1px solid transparent;
-      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
     }
 
     .pool-fila {
-      background: var(--fila-bg);
-      border-color: var(--fila-border);
+      background: linear-gradient(180deg, #fff9db 0%, #fffdf1 100%);
+      border-color: #ffe8a3;
     }
 
     .pool-conferidos {
-      background: var(--conf-bg);
-      border-color: var(--conf-border);
+      background: linear-gradient(180deg, #ebfbee 0%, #f7fff9 100%);
+      border-color: #c3ead0;
     }
 
     .pool-header {
@@ -1908,17 +2237,17 @@
       align-items: center;
       justify-content: space-between;
       gap: 8px;
-      margin-bottom: 8px;
-      padding: 2px 2px 0;
+      margin-bottom: 10px;
+      padding: 2px 2px 4px;
       position: sticky;
       top: 0;
       z-index: 2;
-      backdrop-filter: blur(6px);
+      background: inherit;
     }
 
     .pool-title {
-      font-size: 1.15rem;
-      font-weight: 800;
+      font-size: 1rem;
+      font-weight: 900;
       margin-bottom: 0;
       display: flex;
       align-items: center;
@@ -1942,106 +2271,245 @@
       box-shadow: 0 0 0 4px rgba(24, 117, 77, 0.14);
     }
 
+    .pool-title-icon {
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+    }
+
+    .pool-title-icon.fila {
+      background: #fff4cc;
+      color: #b7791f;
+      border: 1px solid #ffd43b;
+    }
+
+    .pool-title-icon.conferidos {
+      background: #e6fcf5;
+      color: #087f5b;
+      border: 1px solid #8ce99a;
+    }
+
+    .pool-title-icon svg {
+      width: 14px;
+      height: 14px;
+      stroke-width: 2.6;
+    }
+
     .pool-count {
       font-size: 0.68rem;
       font-weight: 900;
       color: var(--text-soft);
-      background: rgba(255, 255, 255, 0.62);
+      background: rgba(255, 255, 255, 0.86);
       padding: 5px 9px;
       border-radius: 999px;
+      border: 1px solid rgba(17, 48, 58, 0.06);
     }
 
     .card-item {
       position: relative;
-      border-radius: 16px;
-      padding: 8px 11px 27px;
-      margin-bottom: 6px;
-      background: rgba(255, 255, 255, 0.68);
-      border: 1px solid rgba(255, 255, 255, 0.75);
+      display: grid;
+      grid-template-columns: minmax(138px, 1fr) minmax(0, 4.2fr);
+      align-items: stretch;
+      border-radius: 12px;
+      padding: 0;
+      margin-bottom: 8px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid rgba(17, 48, 58, 0.08);
       border-left: 5px solid transparent;
       cursor: pointer;
-      box-shadow: 0 6px 12px rgba(26, 55, 63, 0.06);
+      box-shadow: 0 6px 14px rgba(26, 55, 63, 0.06);
     }
 
-    .linha-flex {
+    .pedido-card-top {
       display: flex;
       justify-content: space-between;
       align-items: center;
       gap: 8px;
-      margin-bottom: 2px;
+      padding: 10px 12px 10px 14px;
+      min-width: 0;
+      border-right: 1px solid rgba(17, 48, 58, 0.10);
     }
 
     .nota-numero {
-      font-size: 0.98rem;
+      font-size: 0.92rem;
       font-weight: 900;
       text-align: left;
-      margin-bottom: 2px;
       letter-spacing: 0.01em;
-    }
-
-    .nota-info,
-    .empresa-nome,
-    .conferente {
-      font-size: 0.74rem;
-      font-weight: 800;
-      line-height: 1.15;
-    }
-
-    .empresa-nome {
-      max-width: 78%;
-      text-transform: uppercase;
-    }
-
-    .nota-info {
-      display: flex;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-
-    .tempo-conferencia {
-      font-size: 0.9rem;
-      font-weight: 900;
-      color: #8b6a00;
       white-space: nowrap;
     }
 
-    .conferente {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-end;
-      gap: 2px;
-      text-align: right;
-    }
-
-    .tempo-total {
-      font-size: 0.58rem;
-      color: #335c43;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-    }
-
-    .tempo-total-andamento {
-      color: #8b6a00;
+    .empresa-nome {
       font-size: 0.72rem;
-      letter-spacing: 0;
+      font-weight: 800;
+      line-height: 1.25;
+      text-transform: uppercase;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    .nota-cliente-linha {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .pedido-meta-row {
+      display: grid;
+      grid-template-columns: minmax(82px, 0.82fr) minmax(92px, 0.9fr) minmax(138px, 1.16fr) minmax(82px, 0.78fr) minmax(86px, 0.78fr);
+      align-items: stretch;
+      gap: 0;
+      border-top: 0;
+      overflow: hidden;
+    }
+
+    .pedido-meta-item {
+      min-height: 30px;
+      border: 0;
+      border-right: 1px solid rgba(17, 48, 58, 0.10);
+      border-radius: 0;
+      background: transparent;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 7px 10px;
+      color: #284b55;
+      font-size: 0.62rem;
+      font-weight: 800;
+      line-height: 1.15;
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .pedido-meta-item span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .pedido-meta-item > .meta-dupla {
+      display: grid;
+      gap: 3px;
+      overflow: visible;
+      text-overflow: clip;
+    }
+
+    .meta-dupla span {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .meta-dupla .meta-icon {
+      width: 13px;
+      height: 13px;
+    }
+
+    .pedido-meta-item strong {
+      display: block;
+      color: #516970;
+      font-size: 0.56rem;
+      font-weight: 900;
+      margin-bottom: 2px;
+    }
+
+    .pedido-meta-item b {
+      color: #087f5b;
+      font-weight: 900;
+    }
+
+    .pedido-status-cell {
+      display: grid;
+      place-items: center;
+      padding: 6px 8px;
+      min-width: 0;
+    }
+
+    .card-aguardando {
+      display: block;
+      padding: 8px 11px;
+      min-height: 0;
+      background: #fff;
+    }
+
+    .card-aguardando .pedido-card-top {
+      padding: 0;
+      border-right: 0;
+      margin-bottom: 6px;
+    }
+
+    .card-aguardando .empresa-nome {
+      -webkit-line-clamp: 1;
+    }
+
+    .card-aguardando .pedido-meta-row {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      border-top: 0;
+      gap: 7px;
+      overflow: visible;
+    }
+
+    .card-aguardando .pedido-meta-item {
+      min-height: 25px;
+      border: 1px solid rgba(17, 48, 58, 0.08);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.86);
+      padding: 4px 8px;
+    }
+
+    .card-conferido {
+      grid-template-columns: minmax(170px, 1.18fr) minmax(0, 4fr);
+    }
+
+    .card-conferido .pedido-card-top > div,
+    .card-aguardando .pedido-card-top > div {
+      min-width: 0;
+      overflow: hidden;
+    }
+
+    .card-conferido .nota-numero {
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .card-conferido .empresa-nome {
+      white-space: normal;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-aguardando .nota-cliente-linha {
+      width: 100%;
+    }
+
+    .pedido-meta-item:last-child {
+      border-right: 0;
+    }
+
+    .pool-fila .card-item {
+      padding-top: 10px;
+      padding-bottom: 10px;
     }
 
     .status-text {
-      position: absolute;
-      left: 50%;
-      bottom: 5px;
-      transform: translateX(-50%);
-      font-size: 0.5rem;
+      font-size: 0.56rem;
       font-weight: 900;
       padding: 4px 10px;
       border-radius: 999px;
       white-space: nowrap;
-      letter-spacing: 0.04em;
+      letter-spacing: 0.03em;
     }
 
     .status-andamento {
-      background: linear-gradient(180deg, rgba(255, 239, 166, 0.95) 0%, rgba(255, 230, 133, 0.95) 100%);
+      background: #fff7d6;
       border-left-color: #ffbf00;
     }
 
@@ -2051,23 +2519,25 @@
     }
 
     .status-aguardando {
-      background: linear-gradient(180deg, rgba(221, 242, 252, 0.96) 0%, rgba(198, 233, 248, 0.96) 100%);
-      border-left-color: #0dcaf0;
+      background: #fffefa;
+      border-left-color: #f59f00;
     }
 
     .status-aguardando .status-text {
-      background: linear-gradient(180deg, #25bfe8 0%, #099fcb 100%);
-      color: #05445e;
+      background: #fff3bf;
+      color: #8a5b00;
+      border: 1px solid #ffd43b;
     }
 
     .status-conferido {
-      background: linear-gradient(180deg, rgba(207, 235, 216, 0.98) 0%, rgba(191, 226, 202, 0.98) 100%);
-      border-left-color: #198754;
+      background: #ffffff;
+      border-left-color: #12a66a;
     }
 
     .status-conferido .status-text {
-      background: linear-gradient(180deg, #28a35e 0%, #18754d 100%);
-      color: #fff;
+      background: #d3f9d8;
+      color: #087f5b;
+      border: 1px solid #8ce99a;
     }
 
     .empty-state {
@@ -2153,13 +2623,17 @@
       .scan-panel,
       .consulta-toolbar,
       .consulta-grid,
-      .dashboard-top,
       .metrics-panel,
       .board,
       .fila-workspace,
       .itens-pools,
       .resumo-inline {
         grid-template-columns: 1fr;
+      }
+
+      .dashboard-top {
+        flex-direction: column;
+        align-items: stretch;
       }
 
       .screen {
@@ -2389,6 +2863,27 @@
 
       .board {
         height: auto;
+      }
+
+      .pedido-meta-row,
+      .pool-conferidos .pedido-meta-row {
+        display: grid;
+        grid-template-columns: 1fr;
+        border-top: 0;
+      }
+
+      .card-item {
+        grid-template-columns: 1fr;
+      }
+
+      .pedido-card-top {
+        border-right: 0;
+        border-bottom: 1px solid rgba(17, 48, 58, 0.08);
+      }
+
+      .pedido-meta-item {
+        border: 1px solid rgba(17, 48, 58, 0.08);
+        border-radius: 8px;
       }
 
       .pool {
@@ -2645,6 +3140,7 @@
         <div class="fila-workspace">
         <aside class="pedido-lista">
           <div class="box-title">
+            <span class="sidebar-title-icon"><i data-lucide="clipboard-check"></i></span>
             <span>Pedido em conferencia</span>
           </div>
           <div id="pedido-em-conferencia-card">
@@ -2675,8 +3171,8 @@
           <div class="scan-status" id="confirmar-status"></div>
 
           <div class="pedido-sidebar-actions">
-            <button class="btn-confirmar" id="confirmar-conferencia" type="button" disabled>Confirmar conferencia</button>
-            <button class="btn-back btn-back-compact" id="voltar-lista-fila" type="button">Voltar</button>
+            <button class="btn-confirmar" id="confirmar-conferencia" type="button" disabled><i data-lucide="check-circle-2"></i>Confirmar conferencia</button>
+            <button class="btn-back btn-back-compact" id="voltar-lista-fila" type="button"><i data-lucide="arrow-left"></i>Voltar</button>
           </div>
 
           <section class="produto-foto-panel" id="produto-foto-panel" aria-live="polite">
@@ -2820,35 +3316,52 @@
   <section class="screen conferencia-screen" id="conferencia-screen">
     <div class="dashboard-top">
       <div class="hero-panel">
-        <div class="hero-kicker">Painel Ao Vivo</div>
-        <h2 class="hero-title" id="hero-titulo">Fila de Conferencia</h2>
-        <div class="hero-subtitle" id="hero-periodo">Periodo: -</div>
+        <div>
+          <div class="hero-kicker">Painel ao vivo</div>
+          <h2 class="hero-title" id="hero-titulo">Fila de Conferência</h2>
+          <div class="hero-subtitle" id="hero-periodo">Periodo: -</div>
+        </div>
       </div>
 
       <div class="metrics-panel">
         <div class="metric-card warning">
-          <div class="metric-label">Em andamento</div>
-          <div class="metric-value" id="metric-andamento">0</div>
+          <span class="metric-icon warning" aria-hidden="true"><i data-lucide="activity"></i></span>
+          <div>
+            <div class="metric-label">Em andamento</div>
+            <div class="metric-value" id="metric-andamento">0</div>
+          </div>
         </div>
 
         <div class="metric-card info">
-          <div class="metric-label">Aguardando</div>
-          <div class="metric-value" id="metric-aguardando">0</div>
+          <span class="metric-icon info" aria-hidden="true"><i data-lucide="hourglass"></i></span>
+          <div>
+            <div class="metric-label">Aguardando</div>
+            <div class="metric-value" id="metric-aguardando">0</div>
+          </div>
         </div>
 
         <div class="metric-card success">
-          <div class="metric-label">Conferidos</div>
-          <div class="metric-value" id="metric-conferidos">0</div>
+          <span class="metric-icon success" aria-hidden="true"><i data-lucide="check-circle-2"></i></span>
+          <div>
+            <div class="metric-label">Conferidos</div>
+            <div class="metric-value" id="metric-conferidos">0</div>
+          </div>
         </div>
 
         <div class="metric-card revenue">
-          <div class="metric-label">Total faturado</div>
-          <div class="metric-value" id="metric-total-faturado">R$ 0,00</div>
+          <span class="metric-icon revenue" aria-hidden="true"><i data-lucide="circle-dollar-sign"></i></span>
+          <div>
+            <div class="metric-label">Total faturado</div>
+            <div class="metric-value" id="metric-total-faturado">R$ 0,00</div>
+          </div>
         </div>
 
         <div class="metric-card live">
-          <div class="metric-label">Horario</div>
-          <div class="metric-value" id="metric-relogio">--:--</div>
+          <span class="metric-icon live" aria-hidden="true"><i data-lucide="clock-3"></i></span>
+          <div>
+            <div class="metric-label">Horario</div>
+            <div class="metric-value" id="metric-relogio">--:--</div>
+          </div>
         </div>
       </div>
     </div>
@@ -2857,8 +3370,8 @@
       <div class="pool pool-fila">
         <div class="pool-header">
           <div class="pool-title">
-            <span class="pool-dot fila"></span>
-            <span>Fila de Conferencia</span>
+            <span class="pool-title-icon fila" aria-hidden="true"><i data-lucide="clock-3"></i></span>
+            <span>Aguardando conferência</span>
           </div>
           <div class="pool-count" id="count-pendentes">0 pedidos</div>
         </div>
@@ -2868,8 +3381,8 @@
       <div class="pool pool-conferidos">
         <div class="pool-header">
           <div class="pool-title">
-            <span class="pool-dot conferidos"></span>
-            <span>Conferidos</span>
+            <span class="pool-title-icon conferidos" aria-hidden="true"><i data-lucide="check-circle-2"></i></span>
+            <span>Conferidos recentemente</span>
           </div>
           <div class="pool-count" id="count-conferidos">0 pedidos</div>
         </div>
@@ -2878,7 +3391,8 @@
     </div>
   </section>
 
-  <script src="asyncRefresh.js?v=20260522-3"></script>
-  <script src="app.js?v=20260522-3"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+  <script src="asyncRefresh.js?v=20260601-2"></script>
+  <script src="app.js?v=20260601-2"></script>
 </body>
 </html>
