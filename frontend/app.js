@@ -1397,6 +1397,7 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
   const endereco = escaparHtml(etiqueta.endereco || '-');
   const transportadora = escaparHtml(etiqueta.transportadora || 'TRANSPORTADORA NAO INFORMADA');
   const pedido = escaparHtml(etiqueta.nunota || '-');
+  const logoUrl = `${window.location.origin}/logo-norte-sul-label.png`;
 
   const paginas = Array.from({ length: volumes }, (_, index) => {
     const volumeAtual = index + 1;
@@ -1465,6 +1466,7 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
             <div class="section-label">Transportadora</div>
             <div class="transportadora">${transportadora}</div>
           </div>
+          <img class="label-logo" src="${escaparAtributo(logoUrl)}" alt="Norte Sul">
         </div>
       </section>
     `;
@@ -1625,24 +1627,35 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      max-width: 70mm;
     }
     .cidade {
       margin-top: 0.85mm;
-      font-size: 16.7pt;
+      font-size: 15.6pt;
       line-height: 0.9;
       font-weight: 900;
       white-space: nowrap;
       overflow: hidden;
-      text-overflow: clip;
+      text-overflow: ellipsis;
+      max-width: 66mm;
     }
     .transportadora-bloco {
       display: grid;
-      grid-template-columns: 8mm minmax(0, 1fr);
+      grid-template-columns: 8mm minmax(0, 1fr) 16mm;
       gap: 1.8mm;
       align-items: center;
-      border-top: 0.25mm solid #999;
+      position: relative;
       padding-top: 0.65mm;
       margin-top: 0.15mm;
+    }
+    .transportadora-bloco::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 18mm;
+      height: 0.25mm;
+      background: #999;
     }
     .transportadora {
       margin-top: 0.3mm;
@@ -1652,6 +1665,18 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      max-width: 64mm;
+    }
+    .label-logo {
+      width: 17mm;
+      height: 17mm;
+      object-fit: contain;
+      justify-self: end;
+      align-self: end;
+      margin-top: -10mm;
+      margin-right: -1mm;
+      opacity: 0.82;
+      filter: grayscale(1) contrast(3.2) brightness(0.18);
     }
     @media print {
       body { background: #fff; }
