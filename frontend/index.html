@@ -2533,6 +2533,35 @@
       font-weight: 900;
     }
 
+    .tempo-operador {
+      display: grid;
+      gap: 1px;
+      min-width: 0;
+      line-height: 1.05;
+    }
+
+    .tempo-operador b,
+    .tempo-operador small {
+      display: block;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .tempo-operador b {
+      color: var(--text-main);
+      font-size: 0.62rem;
+      font-weight: 900;
+    }
+
+    .tempo-operador small {
+      color: #087f5b;
+      font-size: 0.56rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
     .pedido-status-cell {
       display: grid;
       place-items: center;

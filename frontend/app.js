@@ -582,6 +582,9 @@ function criarCard(item) {
   const conclusaoValor = mostrarTempoTotal && item.DT_FIM_CONFERENCIA
     ? formatarDataHora(item.DT_FIM_CONFERENCIA)
     : '-';
+  const metaTempoAguardando = mostrarTempo && operador !== '-'
+    ? `<span class="tempo-operador"><b>${tempo}</b><small>${operador}</small></span>`
+    : `<span>${tempoLabel ? `${tempoLabel}: ` : ''}${tempo}</span>`;
 
   div.className = `card-item ${statusClass} card-${tipoCard}`;
 
@@ -610,7 +613,7 @@ function criarCard(item) {
         </div>
         <div class="pedido-meta-item">
           <i data-lucide="calendar-check" class="meta-icon"></i>
-          <span><strong>Concluido</strong>${conclusaoValor}<br><b>Operador: ${operador}</b></span>
+          <span><strong>Concluido</strong>${conclusaoValor}<br><b>${operador}</b></span>
         </div>
         <div class="pedido-meta-item">
           <i data-lucide="clock" class="meta-icon"></i>
@@ -653,7 +656,7 @@ function criarCard(item) {
         </div>
         <div class="pedido-meta-item">
           <i data-lucide="clock" class="meta-icon"></i>
-          <span>${tempoLabel ? `${tempoLabel}: ` : ''}${tempo}</span>
+          ${metaTempoAguardando}
         </div>
       </div>
     `;
