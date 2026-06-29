@@ -579,6 +579,24 @@ function mostrarAtualizacaoContato() {
   contatoPerfil.focus();
 }
 
+function criarIndicadorStatusPedido(tipo, valor) {
+  const financeiro = tipo === 'financeiro';
+  const ok = String(valor ?? '').trim() === '1';
+  const nome = financeiro ? 'Financeiro' : 'Comercial';
+  const descricao = ok ? 'OK' : 'Pendente de analise';
+  const icone = financeiro ? 'circle-dollar-sign' : 'briefcase-business';
+
+  return `
+    <span
+      class="pedido-status-indicador ${ok ? 'ok' : 'pendente'}"
+      title="${nome}: ${descricao}"
+      aria-label="${nome}: ${descricao}"
+    >
+      <i data-lucide="${icone}" aria-hidden="true"></i>
+    </span>
+  `;
+}
+
 function criarCard(item) {
   const div = document.createElement('div');
 
@@ -628,6 +646,12 @@ function criarCard(item) {
   const metaTempoAguardando = mostrarTempo && operador !== '-'
     ? `<span class="tempo-operador"><b>${tempo}</b><small>${operador}</small></span>`
     : `<span>${tempoLabel ? `${tempoLabel}: ` : ''}${tempo}</span>`;
+  const indicadoresStatus = `
+    <span class="pedido-status-indicadores">
+      ${criarIndicadorStatusPedido('financeiro', item.STATUS_FINANCEIRO)}
+      ${criarIndicadorStatusPedido('comercial', item.STATUS_COMERCIAL)}
+    </span>
+  `;
 
   div.className = `card-item ${statusClass} card-${tipoCard}`;
 
@@ -676,7 +700,10 @@ function criarCard(item) {
             <span class="empresa-nome">${item.EMPRESA || '-'}</span>
           </div>
         </div>
-        <div class="status-text">${statusLabel}</div>
+        <div class="pedido-card-status-group">
+          ${indicadoresStatus}
+          <div class="status-text">${statusLabel}</div>
+        </div>
       </div>
 
       <div class="pedido-meta-row">
@@ -2697,7 +2724,7 @@ function renderizarPedidosFila() {
     renderizarEstadoVazio(
       filaPedidosLista,
       filaPedidos.length === 0 && !temBuscaPedido
-        ? 'Nenhum pedido aguardando conferencia para os filtros.'
+        ? 'Nenhum pedido encontrado para os filtros.'
         : 'Nenhum pedido encontrado com esse numero.'
     );
     return;
@@ -2707,12 +2734,12 @@ function renderizarPedidosFila() {
   header.className = 'pedido-list-header';
   header.innerHTML = `
     <div></div>
+    <div>Status</div>
     <div>Pedido</div>
     <div>Data</div>
     <div>Cliente</div>
     <div>Valor</div>
     <div>Itens</div>
-    <div>Status</div>
   `;
   filaPedidosLista.appendChild(header);
 
@@ -2726,11 +2753,6 @@ function renderizarPedidosFila() {
           ? '<button class="pedido-label-button" type="button" aria-label="Gerar etiqueta de volume" title="Gerar etiqueta de volume"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V4h3"/><path d="M17 4h3v3"/><path d="M20 17v3h-3"/><path d="M7 20H4v-3"/><path d="M7 8h10v8H7z"/><path d="M9 11h6"/><path d="M9 14h4"/></svg></button>'
           : ''}
       </div>
-      <strong>Pedido ${pedido.NUNOTA}</strong>
-      <div class="pedido-meta">${formatarData(pedido.DTNEG)}</div>
-      <div class="pedido-cliente" title="${pedido.EMPRESA || '-'}">${pedido.EMPRESA || '-'}</div>
-      <div class="pedido-meta">${formatarMoeda(pedido.VLRNOTA)}</div>
-      <div class="pedido-meta">${pedido.QTD_ITENS} | ${formatarQuantidade(pedido.QTD_TOTAL)} un.</div>
       <div class="pedido-list-status">
         ${emAndamento
         ? `<span class="pedido-status-mini">${pedido.NOME_CONFERENTE || 'Em andamento'}</span>`
@@ -2738,6 +2760,11 @@ function renderizarPedidosFila() {
             ? '<span class="pedido-status-mini conferido">Conferido</span>'
           : '<span class="pedido-status-mini novo">Novo</span>'}
       </div>
+      <strong>Pedido ${pedido.NUNOTA}</strong>
+      <div class="pedido-meta">${formatarData(pedido.DTNEG)}</div>
+      <div class="pedido-cliente" title="${pedido.EMPRESA || '-'}">${pedido.EMPRESA || '-'}</div>
+      <div class="pedido-meta">${formatarMoeda(pedido.VLRNOTA)}</div>
+      <div class="pedido-meta">${pedido.QTD_ITENS} | ${formatarQuantidade(pedido.QTD_TOTAL)} un.</div>
     `;
     const botaoEtiqueta = card.querySelector('.pedido-label-button');
     if (botaoEtiqueta) {

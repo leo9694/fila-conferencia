@@ -551,20 +551,20 @@
 
     .fila-pedidos-layout {
       display: grid;
-      grid-template-columns: 300px 920px;
+      grid-template-columns: clamp(250px, 21vw, 286px) minmax(0, 1fr);
       gap: 10px;
       align-items: start;
-      width: 1230px;
-      max-width: calc(100vw - 32px);
+      width: 100%;
+      max-width: 1600px;
       margin: 0 auto;
-      overflow-x: auto;
+      padding-inline: 2px;
     }
 
     .fila-operacao-panel {
       background: rgba(255, 255, 255, 0.86);
       border: 1px solid var(--border);
       border-radius: 18px;
-      padding: 14px;
+      padding: 12px;
       box-shadow: 0 14px 28px rgba(16, 57, 66, 0.08);
       position: sticky;
       top: 10px;
@@ -697,7 +697,7 @@
       background: rgba(255, 255, 255, 0.86);
       border: 1px solid var(--border);
       border-radius: 18px;
-      padding: 12px;
+      padding: 10px;
       box-shadow: 0 14px 28px rgba(16, 57, 66, 0.08);
       min-height: 280px;
       width: 100%;
@@ -734,9 +734,20 @@
     .pedido-list-header,
     .pedido-operacao-card {
       display: grid;
-      grid-template-columns: 42px 140px 110px minmax(260px, 1fr) 130px 120px 190px;
+      grid-template-columns:
+        38px
+        minmax(88px, 0.78fr)
+        minmax(104px, 0.9fr)
+        minmax(78px, 0.66fr)
+        minmax(160px, 2.1fr)
+        minmax(86px, 0.78fr)
+        minmax(92px, 0.82fr);
       align-items: center;
       gap: 0;
+      width: 100%;
+      min-width: 646px;
+      flex: 0 0 auto;
+      box-sizing: border-box;
     }
 
     .pedido-list-header {
@@ -755,7 +766,7 @@
     .pedido-operacao-card > div,
     .pedido-operacao-card > strong {
       min-width: 0;
-      padding: 8px 10px;
+      padding: 7px 8px;
       border-right: 1px solid rgba(18, 66, 75, 0.10);
       overflow: hidden;
       text-overflow: ellipsis;
@@ -861,7 +872,7 @@
 
     .pedido-operacao-card strong {
       display: block;
-      font-size: 0.86rem;
+      font-size: 0.78rem;
       margin-bottom: 0;
     }
 
@@ -943,25 +954,30 @@
 
     .pedido-meta {
       color: var(--text-soft);
-      font-size: 0.76rem;
+      font-size: 0.7rem;
       font-weight: 800;
       line-height: 1.2;
     }
 
     .pedido-cliente {
       color: var(--text-main);
-      font-size: 0.78rem;
+      font-size: 0.72rem;
       font-weight: 900;
     }
 
     .pedido-list-status {
       display: flex;
-      justify-content: flex-start;
+      justify-content: center;
       align-items: center;
+      overflow: visible !important;
+      text-overflow: clip !important;
+      padding-inline: 12px !important;
     }
 
     .pedido-status-mini {
-      display: inline-block;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       margin-top: 0;
       border-radius: 999px;
       padding: 3px 8px;
@@ -970,6 +986,10 @@
       font-size: 0.6rem;
       font-weight: 900;
       text-transform: uppercase;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .pedido-status-mini.novo {
@@ -3287,6 +3307,39 @@
       border-right: 1px solid rgba(17, 48, 58, 0.10);
     }
 
+    .pedido-card-status-group,
+    .pedido-status-indicadores {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      flex: 0 0 auto;
+    }
+
+    .pedido-status-indicador {
+      width: 22px;
+      height: 22px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 6px;
+      border: 1px solid currentColor;
+    }
+
+    .pedido-status-indicador svg {
+      width: 13px;
+      height: 13px;
+      stroke-width: 2.4;
+    }
+
+    .pedido-status-indicador.ok {
+      color: #087f5b;
+      background: #d3f9d8;
+    }
+
+    .pedido-status-indicador.pendente {
+      color: #c92a2a;
+      background: #ffe3e3;
+    }
+
     .nota-numero {
       font-size: 0.92rem;
       font-weight: 900;
@@ -3726,6 +3779,8 @@
       .pedido-operacao-card {
         display: grid;
         grid-template-columns: auto 1fr auto;
+        width: 100%;
+        min-width: 0;
         gap: 4px 10px;
         align-items: start;
         border: 1px solid rgba(18, 66, 75, 0.10);
@@ -3753,10 +3808,13 @@
       }
 
       .pedido-list-status {
-        grid-column: 1 / -1;
+        grid-column: 3;
+        grid-row: 1;
+        justify-content: flex-end;
       }
 
       .pedido-list-action {
+        grid-column: 1;
         grid-row: 1;
       }
 
@@ -4039,7 +4097,7 @@
           <div class="fila-pedidos-stage">
             <div class="fila-pedidos-top">
               <div class="box-title">
-                <span>Pedidos aguardando</span>
+                <span>Pedidos</span>
                 <span id="fila-count-pedidos">0</span>
               </div>
             </div>

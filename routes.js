@@ -601,6 +601,8 @@ function montarSqlConferencias(intervalo, empresa) {
       PAR.RAZAOSOCIAL AS EMPRESA,
       CAB.CODPARC AS CODIGO_PARCEIRO,
       CAST(NVL(CAB.VLRNOTA, 0) AS NUMBER(15,2)) AS VLRNOTA,
+      CAB.AD_STATUSINTPED AS STATUS_FINANCEIRO,
+      CAB.AD_STATUSCOMERCIAL AS STATUS_COMERCIAL,
       CONF.STATUS AS STATUS_CONF_BD,
       CONF.DHINICONF AS DT_INICIO_CONFERENCIA,
       CONF.DHFINCONF AS DT_FIM_CONFERENCIA,
@@ -628,6 +630,7 @@ function montarSqlConferencias(intervalo, empresa) {
       AND CAB.STATUSNOTA = 'L'
       ${sqlFiltroEmpresa(empresa)}
     GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.CODEMP, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA,
+      CAB.AD_STATUSINTPED, CAB.AD_STATUSCOMERCIAL,
       CONF.STATUS, CONF.DHINICONF, CONF.DHFINCONF, USU.NOMEUSU, CAB.NUCONFATUAL
   `;
 }
@@ -710,7 +713,9 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
       ? `CAB.NUNOTA = ${pedidoBusca}`
       : `CAB.DTNEG >= TO_DATE('${intervalo.inicio}', 'YYYY-MM-DD')
         AND CAB.DTNEG < TO_DATE('${intervalo.fim}', 'YYYY-MM-DD') + 1
-        AND (CAB.NUCONFATUAL IS NULL OR CONF.STATUS = 'A')
+        AND (CAB.NUCONFATUAL IS NULL OR CONF.STATUS IN ('A', 'F'))
+        AND NVL(CAB.AD_STATUSINTPED, '0') = '1'
+        AND NVL(CAB.AD_STATUSCOMERCIAL, '0') = '1'
         ${sqlFiltroEmpresa(empresa)}`;
 
     const rows = await executeQuery(`
@@ -748,7 +753,12 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
       GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.CODEMP, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA, CAB.QTDVOL,
         CAB.NUCONFATUAL, CONF.STATUS, USU.NOMEUSU
       ORDER BY
-        CASE WHEN CONF.STATUS = 'A' THEN 0 ELSE 1 END,
+        CASE
+          WHEN CONF.STATUS = 'A' THEN 0
+          WHEN CAB.NUCONFATUAL IS NULL THEN 1
+          WHEN CONF.STATUS = 'F' THEN 2
+          ELSE 3
+        END,
         CAB.DTNEG,
         CAB.NUNOTA
     `);
