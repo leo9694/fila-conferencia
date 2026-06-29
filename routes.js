@@ -3,9 +3,13 @@ const router = express.Router();
 const { executeQuery, executeService } = require('./api/sankhyaApi');
 const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
 const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
+const { criarContatoStatusStore } = require('./api/contatoStatusStore');
 
 const conferenciaTimerStore = criarConferenciaTimerStore();
 const conferenciaProgressStore = criarConferenciaProgressStore();
+const contatoStatusStore = criarContatoStatusStore({
+  namespace: process.env.SANKHYA_API_BASE_URL || 'padrao'
+});
 const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Cuiaba';
 
 function obterDataHoje() {
@@ -48,6 +52,104 @@ function sqlFiltroEmpresa(empresa) {
 function obterNumeroInteiro(valor) {
   const numero = Number(valor);
   return Number.isInteger(numero) && numero > 0 ? numero : null;
+}
+
+function sqlFiltroPerfilContato(perfil) {
+  const valor = String(perfil || '').trim();
+
+  if (valor === 'todos') {
+    return '';
+  }
+
+  if (valor === 'sem-perfil') {
+    return 'AND NVL(PAR.CODTIPPARC, 0) <= 0';
+  }
+
+  const codPerfil = obterNumeroInteiro(valor);
+  return codPerfil ? `AND PAR.CODTIPPARC = ${codPerfil}` : null;
+}
+
+function sqlFiltroAtivoContato(valor) {
+  return String(valor || '1') === '0' ? '' : "AND NVL(PAR.ATIVO, 'S') = 'S'";
+}
+
+function valorTextoContato(valor, limite = 255) {
+  return String(valor ?? '').trim().slice(0, limite);
+}
+
+function contatoTemConteudo(contato = {}) {
+  return [
+    contato.nome,
+    contato.cargo,
+    contato.telefone,
+    contato.email
+  ].some(valorPreenchido);
+}
+
+function validarContatoObrigatorio(contato, nome) {
+  const faltando = [];
+
+  if (!valorPreenchido(contato?.nome)) faltando.push(`nome do ${nome}`);
+  if (!valorPreenchido(contato?.cargo)) faltando.push(`cargo do ${nome}`);
+  if (!valorPreenchido(contato?.telefone)) faltando.push(`telefone do ${nome}`);
+  if (!valorPreenchido(contato?.email)) faltando.push(`email do ${nome}`);
+
+  return faltando;
+}
+
+function anexarStatusContato(clientes) {
+  return clientes.map((cliente) => {
+    const registro = contatoStatusStore.obter(cliente.CODPARC);
+    const status = registro?.status || (valorPreenchido(cliente.DATA_ATUALIZACAO_CONTATO) ? 'atualizado' : 'pendente');
+
+    return {
+      ...cliente,
+      STATUS_ATUALIZACAO_CONTATO: status
+    };
+  });
+}
+
+async function salvarContatoParceiro(codParc, contato, codContatoNovo) {
+  let codContato = obterNumeroInteiro(contato?.codContato);
+  const camposEditaveis = {
+    NOMECONTATO: valorTextoContato(contato?.nome, 40),
+    APELIDO: valorTextoContato(contato?.nome, 15),
+    CARGO: valorTextoContato(contato?.cargo, 20),
+    TELEFONE: valorTextoContato(contato?.telefone, 13),
+    EMAIL: valorTextoContato(contato?.email, 80),
+    ATIVO: 'S'
+  };
+
+  if (!codContato && ['nfe', 'transporte', 'financeiro'].includes(String(contato?.tipo || '').toLowerCase())) {
+    const cargosFixos = {
+      nfe: 'NFE',
+      transporte: 'TRANSPORTE',
+      financeiro: 'FINANCEIRO'
+    };
+    const cargoBusca = cargosFixos[String(contato.tipo).toLowerCase()];
+    const [contatoExistente] = await executeQuery(`
+      SELECT MIN(CODCONTATO) AS CODCONTATO
+      FROM TGFCTT
+      WHERE CODPARC = ${codParc}
+        AND UPPER(TRIM(CARGO)) = '${cargoBusca}'
+    `);
+    codContato = obterNumeroInteiro(contatoExistente?.CODCONTATO);
+  }
+
+  if (codContato) {
+    await atualizarRegistroApi('Contato', { CODPARC: codParc, CODCONTATO: codContato }, camposEditaveis);
+    return codContato;
+  }
+
+  codContato = codContatoNovo;
+
+  await salvarRegistroApi('Contato', {
+    CODPARC: codParc,
+    CODCONTATO: codContato,
+    ...camposEditaveis
+  });
+
+  return codContato;
 }
 
 function obterCodigoUsuario(valor) {
@@ -967,6 +1069,457 @@ router.get('/produtos/consulta', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: 'Erro ao consultar produto' });
+  }
+});
+
+router.get('/contatos/perfis', async (req, res) => {
+  try {
+    const filtroAtivo = sqlFiltroAtivoContato(req.query.ativos);
+
+    const rows = await executeQuery(`
+      SELECT DISTINCT
+        TPP.CODTIPPARC,
+        TPP.DESCRTIPPARC
+      FROM TGFPAR PAR
+      JOIN TGFTPP TPP
+        ON TPP.CODTIPPARC = PAR.CODTIPPARC
+      WHERE NVL(PAR.CLIENTE, 'N') = 'S'
+        ${filtroAtivo}
+        AND PAR.CODTIPPARC > 0
+        AND NVL(TPP.ATIVO, 'N') = 'S'
+        AND NVL(TPP.ANALITICO, 'N') = 'S'
+      ORDER BY TPP.DESCRTIPPARC
+    `);
+
+    res.json({
+      perfis: [
+        { CODTIPPARC: 'todos', DESCRTIPPARC: 'Todos os perfis' },
+        { CODTIPPARC: 'sem-perfil', DESCRTIPPARC: 'Sem perfil' },
+        ...rows
+      ]
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar perfis' });
+  }
+});
+
+router.get('/contatos/estados', async (req, res) => {
+  try {
+    const filtroPerfil = sqlFiltroPerfilContato(req.query.perfil);
+    const filtroAtivo = sqlFiltroAtivoContato(req.query.ativos);
+
+    if (filtroPerfil === null) {
+      res.status(400).json({ erro: 'Informe o perfil' });
+      return;
+    }
+
+    const rows = await executeQuery(`
+      SELECT DISTINCT
+        UFS.CODUF,
+        UFS.UF
+      FROM TGFPAR PAR
+      JOIN TSICID CID
+        ON CID.CODCID = PAR.CODCID
+      JOIN TSIUFS UFS
+        ON UFS.CODUF = CID.UF
+      WHERE NVL(PAR.CLIENTE, 'N') = 'S'
+        ${filtroAtivo}
+        ${filtroPerfil}
+      ORDER BY UFS.UF
+    `);
+
+    res.json({ estados: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar estados' });
+  }
+});
+
+router.get('/contatos/cidades', async (req, res) => {
+  try {
+    const filtroPerfil = sqlFiltroPerfilContato(req.query.perfil);
+    const filtroAtivo = sqlFiltroAtivoContato(req.query.ativos);
+    const uf = textoSql(String(req.query.uf || '').trim().toUpperCase());
+
+    if (filtroPerfil === null) {
+      res.status(400).json({ erro: 'Informe o perfil' });
+      return;
+    }
+
+    if (!uf) {
+      res.status(400).json({ erro: 'Informe o estado' });
+      return;
+    }
+
+    const rows = await executeQuery(`
+      SELECT DISTINCT
+        CID.CODCID,
+        CID.NOMECID
+      FROM TGFPAR PAR
+      JOIN TSICID CID
+        ON CID.CODCID = PAR.CODCID
+      JOIN TSIUFS UFS
+        ON UFS.CODUF = CID.UF
+      WHERE NVL(PAR.CLIENTE, 'N') = 'S'
+        ${filtroAtivo}
+        ${filtroPerfil}
+        AND UFS.UF = '${uf}'
+      ORDER BY CID.NOMECID
+    `);
+
+    res.json({ cidades: rows });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar cidades' });
+  }
+});
+
+router.get('/contatos/clientes', async (req, res) => {
+  try {
+    const filtroPerfil = sqlFiltroPerfilContato(req.query.perfil);
+    const filtroAtivo = sqlFiltroAtivoContato(req.query.ativos);
+    const codCid = obterNumeroInteiro(req.query.cidade);
+
+    if (filtroPerfil === null) {
+      res.status(400).json({ erro: 'Informe o perfil' });
+      return;
+    }
+
+    if (!codCid) {
+      res.status(400).json({ erro: 'Informe a cidade' });
+      return;
+    }
+
+    const rows = await executeQuery(`
+      SELECT
+        PAR.CODPARC,
+        PAR.NOMEPARC,
+        CASE WHEN NVL(PAR.ATIVO, 'S') = 'S' THEN 'Sim' ELSE 'Nao' END AS ATIVO,
+        NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS PERFIL,
+        TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'DD/MM/YYYY') AS ULTIMA_COMPRA,
+        TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'YYYYMMDD') AS ULTIMA_COMPRA_ORD,
+        TO_CHAR(PAR.AD_DTATUCONTATO, 'DD/MM/YYYY') AS DATA_ATUALIZACAO_CONTATO
+      FROM TGFPAR PAR
+      LEFT JOIN TGFTPP TPP
+        ON TPP.CODTIPPARC = PAR.CODTIPPARC
+      LEFT JOIN (
+        SELECT CODPARC, MAX(DTNEG) AS DTULTCOMPRA
+        FROM TGFCAB
+        WHERE TIPMOV IN ('P', 'V')
+          AND STATUSNOTA = 'L'
+        GROUP BY CODPARC
+      ) ULTIMA_COMPRA
+        ON ULTIMA_COMPRA.CODPARC = PAR.CODPARC
+      WHERE NVL(PAR.CLIENTE, 'N') = 'S'
+        ${filtroAtivo}
+        ${filtroPerfil}
+        AND PAR.CODCID = ${codCid}
+      ORDER BY PAR.NOMEPARC
+    `);
+
+    res.json({ clientes: anexarStatusContato(rows) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar clientes' });
+  }
+});
+
+router.get('/contatos/busca', async (req, res) => {
+  try {
+    const termoOriginal = String(req.query.q || '').trim();
+    const termo = textoSql(termoOriginal.toUpperCase());
+    const termoNumerico = termoOriginal.replace(/\D/g, '');
+    const filtroAtivo = sqlFiltroAtivoContato(req.query.ativos);
+
+    if (termoOriginal.length < 2) {
+      res.json({ clientes: [] });
+      return;
+    }
+
+    const filtroCodigo = /^\d+$/.test(termoNumerico) ? `OR TO_CHAR(PAR.CODPARC) LIKE '${termoNumerico}%'` : '';
+    const filtroCpfCnpj = termoNumerico ? `OR REGEXP_REPLACE(NVL(PAR.CGC_CPF, ''), '[^0-9]', '') LIKE '%${termoNumerico}%'` : '';
+    const ordemNumerica = termoNumerico
+      ? `
+            WHEN TO_CHAR(PAR.CODPARC) = '${termoNumerico}' THEN 0
+            WHEN TO_CHAR(PAR.CODPARC) LIKE '${termoNumerico}%' THEN 1`
+      : '';
+
+    const rows = await executeQuery(`
+      SELECT * FROM (
+        SELECT
+          PAR.CODPARC,
+          PAR.NOMEPARC,
+          CASE WHEN NVL(PAR.ATIVO, 'S') = 'S' THEN 'Sim' ELSE 'Nao' END AS ATIVO,
+          NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS PERFIL,
+          TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'DD/MM/YYYY') AS ULTIMA_COMPRA,
+          TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'YYYYMMDD') AS ULTIMA_COMPRA_ORD,
+          TO_CHAR(PAR.AD_DTATUCONTATO, 'DD/MM/YYYY') AS DATA_ATUALIZACAO_CONTATO
+        FROM TGFPAR PAR
+        LEFT JOIN TGFTPP TPP
+          ON TPP.CODTIPPARC = PAR.CODTIPPARC
+        LEFT JOIN (
+          SELECT CODPARC, MAX(DTNEG) AS DTULTCOMPRA
+          FROM TGFCAB
+          WHERE TIPMOV IN ('P', 'V')
+            AND STATUSNOTA = 'L'
+          GROUP BY CODPARC
+        ) ULTIMA_COMPRA
+          ON ULTIMA_COMPRA.CODPARC = PAR.CODPARC
+        WHERE NVL(PAR.CLIENTE, 'N') = 'S'
+          ${filtroAtivo}
+          AND (
+            UPPER(PAR.NOMEPARC) LIKE '%${termo}%'
+            ${filtroCodigo}
+            ${filtroCpfCnpj}
+          )
+        ORDER BY
+          CASE
+            ${ordemNumerica}
+            WHEN UPPER(PAR.NOMEPARC) LIKE '${termo}%' THEN 2
+            ELSE 3
+          END,
+          PAR.NOMEPARC
+      ) WHERE ROWNUM <= 80
+    `);
+
+    res.json({ clientes: anexarStatusContato(rows) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar clientes' });
+  }
+});
+
+router.get('/contatos/clientes/:codParc', async (req, res) => {
+  try {
+    const codParc = obterNumeroInteiro(req.params.codParc);
+
+    if (!codParc) {
+      res.status(400).json({ erro: 'Informe o cliente' });
+      return;
+    }
+
+    const rows = await executeQuery(`
+      SELECT
+        PAR.CODPARC,
+        PAR.NOMEPARC,
+        PAR.RAZAOSOCIAL,
+        PAR.CGC_CPF,
+        PAR.CODTIPPARC,
+        CASE WHEN NVL(PAR.ATIVO, 'S') = 'S' THEN 'Sim' ELSE 'Nao' END AS ATIVO,
+        CASE WHEN PAR.TIPPESSOA = 'J' THEN 'Juridica' WHEN PAR.TIPPESSOA = 'F' THEN 'Fisica' ELSE NVL(PAR.TIPPESSOA, '-') END AS TIPO_PESSOA,
+        NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS PERFIL,
+        PAR.CODVEND,
+        VEN.APELIDO AS VENDEDOR_PREFERENCIAL,
+        PAR.TELEFONE,
+        PAR.FAX,
+        CPL.AD_TELERECEB AS TELEFONE_RECEBIMENTO,
+        CPL.AD_TELENTREGA AS TELEFONE_ENTREGA,
+        PAR.TIMOUTTELS,
+        PAR.EMAIL,
+        PAR.EMAILNFE,
+        PAR.EMAILDANFE,
+        PAR.EMAILNOTIFENTREGA,
+        TO_CHAR(PAR.DTULTCONTATO, 'DD/MM/YYYY') AS DTULTCONTATO,
+        TO_CHAR(PAR.AD_DTATUCONTATO, 'DD/MM/YYYY') AS DATA_ATUALIZACAO_CONTATO,
+        TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'DD/MM/YYYY') AS ULTIMA_COMPRA,
+        TRIM(NVL(ENDR.TIPO || ' ', '') || NVL(ENDR.NOMEEND, '')) AS ENDERECO,
+        PAR.NUMEND,
+        PAR.COMPLEMENTO,
+        BAI.NOMEBAI AS BAIRRO,
+        CID.NOMECID AS CIDADE,
+        UFS.UF,
+        PAR.CEP
+      FROM TGFPAR PAR
+      LEFT JOIN TGFTPP TPP
+        ON TPP.CODTIPPARC = PAR.CODTIPPARC
+      LEFT JOIN TGFVEN VEN
+        ON VEN.CODVEND = PAR.CODVEND
+      LEFT JOIN TGFCPL CPL
+        ON CPL.CODPARC = PAR.CODPARC
+      LEFT JOIN TSIEND ENDR
+        ON ENDR.CODEND = PAR.CODEND
+      LEFT JOIN TSIBAI BAI
+        ON BAI.CODBAI = PAR.CODBAI
+      LEFT JOIN TSICID CID
+        ON CID.CODCID = PAR.CODCID
+      LEFT JOIN TSIUFS UFS
+        ON UFS.CODUF = CID.UF
+      LEFT JOIN (
+        SELECT CODPARC, MAX(DTNEG) AS DTULTCOMPRA
+        FROM TGFCAB
+        WHERE TIPMOV IN ('P', 'V')
+          AND STATUSNOTA = 'L'
+        GROUP BY CODPARC
+      ) ULTIMA_COMPRA
+        ON ULTIMA_COMPRA.CODPARC = PAR.CODPARC
+      WHERE PAR.CODPARC = ${codParc}
+    `);
+
+    const parceiro = rows[0];
+
+    if (!parceiro) {
+      res.status(404).json({ erro: 'Cliente nao encontrado' });
+      return;
+    }
+
+    parceiro.STATUS_ATUALIZACAO_CONTATO = contatoStatusStore.obter(parceiro.CODPARC)?.status
+      || (valorPreenchido(parceiro.DATA_ATUALIZACAO_CONTATO) ? 'atualizado' : 'pendente');
+
+    const contatos = await executeQuery(`
+      SELECT
+        CODCONTATO,
+        NOMECONTATO,
+        APELIDO,
+        CARGO,
+        TELEFONE,
+        CELULAR,
+        TELRESID,
+        EMAIL,
+        CASE WHEN NVL(ATIVO, 'S') = 'S' THEN 'Sim' ELSE 'Nao' END AS ATIVO
+      FROM TGFCTT
+      WHERE CODPARC = ${codParc}
+      ORDER BY NVL(PRIORIDADE, 999), NOMECONTATO
+    `);
+
+    const perfis = await executeQuery(`
+      SELECT CODTIPPARC, DESCRTIPPARC
+      FROM TGFTPP
+      WHERE CODTIPPARC > 0
+        AND NVL(ATIVO, 'N') = 'S'
+        AND NVL(ANALITICO, 'N') = 'S'
+      ORDER BY DESCRTIPPARC
+    `);
+
+    res.json({ parceiro, contatos, perfis });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar dados do cliente' });
+  }
+});
+
+router.patch('/contatos/clientes/:codParc', async (req, res) => {
+  try {
+    const codParc = obterNumeroInteiro(req.params.codParc);
+    const acao = String(req.body?.acao || 'salvar').trim().toLowerCase();
+
+    if (!codParc) {
+      res.status(400).json({ erro: 'Informe o cliente' });
+      return;
+    }
+
+    if (!['salvar', 'aguardando', 'salvar-perfil'].includes(acao)) {
+      res.status(400).json({ erro: 'Acao de atualizacao invalida' });
+      return;
+    }
+
+    const campos = {};
+
+    if (acao === 'salvar' || acao === 'aguardando') {
+      campos.AD_DTATUCONTATO = formatarDataHoraSankhya();
+    }
+
+    if (acao === 'salvar') {
+      campos.FAX = valorTextoContato(req.body?.telefonePrincipal, 30);
+      campos.EMAIL = valorTextoContato(req.body?.email, 80);
+    }
+
+    if (acao === 'salvar-perfil') {
+      const perfilInformado = String(req.body?.codTipParc ?? '').trim();
+      const codTipParc = obterNumeroInteiro(perfilInformado);
+
+      if (!codTipParc) {
+        res.status(400).json({ erro: 'Selecione um perfil ativo e analitico' });
+        return;
+      }
+
+      const [perfilValido] = await executeQuery(`
+        SELECT CODTIPPARC
+        FROM TGFTPP
+        WHERE CODTIPPARC = ${codTipParc}
+          AND NVL(ATIVO, 'N') = 'S'
+          AND NVL(ANALITICO, 'N') = 'S'
+      `);
+
+      if (!perfilValido) {
+        res.status(400).json({ erro: 'O perfil selecionado nao esta ativo ou nao e analitico' });
+        return;
+      }
+
+      campos.CODTIPPARC = codTipParc;
+    }
+
+    const contatos = Array.isArray(req.body?.contatos) ? req.body.contatos : [];
+    const contatoNfe = contatos.find((contato) => contato?.tipo === 'nfe');
+    const contatoTransporte = contatos.find((contato) => contato?.tipo === 'transporte');
+    const contatoFinanceiro = contatos.find((contato) => contato?.tipo === 'financeiro');
+
+    if (acao === 'salvar') {
+      const faltando = [];
+      if (!valorPreenchido(req.body?.telefonePrincipal)) faltando.push('telefone principal');
+      if (!valorPreenchido(req.body?.email)) faltando.push('email principal');
+      faltando.push(...validarContatoObrigatorio(contatoNfe, 'contato NF-e'));
+      faltando.push(...validarContatoObrigatorio(contatoTransporte, 'contato de Transporte/Logistica'));
+      faltando.push(...validarContatoObrigatorio(contatoFinanceiro, 'contato Financeiro'));
+
+      if (faltando.length > 0) {
+        res.status(400).json({ erro: `Preencha os campos obrigatorios: ${faltando.join(', ')}` });
+        return;
+      }
+
+      campos.EMAILNFE = valorTextoContato(contatoNfe?.email, 80);
+      campos.EMAILNOTIFENTREGA = valorTextoContato(contatoTransporte?.email, 80);
+    }
+
+    if (acao === 'salvar') {
+      const contatosParaSalvar = contatos.filter(contatoTemConteudo);
+      const [sequenciaContato] = await executeQuery(`
+        SELECT NVL(MAX(CODCONTATO), 0) AS ULTIMO
+        FROM TGFCTT
+        WHERE CODPARC = ${codParc}
+      `);
+      let proximoContato = Number(sequenciaContato?.ULTIMO || 0) + 1;
+
+      for (const contato of contatosParaSalvar) {
+        const codContatoAtual = obterNumeroInteiro(contato?.codContato) || proximoContato;
+        await salvarContatoParceiro(codParc, contato, codContatoAtual);
+        if (!obterNumeroInteiro(contato?.codContato)) {
+          proximoContato += 1;
+        }
+      }
+    }
+
+    await atualizarRegistroApi('Parceiro', { CODPARC: codParc }, campos);
+
+    if (acao === 'aguardando') {
+      contatoStatusStore.salvar(codParc, 'aguardando');
+    } else if (acao === 'salvar') {
+      contatoStatusStore.salvar(codParc, 'atualizado');
+    }
+
+    const [parceiro] = await executeQuery(`
+      SELECT
+        PAR.CODPARC,
+        PAR.CODTIPPARC,
+        NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS PERFIL,
+        TO_CHAR(PAR.AD_DTATUCONTATO, 'DD/MM/YYYY') AS DATA_ATUALIZACAO_CONTATO
+      FROM TGFPAR PAR
+      LEFT JOIN TGFTPP TPP
+        ON TPP.CODTIPPARC = PAR.CODTIPPARC
+      WHERE PAR.CODPARC = ${codParc}
+    `);
+
+    const statusContato = contatoStatusStore.obter(codParc)?.status
+      || (valorPreenchido(parceiro?.DATA_ATUALIZACAO_CONTATO) ? 'atualizado' : 'pendente');
+
+    res.json({
+      ok: true,
+      statusContato,
+      parceiro
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: err.message || 'Erro ao atualizar contato do cliente' });
   }
 });
 

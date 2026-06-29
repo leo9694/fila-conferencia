@@ -247,7 +247,7 @@
 
     .home-menu {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 12px;
     }
 
@@ -283,6 +283,10 @@
       background: linear-gradient(180deg, rgba(255, 249, 224, 0.96) 0%, rgba(234, 244, 210, 0.96) 100%);
     }
 
+    .home-menu-button.quaternary {
+      background: linear-gradient(180deg, rgba(244, 241, 255, 0.96) 0%, rgba(225, 235, 255, 0.96) 100%);
+    }
+
     .home-menu-icon {
       width: 48px;
       height: 48px;
@@ -310,6 +314,10 @@
 
     .home-menu-button.tertiary .home-menu-icon {
       background: #7aad1b;
+    }
+
+    .home-menu-button.quaternary .home-menu-icon {
+      background: #4757b8;
     }
 
     .home-menu-title {
@@ -408,7 +416,8 @@
 
     .acompanhamento-screen,
     .fila-screen,
-    .consulta-produtos-screen {
+    .consulta-produtos-screen,
+    .atualizacao-contato-screen {
       padding: 22px 18px;
       background:
         radial-gradient(circle at top right, rgba(24, 167, 216, 0.14), transparent 28%),
@@ -418,7 +427,8 @@
 
     .acompanhamento-screen.active,
     .fila-screen.active,
-    .consulta-produtos-screen.active {
+    .consulta-produtos-screen.active,
+    .atualizacao-contato-screen.active {
       display: grid;
     }
 
@@ -1291,12 +1301,14 @@
       background: var(--accent);
     }
 
-    .consulta-produtos-screen {
+    .consulta-produtos-screen,
+    .atualizacao-contato-screen {
       align-items: stretch;
       padding: 12px;
     }
 
-    .consulta-produtos-app {
+    .consulta-produtos-app,
+    .atualizacao-contato-app {
       width: min(1480px, 100%);
       min-height: calc(100vh - 24px);
       margin: 0 auto;
@@ -1306,6 +1318,7 @@
     }
 
     .consulta-toolbar,
+    .contato-toolbar,
     .consulta-card {
       background: rgba(255, 255, 255, 0.88);
       border: 1px solid var(--border);
@@ -1313,7 +1326,8 @@
       box-shadow: 0 16px 32px rgba(16, 57, 66, 0.08);
     }
 
-    .consulta-toolbar {
+    .consulta-toolbar,
+    .contato-toolbar {
       display: grid;
       grid-template-columns: minmax(220px, 1fr) minmax(280px, 520px) auto;
       gap: 12px;
@@ -1321,7 +1335,81 @@
       padding: 14px;
     }
 
-    .consulta-toolbar h1 {
+    .contato-toolbar {
+      grid-template-columns: minmax(220px, 1fr) minmax(250px, 330px) minmax(140px, 170px) minmax(200px, 280px) minmax(140px, 180px) minmax(200px, 280px) auto;
+    }
+
+    .contato-busca-field {
+      background: linear-gradient(180deg, rgba(234, 250, 244, 0.95), rgba(255, 255, 255, 0.95));
+      border: 1px solid rgba(19, 145, 113, 0.22);
+      border-radius: 12px;
+      padding: 8px;
+    }
+
+    .contato-busca-field input {
+      width: 100%;
+      height: 38px;
+      border: 1px solid rgba(74, 127, 151, 0.32);
+      border-radius: 10px;
+      padding: 0 12px;
+      font: inherit;
+      font-size: 0.9rem;
+      font-weight: 900;
+      color: var(--text-main);
+      outline: none;
+      background: #fff;
+    }
+
+    .contato-busca-field input:focus {
+      border-color: rgba(19, 145, 113, 0.62);
+      box-shadow: 0 0 0 3px rgba(19, 145, 113, 0.12);
+    }
+
+    .contato-toggle-field {
+      min-height: 56px;
+      display: flex;
+      align-items: center;
+      padding: 10px 8px;
+    }
+
+    .contato-toggle-field .form-check {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 38px;
+      margin: 0;
+      padding-left: 2.45em;
+    }
+
+    .contato-toggle-field .form-check-input {
+      width: 2em;
+      height: 1em;
+      min-height: 1em;
+      padding: 0;
+      margin: 0;
+      margin-left: -2.45em;
+      flex: 0 0 auto;
+      cursor: pointer;
+    }
+
+    .contato-toggle-field .form-check-input:checked {
+      background-color: #0d6efd;
+      border-color: #0d6efd;
+    }
+
+    .contato-toggle-field .form-check-label {
+      display: inline;
+      margin: 0;
+      color: var(--text-soft);
+      font-size: 0.68rem;
+      font-weight: 900;
+      line-height: 1;
+      text-transform: uppercase;
+      cursor: pointer;
+    }
+
+    .consulta-toolbar h1,
+    .contato-toolbar h1 {
       margin: 0;
       font-weight: 900;
       font-size: 1.7rem;
@@ -1441,6 +1529,763 @@
       font-weight: 900;
       text-align: center;
       padding: 18px;
+    }
+
+    .contato-lista-card {
+      padding: 12px;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 10px;
+      min-height: 0;
+    }
+
+    .contato-lista {
+      border: 1px solid rgba(18, 66, 75, 0.12);
+      border-radius: 12px;
+      min-height: 0;
+      overflow: auto;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .contato-row,
+    .contato-header {
+      display: grid;
+      grid-template-columns: 120px minmax(260px, 0.9fr) 84px minmax(240px, 1fr) minmax(230px, 260px);
+      align-items: center;
+      min-width: 1060px;
+    }
+
+    .contato-header {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #f8fbfc;
+      border-bottom: 2px solid #59d66d;
+      color: var(--text-soft);
+      font-size: 0.68rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .contato-row {
+      border-bottom: 1px solid rgba(18, 66, 75, 0.08);
+      background: rgba(255, 255, 255, 0.78);
+      border-left: 6px solid #ef4444;
+    }
+
+    .contato-row:nth-child(even) {
+      background: rgba(239, 250, 246, 0.62);
+    }
+
+    .contato-row.contato-status-atualizado {
+      border-left-color: #10b981;
+      background: rgba(187, 247, 208, 0.72);
+      box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.18);
+    }
+
+    .contato-row.contato-status-aguardando {
+      border-left-color: #f59e0b;
+      background: rgba(253, 230, 138, 0.76);
+      box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.22);
+    }
+
+    .contato-row.contato-status-pendente {
+      border-left-color: #ef4444;
+      background: rgba(254, 202, 202, 0.68);
+      box-shadow: inset 0 0 0 1px rgba(239, 68, 68, 0.20);
+    }
+
+    .contato-header > div,
+    .contato-row > div {
+      min-width: 0;
+      padding: 10px 12px;
+      border-right: 1px solid rgba(18, 66, 75, 0.08);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .contato-header > div:last-child,
+    .contato-row > div:last-child {
+      border-right: 0;
+    }
+
+    .contato-codigo {
+      color: var(--text-soft);
+      font-weight: 900;
+      text-align: right;
+    }
+
+    .contato-nome,
+    .contato-ativo,
+    .contato-perfil,
+    .contato-compra {
+      color: var(--text-main);
+      font-weight: 900;
+    }
+
+    .contato-compra {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      justify-content: space-between;
+    }
+
+    .contato-status-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 22px;
+      padding: 0 8px;
+      border-radius: 999px;
+      font-size: 0.62rem;
+      font-weight: 950;
+      text-transform: uppercase;
+      background: #ef4444;
+      color: #fff;
+      border: 1px solid rgba(127, 29, 29, 0.22);
+    }
+
+    .contato-status-atualizado .contato-status-badge {
+      background: #059669;
+      color: #fff;
+      border-color: rgba(4, 120, 87, 0.24);
+    }
+
+    .contato-status-aguardando .contato-status-badge {
+      background: #d97706;
+      color: #fff;
+      border-color: rgba(146, 64, 14, 0.24);
+    }
+
+    .contato-ativo {
+      text-align: center;
+    }
+
+    .contato-perfil {
+      color: #087f5b;
+      text-transform: uppercase;
+    }
+
+    .contato-sort-button {
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font: inherit;
+      font-weight: 900;
+      text-transform: uppercase;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      padding: 0;
+    }
+
+    .contato-sort-button span {
+      color: #0d8a6a;
+      font-size: 0.82rem;
+      line-height: 1;
+    }
+
+    .contato-link {
+      border: 0;
+      background: transparent;
+      padding: 0;
+      color: var(--text-main);
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-align: left;
+    }
+
+    .contato-link:hover {
+      color: #0d8a6a;
+      text-decoration: underline;
+    }
+
+    .contato-detalhe-card {
+      padding: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 12px;
+      min-height: 0;
+      background: transparent;
+      border: 0;
+      box-shadow: none;
+    }
+
+    .contato-detalhe-card[hidden] {
+      display: none;
+    }
+
+    .contato-detalhe-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 22px;
+      padding: 28px 32px;
+      border: 1px solid rgba(18, 66, 75, 0.08);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.88);
+      box-shadow: 0 16px 34px rgba(16, 57, 66, 0.08);
+    }
+
+    .contato-detalhe-top h2 {
+      margin: 0 0 8px;
+      font-size: 1.8rem;
+      font-weight: 900;
+      letter-spacing: 0;
+      color: var(--text-main);
+    }
+
+    .contato-detalhe-brand {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      min-width: 0;
+    }
+
+    .contato-avatar {
+      width: 104px;
+      height: 104px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      background:
+        radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.82), transparent 44%),
+        linear-gradient(145deg, rgba(218, 244, 236, 0.98), rgba(229, 240, 237, 0.98));
+      color: #087f5b;
+      font-size: 2.2rem;
+      font-weight: 900;
+      box-shadow: inset 0 0 0 1px rgba(13, 138, 106, 0.06);
+    }
+
+    .contato-detalhe-subtitle {
+      margin: 0;
+      color: var(--text-soft);
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .contato-perfil-edit {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .contato-perfil-edit > span {
+      font-size: 0.72rem;
+      font-weight: 900;
+      text-transform: uppercase;
+      color: #087f5b;
+    }
+
+    .contato-perfil-edit select {
+      min-width: 210px;
+      max-width: min(360px, 70vw);
+      height: 34px;
+      padding: 4px 30px 4px 10px;
+      border: 1px solid rgba(13, 138, 106, 0.24);
+      border-radius: 8px;
+      background-color: rgba(239, 250, 246, 0.95);
+      color: var(--text-main);
+      font: inherit;
+      font-weight: 800;
+    }
+
+    .contato-perfil-save {
+      min-height: 34px;
+      padding: 0 14px;
+      border: 1px solid #0d8a6a;
+      border-radius: 8px;
+      background: #0d8a6a;
+      color: #fff;
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 900;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .contato-perfil-save:hover {
+      background: #087f5b;
+    }
+
+    .contato-perfil-save:disabled {
+      cursor: wait;
+      opacity: 0.65;
+    }
+
+    .contato-perfil-status {
+      font-size: 0.72rem;
+      font-weight: 900;
+      color: var(--text-soft);
+    }
+
+    .contato-perfil-status.success {
+      color: #087f5b;
+    }
+
+    .contato-perfil-status.error {
+      color: #c8231a;
+    }
+
+    .contato-detalhe-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .contato-pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 0 10px;
+      border-radius: 999px;
+      background: rgba(13, 138, 106, 0.10);
+      color: #087f5b;
+      border: 1px solid rgba(13, 138, 106, 0.18);
+      font-size: 0.78rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .contato-detalhe-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 12px;
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .contato-detalhe-col {
+      display: grid;
+      align-content: start;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .contato-info-section {
+      border: 1px solid rgba(18, 66, 75, 0.10);
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.88);
+      padding: 18px;
+      box-shadow: 0 12px 28px rgba(16, 57, 66, 0.07);
+    }
+
+    .contato-info-section h3 {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 0 0 14px;
+      font-size: 1rem;
+      font-weight: 900;
+      color: var(--text-main);
+    }
+
+    .contato-section-icon,
+    .contato-mini-icon {
+      display: inline-grid;
+      place-items: center;
+      color: #087f5b;
+      background: rgba(13, 138, 106, 0.08);
+    }
+
+    .contato-section-icon {
+      width: 34px;
+      height: 34px;
+      border-radius: 9px;
+      flex: 0 0 auto;
+    }
+
+    .contato-section-icon svg,
+    .contato-mini-icon svg,
+    .contato-person-avatar svg,
+    .contato-person-meta svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    .contato-info-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0;
+      border: 1px solid rgba(18, 66, 75, 0.10);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    .contato-info-item {
+      min-width: 0;
+      min-height: 58px;
+      padding: 10px 12px;
+      border-right: 1px solid rgba(18, 66, 75, 0.08);
+      border-bottom: 1px solid rgba(18, 66, 75, 0.08);
+      background: rgba(255, 255, 255, 0.9);
+    }
+
+    .contato-info-item.full {
+      grid-column: 1 / -1;
+    }
+
+    .contato-info-highlight {
+      background: linear-gradient(90deg, rgba(13, 138, 106, 0.10), rgba(255, 255, 255, 0.96));
+    }
+
+    .contato-info-highlight .contato-info-value {
+      color: #087f5b;
+      font-weight: 950;
+    }
+
+    .contato-info-item:nth-child(2n) {
+      border-right: 0;
+    }
+
+    .contato-info-label {
+      display: block;
+      margin-bottom: 4px;
+      color: var(--text-soft);
+      font-size: 0.66rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .contato-info-value {
+      display: block;
+      overflow-wrap: anywhere;
+      color: var(--text-main);
+      font-size: 0.92rem;
+      font-weight: 900;
+    }
+
+    .contato-contato-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .contato-person-card {
+      border: 1px solid rgba(18, 66, 75, 0.10);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(239, 250, 246, 0.96), rgba(255, 255, 255, 0.96));
+      padding: 14px 16px;
+      display: grid;
+      grid-template-columns: 58px minmax(0, 1fr);
+      gap: 12px;
+      align-items: start;
+    }
+
+    .contato-person-card strong {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--text-main);
+      font-weight: 900;
+    }
+
+    .contato-person-card span {
+      display: block;
+      color: var(--text-soft);
+      font-size: 0.78rem;
+      font-weight: 800;
+      overflow-wrap: anywhere;
+    }
+
+    .contato-person-avatar {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: rgba(13, 138, 106, 0.10);
+      color: #087f5b;
+      font-weight: 900;
+      font-size: 1.05rem;
+    }
+
+    .contato-person-head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+
+    .contato-person-tag {
+      display: inline-flex !important;
+      width: auto;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(13, 138, 106, 0.10);
+      color: #087f5b !important;
+      font-size: 0.66rem !important;
+      font-weight: 900 !important;
+    }
+
+    .contato-person-meta {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px 16px;
+    }
+
+    .contato-person-meta span {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .contato-dot-ok::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #10b981;
+      display: inline-block;
+    }
+
+    .contato-list-row {
+      min-height: 46px;
+      display: grid;
+      grid-template-columns: 34px minmax(128px, 0.75fr) minmax(0, 1fr) 34px;
+      align-items: center;
+      gap: 10px;
+      border: 1px solid rgba(18, 66, 75, 0.08);
+      border-radius: 10px;
+      padding: 7px 9px;
+      background: #fff;
+      margin-bottom: 7px;
+    }
+
+    .contato-edit-form {
+      display: grid;
+      gap: 8px;
+    }
+
+    .contato-edit-row {
+      min-height: 48px;
+      display: grid;
+      grid-template-columns: 34px minmax(120px, 0.7fr) minmax(0, 1fr);
+      align-items: center;
+      gap: 10px;
+      border: 1px solid rgba(18, 66, 75, 0.08);
+      border-radius: 10px;
+      padding: 7px 9px;
+      background: #fff;
+    }
+
+    .contato-edit-label {
+      color: var(--text-soft);
+      font-size: 0.66rem;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .contato-edit-input {
+      width: 100%;
+      min-width: 0;
+      height: 34px;
+      border: 1px solid rgba(74, 127, 151, 0.26);
+      border-radius: 8px;
+      padding: 0 10px;
+      color: var(--text-main);
+      background: rgba(248, 251, 252, 0.95);
+      font: inherit;
+      font-size: 0.86rem;
+      font-weight: 900;
+      outline: none;
+    }
+
+    .contato-edit-input:focus {
+      border-color: rgba(13, 138, 106, 0.55);
+      box-shadow: 0 0 0 3px rgba(13, 138, 106, 0.10);
+      background: #fff;
+    }
+
+    .contato-save-panel {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .contato-save-button,
+    .contato-wait-button {
+      min-height: 42px;
+      border-radius: 10px;
+    }
+
+    .contato-wait-button {
+      border-color: rgba(245, 158, 11, 0.42);
+      color: #92400e;
+      background: rgba(254, 243, 199, 0.62);
+    }
+
+    .contato-save-status {
+      min-height: 22px;
+      margin-top: 9px;
+      color: var(--text-soft);
+      font-size: 0.78rem;
+      font-weight: 900;
+    }
+
+    .contato-save-status.success {
+      color: #047857;
+    }
+
+    .contato-save-status.warning {
+      color: #92400e;
+    }
+
+    .contato-save-status.error {
+      color: #b91c1c;
+    }
+
+    .contato-extra-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .contato-card-edit {
+      border: 1px solid rgba(18, 66, 75, 0.10);
+      border-radius: 12px;
+      background: linear-gradient(180deg, rgba(239, 250, 246, 0.98), rgba(255, 255, 255, 0.98));
+      padding: 12px;
+    }
+
+    .contato-card-edit-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+
+    .contato-card-edit-head strong {
+      color: var(--text-main);
+      font-weight: 950;
+    }
+
+    .contato-card-fixed,
+    .contato-remove-button {
+      min-height: 24px;
+      padding: 0 8px;
+      border-radius: 999px;
+      font-size: 0.65rem;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .contato-card-fixed {
+      display: inline-flex;
+      align-items: center;
+      background: rgba(13, 138, 106, 0.10);
+      color: #087f5b;
+      border: 1px solid rgba(13, 138, 106, 0.18);
+    }
+
+    .contato-remove-button {
+      border: 1px solid rgba(239, 68, 68, 0.24);
+      background: rgba(254, 226, 226, 0.84);
+      color: #b91c1c;
+      cursor: pointer;
+    }
+
+    .contato-card-edit-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 9px;
+    }
+
+    .contato-card-edit-grid label {
+      display: grid;
+      gap: 4px;
+      min-width: 0;
+    }
+
+    .contato-card-edit-grid span {
+      color: var(--text-soft);
+      font-size: 0.64rem;
+      font-weight: 950;
+      text-transform: uppercase;
+    }
+
+    .contato-card-edit-grid input,
+    .contato-card-edit-grid select,
+    .contato-fixed-cargo {
+      width: 100%;
+      min-width: 0;
+      height: 34px;
+      border: 1px solid rgba(74, 127, 151, 0.26);
+      border-radius: 8px;
+      padding: 0 10px;
+      background: #fff;
+      color: var(--text-main);
+      font: inherit;
+      font-size: 0.84rem;
+      font-weight: 900;
+      outline: none;
+    }
+
+    .contato-fixed-cargo {
+      display: flex;
+      align-items: center;
+      background: rgba(13, 138, 106, 0.08);
+      color: #087f5b;
+      border-color: rgba(13, 138, 106, 0.18);
+    }
+
+    .contato-card-edit-grid input:focus,
+    .contato-card-edit-grid select:focus {
+      border-color: rgba(13, 138, 106, 0.55);
+      box-shadow: 0 0 0 3px rgba(13, 138, 106, 0.10);
+    }
+
+    .contato-add-button {
+      min-height: 40px;
+      margin-top: 10px;
+      width: 100%;
+      border: 1px dashed rgba(13, 138, 106, 0.40);
+      border-radius: 10px;
+      background: rgba(13, 138, 106, 0.06);
+      color: #087f5b;
+      font: inherit;
+      font-size: 0.86rem;
+      font-weight: 950;
+      cursor: pointer;
+    }
+
+    .contato-mini-icon {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      font-weight: 900;
+      font-size: 0.78rem;
+      text-decoration: none;
+      border: 1px solid rgba(13, 138, 106, 0.08);
+    }
+
+    .contato-mini-action {
+      background: #fff;
+      color: var(--text-soft);
+      border-color: rgba(18, 66, 75, 0.12);
+      transition: 0.15s ease;
+    }
+
+    .contato-mini-action:hover {
+      color: #087f5b;
+      border-color: rgba(13, 138, 106, 0.28);
+      background: rgba(13, 138, 106, 0.06);
     }
 
     .resizing-columns {
@@ -2760,7 +3605,9 @@
       .home-menu,
       .scan-panel,
       .consulta-toolbar,
+      .contato-toolbar,
       .consulta-grid,
+      .contato-detalhe-grid,
       .metrics-panel,
       .board,
       .fila-workspace,
@@ -2788,9 +3635,18 @@
       }
 
       .home-topbar,
-      .home-user {
+      .home-user,
+      .contato-detalhe-top {
         flex-direction: column;
         align-items: stretch;
+      }
+
+      .contato-info-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .contato-detalhe-actions {
+        justify-content: stretch;
       }
 
       .fila-app {
@@ -3032,16 +3888,19 @@
         width: 100%;
       }
 
-      .consulta-produtos-app {
+      .consulta-produtos-app,
+      .atualizacao-contato-app {
         min-height: auto;
       }
 
-      .consulta-toolbar {
+      .consulta-toolbar,
+      .contato-toolbar {
         align-items: stretch;
         padding: 12px;
       }
 
-      .consulta-toolbar .btn-start {
+      .consulta-toolbar .btn-start,
+      .contato-toolbar .btn-back {
         min-width: 0;
         width: 100%;
       }
@@ -3120,6 +3979,12 @@
           <span class="home-menu-icon">CP</span>
           <span class="home-menu-title">Consulta de Produtos</span>
           <span class="home-menu-text">Consulte foto, grupo e estoque positivo por empresa e lote.</span>
+        </button>
+
+        <button class="home-menu-button quaternary" id="abrir-atualizacao-contato" type="button">
+          <span class="home-menu-icon">AC</span>
+          <span class="home-menu-title">Atualizacao de Contato</span>
+          <span class="home-menu-text">Atualize dados de contato dos parceiros.</span>
         </button>
       </div>
     </div>
@@ -3427,6 +4292,76 @@
           </div>
         </section>
       </div>
+    </div>
+  </section>
+
+  <section class="screen atualizacao-contato-screen" id="atualizacao-contato-screen">
+    <div class="atualizacao-contato-app">
+      <div class="contato-toolbar">
+        <div>
+          <div class="home-kicker">Cadastro comercial</div>
+          <h1>Atualizacao de Contato</h1>
+        </div>
+        <div class="fila-field contato-busca-field">
+          <label for="contato-busca">Pesquisa inteligente</label>
+          <input id="contato-busca" type="search" placeholder="Codigo, nome ou CNPJ">
+        </div>
+        <div class="fila-field contato-toggle-field">
+          <div class="form-check form-switch">
+            <input class="form-check-input" id="contato-somente-ativos" type="checkbox" role="switch" checked>
+            <label class="form-check-label" for="contato-somente-ativos">Somente ativos</label>
+          </div>
+        </div>
+        <div class="fila-field">
+          <label for="contato-perfil">Perfil</label>
+          <select id="contato-perfil">
+            <option value="">Selecione o perfil</option>
+          </select>
+        </div>
+        <div class="fila-field">
+          <label for="contato-estado">Estado</label>
+          <select id="contato-estado" disabled>
+            <option value="">Selecione o estado</option>
+          </select>
+        </div>
+        <div class="fila-field">
+          <label for="contato-cidade">Cidade</label>
+          <select id="contato-cidade" disabled>
+            <option value="">Selecione a cidade</option>
+          </select>
+        </div>
+        <button class="btn-back" id="voltar-home-contato" type="button">Voltar</button>
+      </div>
+
+      <section class="consulta-card contato-lista-card">
+        <div class="consulta-card-title">
+          <strong>Clientes da cidade</strong>
+          <span class="consulta-status" id="contato-status">Selecione estado e cidade.</span>
+        </div>
+        <div class="contato-lista" id="contato-clientes-lista">
+          <div class="consulta-empty">Selecione uma cidade para listar os clientes.</div>
+        </div>
+      </section>
+
+      <section class="consulta-card contato-detalhe-card" id="contato-detalhe-card" hidden>
+        <div class="contato-detalhe-top">
+          <div class="contato-detalhe-brand">
+            <div class="contato-avatar" id="contato-detalhe-avatar">--</div>
+            <div>
+              <div class="home-kicker">Perfil do cliente</div>
+              <h2 id="contato-detalhe-nome">Cliente</h2>
+              <p class="contato-detalhe-subtitle" id="contato-detalhe-subtitulo">Dados cadastrais e contatos</p>
+            </div>
+          </div>
+          <div class="contato-detalhe-actions">
+            <span class="contato-pill" id="contato-detalhe-ativo">Ativo</span>
+            <button class="btn-back" id="voltar-lista-contatos" type="button">Voltar para lista</button>
+          </div>
+        </div>
+        <div class="contato-detalhe-grid" id="contato-detalhe-conteudo">
+          <div class="consulta-empty">Selecione um cliente.</div>
+        </div>
+      </section>
     </div>
   </section>
 

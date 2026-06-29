@@ -15,6 +15,7 @@ const conferenciaScreen = document.getElementById('conferencia-screen');
 const acompanhamentoScreen = document.getElementById('acompanhamento-screen');
 const filaScreen = document.getElementById('fila-screen');
 const consultaProdutosScreen = document.getElementById('consulta-produtos-screen');
+const atualizacaoContatoScreen = document.getElementById('atualizacao-contato-screen');
 const filaContexto = document.getElementById('fila-contexto');
 const inputDataInicial = document.getElementById('data-inicial');
 const inputDataFinal = document.getElementById('data-final');
@@ -22,9 +23,11 @@ const inputEmpresaFiltro = document.getElementById('empresa-filtro');
 const botaoAbrirConferencia = document.getElementById('abrir-conferencia');
 const botaoAbrirAcompanhamento = document.getElementById('abrir-acompanhamento');
 const botaoAbrirConsultaHome = document.getElementById('abrir-consulta-home');
+const botaoAbrirAtualizacaoContato = document.getElementById('abrir-atualizacao-contato');
 const botaoExibirAcompanhamento = document.getElementById('exibir-acompanhamento');
 const botaoVoltarHomeAcompanhamento = document.getElementById('voltar-home-acompanhamento');
 const botaoVoltarHomeFila = document.getElementById('voltar-home-fila');
+const botaoVoltarHomeContato = document.getElementById('voltar-home-contato');
 const filaDataInicial = document.getElementById('fila-data-inicial');
 const filaDataFinal = document.getElementById('fila-data-final');
 const filaEmpresa = document.getElementById('fila-empresa');
@@ -109,6 +112,20 @@ const consultaProdutoResumo = document.getElementById('consulta-produto-resumo')
 const consultaProdutoDetalhes = document.getElementById('consulta-produto-detalhes');
 const consultaProdutoStatus = document.getElementById('consulta-produto-status');
 const consultaEstoqueStatus = document.getElementById('consulta-estoque-status');
+const contatoBusca = document.getElementById('contato-busca');
+const contatoSomenteAtivos = document.getElementById('contato-somente-ativos');
+const contatoPerfil = document.getElementById('contato-perfil');
+const contatoEstado = document.getElementById('contato-estado');
+const contatoCidade = document.getElementById('contato-cidade');
+const contatoClientesLista = document.getElementById('contato-clientes-lista');
+const contatoStatus = document.getElementById('contato-status');
+const contatoDetalheCard = document.getElementById('contato-detalhe-card');
+const contatoDetalheAvatar = document.getElementById('contato-detalhe-avatar');
+const contatoDetalheNome = document.getElementById('contato-detalhe-nome');
+const contatoDetalheSubtitulo = document.getElementById('contato-detalhe-subtitulo');
+const contatoDetalheAtivo = document.getElementById('contato-detalhe-ativo');
+const contatoDetalheConteudo = document.getElementById('contato-detalhe-conteudo');
+const botaoVoltarListaContatos = document.getElementById('voltar-lista-contatos');
 let filaPedidos = [];
 let pedidoSelecionado = null;
 let pedidoPreviewSelecionado = null;
@@ -117,6 +134,10 @@ let itensPedidoSelecionado = [];
 let itemCorteSelecionado = null;
 let pedidoConcluido = null;
 let volumePanelAberto = false;
+let contatoBuscaTimer = null;
+let contatoClientesAtuais = [];
+let contatoOrdenacaoUltimaCompra = '';
+let contatoDetalheAtual = null;
 let produtoFotoAtual = null;
 let ordenacaoItens = { coluna: '', direcao: '' };
 const itensGridMinimos = [34, 78, 210, 122, 148, 118];
@@ -238,6 +259,7 @@ function mostrarLogin(mensagem = '') {
   acompanhamentoScreen.classList.remove('active');
   filaScreen.classList.remove('active');
   consultaProdutosScreen.classList.remove('active');
+  atualizacaoContatoScreen.classList.remove('active');
   loginStatus.textContent = mensagem;
   atualizarUsuarioLogadoNaTela();
 
@@ -476,6 +498,7 @@ function mostrarHome() {
   acompanhamentoScreen.classList.remove('active');
   filaScreen.classList.remove('active');
   consultaProdutosScreen.classList.remove('active');
+  atualizacaoContatoScreen.classList.remove('active');
   homeScreen.classList.add('active');
 }
 
@@ -490,6 +513,7 @@ function mostrarConferencia() {
   acompanhamentoScreen.classList.remove('active');
   filaScreen.classList.remove('active');
   consultaProdutosScreen.classList.remove('active');
+  atualizacaoContatoScreen.classList.remove('active');
   conferenciaScreen.classList.add('active');
 }
 
@@ -504,6 +528,7 @@ function mostrarAcompanhamento() {
   conferenciaScreen.classList.remove('active');
   filaScreen.classList.remove('active');
   consultaProdutosScreen.classList.remove('active');
+  atualizacaoContatoScreen.classList.remove('active');
   acompanhamentoScreen.classList.add('active');
 }
 
@@ -518,6 +543,7 @@ function mostrarFila() {
   conferenciaScreen.classList.remove('active');
   acompanhamentoScreen.classList.remove('active');
   consultaProdutosScreen.classList.remove('active');
+  atualizacaoContatoScreen.classList.remove('active');
   filaScreen.classList.add('active');
 }
 
@@ -532,8 +558,25 @@ function mostrarConsultaProdutos() {
   conferenciaScreen.classList.remove('active');
   acompanhamentoScreen.classList.remove('active');
   filaScreen.classList.remove('active');
+  atualizacaoContatoScreen.classList.remove('active');
   consultaProdutosScreen.classList.add('active');
   consultaProdutoCodigo.focus();
+}
+
+function mostrarAtualizacaoContato() {
+  if (!usuarioLogado) {
+    mostrarLogin('Entre para acessar a atualizacao de contato.');
+    return;
+  }
+
+  loginScreen.classList.remove('active');
+  homeScreen.classList.remove('active');
+  conferenciaScreen.classList.remove('active');
+  acompanhamentoScreen.classList.remove('active');
+  filaScreen.classList.remove('active');
+  consultaProdutosScreen.classList.remove('active');
+  atualizacaoContatoScreen.classList.add('active');
+  contatoPerfil.focus();
 }
 
 function criarCard(item) {
@@ -978,6 +1021,895 @@ function abrirConsultaProdutosMesmaTela() {
   mostrarHomeESuspenderRefresh();
   mostrarConsultaProdutos();
   history.pushState({ tela: 'consulta-produtos' }, '', '#consulta-produtos');
+}
+
+function obterValorOrdenacaoUltimaCompra(cliente) {
+  return Number(cliente.ULTIMA_COMPRA_ORD || 0);
+}
+
+function obterClientesContatoOrdenados() {
+  const clientes = [...contatoClientesAtuais];
+
+  if (!contatoOrdenacaoUltimaCompra) {
+    return clientes;
+  }
+
+  return clientes.sort((a, b) => {
+    const valorA = obterValorOrdenacaoUltimaCompra(a);
+    const valorB = obterValorOrdenacaoUltimaCompra(b);
+
+    if (!valorA && valorB) return 1;
+    if (valorA && !valorB) return -1;
+
+    if (valorA === valorB) {
+      return String(a.NOMEPARC || '').localeCompare(String(b.NOMEPARC || ''), 'pt-BR');
+    }
+
+    return contatoOrdenacaoUltimaCompra === 'asc' ? valorA - valorB : valorB - valorA;
+  });
+}
+
+function alternarOrdenacaoUltimaCompraContato() {
+  contatoOrdenacaoUltimaCompra = contatoOrdenacaoUltimaCompra === 'desc' ? 'asc' : 'desc';
+  desenharClientesContato();
+}
+
+function contatoValorPreenchido(valor) {
+  return valor !== null && valor !== undefined && String(valor).trim() !== '';
+}
+
+function valorContato(valor, fallback = '-') {
+  return contatoValorPreenchido(valor) ? String(valor) : fallback;
+}
+
+function criarInfoItemContato(label, valor) {
+  return `
+    <div class="contato-info-item">
+      <span class="contato-info-label">${escaparHtml(label)}</span>
+      <span class="contato-info-value">${escaparHtml(valorContato(valor))}</span>
+    </div>
+  `;
+}
+
+function criarInfoItemContatoFull(label, valor) {
+  return `
+    <div class="contato-info-item full">
+      <span class="contato-info-label">${escaparHtml(label)}</span>
+      <span class="contato-info-value">${escaparHtml(valorContato(valor))}</span>
+    </div>
+  `;
+}
+
+function criarInfoItemContatoDestaque(label, valor) {
+  return `
+    <div class="contato-info-item contato-info-highlight full">
+      <span class="contato-info-label">${escaparHtml(label)}</span>
+      <strong class="contato-info-value">${escaparHtml(valorContato(valor))}</strong>
+    </div>
+  `;
+}
+
+function obterStatusContatoCliente(cliente = {}) {
+  if (cliente.STATUS_ATUALIZACAO_CONTATO) return cliente.STATUS_ATUALIZACAO_CONTATO;
+  return contatoValorPreenchido(cliente.DATA_ATUALIZACAO_CONTATO) ? 'atualizado' : 'pendente';
+}
+
+function rotuloStatusContato(status) {
+  if (status === 'aguardando') return 'Aguardando';
+  if (status === 'atualizado') return 'Atualizado';
+  return 'Pendente';
+}
+
+function criarCampoContatoEditavel(tipo, nome, titulo, valor) {
+  return `
+    <label class="contato-edit-row">
+      <span class="contato-mini-icon">${iconeContato(tipo)}</span>
+      <span class="contato-edit-label">${escaparHtml(titulo)}</span>
+      <input
+        class="contato-edit-input"
+        name="${escaparAtributo(nome)}"
+        type="${tipo === 'email' ? 'email' : 'text'}"
+        value="${escaparAtributo(valorContato(valor, ''))}"
+        autocomplete="off"
+      >
+    </label>
+  `;
+}
+
+function criarSelectPerfilCliente(perfis = [], codTipParcAtual = '') {
+  const valorAtual = String(codTipParcAtual || '');
+  const opcoes = [
+    '<option value="">Selecione o perfil</option>',
+    ...perfis.map((perfil) => {
+      const codigo = String(perfil.CODTIPPARC || '');
+      return `<option value="${escaparAtributo(codigo)}"${codigo === valorAtual ? ' selected' : ''}>${escaparHtml(perfil.DESCRTIPPARC || codigo)}</option>`;
+    })
+  ];
+
+  return `
+    <div class="contato-perfil-edit">
+      <span>Perfil</span>
+      <select id="contato-perfil-cliente" name="codTipParc" aria-label="Perfil do cliente">
+        ${opcoes.join('')}
+      </select>
+      <button class="contato-perfil-save" id="contato-salvar-perfil" type="button">Salvar Perfil</button>
+      <span class="contato-perfil-status" id="contato-perfil-status" aria-live="polite"></span>
+    </div>
+  `;
+}
+
+function normalizarTextoBuscaContato(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase();
+}
+
+function selecionarContatoModelo(contatos, tipo) {
+  const cargosFixos = {
+    nfe: 'NFE',
+    transporte: 'TRANSPORTE',
+    financeiro: 'FINANCEIRO'
+  };
+  const cargoAlvo = cargosFixos[tipo];
+
+  return contatos.find((contato) => {
+    const cargo = normalizarTextoBuscaContato(contato.CARGO || '');
+    return cargo === cargoAlvo;
+  }) || null;
+}
+
+function contatoEhModeloFixo(contato) {
+  const cargo = normalizarTextoBuscaContato(contato?.CARGO || '');
+  return cargo === 'NFE' || cargo === 'TRANSPORTE' || cargo === 'FINANCEIRO';
+}
+
+function criarOpcoesCargoContato(cargoAtual = '', cargoPadrao = '') {
+  const cargos = [
+    'Geral',
+    'Proprietaria',
+    'Compras',
+    'Financeiro',
+    'NFE',
+    'Transporte',
+    'Recebimento',
+    'Entrega',
+    'Gerente'
+  ];
+  const valor = cargoAtual || cargoPadrao || 'Geral';
+  const opcoes = cargos.includes(valor) ? cargos : [valor, ...cargos];
+
+  return opcoes.map((cargo) => `
+    <option value="${escaparAtributo(cargo)}"${cargo === valor ? ' selected' : ''}>${escaparHtml(cargo)}</option>
+  `).join('');
+}
+
+function criarCardContatoEditavel(contato = {}, tipo = 'extra', titulo = 'Contato adicional') {
+  const cargosFixos = {
+    nfe: 'NFE',
+    transporte: 'Transporte',
+    financeiro: 'Financeiro'
+  };
+  const cargoPadrao = cargosFixos[tipo] || 'Geral';
+  const contatoId = contato.CODCONTATO || contato.codContato || '';
+  const cargoValor = contato.CARGO || contato.cargo || cargoPadrao;
+  const cargoCampo = tipo === 'extra'
+    ? `<select name="cargo">${criarOpcoesCargoContato(cargoValor, cargoPadrao)}</select>`
+    : `
+      <input name="cargo" type="hidden" value="${escaparAtributo(cargoPadrao)}">
+      <strong class="contato-fixed-cargo">${escaparHtml(cargoPadrao)}</strong>
+    `;
+
+  return `
+    <div class="contato-card-edit" data-tipo="${escaparAtributo(tipo)}" data-codcontato="${escaparAtributo(contatoId)}">
+      <div class="contato-card-edit-head">
+        <strong>${escaparHtml(titulo)}</strong>
+        ${tipo === 'extra' ? '<button class="contato-remove-button" type="button" title="Remover contato">Remover</button>' : '<span class="contato-card-fixed">Fixo</span>'}
+      </div>
+      <div class="contato-card-edit-grid">
+        <label>
+          <span>Nome do contato</span>
+          <input name="nome" type="text" value="${escaparAtributo(contato.NOMECONTATO || contato.nome || '')}" maxlength="40">
+        </label>
+        <label>
+          <span>Cargo</span>
+          ${cargoCampo}
+        </label>
+        <label>
+          <span>Telefone</span>
+          <input name="telefone" type="text" value="${escaparAtributo(contato.TELEFONE || contato.telefone || '')}" maxlength="13">
+        </label>
+        <label>
+          <span>Email</span>
+          <input name="email" type="email" value="${escaparAtributo(contato.EMAIL || contato.email || '')}" maxlength="80">
+        </label>
+      </div>
+    </div>
+  `;
+}
+
+function montarContatosEditaveis(contatos = []) {
+  const contatoNfe = selecionarContatoModelo(contatos, 'nfe');
+  const contatoTransporte = selecionarContatoModelo(contatos, 'transporte');
+  const contatoFinanceiro = selecionarContatoModelo(contatos, 'financeiro');
+  const extras = contatos.filter((contato) => !contatoEhModeloFixo(contato));
+
+  return `
+    <div class="contato-extra-list" id="contato-extra-list">
+      ${criarCardContatoEditavel(contatoFinanceiro || {}, 'financeiro', 'Contato Financeiro')}
+      ${criarCardContatoEditavel(contatoNfe || {}, 'nfe', 'Contato NF-e')}
+      ${criarCardContatoEditavel(contatoTransporte || {}, 'transporte', 'Contato de Transporte/Logistica')}
+      ${extras.map((contato) => criarCardContatoEditavel(contato, 'extra', 'Contato adicional')).join('')}
+    </div>
+    <button class="contato-add-button" id="contato-adicionar" type="button">+ Adicionar contato</button>
+  `;
+}
+
+function obterIniciaisContato(nome = '') {
+  const partes = String(nome || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+
+  return partes.map((parte) => parte[0]).join('').toUpperCase() || '--';
+}
+
+function iconeContato(tipo) {
+  const icones = {
+    usuario: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 12a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0 2c-4.2 0-7 2.1-7 5v1h14v-1c0-2.9-2.8-5-7-5Z"/></svg>',
+    documento: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h8l4 4v14H7V3Zm7 1.8V8h3.2L14 4.8ZM9 11h6v1.8H9V11Zm0 4h6v1.8H9V15Z"/></svg>',
+    telefone: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7.2 4.1 9.8 4c.6 0 1 .4 1.1.9l.6 3c.1.5-.1 1-.6 1.3l-1.4.8c.9 1.8 2.3 3.2 4.1 4.1l.8-1.4c.3-.5.8-.7 1.3-.6l3 .6c.5.1.9.6.9 1.1l-.1 2.6c0 .8-.6 1.4-1.4 1.4A12.1 12.1 0 0 1 5.8 5.5c0-.8.6-1.4 1.4-1.4Z"/></svg>',
+    email: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16v12H4V6Zm2 2v.3l6 4 6-4V8H6Zm12 8v-5.2l-6 4-6-4V16h12Z"/></svg>',
+    calendario: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 2h2v2h6V2h2v2h3v17H4V4h3V2Zm11 8H6v9h12v-9ZM6 8h12V6H6v2Z"/></svg>',
+    endereco: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a7 7 0 0 0-7 7c0 5.2 7 13 7 13s7-7.8 7-13a7 7 0 0 0-7-7Zm0 9.8A2.8 2.8 0 1 1 12 6a2.8 2.8 0 0 1 0 5.8Z"/></svg>',
+    grupo: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8 0a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8 13c-3 0-5 1.5-5 4v2h10v-2c0-2.5-2-4-5-4Zm8 0c-.7 0-1.4.1-2 .3 1.2.9 2 2.1 2 3.7v2h5v-2c0-2.5-2-4-5-4Z"/></svg>'
+  };
+
+  return icones[tipo] || icones.documento;
+}
+
+function montarEnderecoContato(parceiro = {}) {
+  const partes = [
+    parceiro.ENDERECO,
+    parceiro.NUMEND ? `N. ${parceiro.NUMEND}` : '',
+    parceiro.COMPLEMENTO,
+    parceiro.BAIRRO,
+    parceiro.CIDADE && parceiro.UF ? `${parceiro.CIDADE}-${parceiro.UF}` : parceiro.CIDADE,
+    parceiro.CEP ? `CEP ${parceiro.CEP}` : ''
+  ].filter(contatoValorPreenchido);
+
+  return partes.join(' - ');
+}
+
+function mostrarListaContato() {
+  contatoDetalheCard.hidden = true;
+  document.querySelector('.contato-lista-card').hidden = false;
+}
+
+function mostrarDetalheContato() {
+  document.querySelector('.contato-lista-card').hidden = true;
+  contatoDetalheCard.hidden = false;
+}
+
+function renderizarDetalheContato(payload) {
+  const parceiro = payload?.parceiro || {};
+  const contatos = payload?.contatos || [];
+  const perfis = payload?.perfis || [];
+  const endereco = montarEnderecoContato(parceiro);
+  contatoDetalheAtual = parceiro;
+
+  contatoDetalheNome.textContent = parceiro.NOMEPARC || 'Cliente';
+  contatoDetalheAvatar.textContent = obterIniciaisContato(parceiro.NOMEPARC);
+  contatoDetalheSubtitulo.innerHTML = `
+    <span>${escaparHtml(valorContato(parceiro.CODPARC))}</span>
+    <span aria-hidden="true">|</span>
+    ${criarSelectPerfilCliente(perfis, parceiro.CODTIPPARC)}
+  `;
+  contatoDetalheAtivo.textContent = `Ativo: ${valorContato(parceiro.ATIVO)} | ${rotuloStatusContato(obterStatusContatoCliente(parceiro))}`;
+
+  contatoDetalheConteudo.innerHTML = `
+    <div class="contato-detalhe-col">
+      <div class="contato-info-section">
+        <h3><span class="contato-section-icon">${iconeContato('documento')}</span>Informacoes basicas</h3>
+        <div class="contato-info-grid">
+          ${criarInfoItemContato('Codigo', parceiro.CODPARC)}
+          ${criarInfoItemContato('Ativo', parceiro.ATIVO)}
+          ${criarInfoItemContatoFull('Nome', parceiro.NOMEPARC)}
+          ${criarInfoItemContatoFull('Razao social', parceiro.RAZAOSOCIAL)}
+          ${criarInfoItemContato('CNPJ/CPF', parceiro.CGC_CPF)}
+          ${criarInfoItemContato('Tipo pessoa', parceiro.TIPO_PESSOA)}
+          ${criarInfoItemContatoDestaque('Vendedor preferencial', parceiro.VENDEDOR_PREFERENCIAL ? `${parceiro.CODVEND} - ${parceiro.VENDEDOR_PREFERENCIAL}` : '-')}
+          ${criarInfoItemContato('Ultima compra', parceiro.ULTIMA_COMPRA || 'Sem compra')}
+          ${criarInfoItemContato('Ultimo contato', parceiro.DTULTCONTATO)}
+          ${criarInfoItemContato('Atualizado contato', parceiro.DATA_ATUALIZACAO_CONTATO)}
+        </div>
+      </div>
+      <div class="contato-info-section">
+        <h3><span class="contato-section-icon">${iconeContato('endereco')}</span>Endereco</h3>
+        <div class="contato-person-card">
+          <div class="contato-person-avatar">${iconeContato('endereco')}</div>
+          <div>
+            <strong>${escaparHtml(endereco || '-')}</strong>
+            <span>${escaparHtml(parceiro.CIDADE && parceiro.UF ? `${parceiro.CIDADE}-${parceiro.UF}` : valorContato(parceiro.CIDADE))}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="contato-detalhe-col">
+      <div class="contato-info-section">
+        <h3><span class="contato-section-icon">${iconeContato('telefone')}</span>Contato principal da empresa</h3>
+        <div class="contato-edit-form" id="contato-edit-form">
+          ${criarCampoContatoEditavel('telefone', 'telefonePrincipal', 'Telefone principal', parceiro.FAX || parceiro.TELEFONE)}
+          ${criarCampoContatoEditavel('email', 'email', 'Email', parceiro.EMAIL)}
+        </div>
+      </div>
+      <div class="contato-info-section">
+        <h3><span class="contato-section-icon">${iconeContato('grupo')}</span>Contatos cadastrados</h3>
+        ${montarContatosEditaveis(contatos)}
+        <div class="contato-save-panel">
+          <button class="btn-start contato-save-button" id="contato-salvar" type="button">Salvar contatos</button>
+          <button class="btn-back contato-wait-button" id="contato-aguardando" type="button">Aguardando resposta</button>
+        </div>
+        <div class="contato-save-status" id="contato-save-status"></div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('contato-salvar')?.addEventListener('click', () => salvarContatoCliente('salvar'));
+  document.getElementById('contato-aguardando')?.addEventListener('click', () => salvarContatoCliente('aguardando'));
+  document.getElementById('contato-salvar-perfil')?.addEventListener('click', salvarPerfilCliente);
+  document.getElementById('contato-adicionar')?.addEventListener('click', adicionarContatoExtra);
+  document.querySelectorAll('.contato-remove-button').forEach((botao) => {
+    botao.addEventListener('click', () => botao.closest('.contato-card-edit')?.remove());
+  });
+}
+
+function obterDadosContatoEditados() {
+  const form = document.getElementById('contato-edit-form');
+  const dados = {};
+
+  if (!form) return dados;
+
+  form.querySelectorAll('input[name]').forEach((input) => {
+    dados[input.name] = input.value.trim();
+  });
+
+  return dados;
+}
+
+async function salvarPerfilCliente() {
+  if (!contatoDetalheAtual?.CODPARC) return;
+
+  const select = document.getElementById('contato-perfil-cliente');
+  const botao = document.getElementById('contato-salvar-perfil');
+  const status = document.getElementById('contato-perfil-status');
+  if (!select || !botao) return;
+
+  botao.disabled = true;
+  if (status) {
+    status.textContent = 'Salvando...';
+    status.className = 'contato-perfil-status';
+  }
+
+  try {
+    const res = await fetch(`/api/contatos/clientes/${encodeURIComponent(contatoDetalheAtual.CODPARC)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ acao: 'salvar-perfil', codTipParc: select.value })
+    });
+    const resposta = await res.json();
+
+    if (!res.ok) {
+      throw new Error(resposta.erro || 'Erro ao salvar perfil');
+    }
+
+    const perfil = resposta.parceiro?.PERFIL || 'Sem perfil';
+    const codTipParc = resposta.parceiro?.CODTIPPARC || '';
+    contatoDetalheAtual = { ...contatoDetalheAtual, PERFIL: perfil, CODTIPPARC: codTipParc };
+    atualizarClienteContatoNaLista(contatoDetalheAtual.CODPARC, { PERFIL: perfil, CODTIPPARC: codTipParc });
+
+    if (status) {
+      status.textContent = 'Perfil salvo.';
+      status.classList.add('success');
+    }
+  } catch (error) {
+    if (status) {
+      status.textContent = error.message;
+      status.classList.add('error');
+    }
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+function obterContatosEditados() {
+  return Array.from(document.querySelectorAll('.contato-card-edit')).map((card) => {
+    const dados = {
+      tipo: card.dataset.tipo || 'extra',
+      codContato: card.dataset.codcontato || ''
+    };
+
+    card.querySelectorAll('input[name], select[name]').forEach((input) => {
+      dados[input.name] = input.value.trim();
+    });
+
+    return dados;
+  });
+}
+
+function validarCamposContatoObrigatorios(dados, contatos) {
+  const faltando = [];
+  const contatoNfe = contatos.find((contato) => contato.tipo === 'nfe');
+  const contatoTransporte = contatos.find((contato) => contato.tipo === 'transporte');
+  const contatoFinanceiro = contatos.find((contato) => contato.tipo === 'financeiro');
+
+  if (!contatoValorPreenchido(dados.telefonePrincipal)) faltando.push('telefone principal');
+  if (!contatoValorPreenchido(dados.email)) faltando.push('email principal');
+
+  [
+    ['contato NF-e', contatoNfe],
+    ['contato de Transporte/Logistica', contatoTransporte],
+    ['contato Financeiro', contatoFinanceiro]
+  ].forEach(([titulo, contato]) => {
+    if (!contatoValorPreenchido(contato?.nome)) faltando.push(`nome do ${titulo}`);
+    if (!contatoValorPreenchido(contato?.cargo)) faltando.push(`cargo do ${titulo}`);
+    if (!contatoValorPreenchido(contato?.telefone)) faltando.push(`telefone do ${titulo}`);
+    if (!contatoValorPreenchido(contato?.email)) faltando.push(`email do ${titulo}`);
+  });
+
+  return faltando;
+}
+
+function adicionarContatoExtra() {
+  const lista = document.getElementById('contato-extra-list');
+  if (!lista) return;
+
+  const wrapper = document.createElement('div');
+  wrapper.innerHTML = criarCardContatoEditavel({}, 'extra', 'Contato adicional').trim();
+  const card = wrapper.firstElementChild;
+  lista.appendChild(card);
+  card.querySelector('.contato-remove-button')?.addEventListener('click', () => card.remove());
+  card.querySelector('input[name="nome"]')?.focus();
+}
+
+function atualizarClienteContatoNaLista(codParc, alteracoes = {}) {
+  contatoClientesAtuais = contatoClientesAtuais.map((cliente) => {
+    if (String(cliente.CODPARC) !== String(codParc)) return cliente;
+    return { ...cliente, ...alteracoes };
+  });
+  desenharClientesContato();
+}
+
+async function salvarContatoCliente(acao) {
+  if (!contatoDetalheAtual?.CODPARC) return;
+
+  const statusEl = document.getElementById('contato-save-status');
+  const botaoSalvar = document.getElementById('contato-salvar');
+  const botaoAguardando = document.getElementById('contato-aguardando');
+  const codParc = contatoDetalheAtual.CODPARC;
+  const payload = {
+    acao,
+    ...obterDadosContatoEditados(),
+    contatos: obterContatosEditados()
+  };
+
+  if (acao === 'salvar') {
+    const faltando = validarCamposContatoObrigatorios(payload, payload.contatos);
+    if (faltando.length > 0) {
+      if (statusEl) {
+        statusEl.textContent = `Preencha os campos obrigatorios: ${faltando.join(', ')}`;
+        statusEl.className = 'contato-save-status error';
+      }
+      return;
+    }
+  }
+
+  if (statusEl) {
+    statusEl.textContent = acao === 'aguardando' ? 'Marcando como aguardando resposta...' : 'Salvando contatos...';
+    statusEl.className = 'contato-save-status';
+  }
+
+  botaoSalvar?.setAttribute('disabled', 'disabled');
+  botaoAguardando?.setAttribute('disabled', 'disabled');
+
+  try {
+    const res = await fetch(`/api/contatos/clientes/${encodeURIComponent(codParc)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const resposta = await res.json();
+
+    if (!res.ok) {
+      throw new Error(resposta.erro || 'Erro ao atualizar contato');
+    }
+
+    const statusContato = resposta.statusContato || (acao === 'aguardando' ? 'aguardando' : 'atualizado');
+    const dataAtualizacao = resposta.parceiro?.DATA_ATUALIZACAO_CONTATO || contatoDetalheAtual.DATA_ATUALIZACAO_CONTATO;
+    const perfilAtualizado = resposta.parceiro?.PERFIL || contatoDetalheAtual.PERFIL;
+    const codTipParcAtualizado = resposta.parceiro?.CODTIPPARC ?? contatoDetalheAtual.CODTIPPARC;
+    contatoDetalheAtual = {
+      ...contatoDetalheAtual,
+      STATUS_ATUALIZACAO_CONTATO: statusContato,
+      DATA_ATUALIZACAO_CONTATO: dataAtualizacao,
+      PERFIL: perfilAtualizado,
+      CODTIPPARC: codTipParcAtualizado
+    };
+    atualizarClienteContatoNaLista(codParc, {
+      STATUS_ATUALIZACAO_CONTATO: statusContato,
+      DATA_ATUALIZACAO_CONTATO: dataAtualizacao,
+      PERFIL: perfilAtualizado,
+      CODTIPPARC: codTipParcAtualizado
+    });
+
+    if (statusEl) {
+      statusEl.textContent = statusContato === 'aguardando'
+        ? 'Cliente marcado como aguardando resposta.'
+        : 'Contatos salvos com sucesso.';
+      statusEl.classList.add(statusContato === 'aguardando' ? 'warning' : 'success');
+    }
+
+    if (contatoDetalheAtivo) {
+      contatoDetalheAtivo.textContent = `${contatoDetalheAtual.ATIVO ? `Ativo: ${contatoDetalheAtual.ATIVO}` : 'Ativo'} | ${rotuloStatusContato(statusContato)}`;
+    }
+  } catch (error) {
+    if (statusEl) {
+      statusEl.textContent = error.message;
+      statusEl.classList.add('error');
+    }
+  } finally {
+    botaoSalvar?.removeAttribute('disabled');
+    botaoAguardando?.removeAttribute('disabled');
+  }
+}
+
+async function abrirDetalheContato(codParc) {
+  if (!codParc) return;
+
+  mostrarDetalheContato();
+  contatoDetalheAtual = null;
+  contatoDetalheNome.textContent = 'Carregando cliente...';
+  contatoDetalheAvatar.textContent = '--';
+  contatoDetalheSubtitulo.textContent = `Codigo ${codParc}`;
+  contatoDetalheAtivo.textContent = 'Carregando';
+  contatoDetalheConteudo.innerHTML = '<div class="consulta-empty">Buscando dados do cliente...</div>';
+
+  try {
+    const res = await fetch(`/api/contatos/clientes/${encodeURIComponent(codParc)}`);
+    const payload = await res.json();
+
+    if (!res.ok) {
+      throw new Error(payload.erro || 'Erro ao carregar cliente');
+    }
+
+    renderizarDetalheContato(payload);
+  } catch (error) {
+    contatoDetalheAtual = null;
+    contatoDetalheNome.textContent = 'Erro ao carregar cliente';
+    contatoDetalheAvatar.textContent = '!';
+    contatoDetalheSubtitulo.textContent = '';
+    contatoDetalheAtivo.textContent = 'Erro';
+    contatoDetalheConteudo.innerHTML = `<div class="consulta-empty">${escaparHtml(error.message)}</div>`;
+  }
+}
+
+function desenharClientesContato() {
+  const clientes = obterClientesContatoOrdenados();
+
+  if (!clientes.length) {
+    contatoClientesLista.innerHTML = '<div class="consulta-empty">Nenhum cliente encontrado para esta cidade.</div>';
+    contatoStatus.textContent = '0 clientes';
+    return;
+  }
+
+  const indicadorOrdenacao = contatoOrdenacaoUltimaCompra === 'asc' ? '↑' : contatoOrdenacaoUltimaCompra === 'desc' ? '↓' : '↕';
+
+  const linhas = clientes.map((cliente) => {
+    const statusContato = obterStatusContatoCliente(cliente);
+
+    return `
+      <div class="contato-row contato-status-${statusContato}">
+        <div class="contato-codigo">${escaparHtml(cliente.CODPARC)}</div>
+        <div class="contato-nome" title="${escaparAtributo(cliente.NOMEPARC || '-')}">
+          <button class="contato-link" type="button" data-codparc="${escaparAtributo(cliente.CODPARC)}">${escaparHtml(cliente.NOMEPARC || '-')}</button>
+        </div>
+        <div class="contato-ativo">${escaparHtml(cliente.ATIVO || '-')}</div>
+        <div class="contato-perfil" title="${escaparAtributo(cliente.PERFIL || '-')}">${escaparHtml(cliente.PERFIL || '-')}</div>
+        <div class="contato-compra">
+          <span>${escaparHtml(cliente.ULTIMA_COMPRA || 'Sem compra')}</span>
+          <span class="contato-status-badge">${escaparHtml(rotuloStatusContato(statusContato))}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  contatoClientesLista.innerHTML = `
+    <div class="contato-header">
+      <div>Codigo</div>
+      <div>Cliente</div>
+      <div>Ativo</div>
+      <div>Perfil</div>
+      <div>
+        <button class="contato-sort-button" type="button" id="contato-ordenar-ultima-compra">
+          Ultima compra <span aria-hidden="true">${indicadorOrdenacao}</span>
+        </button>
+      </div>
+    </div>
+    ${linhas}
+  `;
+  document.getElementById('contato-ordenar-ultima-compra')?.addEventListener('click', alternarOrdenacaoUltimaCompraContato);
+  contatoStatus.textContent = `${clientes.length} clientes`;
+}
+
+function renderizarClientesContato(clientes = []) {
+  contatoClientesAtuais = clientes;
+  mostrarListaContato();
+  desenharClientesContato();
+}
+
+function limparSelecaoContato(mensagem = 'Selecione perfil, estado e cidade.') {
+  mostrarListaContato();
+  contatoClientesAtuais = [];
+  contatoOrdenacaoUltimaCompra = '';
+  contatoEstado.innerHTML = '<option value="">Selecione o estado</option>';
+  contatoEstado.disabled = true;
+  contatoCidade.innerHTML = '<option value="">Selecione a cidade</option>';
+  contatoCidade.disabled = true;
+  contatoClientesAtuais = [];
+  contatoOrdenacaoUltimaCompra = '';
+  contatoClientesLista.innerHTML = '<div class="consulta-empty">Selecione uma cidade para listar os clientes.</div>';
+  contatoStatus.textContent = mensagem;
+}
+
+function limparBuscaContato() {
+  contatoBusca.value = '';
+  if (contatoBuscaTimer) {
+    clearTimeout(contatoBuscaTimer);
+    contatoBuscaTimer = null;
+  }
+}
+
+function parametroAtivosContato() {
+  return contatoSomenteAtivos.checked ? '1' : '0';
+}
+
+async function carregarPerfisContato() {
+  contatoStatus.textContent = 'Carregando perfis...';
+  contatoPerfil.innerHTML = '<option value="">Carregando perfis...</option>';
+  limparBuscaContato();
+  limparSelecaoContato('Carregando perfis...');
+
+  try {
+    const res = await fetch(`/api/contatos/perfis?ativos=${parametroAtivosContato()}`);
+    const payload = await res.json();
+
+    if (!res.ok) {
+      throw new Error(payload.erro || 'Erro ao carregar perfis');
+    }
+
+    const perfis = payload.perfis || [];
+    contatoPerfil.innerHTML = '<option value="">Selecione o perfil</option>';
+    perfis.forEach((perfil) => {
+      const option = document.createElement('option');
+      option.value = perfil.CODTIPPARC;
+      option.textContent = perfil.DESCRTIPPARC;
+      contatoPerfil.appendChild(option);
+    });
+    contatoStatus.textContent = `${perfis.length} perfis`;
+  } catch (error) {
+    contatoPerfil.innerHTML = '<option value="">Erro ao carregar</option>';
+    contatoStatus.textContent = error.message;
+  }
+}
+
+async function carregarEstadosContato() {
+  const codPerfil = contatoPerfil.value;
+  limparBuscaContato();
+  mostrarListaContato();
+
+  if (!codPerfil) {
+    limparSelecaoContato('Selecione o perfil.');
+    return;
+  }
+
+  contatoStatus.textContent = 'Carregando estados...';
+  contatoEstado.innerHTML = '<option value="">Carregando estados...</option>';
+  contatoEstado.disabled = true;
+  contatoCidade.innerHTML = '<option value="">Selecione a cidade</option>';
+  contatoCidade.disabled = true;
+  contatoClientesAtuais = [];
+  contatoOrdenacaoUltimaCompra = '';
+  contatoClientesLista.innerHTML = '<div class="consulta-empty">Selecione uma cidade para listar os clientes.</div>';
+
+  try {
+    const res = await fetch(`/api/contatos/estados?perfil=${encodeURIComponent(codPerfil)}&ativos=${parametroAtivosContato()}`);
+    const payload = await res.json();
+
+    if (!res.ok) {
+      throw new Error(payload.erro || 'Erro ao carregar estados');
+    }
+
+    const estados = payload.estados || [];
+    contatoEstado.innerHTML = '<option value="">Selecione o estado</option>';
+    estados.forEach((estado) => {
+      const option = document.createElement('option');
+      option.value = estado.UF;
+      option.textContent = estado.UF;
+      contatoEstado.appendChild(option);
+    });
+    contatoEstado.disabled = false;
+    contatoStatus.textContent = `${estados.length} estados`;
+  } catch (error) {
+    contatoEstado.innerHTML = '<option value="">Erro ao carregar</option>';
+    contatoStatus.textContent = error.message;
+  }
+}
+
+async function carregarCidadesContato() {
+  const codPerfil = contatoPerfil.value;
+  const uf = contatoEstado.value;
+  limparBuscaContato();
+  mostrarListaContato();
+  contatoCidade.innerHTML = '<option value="">Selecione a cidade</option>';
+  contatoCidade.disabled = true;
+  contatoClientesAtuais = [];
+  contatoOrdenacaoUltimaCompra = '';
+  contatoClientesLista.innerHTML = '<div class="consulta-empty">Selecione uma cidade para listar os clientes.</div>';
+
+  if (!codPerfil) {
+    contatoStatus.textContent = 'Selecione o perfil.';
+    return;
+  }
+
+  if (!uf) {
+    contatoStatus.textContent = 'Selecione estado e cidade.';
+    return;
+  }
+
+  contatoStatus.textContent = 'Carregando cidades...';
+
+  try {
+    const res = await fetch(`/api/contatos/cidades?perfil=${encodeURIComponent(codPerfil)}&uf=${encodeURIComponent(uf)}&ativos=${parametroAtivosContato()}`);
+    const payload = await res.json();
+
+    if (!res.ok) {
+      throw new Error(payload.erro || 'Erro ao carregar cidades');
+    }
+
+    const cidades = payload.cidades || [];
+    cidades.forEach((cidade) => {
+      const option = document.createElement('option');
+      option.value = cidade.CODCID;
+      option.textContent = cidade.NOMECID;
+      contatoCidade.appendChild(option);
+    });
+    contatoCidade.disabled = false;
+    contatoStatus.textContent = `${cidades.length} cidades`;
+  } catch (error) {
+    contatoStatus.textContent = error.message;
+  }
+}
+
+async function carregarClientesContato() {
+  const codPerfil = contatoPerfil.value;
+  const codCidade = contatoCidade.value;
+  limparBuscaContato();
+  mostrarListaContato();
+
+  if (!codPerfil) {
+    contatoClientesAtuais = [];
+    contatoClientesLista.innerHTML = '<div class="consulta-empty">Selecione um perfil antes de listar os clientes.</div>';
+    contatoStatus.textContent = 'Selecione o perfil.';
+    return;
+  }
+
+  if (!codCidade) {
+    contatoClientesAtuais = [];
+    contatoClientesLista.innerHTML = '<div class="consulta-empty">Selecione uma cidade para listar os clientes.</div>';
+    contatoStatus.textContent = 'Selecione uma cidade.';
+    return;
+  }
+
+  contatoStatus.textContent = 'Carregando clientes...';
+  contatoClientesLista.innerHTML = '<div class="consulta-empty">Buscando clientes da cidade...</div>';
+
+  try {
+    const res = await fetch(`/api/contatos/clientes?perfil=${encodeURIComponent(codPerfil)}&cidade=${encodeURIComponent(codCidade)}&ativos=${parametroAtivosContato()}`);
+    const payload = await res.json();
+
+    if (!res.ok) {
+      throw new Error(payload.erro || 'Erro ao carregar clientes');
+    }
+
+    renderizarClientesContato(payload.clientes || []);
+  } catch (error) {
+    contatoStatus.textContent = 'Erro ao carregar clientes';
+    contatoClientesLista.innerHTML = `<div class="consulta-empty">${escaparHtml(error.message)}</div>`;
+  }
+}
+
+async function buscarClientesContato() {
+  const termo = contatoBusca.value.trim();
+  mostrarListaContato();
+
+  if (!termo) {
+    if (contatoCidade.value) {
+      carregarClientesContato();
+    } else {
+      contatoClientesAtuais = [];
+      contatoClientesLista.innerHTML = '<div class="consulta-empty">Selecione uma cidade para listar os clientes.</div>';
+      contatoStatus.textContent = 'Selecione uma cidade ou pesquise por codigo, nome ou CNPJ.';
+    }
+    return;
+  }
+
+  if (termo.length < 2) {
+    contatoClientesAtuais = [];
+    contatoClientesLista.innerHTML = '<div class="consulta-empty">Digite pelo menos 2 caracteres para pesquisar.</div>';
+    contatoStatus.textContent = 'Pesquisa inteligente';
+    return;
+  }
+
+  contatoStatus.textContent = 'Pesquisando clientes...';
+  contatoClientesLista.innerHTML = '<div class="consulta-empty">Buscando por codigo, nome ou CNPJ...</div>';
+
+  try {
+    const res = await fetch(`/api/contatos/busca?q=${encodeURIComponent(termo)}&ativos=${parametroAtivosContato()}`);
+    const payload = await res.json();
+
+    if (!res.ok) {
+      throw new Error(payload.erro || 'Erro ao pesquisar clientes');
+    }
+
+    renderizarClientesContato(payload.clientes || []);
+    contatoStatus.textContent = `${(payload.clientes || []).length} resultados para "${termo}"`;
+  } catch (error) {
+    contatoStatus.textContent = 'Erro ao pesquisar clientes';
+    contatoClientesLista.innerHTML = `<div class="consulta-empty">${escaparHtml(error.message)}</div>`;
+  }
+}
+
+function agendarBuscaContato() {
+  if (contatoBuscaTimer) {
+    clearTimeout(contatoBuscaTimer);
+  }
+
+  contatoBuscaTimer = setTimeout(() => {
+    contatoBuscaTimer = null;
+    buscarClientesContato();
+  }, 280);
+}
+
+function alternarFiltroAtivosContato() {
+  if (contatoBusca.value.trim()) {
+    buscarClientesContato();
+    return;
+  }
+
+  if (contatoCidade.value) {
+    carregarClientesContato();
+    return;
+  }
+
+  if (contatoEstado.value) {
+    carregarCidadesContato();
+    return;
+  }
+
+  if (contatoPerfil.value) {
+    carregarEstadosContato();
+    return;
+  }
+
+  carregarPerfisContato();
+}
+
+function abrirAtualizacaoContato() {
+  mostrarHomeESuspenderRefresh();
+  mostrarAtualizacaoContato();
+  carregarPerfisContato();
+  history.pushState({ tela: 'atualizacao-contato' }, '', '#atualizacao-contato');
 }
 
 function alternarVisibilidadeSenha() {
@@ -2321,6 +3253,13 @@ async function prepararSessaoAutenticada(usuario) {
     return;
   }
 
+  if (window.location.hash === '#atualizacao-contato') {
+    mostrarAtualizacaoContato();
+    carregarPerfisContato();
+    history.replaceState({ tela: 'atualizacao-contato' }, '', '#atualizacao-contato');
+    return;
+  }
+
   mostrarHome();
   history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);
 }
@@ -2397,6 +3336,7 @@ botaoLogout.addEventListener('click', encerrarSessao);
 botaoAbrirConferencia.addEventListener('click', abrirFila);
 botaoAbrirAcompanhamento.addEventListener('click', abrirAcompanhamento);
 botaoAbrirConsultaHome.addEventListener('click', abrirConsultaProdutosMesmaTela);
+botaoAbrirAtualizacaoContato.addEventListener('click', abrirAtualizacaoContato);
 botaoAbrirConsultaProdutos.addEventListener('click', abrirConsultaProdutos);
 botaoConsultaProdutoBuscar.addEventListener('click', buscarConsultaProduto);
 consultaProdutoCodigo.addEventListener('keydown', (event) => {
@@ -2405,9 +3345,21 @@ consultaProdutoCodigo.addEventListener('keydown', (event) => {
     buscarConsultaProduto();
   }
 });
+contatoPerfil.addEventListener('change', carregarEstadosContato);
+contatoEstado.addEventListener('change', carregarCidadesContato);
+contatoCidade.addEventListener('change', carregarClientesContato);
+contatoBusca.addEventListener('input', agendarBuscaContato);
+contatoSomenteAtivos.addEventListener('change', alternarFiltroAtivosContato);
+contatoClientesLista.addEventListener('click', (event) => {
+  const botaoCliente = event.target.closest('.contato-link');
+  if (!botaoCliente) return;
+  abrirDetalheContato(botaoCliente.dataset.codparc);
+});
+botaoVoltarListaContatos.addEventListener('click', mostrarListaContato);
 botaoExibirAcompanhamento.addEventListener('click', abrirConferencia);
 botaoVoltarHomeAcompanhamento.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeFila.addEventListener('click', voltarParaHomeViaHistorico);
+botaoVoltarHomeContato.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarListaFila.addEventListener('click', () => {
   mostrarEtapaPedidosFila();
   limparPedidoConferencia('Selecione um pedido para iniciar.');
@@ -2518,6 +3470,13 @@ window.addEventListener('popstate', (event) => {
     mostrarHomeESuspenderRefresh();
     renderizarConsultaVazia();
     mostrarConsultaProdutos();
+    return;
+  }
+
+  if (state?.tela === 'atualizacao-contato' || window.location.hash === '#atualizacao-contato') {
+    mostrarHomeESuspenderRefresh();
+    mostrarAtualizacaoContato();
+    carregarPerfisContato();
     return;
   }
 
