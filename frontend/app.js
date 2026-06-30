@@ -117,8 +117,10 @@ const contatoSomenteAtivos = document.getElementById('contato-somente-ativos');
 const contatoPerfil = document.getElementById('contato-perfil');
 const contatoEstado = document.getElementById('contato-estado');
 const contatoCidade = document.getElementById('contato-cidade');
+const botaoExibirContatosAtualizados = document.getElementById('contato-exibir-atualizados');
 const contatoClientesLista = document.getElementById('contato-clientes-lista');
 const contatoStatus = document.getElementById('contato-status');
+const contatoListaTitulo = document.getElementById('contato-lista-titulo');
 const contatoDetalheCard = document.getElementById('contato-detalhe-card');
 const contatoDetalheAvatar = document.getElementById('contato-detalhe-avatar');
 const contatoDetalheNome = document.getElementById('contato-detalhe-nome');
@@ -126,6 +128,7 @@ const contatoDetalheSubtitulo = document.getElementById('contato-detalhe-subtitu
 const contatoDetalheAtivo = document.getElementById('contato-detalhe-ativo');
 const contatoDetalheConteudo = document.getElementById('contato-detalhe-conteudo');
 const botaoVoltarListaContatos = document.getElementById('voltar-lista-contatos');
+const botaoProximoClienteContatos = document.getElementById('proximo-cliente-contatos');
 let filaPedidos = [];
 let pedidoSelecionado = null;
 let pedidoPreviewSelecionado = null;
@@ -138,6 +141,7 @@ let contatoBuscaTimer = null;
 let contatoClientesAtuais = [];
 let contatoOrdenacaoUltimaCompra = '';
 let contatoDetalheAtual = null;
+let contatoOrigemLista = 'nenhuma';
 let produtoFotoAtual = null;
 let ordenacaoItens = { coluna: '', direcao: '' };
 const itensGridMinimos = [34, 78, 210, 122, 148, 118];
@@ -1127,6 +1131,24 @@ function rotuloStatusContato(status) {
   return 'Pendente';
 }
 
+function criarIndicadorLimiteCreditoLista(cliente = {}) {
+  const limite = Number(cliente.LIMCRED || 0);
+  const definido = limite > 0;
+  const titulo = definido
+    ? `Limite definido: ${formatarMoeda(limite)}`
+    : 'Sem limite de credito definido';
+
+  return `
+    <div
+      class="contato-limite-lista ${definido ? 'definido' : 'sem-limite'}"
+      title="${escaparAtributo(titulo)}"
+      aria-label="${escaparAtributo(titulo)}"
+    >
+      <i data-lucide="circle-dollar-sign" aria-hidden="true"></i>
+    </div>
+  `;
+}
+
 function criarCampoContatoEditavel(tipo, nome, titulo, valor) {
   return `
     <label class="contato-edit-row">
@@ -1309,14 +1331,104 @@ function montarEnderecoContato(parceiro = {}) {
   return partes.join(' - ');
 }
 
+function criarPainelLimiteCredito(parceiro = {}) {
+  const limiteDefinido = Number(parceiro.LIMCRED || 0);
+  const sugestao = Number(parceiro.SUGESTAO_LIMCRED || 0);
+  const qtdPedidos = Number(parceiro.QTD_PEDIDOS_SUGESTAO || 0);
+  const possuiLimite = limiteDefinido > 0;
+  const possuiSugestao = sugestao > 0 && qtdPedidos > 0;
+  const valorCampo = possuiLimite ? limiteDefinido : possuiSugestao ? sugestao : '';
+  const tipoIndicador = possuiLimite ? 'definido' : 'sugestao';
+  const icone = possuiLimite ? 'circle-check' : 'lightbulb';
+  const textoIndicador = possuiLimite
+    ? 'Valor definido no Sankhya'
+    : possuiSugestao
+      ? `Sugestao: media dos ultimos ${qtdPedidos} pedidos`
+      : 'Sem limite definido e sem historico de pedidos';
+
+  return `
+    <div class="contato-info-section contato-limite-section">
+      <h3><span class="contato-section-icon">${iconeContato('documento')}</span>Limite de credito</h3>
+      <div class="contato-limite-form">
+        <label>
+          <span>Valor do limite</span>
+          <div class="contato-limite-input-wrap">
+            <span>R$</span>
+            <input
+              id="contato-limite-credito"
+              type="number"
+              min="0"
+              step="0.01"
+              inputmode="decimal"
+              value="${valorCampo === '' ? '' : escaparAtributo(Number(valorCampo).toFixed(2))}"
+              placeholder="Sem sugestao"
+            >
+          </div>
+        </label>
+        <button class="contato-limite-save" id="contato-salvar-limite" type="button">Salvar limite</button>
+      </div>
+      <div class="contato-limite-feedback">
+        <span class="contato-limite-indicador ${tipoIndicador}" id="contato-limite-indicador">
+          <i data-lucide="${icone}" aria-hidden="true"></i>
+        </span>
+        <span id="contato-limite-origem">${escaparHtml(textoIndicador)}</span>
+        <span class="contato-limite-status" id="contato-limite-status" aria-live="polite"></span>
+      </div>
+    </div>
+  `;
+}
+
 function mostrarListaContato() {
   contatoDetalheCard.hidden = true;
   document.querySelector('.contato-lista-card').hidden = false;
 }
 
+async function voltarERecarregarListaContato() {
+  mostrarListaContato();
+  contatoDetalheAtual = null;
+
+  if (contatoOrigemLista === 'atualizados') {
+    await carregarClientesAtualizadosContato();
+    return;
+  }
+
+  if (contatoOrigemLista === 'pesquisa' && contatoBusca.value.trim()) {
+    await buscarClientesContato();
+    return;
+  }
+
+  if (contatoCidade.value) {
+    await carregarClientesContato();
+    return;
+  }
+
+  desenharClientesContato();
+}
+
 function mostrarDetalheContato() {
   document.querySelector('.contato-lista-card').hidden = true;
   contatoDetalheCard.hidden = false;
+}
+
+function obterProximoClienteContato(codParcAtual) {
+  const clientes = obterClientesContatoOrdenados();
+  const indiceAtual = clientes.findIndex((cliente) => String(cliente.CODPARC) === String(codParcAtual));
+  return indiceAtual >= 0 ? clientes[indiceAtual + 1] || null : null;
+}
+
+function atualizarBotaoProximoClienteContato(codParcAtual) {
+  if (!botaoProximoClienteContatos) return;
+
+  const proximo = obterProximoClienteContato(codParcAtual);
+  botaoProximoClienteContatos.disabled = !proximo;
+  botaoProximoClienteContatos.title = proximo
+    ? `Abrir ${proximo.NOMEPARC || `cliente ${proximo.CODPARC}`}`
+    : 'Este e o ultimo cliente da lista';
+}
+
+function abrirProximoClienteContato() {
+  const proximo = obterProximoClienteContato(contatoDetalheAtual?.CODPARC);
+  if (proximo) abrirDetalheContato(proximo.CODPARC);
 }
 
 function renderizarDetalheContato(payload) {
@@ -1334,9 +1446,11 @@ function renderizarDetalheContato(payload) {
     ${criarSelectPerfilCliente(perfis, parceiro.CODTIPPARC)}
   `;
   contatoDetalheAtivo.textContent = `Ativo: ${valorContato(parceiro.ATIVO)} | ${rotuloStatusContato(obterStatusContatoCliente(parceiro))}`;
+  atualizarBotaoProximoClienteContato(parceiro.CODPARC);
 
   contatoDetalheConteudo.innerHTML = `
     <div class="contato-detalhe-col">
+      ${criarPainelLimiteCredito(parceiro)}
       <div class="contato-info-section">
         <h3><span class="contato-section-icon">${iconeContato('documento')}</span>Informacoes basicas</h3>
         <div class="contato-info-grid">
@@ -1386,10 +1500,12 @@ function renderizarDetalheContato(payload) {
   document.getElementById('contato-salvar')?.addEventListener('click', () => salvarContatoCliente('salvar'));
   document.getElementById('contato-aguardando')?.addEventListener('click', () => salvarContatoCliente('aguardando'));
   document.getElementById('contato-salvar-perfil')?.addEventListener('click', salvarPerfilCliente);
+  document.getElementById('contato-salvar-limite')?.addEventListener('click', salvarLimiteCreditoCliente);
   document.getElementById('contato-adicionar')?.addEventListener('click', adicionarContatoExtra);
   document.querySelectorAll('.contato-remove-button').forEach((botao) => {
     botao.addEventListener('click', () => botao.closest('.contato-card-edit')?.remove());
   });
+  atualizarIcones();
 }
 
 function obterDadosContatoEditados() {
@@ -1445,6 +1561,56 @@ async function salvarPerfilCliente() {
       status.textContent = error.message;
       status.classList.add('error');
     }
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+async function salvarLimiteCreditoCliente() {
+  if (!contatoDetalheAtual?.CODPARC) return;
+
+  const input = document.getElementById('contato-limite-credito');
+  const botao = document.getElementById('contato-salvar-limite');
+  const status = document.getElementById('contato-limite-status');
+  const indicador = document.getElementById('contato-limite-indicador');
+  const origem = document.getElementById('contato-limite-origem');
+  if (!input || !botao) return;
+
+  const limiteCredito = Number(input.value);
+  if (!Number.isFinite(limiteCredito) || limiteCredito < 0 || input.value.trim() === '') {
+    status.textContent = 'Informe um valor valido.';
+    status.className = 'contato-limite-status error';
+    return;
+  }
+
+  botao.disabled = true;
+  status.textContent = 'Salvando...';
+  status.className = 'contato-limite-status';
+
+  try {
+    const res = await fetch(`/api/contatos/clientes/${encodeURIComponent(contatoDetalheAtual.CODPARC)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ acao: 'salvar-limite', limiteCredito })
+    });
+    const resposta = await res.json();
+
+    if (!res.ok) {
+      throw new Error(resposta.erro || 'Erro ao salvar limite de credito');
+    }
+
+    const limiteSalvo = Number(resposta.parceiro?.LIMCRED ?? limiteCredito);
+    input.value = limiteSalvo.toFixed(2);
+    contatoDetalheAtual = { ...contatoDetalheAtual, LIMCRED: limiteSalvo };
+    indicador.className = 'contato-limite-indicador definido';
+    indicador.innerHTML = '<i data-lucide="circle-check" aria-hidden="true"></i>';
+    origem.textContent = 'Valor definido no Sankhya';
+    status.textContent = 'Limite salvo.';
+    status.className = 'contato-limite-status success';
+    atualizarIcones();
+  } catch (error) {
+    status.textContent = error.message;
+    status.className = 'contato-limite-status error';
   } finally {
     botao.disabled = false;
   }
@@ -1595,6 +1761,7 @@ async function abrirDetalheContato(codParc) {
   if (!codParc) return;
 
   mostrarDetalheContato();
+  atualizarBotaoProximoClienteContato(codParc);
   contatoDetalheAtual = null;
   contatoDetalheNome.textContent = 'Carregando cliente...';
   contatoDetalheAvatar.textContent = '--';
@@ -1637,6 +1804,7 @@ function desenharClientesContato() {
 
     return `
       <div class="contato-row contato-status-${statusContato}">
+        ${criarIndicadorLimiteCreditoLista(cliente)}
         <div class="contato-codigo">${escaparHtml(cliente.CODPARC)}</div>
         <div class="contato-nome" title="${escaparAtributo(cliente.NOMEPARC || '-')}">
           <button class="contato-link" type="button" data-codparc="${escaparAtributo(cliente.CODPARC)}">${escaparHtml(cliente.NOMEPARC || '-')}</button>
@@ -1653,6 +1821,7 @@ function desenharClientesContato() {
 
   contatoClientesLista.innerHTML = `
     <div class="contato-header">
+      <div aria-label="Limite de credito"></div>
       <div>Codigo</div>
       <div>Cliente</div>
       <div>Ativo</div>
@@ -1667,6 +1836,7 @@ function desenharClientesContato() {
   `;
   document.getElementById('contato-ordenar-ultima-compra')?.addEventListener('click', alternarOrdenacaoUltimaCompraContato);
   contatoStatus.textContent = `${clientes.length} clientes`;
+  atualizarIcones();
 }
 
 function renderizarClientesContato(clientes = []) {
@@ -1675,8 +1845,38 @@ function renderizarClientesContato(clientes = []) {
   desenharClientesContato();
 }
 
-function limparSelecaoContato(mensagem = 'Selecione perfil, estado e cidade.') {
+async function carregarClientesAtualizadosContato() {
+  contatoOrigemLista = 'atualizados';
   mostrarListaContato();
+  limparBuscaContato();
+  contatoListaTitulo.textContent = 'Clientes atualizados';
+  contatoStatus.textContent = 'Carregando atualizados...';
+  contatoClientesLista.innerHTML = '<div class="consulta-empty">Buscando todos os cadastros atualizados...</div>';
+  botaoExibirContatosAtualizados.disabled = true;
+
+  try {
+    const res = await fetch('/api/contatos/atualizados');
+    const payload = await res.json();
+
+    if (!res.ok) {
+      throw new Error(payload.erro || 'Erro ao buscar clientes atualizados');
+    }
+
+    renderizarClientesContato(payload.clientes || []);
+    contatoListaTitulo.textContent = 'Clientes atualizados';
+    contatoStatus.textContent = `${(payload.clientes || []).length} clientes atualizados`;
+  } catch (error) {
+    contatoStatus.textContent = 'Erro ao buscar atualizados';
+    contatoClientesLista.innerHTML = `<div class="consulta-empty">${escaparHtml(error.message)}</div>`;
+  } finally {
+    botaoExibirContatosAtualizados.disabled = false;
+  }
+}
+
+function limparSelecaoContato(mensagem = 'Selecione perfil, estado e cidade.') {
+  contatoOrigemLista = 'nenhuma';
+  mostrarListaContato();
+  contatoListaTitulo.textContent = 'Clientes da cidade';
   contatoClientesAtuais = [];
   contatoOrdenacaoUltimaCompra = '';
   contatoEstado.innerHTML = '<option value="">Selecione o estado</option>';
@@ -1823,6 +2023,7 @@ async function carregarClientesContato() {
   const codCidade = contatoCidade.value;
   limparBuscaContato();
   mostrarListaContato();
+  contatoListaTitulo.textContent = 'Clientes da cidade';
 
   if (!codPerfil) {
     contatoClientesAtuais = [];
@@ -1837,6 +2038,8 @@ async function carregarClientesContato() {
     contatoStatus.textContent = 'Selecione uma cidade.';
     return;
   }
+
+  contatoOrigemLista = 'cidade';
 
   contatoStatus.textContent = 'Carregando clientes...';
   contatoClientesLista.innerHTML = '<div class="consulta-empty">Buscando clientes da cidade...</div>';
@@ -1859,6 +2062,7 @@ async function carregarClientesContato() {
 async function buscarClientesContato() {
   const termo = contatoBusca.value.trim();
   mostrarListaContato();
+  contatoListaTitulo.textContent = termo ? 'Resultados da pesquisa' : 'Clientes da cidade';
 
   if (!termo) {
     if (contatoCidade.value) {
@@ -1877,6 +2081,8 @@ async function buscarClientesContato() {
     contatoStatus.textContent = 'Pesquisa inteligente';
     return;
   }
+
+  contatoOrigemLista = 'pesquisa';
 
   contatoStatus.textContent = 'Pesquisando clientes...';
   contatoClientesLista.innerHTML = '<div class="consulta-empty">Buscando por codigo, nome ou CNPJ...</div>';
@@ -3375,6 +3581,7 @@ consultaProdutoCodigo.addEventListener('keydown', (event) => {
 contatoPerfil.addEventListener('change', carregarEstadosContato);
 contatoEstado.addEventListener('change', carregarCidadesContato);
 contatoCidade.addEventListener('change', carregarClientesContato);
+botaoExibirContatosAtualizados.addEventListener('click', carregarClientesAtualizadosContato);
 contatoBusca.addEventListener('input', agendarBuscaContato);
 contatoSomenteAtivos.addEventListener('change', alternarFiltroAtivosContato);
 contatoClientesLista.addEventListener('click', (event) => {
@@ -3382,7 +3589,8 @@ contatoClientesLista.addEventListener('click', (event) => {
   if (!botaoCliente) return;
   abrirDetalheContato(botaoCliente.dataset.codparc);
 });
-botaoVoltarListaContatos.addEventListener('click', mostrarListaContato);
+botaoVoltarListaContatos.addEventListener('click', voltarERecarregarListaContato);
+botaoProximoClienteContatos?.addEventListener('click', abrirProximoClienteContato);
 botaoExibirAcompanhamento.addEventListener('click', abrirConferencia);
 botaoVoltarHomeAcompanhamento.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeFila.addEventListener('click', voltarParaHomeViaHistorico);

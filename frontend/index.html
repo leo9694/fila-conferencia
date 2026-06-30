@@ -1356,7 +1356,29 @@
     }
 
     .contato-toolbar {
-      grid-template-columns: minmax(220px, 1fr) minmax(250px, 330px) minmax(140px, 170px) minmax(200px, 280px) minmax(140px, 180px) minmax(200px, 280px) auto;
+      grid-template-columns: minmax(205px, 1fr) minmax(230px, 300px) minmax(128px, 150px) minmax(175px, 230px) minmax(125px, 155px) minmax(170px, 220px) minmax(185px, 210px) auto;
+    }
+
+    .contato-updated-button {
+      min-height: 42px;
+      padding: 0 12px;
+      border: 1px solid rgba(13, 138, 106, 0.30);
+      border-radius: 10px;
+      background: linear-gradient(180deg, #ffffff 0%, #eaf8f3 100%);
+      color: #087f5b;
+      font-size: 0.72rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .contato-updated-button:hover {
+      background: #0d8a6a;
+      color: #fff;
+    }
+
+    .contato-updated-button:disabled {
+      cursor: wait;
+      opacity: 0.65;
     }
 
     .contato-busca-field {
@@ -1570,9 +1592,9 @@
     .contato-row,
     .contato-header {
       display: grid;
-      grid-template-columns: 120px minmax(260px, 0.9fr) 84px minmax(240px, 1fr) minmax(230px, 260px);
+      grid-template-columns: 42px 120px minmax(260px, 0.9fr) 84px minmax(240px, 1fr) minmax(230px, 260px);
       align-items: center;
-      min-width: 1060px;
+      min-width: 1102px;
     }
 
     .contato-header {
@@ -1634,6 +1656,36 @@
       color: var(--text-soft);
       font-weight: 900;
       text-align: right;
+    }
+
+    .contato-limite-lista {
+      width: 26px;
+      height: 26px;
+      justify-self: center;
+      display: grid;
+      place-items: center;
+      border-radius: 7px;
+      padding: 0 !important;
+      border-right: 0 !important;
+      overflow: visible !important;
+    }
+
+    .contato-limite-lista svg {
+      width: 15px;
+      height: 15px;
+      stroke-width: 2.5;
+    }
+
+    .contato-limite-lista.definido {
+      color: #1864ab;
+      background: #dbeafe;
+      box-shadow: inset 0 0 0 1px #93c5fd;
+    }
+
+    .contato-limite-lista.sem-limite {
+      color: #c92a2a;
+      background: #ffe3e3;
+      box-shadow: inset 0 0 0 1px #ffa8a8;
     }
 
     .contato-nome,
@@ -1867,6 +1919,42 @@
       justify-content: flex-end;
     }
 
+    .contato-next-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 42px;
+      padding: 0 16px;
+      border: 1px solid #0d8a6a;
+      border-radius: 8px;
+      background: #0d8a6a;
+      color: #fff;
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+      transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+    }
+
+    .contato-next-button:hover:not(:disabled) {
+      background: #087f5b;
+      border-color: #087f5b;
+      transform: translateY(-1px);
+    }
+
+    .contato-next-button:disabled {
+      border-color: #d6e2df;
+      background: #edf3f1;
+      color: #82928e;
+      cursor: not-allowed;
+    }
+
+    .contato-next-button svg {
+      width: 17px;
+      height: 17px;
+      flex: 0 0 auto;
+    }
+
     .contato-pill {
       display: inline-flex;
       align-items: center;
@@ -1912,6 +2000,129 @@
       font-size: 1rem;
       font-weight: 900;
       color: var(--text-main);
+    }
+
+    .contato-limite-section {
+      border-color: rgba(13, 138, 106, 0.18);
+      background: linear-gradient(135deg, rgba(239, 250, 246, 0.98), rgba(255, 255, 255, 0.96));
+    }
+
+    .contato-limite-form {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 10px;
+    }
+
+    .contato-limite-form label > span {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--text-soft);
+      font-size: 0.66rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .contato-limite-input-wrap {
+      min-height: 40px;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      border: 1px solid rgba(13, 138, 106, 0.28);
+      border-radius: 10px;
+      background: #fff;
+      overflow: hidden;
+    }
+
+    .contato-limite-input-wrap > span {
+      align-self: stretch;
+      display: grid;
+      place-items: center;
+      padding: 0 10px;
+      background: rgba(13, 138, 106, 0.09);
+      color: #087f5b;
+      font-weight: 900;
+    }
+
+    .contato-limite-input-wrap input {
+      width: 100%;
+      min-width: 0;
+      height: 38px;
+      padding: 0 10px;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text-main);
+      font: inherit;
+      font-weight: 900;
+    }
+
+    .contato-limite-save {
+      min-height: 40px;
+      padding: 0 16px;
+      border: 0;
+      border-radius: 10px;
+      background: #0d8a6a;
+      color: #fff;
+      font-size: 0.78rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .contato-limite-save:disabled {
+      cursor: wait;
+      opacity: 0.65;
+    }
+
+    .contato-limite-feedback {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 9px;
+      color: var(--text-soft);
+      font-size: 0.7rem;
+      font-weight: 850;
+      flex-wrap: wrap;
+    }
+
+    .contato-limite-indicador {
+      width: 24px;
+      height: 24px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 7px;
+      flex: 0 0 auto;
+    }
+
+    .contato-limite-indicador svg {
+      width: 15px;
+      height: 15px;
+      stroke-width: 2.5;
+    }
+
+    .contato-limite-indicador.definido {
+      color: #087f5b;
+      background: #d3f9d8;
+      border: 1px solid #8ce99a;
+    }
+
+    .contato-limite-indicador.sugestao {
+      color: #c92a2a;
+      background: #ffe3e3;
+      border: 1px solid #ffa8a8;
+    }
+
+    .contato-limite-status {
+      margin-left: auto;
+      font-weight: 900;
+    }
+
+    .contato-limite-status.success {
+      color: #087f5b;
+    }
+
+    .contato-limite-status.error {
+      color: #c92a2a;
     }
 
     .contato-section-icon,
@@ -3698,8 +3909,21 @@
         grid-template-columns: 1fr;
       }
 
+      .contato-limite-form {
+        grid-template-columns: 1fr;
+      }
+
+      .contato-limite-save {
+        width: 100%;
+      }
+
       .contato-detalhe-actions {
         justify-content: stretch;
+      }
+
+      .contato-detalhe-actions .btn-back,
+      .contato-next-button {
+        flex: 1 1 150px;
       }
 
       .fila-app {
@@ -4388,12 +4612,13 @@
             <option value="">Selecione a cidade</option>
           </select>
         </div>
+        <button class="contato-updated-button" id="contato-exibir-atualizados" type="button">Exibir somente atualizados</button>
         <button class="btn-back" id="voltar-home-contato" type="button">Voltar</button>
       </div>
 
       <section class="consulta-card contato-lista-card">
         <div class="consulta-card-title">
-          <strong>Clientes da cidade</strong>
+          <strong id="contato-lista-titulo">Clientes da cidade</strong>
           <span class="consulta-status" id="contato-status">Selecione estado e cidade.</span>
         </div>
         <div class="contato-lista" id="contato-clientes-lista">
@@ -4414,6 +4639,10 @@
           <div class="contato-detalhe-actions">
             <span class="contato-pill" id="contato-detalhe-ativo">Ativo</span>
             <button class="btn-back" id="voltar-lista-contatos" type="button">Voltar para lista</button>
+            <button class="contato-next-button" id="proximo-cliente-contatos" type="button">
+              <span>Proximo cliente</span>
+              <i data-lucide="arrow-right" aria-hidden="true"></i>
+            </button>
           </div>
         </div>
         <div class="contato-detalhe-grid" id="contato-detalhe-conteudo">

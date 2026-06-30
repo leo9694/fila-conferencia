@@ -162,6 +162,22 @@ function normalizarNumero(valor) {
   return Number.isFinite(numero) ? numero : 0;
 }
 
+function obterValorMonetario(valor) {
+  if (typeof valor === 'number') {
+    return Number.isFinite(valor) && valor >= 0 ? valor : null;
+  }
+
+  let texto = String(valor ?? '').trim().replace(/R\$/gi, '').replace(/\s+/g, '');
+  if (!texto) return null;
+
+  if (texto.includes(',')) {
+    texto = texto.replace(/\./g, '').replace(',', '.');
+  }
+
+  const numero = Number(texto);
+  return Number.isFinite(numero) && numero >= 0 ? numero : null;
+}
+
 function valorPreenchido(valor) {
   return valor !== null && valor !== undefined && String(valor).trim() !== '';
 }
@@ -1205,6 +1221,7 @@ router.get('/contatos/clientes', async (req, res) => {
       SELECT
         PAR.CODPARC,
         PAR.NOMEPARC,
+        CAST(NVL(PAR.LIMCRED, 0) AS NUMBER(15,2)) AS LIMCRED,
         CASE WHEN NVL(PAR.ATIVO, 'S') = 'S' THEN 'Sim' ELSE 'Nao' END AS ATIVO,
         NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS PERFIL,
         TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'DD/MM/YYYY') AS ULTIMA_COMPRA,
@@ -1260,6 +1277,7 @@ router.get('/contatos/busca', async (req, res) => {
         SELECT
           PAR.CODPARC,
           PAR.NOMEPARC,
+          CAST(NVL(PAR.LIMCRED, 0) AS NUMBER(15,2)) AS LIMCRED,
           CASE WHEN NVL(PAR.ATIVO, 'S') = 'S' THEN 'Sim' ELSE 'Nao' END AS ATIVO,
           NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS PERFIL,
           TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'DD/MM/YYYY') AS ULTIMA_COMPRA,
@@ -1300,6 +1318,44 @@ router.get('/contatos/busca', async (req, res) => {
   }
 });
 
+router.get('/contatos/atualizados', async (req, res) => {
+  try {
+    const rows = await executeQuery(`
+      SELECT
+        PAR.CODPARC,
+        PAR.NOMEPARC,
+        CAST(NVL(PAR.LIMCRED, 0) AS NUMBER(15,2)) AS LIMCRED,
+        CASE WHEN NVL(PAR.ATIVO, 'S') = 'S' THEN 'Sim' ELSE 'Nao' END AS ATIVO,
+        NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS PERFIL,
+        TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'DD/MM/YYYY') AS ULTIMA_COMPRA,
+        TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'YYYYMMDD') AS ULTIMA_COMPRA_ORD,
+        TO_CHAR(PAR.AD_DTATUCONTATO, 'DD/MM/YYYY') AS DATA_ATUALIZACAO_CONTATO
+      FROM TGFPAR PAR
+      LEFT JOIN TGFTPP TPP
+        ON TPP.CODTIPPARC = PAR.CODTIPPARC
+      LEFT JOIN (
+        SELECT CODPARC, MAX(DTNEG) AS DTULTCOMPRA
+        FROM TGFCAB
+        WHERE TIPMOV IN ('P', 'V')
+          AND STATUSNOTA = 'L'
+        GROUP BY CODPARC
+      ) ULTIMA_COMPRA
+        ON ULTIMA_COMPRA.CODPARC = PAR.CODPARC
+      WHERE NVL(PAR.CLIENTE, 'N') = 'S'
+        AND PAR.AD_DTATUCONTATO IS NOT NULL
+      ORDER BY PAR.AD_DTATUCONTATO DESC, PAR.NOMEPARC
+    `);
+
+    const clientes = anexarStatusContato(rows)
+      .filter((cliente) => cliente.STATUS_ATUALIZACAO_CONTATO === 'atualizado');
+
+    res.json({ clientes });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar clientes atualizados' });
+  }
+});
+
 router.get('/contatos/clientes/:codParc', async (req, res) => {
   try {
     const codParc = obterNumeroInteiro(req.params.codParc);
@@ -1330,6 +1386,9 @@ router.get('/contatos/clientes/:codParc', async (req, res) => {
         PAR.EMAILNFE,
         PAR.EMAILDANFE,
         PAR.EMAILNOTIFENTREGA,
+        CAST(NVL(PAR.LIMCRED, 0) AS NUMBER(15,2)) AS LIMCRED,
+        CAST(NVL(SUGESTAO_LIMITE.MEDIA_PEDIDOS, 0) AS NUMBER(15,2)) AS SUGESTAO_LIMCRED,
+        NVL(SUGESTAO_LIMITE.QTD_PEDIDOS, 0) AS QTD_PEDIDOS_SUGESTAO,
         TO_CHAR(PAR.DTULTCONTATO, 'DD/MM/YYYY') AS DTULTCONTATO,
         TO_CHAR(PAR.AD_DTATUCONTATO, 'DD/MM/YYYY') AS DATA_ATUALIZACAO_CONTATO,
         TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'DD/MM/YYYY') AS ULTIMA_COMPRA,
@@ -1363,6 +1422,27 @@ router.get('/contatos/clientes/:codParc', async (req, res) => {
         GROUP BY CODPARC
       ) ULTIMA_COMPRA
         ON ULTIMA_COMPRA.CODPARC = PAR.CODPARC
+      LEFT JOIN (
+        SELECT
+          CODPARC,
+          AVG(VLRNOTA) AS MEDIA_PEDIDOS,
+          COUNT(*) AS QTD_PEDIDOS
+        FROM (
+          SELECT
+            CAB.CODPARC,
+            NVL(CAB.VLRNOTA, 0) AS VLRNOTA,
+            ROW_NUMBER() OVER (
+              PARTITION BY CAB.CODPARC
+              ORDER BY CAB.DTNEG DESC, CAB.NUNOTA DESC
+            ) AS ORDEM_PEDIDO
+          FROM TGFCAB CAB
+          WHERE CAB.TIPMOV = 'P'
+            AND CAB.STATUSNOTA = 'L'
+        )
+        WHERE ORDEM_PEDIDO <= 5
+        GROUP BY CODPARC
+      ) SUGESTAO_LIMITE
+        ON SUGESTAO_LIMITE.CODPARC = PAR.CODPARC
       WHERE PAR.CODPARC = ${codParc}
     `);
 
@@ -1418,7 +1498,7 @@ router.patch('/contatos/clientes/:codParc', async (req, res) => {
       return;
     }
 
-    if (!['salvar', 'aguardando', 'salvar-perfil'].includes(acao)) {
+    if (!['salvar', 'aguardando', 'salvar-perfil', 'salvar-limite'].includes(acao)) {
       res.status(400).json({ erro: 'Acao de atualizacao invalida' });
       return;
     }
@@ -1457,6 +1537,17 @@ router.patch('/contatos/clientes/:codParc', async (req, res) => {
       }
 
       campos.CODTIPPARC = codTipParc;
+    }
+
+    if (acao === 'salvar-limite') {
+      const limiteCredito = obterValorMonetario(req.body?.limiteCredito);
+
+      if (limiteCredito === null) {
+        res.status(400).json({ erro: 'Informe um limite de credito valido' });
+        return;
+      }
+
+      campos.LIMCRED = numeroApi(limiteCredito);
     }
 
     const contatos = Array.isArray(req.body?.contatos) ? req.body.contatos : [];
@@ -1511,6 +1602,7 @@ router.patch('/contatos/clientes/:codParc', async (req, res) => {
       SELECT
         PAR.CODPARC,
         PAR.CODTIPPARC,
+        CAST(NVL(PAR.LIMCRED, 0) AS NUMBER(15,2)) AS LIMCRED,
         NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS PERFIL,
         TO_CHAR(PAR.AD_DTATUCONTATO, 'DD/MM/YYYY') AS DATA_ATUALIZACAO_CONTATO
       FROM TGFPAR PAR
