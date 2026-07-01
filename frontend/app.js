@@ -48,6 +48,7 @@ const pedidoPreviewItens = document.getElementById('pedido-preview-itens');
 const pedidoPreviewUnidades = document.getElementById('pedido-preview-unidades');
 const pedidoPreviewStatus = document.getElementById('pedido-preview-status');
 const pedidoPreviewItensLista = document.getElementById('pedido-preview-itens-lista');
+const pedidoPreviewDocumentos = document.getElementById('pedido-preview-documentos');
 const botaoCancelarPreviewPedido = document.getElementById('cancelar-preview-pedido');
 const botaoConfirmarPreviewPedido = document.getElementById('confirmar-preview-pedido');
 const pedidoEmConferenciaCard = document.getElementById('pedido-em-conferencia-card');
@@ -92,6 +93,7 @@ const posConferenciaTexto = document.getElementById('pos-conferencia-texto');
 const volumePanel = document.getElementById('volume-panel');
 const volumeQtd = document.getElementById('volume-qtd');
 const volumeStatus = document.getElementById('volume-status');
+const posConferenciaDocumentos = document.getElementById('pos-conferencia-documentos');
 const botaoImprimirEtiquetaVolume = document.getElementById('imprimir-etiqueta-volume');
 const botaoVoltarListaPosConferencia = document.getElementById('voltar-lista-pos-conferencia');
 const metricAndamento = document.getElementById('metric-andamento');
@@ -2520,15 +2522,126 @@ function confirmarCorteItem() {
   scanCodigo.focus();
 }
 
-function abrirModalPosConferencia(pedido) {
+function renderizarPainelDocumentosFiscais(container, situacao = {}, fallback = null) {
+  if (!container) return;
+
+  const faturado = Boolean(situacao.faturado || situacao.nota || fallback?.status === 'FATURADO');
+  const nota = situacao.nota || fallback?.nota || null;
+  const erroFaturamento = fallback?.status === 'ERRO'
+    ? (fallback.detalhes || []).filter(Boolean).join(' ')
+    : '';
+
+  if (!faturado) {
+    container.hidden = false;
+    container.innerHTML = `
+      <div class="documentos-fiscais-info">
+        <strong class="danger-text">Pedido nao faturado</strong>
+        <span>${escaparHtml(erroFaturamento || situacao.danfe?.motivo || 'A nota de faturamento ainda nao foi localizada.')}</span>
+      </div>
+    `;
+    return;
+  }
+
+  const nunota = nota?.NUNOTA || '';
+  const numeroNota = Number(nota?.NUMNOTA || 0) > 0 ? ` | Nota fiscal: ${nota.NUMNOTA}` : '';
+  const mensagens = [
+    situacao.danfe?.motivo,
+    situacao.boleto?.motivo
+  ].filter(Boolean).join(' ');
+
+  container.hidden = false;
+  container.innerHTML = `
+    <div class="documentos-fiscais-info">
+      <strong>Faturado | Nota interna: ${escaparHtml(nunota)}${escaparHtml(numeroNota)}</strong>
+      <span class="documentos-fiscais-feedback">${escaparHtml(mensagens || 'DANFE e boleto podem ser abertos nas guias abaixo.')}</span>
+    </div>
+    <div class="documentos-fiscais-actions">
+      <button class="documento-fiscal-button" type="button" data-documento="danfe" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(situacao.danfe?.motivo || 'Abrir DANFE')}">
+        <i data-lucide="file-text" aria-hidden="true"></i>Abrir DANFE
+      </button>
+      <button class="documento-fiscal-button" type="button" data-documento="boleto" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(situacao.boleto?.motivo || 'Abrir boleto')}">
+        <i data-lucide="barcode" aria-hidden="true"></i>Abrir boleto
+      </button>
+    </div>
+  `;
+  atualizarIcones();
+}
+
+async function carregarDocumentosFiscaisPedido(pedido, container, fallback = null) {
+  if (!pedido?.NUNOTA || !container) return;
+
+  container.hidden = false;
+  container.innerHTML = '<div class="documentos-fiscais-info"><strong>Consultando faturamento...</strong><span>Buscando nota e documentos no Sankhya.</span></div>';
+
+  try {
+    const res = await fetch(`/api/fila-conferencia/pedidos/${pedido.NUNOTA}/documentos`);
+    const payload = await res.json();
+    if (!res.ok) throw new Error(payload.erro || 'Erro ao consultar documentos');
+    renderizarPainelDocumentosFiscais(container, payload, fallback);
+  } catch (error) {
+    renderizarPainelDocumentosFiscais(container, {}, {
+      status: 'ERRO',
+      detalhes: [error.message]
+    });
+  }
+}
+
+async function abrirDocumentoFiscal(botao) {
+  const nunota = botao?.dataset?.nunota;
+  const tipo = botao?.dataset?.documento;
+  if (!nunota || !['danfe', 'boleto'].includes(tipo)) return;
+
+  const painel = botao.closest('.documentos-fiscais-panel');
+  const feedback = painel?.querySelector('.documentos-fiscais-feedback');
+  const novaAba = window.open('', '_blank');
+
+  if (!novaAba) {
+    if (feedback) feedback.textContent = 'O navegador bloqueou a nova guia.';
+    return;
+  }
+
+  novaAba.document.write('<p style="font-family:Arial;padding:20px">Carregando documento do Sankhya...</p>');
+  novaAba.document.close();
+  botao.disabled = true;
+  if (feedback) feedback.textContent = `Gerando ${tipo === 'danfe' ? 'DANFE' : 'boleto'} no Sankhya...`;
+
+  try {
+    const res = await fetch(`/api/fila-conferencia/notas/${nunota}/documentos/${tipo}`);
+    const contentType = res.headers.get('content-type') || '';
+
+    if (!res.ok || !contentType.includes('application/pdf')) {
+      const payload = await res.json().catch(() => ({}));
+      throw new Error([payload.erro, payload.detalhes].filter(Boolean).join(' - ') || 'Documento indisponivel');
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    novaAba.location.replace(url);
+    if (feedback) feedback.textContent = `${tipo === 'danfe' ? 'DANFE' : 'Boleto'} aberto em nova guia.`;
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+  } catch (error) {
+    novaAba.close();
+    if (feedback) {
+      feedback.textContent = error.message;
+      feedback.classList.add('danger-text');
+    }
+  } finally {
+    botao.disabled = false;
+  }
+}
+
+function abrirModalPosConferencia(pedido, faturamento) {
   pedidoConcluido = pedido;
   volumePanelAberto = false;
   volumePanel.classList.remove('active');
   volumeQtd.value = '1';
   volumeStatus.textContent = '';
+  posConferenciaDocumentos.hidden = false;
   botaoImprimirEtiquetaVolume.textContent = 'Imprimir etiqueta';
   posConferenciaTexto.textContent = `Pedido ${pedido.NUNOTA} conferido com sucesso.`;
   posConferenciaModal.hidden = false;
+  atualizarIcones();
+  carregarDocumentosFiscaisPedido(pedido, posConferenciaDocumentos, faturamento);
 }
 
 function abrirModalEtiquetaPedido(pedido) {
@@ -2537,9 +2650,12 @@ function abrirModalEtiquetaPedido(pedido) {
   volumePanel.classList.add('active');
   volumeQtd.value = String(Math.max(1, Number(pedido.QTDVOL || 1)));
   volumeStatus.textContent = '';
+  posConferenciaDocumentos.hidden = true;
+  posConferenciaDocumentos.innerHTML = '';
   botaoImprimirEtiquetaVolume.textContent = 'Gerar etiqueta';
   posConferenciaTexto.textContent = `Informe a quantidade de volumes para imprimir as etiquetas do pedido ${pedido.NUNOTA}.`;
   posConferenciaModal.hidden = false;
+  atualizarIcones();
   setTimeout(() => {
     volumeQtd.focus();
     volumeQtd.select();
@@ -2549,6 +2665,8 @@ function abrirModalEtiquetaPedido(pedido) {
 function fecharModalPosConferenciaEVoltar() {
   posConferenciaModal.hidden = true;
   volumeStatus.textContent = '';
+  posConferenciaDocumentos.hidden = true;
+  posConferenciaDocumentos.innerHTML = '';
   volumePanel.classList.remove('active');
   pedidoConcluido = null;
   buscarFilaConferencia();
@@ -3013,6 +3131,8 @@ function fecharPreviewPedido() {
   itensPedidoPreview = [];
   pedidoPreview.hidden = true;
   pedidoPreviewItensLista.innerHTML = '';
+  pedidoPreviewDocumentos.hidden = true;
+  pedidoPreviewDocumentos.innerHTML = '';
 }
 
 function limparPedidoConferencia(mensagem = 'Selecione um pedido para iniciar.') {
@@ -3110,6 +3230,11 @@ async function abrirPreviewPedido(pedido) {
   botaoConfirmarPreviewPedido.textContent = pedidoPodeIniciarConferencia(pedido)
     ? 'Iniciar conferencia'
     : 'Pedido ja conferido';
+  pedidoPreviewDocumentos.hidden = pedido.STATUS_CONFERENCIA !== 'CONFERIDO';
+  pedidoPreviewDocumentos.innerHTML = '';
+  if (pedido.STATUS_CONFERENCIA === 'CONFERIDO') {
+    carregarDocumentosFiscaisPedido(pedido, pedidoPreviewDocumentos);
+  }
   renderizarEstadoVazio(pedidoPreviewItensLista, 'Carregando itens do pedido...');
 
   try {
@@ -3292,7 +3417,7 @@ async function confirmarConferencia() {
     confirmarStatus.innerHTML = '<span class="success-text">Conferencia confirmada.</span>';
     filaPedidos = filaPedidos.filter((pedido) => pedido.NUNOTA !== pedidoSelecionado.NUNOTA);
     limparPedidoConferencia('Pedido conferido. Selecione o proximo pedido.');
-    abrirModalPosConferencia(pedidoFinalizado);
+    abrirModalPosConferencia(pedidoFinalizado, payload.faturamento);
   } catch (error) {
     console.error('Erro ao confirmar conferencia:', error);
     confirmarStatus.innerHTML = `<span class="danger-text">${error.message}</span>`;
@@ -3624,6 +3749,12 @@ pedidoPreview.addEventListener('click', (event) => {
   if (event.target === pedidoPreview) {
     fecharPreviewPedido();
   }
+});
+[pedidoPreviewDocumentos, posConferenciaDocumentos].forEach((container) => {
+  container?.addEventListener('click', (event) => {
+    const botao = event.target.closest('.documento-fiscal-button');
+    if (botao) abrirDocumentoFiscal(botao);
+  });
 });
 botaoCancelarCorte.addEventListener('click', fecharModalCorte);
 botaoConfirmarCorte.addEventListener('click', confirmarCorteItem);

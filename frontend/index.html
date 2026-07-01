@@ -3066,6 +3066,89 @@
       padding: 0 14px;
     }
 
+    .faturamento-status {
+      min-height: 0;
+      font-size: 0.82rem;
+      font-weight: 850;
+      line-height: 1.35;
+    }
+
+    .documentos-fiscais-panel {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 10px;
+      padding: 10px 12px;
+      border: 1px solid rgba(13, 138, 106, 0.18);
+      border-radius: 10px;
+      background: #f4fbf8;
+    }
+
+    .documentos-fiscais-panel[hidden] {
+      display: none;
+    }
+
+    .documentos-fiscais-info {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
+    }
+
+    .documentos-fiscais-info strong {
+      color: #087f5b;
+      font-size: 0.86rem;
+    }
+
+    .documentos-fiscais-info span {
+      color: var(--text-soft);
+      font-size: 0.75rem;
+      font-weight: 750;
+    }
+
+    .documentos-fiscais-actions {
+      display: flex;
+      gap: 7px;
+      flex: 0 0 auto;
+    }
+
+    .documento-fiscal-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      min-height: 36px;
+      padding: 0 12px;
+      border: 1px solid #0d8a6a;
+      border-radius: 8px;
+      background: #fff;
+      color: #087f5b;
+      font: inherit;
+      font-size: 0.75rem;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .documento-fiscal-button:hover:not(:disabled) {
+      background: #e7f8f1;
+    }
+
+    .documento-fiscal-button:disabled {
+      border-color: #d6e2df;
+      background: #edf3f1;
+      color: #82928e;
+      cursor: not-allowed;
+    }
+
+    .documento-fiscal-button svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    .pedido-preview .documentos-fiscais-panel {
+      margin: 10px 12px 0;
+    }
+
     .progress-line {
       height: 8px;
       border-radius: 999px;
@@ -3926,6 +4009,24 @@
         flex: 1 1 150px;
       }
 
+      .pos-conferencia-actions {
+        grid-template-columns: 1fr;
+      }
+
+      .documentos-fiscais-panel {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .documentos-fiscais-actions,
+      .documento-fiscal-button {
+        width: 100%;
+      }
+
+      .documentos-fiscais-actions {
+        flex-direction: column;
+      }
+
       .fila-app {
         min-height: auto;
       }
@@ -4361,6 +4462,8 @@
                 </div>
               </div>
 
+              <div class="documentos-fiscais-panel" id="pedido-preview-documentos" hidden></div>
+
               <div class="pedido-preview-items" id="pedido-preview-itens-lista"></div>
             </div>
           </section>
@@ -4413,6 +4516,8 @@
             </div>
             <div class="scan-status" id="volume-status"></div>
           </div>
+
+          <div class="documentos-fiscais-panel" id="pos-conferencia-documentos" aria-live="polite"></div>
 
           <div class="pos-conferencia-actions">
             <button class="btn-start" id="imprimir-etiqueta-volume" type="button">Imprimir etiqueta</button>

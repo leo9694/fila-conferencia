@@ -1,10 +1,14 @@
 const DEFAULT_BASE_URL = 'https://api.sankhya.com.br';
+const DEFAULT_DIRECT_SESSION_IDLE_MS = 20 * 60 * 1000;
 
 let cachedAccessToken = null;
 let cachedAccessTokenExpiresAt = 0;
 let accessSessionToken = null;
 let accessSessionPromise = null;
 let accessSessionPromiseToken = null;
+let directSessionId = null;
+let directSessionPromise = null;
+let directSessionLastUsedAt = 0;
 
 function clearAuthCache() {
   cachedAccessToken = null;
@@ -12,6 +16,9 @@ function clearAuthCache() {
   accessSessionToken = null;
   accessSessionPromise = null;
   accessSessionPromiseToken = null;
+  directSessionId = null;
+  directSessionPromise = null;
+  directSessionLastUsedAt = 0;
 }
 
 function getConfig() {
@@ -21,7 +28,193 @@ function getConfig() {
     clientId: process.env.SANKHYA_CLIENT_ID,
     clientSecret: process.env.SANKHYA_CLIENT_SECRET,
     accessUser: process.env.SANKHYA_ACCESS_USER,
-    accessPassword: process.env.SANKHYA_ACCESS_PASSWORD
+    accessPassword: process.env.SANKHYA_ACCESS_PASSWORD,
+    omBaseUrl: process.env.SANKHYA_OM_BASE_URL
+  };
+}
+
+function getDirectBaseUrl(config = getConfig()) {
+  const value = String(config.omBaseUrl || '').trim().replace(/\/+$/, '');
+  if (!value) return null;
+  return value.endsWith('/mge') ? value : `${value}/mge`;
+}
+
+function extractDirectSessionId(payload) {
+  return payload?.responseBody?.jsessionid?.$
+    || payload?.responseBody?.jsessionid
+    || payload?.jsessionid?.$
+    || payload?.jsessionid
+    || null;
+}
+
+function isDirectSessionError(message, statusCode) {
+  if (statusCode === 401 || statusCode === 403) return true;
+
+  const normalized = String(message || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  return /sess[a-z\ufffd]*o|session|login|autentic|expirad|inativ|n.o autorizado|nao autorizado|unauthoriz/.test(normalized);
+}
+
+function getDirectSessionIdleMs() {
+  const configured = Number(process.env.SANKHYA_DIRECT_SESSION_IDLE_MS);
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_DIRECT_SESSION_IDLE_MS;
+}
+
+function directSessionIsFresh() {
+  return Boolean(
+    directSessionId
+    && directSessionLastUsedAt
+    && Date.now() - directSessionLastUsedAt < getDirectSessionIdleMs()
+  );
+}
+
+async function logoutDirectSession(sessionId, config = getConfig()) {
+  if (!sessionId) return;
+
+  const baseUrl = getDirectBaseUrl(config);
+  if (!baseUrl) return;
+
+  const query = new URLSearchParams({
+    serviceName: 'MobileLoginSP.logout',
+    outputType: 'json',
+    mgeSession: sessionId
+  });
+
+  await fetch(`${baseUrl}/service.sbr?${query}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Cookie: `JSESSIONID=${sessionId}`
+    },
+    body: JSON.stringify({
+      serviceName: 'MobileLoginSP.logout',
+      status: '1',
+      pendingPrinting: 'false',
+      requestBody: {}
+    })
+  }).catch(() => {});
+}
+
+async function invalidateDirectSession(sessionId, options = {}) {
+  if (!sessionId || directSessionId === sessionId) {
+    directSessionId = null;
+    directSessionLastUsedAt = 0;
+  }
+
+  if (options.logout) {
+    await logoutDirectSession(sessionId);
+  }
+}
+
+async function loginDirectSession(options = {}) {
+  const config = getConfig();
+  const baseUrl = getDirectBaseUrl(config);
+  if (!baseUrl) {
+    throw new Error('Endereco direto do Sankhya nao configurado: informe SANKHYA_OM_BASE_URL');
+  }
+  if (!config.accessUser || !config.accessPassword) {
+    throw new Error('Usuario tecnico Sankhya nao configurado para gerar documentos');
+  }
+  if (!options.forceNew && directSessionIsFresh()) return directSessionId;
+  if (directSessionPromise) return directSessionPromise;
+
+  const expiredSessionId = directSessionId;
+  if (expiredSessionId) {
+    directSessionId = null;
+    directSessionLastUsedAt = 0;
+    await logoutDirectSession(expiredSessionId, config);
+  }
+
+  directSessionPromise = (async () => {
+    const url = `${baseUrl}/service.sbr?serviceName=MobileLoginSP.login&outputType=json`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        serviceName: 'MobileLoginSP.login',
+        requestBody: {
+          NOMUSU: campoApi(config.accessUser),
+          INTERNO: campoApi(config.accessPassword),
+          KEEPCONNECTED: campoApi('N')
+        }
+      })
+    });
+    const payload = await response.json().catch(() => ({}));
+    const sessionId = extractDirectSessionId(payload);
+    if (!response.ok || payload.status === '0' || payload.status === '3' || !sessionId) {
+      const message = payload.statusMessage || `HTTP ${response.status}`;
+      throw new Error(`Falha ao abrir sessao direta no Sankhya: ${message}`);
+    }
+    directSessionId = sessionId;
+    directSessionLastUsedAt = Date.now();
+    return sessionId;
+  })();
+
+  try {
+    return await directSessionPromise;
+  } finally {
+    directSessionPromise = null;
+  }
+}
+
+async function executeDirectService(serviceName, requestBody, options = {}) {
+  const config = getConfig();
+  const baseUrl = getDirectBaseUrl(config);
+  const sessionId = await loginDirectSession({ forceNew: Boolean(options.forceNewSession) });
+  const modulePath = options.modulePath || 'mge';
+  const moduleBase = modulePath === 'mge' ? baseUrl : baseUrl.replace(/\/mge$/, `/${modulePath}`);
+  const query = new URLSearchParams({ serviceName, outputType: 'json', mgeSession: sessionId });
+  const response = await fetch(`${moduleBase}/service.sbr?${query}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Cookie: `JSESSIONID=${sessionId}`
+    },
+    body: JSON.stringify({ serviceName, requestBody })
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || payload.status === '0' || payload.status === '3') {
+    const message = payload.statusMessage || `HTTP ${response.status}`;
+    if (!options.__retried && isDirectSessionError(message, response.status)) {
+      await invalidateDirectSession(sessionId, { logout: true });
+      return executeDirectService(serviceName, requestBody, {
+        ...options,
+        __retried: true
+      });
+    }
+    throw new Error(`Falha ao executar servico ${serviceName}: ${message}`);
+  }
+  if (directSessionId === sessionId) {
+    directSessionLastUsedAt = Date.now();
+  }
+  return payload;
+}
+
+async function downloadDirectFile(modulePath, resourcePath, params = {}) {
+  const config = getConfig();
+  const baseUrl = getDirectBaseUrl(config);
+  const sessionId = await loginDirectSession();
+  const moduleBase = modulePath === 'mge' ? baseUrl : baseUrl.replace(/\/mge$/, `/${modulePath}`);
+  const query = new URLSearchParams({
+    ...Object.fromEntries(Object.entries(params).filter(([, value]) => value !== null && value !== undefined && value !== '')),
+    mgeSession: sessionId
+  });
+  const response = await fetch(`${moduleBase}/${resourcePath}?${query}`, {
+    headers: { Cookie: `JSESSIONID=${sessionId}` }
+  });
+  if (!response.ok) {
+    const message = (await response.text().catch(() => '')).slice(0, 500);
+    if (response.status === 401 || response.status === 403) directSessionId = null;
+    throw new Error(`Falha ao baixar arquivo direto do Sankhya: ${message || `HTTP ${response.status}`}`);
+  }
+  return {
+    buffer: Buffer.from(await response.arrayBuffer()),
+    contentType: response.headers.get('content-type') || 'application/pdf'
   };
 }
 
@@ -298,9 +491,41 @@ async function executeService(serviceName, requestBody, options = {}) {
   }
 }
 
+async function downloadGatewayFile(modulePath, resourcePath, params = {}) {
+  const config = getConfig();
+  const accessToken = await authenticate();
+  await ensureAccessSession(accessToken, config, { required: true });
+  const query = new URLSearchParams(
+    Object.entries(params).filter(([, value]) => value !== null && value !== undefined && value !== '')
+  );
+  const url = `${config.baseUrl}/gateway/v1/${modulePath}/${resourcePath}?${query.toString()}`;
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${accessToken}`
+    }
+  });
+
+  if (!response.ok) {
+    const message = (await response.text().catch(() => '')).slice(0, 500);
+    throw new Error(`Falha ao baixar arquivo Sankhya: ${message || `HTTP ${response.status}`}`);
+  }
+
+  return {
+    buffer: Buffer.from(await response.arrayBuffer()),
+    contentType: response.headers.get('content-type') || 'application/pdf'
+  };
+}
+
 module.exports = {
   clearAuthCache,
+  downloadDirectFile,
+  downloadGatewayFile,
+  executeDirectService,
   executeService,
   executeQuery,
-  normalizeQueryRows
+  normalizeQueryRows,
+  _internals: {
+    isDirectSessionError
+  }
 };

@@ -1,6 +1,12 @@
 const express = require('express');
 const router = express.Router();
-const { executeQuery, executeService } = require('./api/sankhyaApi');
+const {
+  downloadDirectFile,
+  downloadGatewayFile,
+  executeDirectService,
+  executeQuery,
+  executeService
+} = require('./api/sankhyaApi');
 const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
 const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
 const { criarContatoStatusStore } = require('./api/contatoStatusStore');
@@ -294,6 +300,299 @@ async function finalizarConferenciaNativa(nuconf, nunota) {
     },
     { modulePath: 'mgecom', forceAccessSession: true }
   );
+}
+
+async function consultarFaturamentoExistente(nunotaOrigem) {
+  const [nota] = await executeQuery(`
+    SELECT *
+    FROM (
+      SELECT RESULTADO.*
+      FROM (
+        SELECT DISTINCT
+          DEST.NUNOTA,
+          DEST.NUMNOTA,
+          DEST.CODTIPOPER,
+          DEST.STATUSNOTA,
+          DEST.VLRNOTA,
+          1 AS PRIORIDADE
+        FROM TGFVAR VAR
+        JOIN TGFCAB DEST
+          ON DEST.NUNOTA = VAR.NUNOTA
+        WHERE VAR.NUNOTAORIG = ${nunotaOrigem}
+          AND DEST.TIPMOV <> 'P'
+
+        UNION ALL
+
+        SELECT
+          CAB.NUNOTA,
+          CAB.NUMNOTA,
+          CAB.CODTIPOPER,
+          CAB.STATUSNOTA,
+          CAB.VLRNOTA,
+          2 AS PRIORIDADE
+        FROM TGFCAB CAB
+        WHERE CAB.NUNOTA = ${nunotaOrigem}
+          AND CAB.TIPMOV <> 'P'
+      ) RESULTADO
+      ORDER BY RESULTADO.PRIORIDADE, RESULTADO.NUNOTA DESC
+    )
+    WHERE ROWNUM = 1
+  `);
+
+  return nota || null;
+}
+
+function extrairChaveDocumento(resultado = {}) {
+  const documento = resultado?.responseBody?.documento;
+  const boleto = resultado?.responseBody?.boleto;
+  return String(
+    documento?.valor?.$
+    ?? documento?.valor
+    ?? documento?.$
+    ?? documento
+    ?? boleto?.valor?.$
+    ?? boleto?.valor
+    ?? boleto?.$
+    ?? boleto
+    ?? ''
+  ).trim();
+}
+
+function extrairAvisosDocumento(resultado = {}) {
+  const avisos = resultado?.responseBody?.avisos?.aviso;
+  const lista = Array.isArray(avisos) ? avisos : avisos ? [avisos] : [];
+  return lista
+    .map((aviso) => String(aviso?.$ ?? aviso?.mensagem ?? aviso ?? '').trim())
+    .filter(Boolean);
+}
+
+async function obterSituacaoDocumentosPedido(nunotaPedido) {
+  const nota = await consultarFaturamentoExistente(nunotaPedido);
+
+  if (!nota) {
+    return {
+      faturado: false,
+      pedido: nunotaPedido,
+      nota: null,
+      danfe: { disponivel: false, motivo: 'Pedido ainda nao faturado.' },
+      boleto: { disponivel: false, motivo: 'Pedido ainda nao faturado.' }
+    };
+  }
+
+  const [situacao] = await executeQuery(`
+    SELECT
+      CAB.NUNOTA,
+      CAB.NUMNOTA,
+      CASE
+        WHEN NFE.CHAVENFE IS NOT NULL AND NFE.XMLPROTAUTNOT IS NOT NULL THEN 'S'
+        ELSE 'N'
+      END AS NFE_AUTORIZADA,
+      (SELECT COUNT(*) FROM TGFFIN FIN WHERE FIN.NUNOTA = CAB.NUNOTA) AS QTD_TITULOS
+    FROM TGFCAB CAB
+    LEFT JOIN TGFNFE NFE
+      ON NFE.NUNOTA = CAB.NUNOTA
+    WHERE CAB.NUNOTA = ${nota.NUNOTA}
+  `);
+  const nfeAutorizada = situacao?.NFE_AUTORIZADA === 'S';
+  const possuiFinanceiro = normalizarNumero(situacao?.QTD_TITULOS) > 0;
+
+  return {
+    faturado: true,
+    pedido: nunotaPedido,
+    nota: {
+      ...nota,
+      NUMNOTA: situacao?.NUMNOTA ?? nota.NUMNOTA
+    },
+    danfe: {
+      disponivel: nfeAutorizada,
+      motivo: nfeAutorizada ? null : 'DANFE aguardando autorizacao da NF-e.'
+    },
+    boleto: {
+      disponivel: possuiFinanceiro,
+      motivo: possuiFinanceiro ? null : 'A nota nao possui titulo financeiro para boleto.'
+    }
+  };
+}
+
+async function obterDanfeArmazenado(nunota) {
+  const [registro] = await executeQuery(`
+    SELECT DBMS_LOB.GETLENGTH(PDFDANFE) AS TAMANHO
+    FROM TGFPDF
+    WHERE NUNOTA = ${nunota}
+      AND TIPO = 'N'
+      AND PDFDANFE IS NOT NULL
+  `);
+  const tamanho = normalizarNumero(registro?.TAMANHO);
+  if (tamanho <= 0) return null;
+
+  const tamanhoChunk = 2000;
+  const totalChunks = Math.ceil(tamanho / tamanhoChunk);
+  const chunks = await executeQuery(`
+    SELECT
+      NIVEL AS IDX,
+      RAWTOHEX(DBMS_LOB.SUBSTR(PDF.PDFDANFE, ${tamanhoChunk}, ((N.NIVEL - 1) * ${tamanhoChunk}) + 1)) AS HEXPDF
+    FROM TGFPDF PDF
+    CROSS JOIN (
+      SELECT LEVEL NIVEL
+      FROM DUAL
+      CONNECT BY LEVEL <= ${totalChunks}
+    ) N
+    WHERE PDF.NUNOTA = ${nunota}
+      AND PDF.TIPO = 'N'
+    ORDER BY N.NIVEL
+  `);
+  const hex = chunks
+    .sort((a, b) => Number(a.IDX) - Number(b.IDX))
+    .map((row) => String(row.HEXPDF || ''))
+    .join('');
+
+  return hex ? Buffer.from(hex, 'hex') : null;
+}
+
+async function obterBoletoArmazenado(nunota, direto = false) {
+  const baixar = direto ? downloadDirectFile : downloadGatewayFile;
+  const arquivo = await baixar('mge', 'download.mge', {
+    fileName: `Repo://Sistema/boletos/boleto_${nunota}.pdf`,
+    pkValues: JSON.stringify({ NUNOTA: nunota, TIPO: 'N' }),
+    tableName: 'TGFPDF',
+    entityName: 'ArquivoPdf'
+  });
+  return arquivo.buffer;
+}
+
+async function gerarPrevisualizacaoBoleto(nunota) {
+  const titulos = await executeQuery(`
+    SELECT
+      FIN.NUFIN,
+      FIN.CODEMP,
+      FIN.CODCTABCOINT,
+      CTA.CODBCO,
+      CTA.MODBOLETA,
+      CTA.NURFEMODBOLETO
+    FROM TGFFIN FIN
+    LEFT JOIN TSICTA CTA
+      ON CTA.CODCTABCOINT = FIN.CODCTABCOINT
+    WHERE FIN.NUNOTA = ${nunota}
+    ORDER BY FIN.NUFIN
+  `);
+
+  if (titulos.length === 0) {
+    throw new Error('A nota faturada nao possui titulos financeiros para gerar boleto.');
+  }
+
+  const primeiro = titulos[0];
+  const codigoContaInterna = normalizarNumero(primeiro.CODCTABCOINT);
+  const codigoBanco = normalizarNumero(primeiro.CODBCO);
+  const codigoEmpresa = normalizarNumero(primeiro.CODEMP);
+  const relatorioPadraoPorBanco = {
+    1: 11,
+    237: 61,
+    341: 271,
+    422: 267,
+    748: 12,
+    756: 191
+  };
+  const codigoRelatorio = normalizarNumero(primeiro.NURFEMODBOLETO)
+    || relatorioPadraoPorBanco[codigoBanco]
+    || 0;
+
+  if (!codigoContaInterna || !codigoBanco || !codigoRelatorio) {
+    throw new Error('A conta bancaria do titulo nao possui banco ou modelo de boleto configurado no Sankhya.');
+  }
+
+  const resultado = await executeDirectService('BoletoSP.buildPreVisualizacao', {
+    configBoleto: {
+      agrupamentoBoleto: '4',
+      ordenacaoParceiro: '1',
+      dupRenegociadas: false,
+      gerarNumeroBoleto: false,
+      codigoConta: String(codigoBanco),
+      codBco: String(codigoContaInterna),
+      codEmp: String(codigoEmpresa),
+      nossoNumComecando: '',
+      alterarTipoTitulo: false,
+      tipoTitulo: '-1',
+      bcoIgualConta: false,
+      empIgualConta: false,
+      reimprimir: true,
+      tipoReimpressao: 'S',
+      registraConta: false,
+      codigoRelatorio,
+      codCtaBcoInt: '',
+      boletoRapido: false,
+      telaImpressaoBoleto: true,
+      boleto: { binicial: '', bfinal: '' },
+      titulo: titulos.map((titulo) => ({ $: normalizarNumero(titulo.NUFIN) }))
+    }
+  });
+  const chaveArquivo = extrairChaveDocumento(resultado);
+  if (!chaveArquivo) {
+    throw new Error(extrairAvisosDocumento(resultado).join(' ') || 'O Sankhya nao retornou a chave de visualizacao do boleto.');
+  }
+
+  const arquivo = await downloadDirectFile('mge', 'visualizadorArquivos.mge', {
+    chaveArquivo,
+    download: 'S'
+  });
+  return arquivo.buffer;
+}
+
+async function gerarDocumentoFiscalSankhya(nunota, tipo) {
+  if (tipo === 'boleto' && process.env.SANKHYA_OM_BASE_URL) {
+    const pdfBoleto = await gerarPrevisualizacaoBoleto(nunota);
+    if (!pdfBoleto.subarray(0, 4).equals(Buffer.from('%PDF'))) {
+      throw new Error('O Sankhya retornou um arquivo invalido para BOLETO.');
+    }
+    return pdfBoleto;
+  }
+
+  const tipoImp = tipo === 'danfe' ? 9 : 3;
+  const resultado = await executeService(
+    'ImpressaoNotasSP.imprimeDocumentos',
+    {
+      notas: {
+        pedidoWeb: 'false',
+        gerarpdf: 'true',
+        ownerServiceCall: 'CentralNotas',
+        nota: [{ nuNota: nunota, tipoImp }]
+      }
+    },
+    { modulePath: 'mge', forceAccessSession: true }
+  );
+  const chaveArquivo = extrairChaveDocumento(resultado);
+  const avisos = extrairAvisosDocumento(resultado);
+
+  let pdf = null;
+
+  if (chaveArquivo) {
+    const arquivo = await downloadGatewayFile('mge', 'visualizadorArquivos.mge', {
+      hidemail: 'S',
+      download: 'S',
+      chaveArquivo
+    });
+    pdf = arquivo.buffer;
+  } else if (tipo === 'danfe') {
+    pdf = await obterDanfeArmazenado(nunota);
+  } else {
+    try {
+      pdf = await obterBoletoArmazenado(nunota);
+    } catch {
+      pdf = null;
+    }
+  }
+
+  if (!pdf) {
+    const complemento = tipo === 'boleto'
+      ? `${process.env.SANKHYA_OM_BASE_URL ? '' : ' Configure SANKHYA_OM_BASE_URL com o endereco direto do ambiente Sankhya.'} Confira tambem o parametro VERPDFBOLPORTAL e a configuracao de impressao da TOP, negociacao, parceiro e conta.`
+      : '';
+    throw new Error(`${avisos.join(' ') || `O Sankhya nao gerou o PDF de ${tipo.toUpperCase()}.`}${complemento}`);
+  }
+
+  if (!pdf.subarray(0, 4).equals(Buffer.from('%PDF'))) {
+    throw new Error(`O Sankhya retornou um arquivo invalido para ${tipo.toUpperCase()}.`);
+  }
+
+  return pdf;
 }
 
 function coletarDetalhesSankhya(valor, prefixo = '') {
@@ -642,7 +941,7 @@ function montarSqlConferencias(intervalo, empresa) {
       ON ITE.NUNOTA = CAB.NUNOTA
     WHERE CAB.DTNEG >= TO_DATE('${intervalo.inicio}', 'YYYY-MM-DD')
       AND CAB.DTNEG < TO_DATE('${intervalo.fim}', 'YYYY-MM-DD') + 1
-      AND CAB.CODTIPOPER IN (5, 6)
+      AND CAB.CODTIPOPER IN (5, 6, 237)
       AND CAB.STATUSNOTA = 'L'
       ${sqlFiltroEmpresa(empresa)}
     GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.CODEMP, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA,
@@ -660,7 +959,7 @@ router.get('/empresas', async (req, res) => {
       FROM TGFCAB CAB
       LEFT JOIN TSIEMP EMP
         ON EMP.CODEMP = CAB.CODEMP
-      WHERE CAB.CODTIPOPER IN (5, 6)
+      WHERE CAB.CODTIPOPER IN (5, 6, 237)
         AND CAB.STATUSNOTA = 'L'
         AND CAB.CODEMP IS NOT NULL
       ORDER BY EMP.RAZAOSOCIAL, TO_CHAR(CAB.CODEMP)
@@ -764,7 +1063,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
       LEFT JOIN TGFITE ITE
         ON ITE.NUNOTA = CAB.NUNOTA
       WHERE ${filtroBusca}
-        AND CAB.CODTIPOPER IN (5, 6)
+        AND CAB.CODTIPOPER IN (5, 6, 237)
         AND CAB.STATUSNOTA = 'L'
       GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.CODEMP, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA, CAB.QTDVOL,
         CAB.NUCONFATUAL, CONF.STATUS, USU.NOMEUSU
@@ -1641,7 +1940,7 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
       LEFT JOIN TGFCON2 CONF
         ON CONF.NUCONF = CAB.NUCONFATUAL
       WHERE NUNOTA = ${nunota}
-        AND CODTIPOPER IN (5, 6)
+        AND CODTIPOPER IN (5, 6, 237)
         AND STATUSNOTA = 'L'
     `);
 
@@ -1820,12 +2119,22 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
 
   try {
     const pedidoRows = await executeQuery(`
-      SELECT CAB.NUNOTA, CAB.NUCONFATUAL, CAB.QTDVOL, CONF.STATUS
+      SELECT
+        CAB.NUNOTA,
+        CAB.NUCONFATUAL,
+        CAB.QTDVOL,
+        CONF.STATUS,
+        NVL(CCO.FATAOCONCLUIR, 'N') AS FATAOCONCLUIR
       FROM TGFCAB CAB
       LEFT JOIN TGFCON2 CONF
         ON CONF.NUCONF = CAB.NUCONFATUAL
+      LEFT JOIN TGFTOP TOP
+        ON TOP.CODTIPOPER = CAB.CODTIPOPER
+       AND TOP.DHALTER = CAB.DHTIPOPER
+      LEFT JOIN TGFCCO CCO
+        ON CCO.NUCCO = TOP.NUCCO
       WHERE CAB.NUNOTA = ${nunota}
-        AND CAB.CODTIPOPER IN (5, 6)
+        AND CAB.CODTIPOPER IN (5, 6, 237)
         AND CAB.STATUSNOTA = 'L'
     `);
 
@@ -1977,7 +2286,14 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
 
     await salvarDetalhesConferenciaSankhya({ nuconf, nunota });
 
-    const resultadoFinalizacao = await finalizarConferenciaNativa(nuconf, nunota);
+    let resultadoFinalizacao = null;
+    let erroFinalizacaoNativa = null;
+
+    try {
+      resultadoFinalizacao = await finalizarConferenciaNativa(nuconf, nunota);
+    } catch (err) {
+      erroFinalizacaoNativa = err;
+    }
 
     const [conferenciaFinal] = await executeQuery(`
       SELECT NUCONF, NUNOTAORIG, STATUS, CODUSUCONF, DHFINCONF
@@ -1999,6 +2315,10 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     }
 
     if (conferenciaConferida?.STATUS !== 'F') {
+      if (erroFinalizacaoNativa) {
+        throw erroFinalizacaoNativa;
+      }
+
       const detalhesSankhya = [
         traduzirStatusConferencia(conferenciaConferida?.STATUS),
         ...coletarDetalhesSankhya(resultadoFinalizacao)
@@ -2022,6 +2342,37 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
 
     conferenciaProgressStore.remover(nunota);
 
+    const notaFaturada = await consultarFaturamentoExistente(nunota);
+    const faturamentoAutomatico = pedido.FATAOCONCLUIR === 'S';
+    const detalhesFaturamento = notaFaturada || !faturamentoAutomatico
+      ? []
+      : [
+          erroFinalizacaoNativa?.message,
+          ...coletarDetalhesSankhya(resultadoFinalizacao)
+        ].filter(Boolean);
+    const faturamento = notaFaturada
+      ? {
+          status: 'FATURADO',
+          automatico: faturamentoAutomatico,
+          nota: notaFaturada,
+          detalhes: []
+        }
+      : faturamentoAutomatico
+        ? {
+            status: 'ERRO',
+            automatico: true,
+            nota: null,
+            detalhes: detalhesFaturamento.length > 0
+              ? detalhesFaturamento
+              : ['O Sankhya concluiu a conferencia, mas nao gerou uma nota de faturamento.']
+          }
+        : {
+            status: 'NAO_CONFIGURADO',
+            automatico: false,
+            nota: null,
+            detalhes: ['Faturamento automatico nao configurado para esta conferencia.']
+          };
+
     res.json({
       ok: true,
       nunota,
@@ -2029,6 +2380,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       status: 'CONFERIDO',
       fechamentoOperacionalAplicado,
       cortesAplicados,
+      faturamento,
       resultadoFinalizacao
     });
   } catch (err) {
@@ -2036,6 +2388,59 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     res.status(500).json({
       erro: 'Erro ao confirmar conferencia',
       detalhesSankhya: [err.message].filter(Boolean)
+    });
+  }
+});
+
+router.get('/fila-conferencia/pedidos/:nunota/documentos', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+
+  if (!nunota) {
+    res.status(400).json({ erro: 'Informe um pedido valido' });
+    return;
+  }
+
+  try {
+    res.json(await obterSituacaoDocumentosPedido(nunota));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao consultar documentos do faturamento', detalhes: err.message });
+  }
+});
+
+router.get('/fila-conferencia/notas/:nunota/documentos/:tipo', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+  const tipo = String(req.params.tipo || '').toLowerCase();
+
+  if (!nunota || !['danfe', 'boleto'].includes(tipo)) {
+    res.status(400).json({ erro: 'Informe uma nota e um tipo de documento validos' });
+    return;
+  }
+
+  try {
+    const [nota] = await executeQuery(`
+      SELECT NUNOTA
+      FROM TGFCAB
+      WHERE NUNOTA = ${nunota}
+        AND TIPMOV <> 'P'
+        AND STATUSNOTA = 'L'
+    `);
+
+    if (!nota) {
+      res.status(404).json({ erro: 'Nota faturada e confirmada nao encontrada' });
+      return;
+    }
+
+    const pdf = await gerarDocumentoFiscalSankhya(nunota, tipo);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${tipo}-${nunota}.pdf"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(pdf);
+  } catch (err) {
+    console.error(err);
+    res.status(409).json({
+      erro: `Nao foi possivel abrir ${tipo === 'danfe' ? 'o DANFE' : 'o boleto'}`,
+      detalhes: err.message
     });
   }
 });
@@ -2129,7 +2534,12 @@ router.post('/fila-conferencia/pedidos/:nunota/etiquetas-volume', async (req, re
 
 router._internals = {
   normalizarDataSankhya,
-  obterIntervaloDatas
+  obterIntervaloDatas,
+  extrairAvisosDocumento,
+  extrairChaveDocumento,
+  gerarDocumentoFiscalSankhya,
+  obterDanfeArmazenado,
+  obterSituacaoDocumentosPedido
 };
 
 module.exports = router;
