@@ -1465,14 +1465,16 @@ router.get('/contatos/cidades', async (req, res) => {
   try {
     const filtroPerfil = sqlFiltroPerfilContato(req.query.perfil);
     const filtroAtivo = sqlFiltroAtivoContato(req.query.ativos);
-    const uf = textoSql(String(req.query.uf || '').trim().toUpperCase());
+    const ufOriginal = String(req.query.uf || '').trim().toUpperCase();
+    const uf = textoSql(ufOriginal);
+    const filtroUf = ufOriginal === 'TODOS' ? '' : `AND UFS.UF = '${uf}'`;
 
     if (filtroPerfil === null) {
       res.status(400).json({ erro: 'Informe o perfil' });
       return;
     }
 
-    if (!uf) {
+    if (!ufOriginal) {
       res.status(400).json({ erro: 'Informe o estado' });
       return;
     }
@@ -1489,7 +1491,7 @@ router.get('/contatos/cidades', async (req, res) => {
       WHERE NVL(PAR.CLIENTE, 'N') = 'S'
         ${filtroAtivo}
         ${filtroPerfil}
-        AND UFS.UF = '${uf}'
+        ${filtroUf}
       ORDER BY CID.NOMECID
     `);
 
@@ -1504,14 +1506,21 @@ router.get('/contatos/clientes', async (req, res) => {
   try {
     const filtroPerfil = sqlFiltroPerfilContato(req.query.perfil);
     const filtroAtivo = sqlFiltroAtivoContato(req.query.ativos);
+    const cidadeOriginal = String(req.query.cidade || '').trim().toLowerCase();
     const codCid = obterNumeroInteiro(req.query.cidade);
+    const ufOriginal = String(req.query.uf || '').trim().toUpperCase();
+    const uf = textoSql(ufOriginal);
+    const filtroCidade = cidadeOriginal === 'todos' ? '' : `AND PAR.CODCID = ${codCid}`;
+    const filtroUf = cidadeOriginal === 'todos' && ufOriginal && ufOriginal !== 'TODOS'
+      ? `AND UFS.UF = '${uf}'`
+      : '';
 
     if (filtroPerfil === null) {
       res.status(400).json({ erro: 'Informe o perfil' });
       return;
     }
 
-    if (!codCid) {
+    if (cidadeOriginal !== 'todos' && !codCid) {
       res.status(400).json({ erro: 'Informe a cidade' });
       return;
     }
@@ -1523,12 +1532,19 @@ router.get('/contatos/clientes', async (req, res) => {
         CAST(NVL(PAR.LIMCRED, 0) AS NUMBER(15,2)) AS LIMCRED,
         CASE WHEN NVL(PAR.ATIVO, 'S') = 'S' THEN 'Sim' ELSE 'Nao' END AS ATIVO,
         NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS PERFIL,
+        NVL(VEN.APELIDO, 'Sem vendedor') AS VENDEDOR,
         TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'DD/MM/YYYY') AS ULTIMA_COMPRA,
         TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'YYYYMMDD') AS ULTIMA_COMPRA_ORD,
         TO_CHAR(PAR.AD_DTATUCONTATO, 'DD/MM/YYYY') AS DATA_ATUALIZACAO_CONTATO
       FROM TGFPAR PAR
       LEFT JOIN TGFTPP TPP
         ON TPP.CODTIPPARC = PAR.CODTIPPARC
+      LEFT JOIN TGFVEN VEN
+        ON VEN.CODVEND = PAR.CODVEND
+      LEFT JOIN TSICID CID
+        ON CID.CODCID = PAR.CODCID
+      LEFT JOIN TSIUFS UFS
+        ON UFS.CODUF = CID.UF
       LEFT JOIN (
         SELECT CODPARC, MAX(DTNEG) AS DTULTCOMPRA
         FROM TGFCAB
@@ -1540,7 +1556,8 @@ router.get('/contatos/clientes', async (req, res) => {
       WHERE NVL(PAR.CLIENTE, 'N') = 'S'
         ${filtroAtivo}
         ${filtroPerfil}
-        AND PAR.CODCID = ${codCid}
+        ${filtroCidade}
+        ${filtroUf}
       ORDER BY PAR.NOMEPARC
     `);
 
@@ -1579,12 +1596,15 @@ router.get('/contatos/busca', async (req, res) => {
           CAST(NVL(PAR.LIMCRED, 0) AS NUMBER(15,2)) AS LIMCRED,
           CASE WHEN NVL(PAR.ATIVO, 'S') = 'S' THEN 'Sim' ELSE 'Nao' END AS ATIVO,
           NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS PERFIL,
+          NVL(VEN.APELIDO, 'Sem vendedor') AS VENDEDOR,
           TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'DD/MM/YYYY') AS ULTIMA_COMPRA,
           TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'YYYYMMDD') AS ULTIMA_COMPRA_ORD,
           TO_CHAR(PAR.AD_DTATUCONTATO, 'DD/MM/YYYY') AS DATA_ATUALIZACAO_CONTATO
         FROM TGFPAR PAR
         LEFT JOIN TGFTPP TPP
           ON TPP.CODTIPPARC = PAR.CODTIPPARC
+        LEFT JOIN TGFVEN VEN
+          ON VEN.CODVEND = PAR.CODVEND
         LEFT JOIN (
           SELECT CODPARC, MAX(DTNEG) AS DTULTCOMPRA
           FROM TGFCAB
@@ -1626,12 +1646,15 @@ router.get('/contatos/atualizados', async (req, res) => {
         CAST(NVL(PAR.LIMCRED, 0) AS NUMBER(15,2)) AS LIMCRED,
         CASE WHEN NVL(PAR.ATIVO, 'S') = 'S' THEN 'Sim' ELSE 'Nao' END AS ATIVO,
         NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS PERFIL,
+        NVL(VEN.APELIDO, 'Sem vendedor') AS VENDEDOR,
         TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'DD/MM/YYYY') AS ULTIMA_COMPRA,
         TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'YYYYMMDD') AS ULTIMA_COMPRA_ORD,
         TO_CHAR(PAR.AD_DTATUCONTATO, 'DD/MM/YYYY') AS DATA_ATUALIZACAO_CONTATO
       FROM TGFPAR PAR
       LEFT JOIN TGFTPP TPP
         ON TPP.CODTIPPARC = PAR.CODTIPPARC
+      LEFT JOIN TGFVEN VEN
+        ON VEN.CODVEND = PAR.CODVEND
       LEFT JOIN (
         SELECT CODPARC, MAX(DTNEG) AS DTULTCOMPRA
         FROM TGFCAB

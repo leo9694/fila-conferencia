@@ -1356,7 +1356,62 @@
     }
 
     .contato-toolbar {
-      grid-template-columns: minmax(205px, 1fr) minmax(230px, 300px) minmax(128px, 150px) minmax(175px, 230px) minmax(125px, 155px) minmax(170px, 220px) minmax(185px, 210px) auto;
+      grid-template-columns: repeat(13, minmax(0, 1fr));
+    }
+
+    .contato-toolbar > :nth-child(1) { grid-column: span 2; }
+    .contato-toolbar > :nth-child(2) { grid-column: span 2; }
+    .contato-toolbar > :nth-child(3) { grid-column: span 1; }
+    .contato-toolbar > :nth-child(4) { grid-column: span 2; }
+    .contato-toolbar > :nth-child(5) { grid-column: span 1; }
+    .contato-toolbar > :nth-child(6) { grid-column: span 2; }
+    .contato-toolbar > :nth-child(7) { grid-column: span 2; }
+    .contato-toolbar > :nth-child(8) { grid-column: span 1; }
+    }
+
+    .contato-periodo-field {
+      display: grid;
+      grid-template-columns: minmax(135px, 170px) minmax(135px, 170px);
+      align-items: end;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .contato-periodo-input {
+      min-width: 0;
+    }
+
+    .contato-periodo-input span {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--text-soft);
+      font-size: 0.58rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .contato-periodo-input input {
+      width: 100%;
+      min-width: 0;
+      height: 42px;
+      border: 1px solid rgba(74, 127, 151, 0.32);
+      border-radius: 10px;
+      padding: 0 7px;
+      background: #fff;
+      color: var(--text-main);
+      font: inherit;
+      font-size: 0.72rem;
+      font-weight: 850;
+    }
+
+    .contato-lista-card .consulta-card-title {
+      align-items: flex-start;
+    }
+
+    .contato-lista-heading {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
     }
 
     .contato-updated-button {
@@ -1592,9 +1647,9 @@
     .contato-row,
     .contato-header {
       display: grid;
-      grid-template-columns: 42px 120px minmax(260px, 0.9fr) 84px minmax(240px, 1fr) minmax(230px, 260px);
+      grid-template-columns: 42px 105px minmax(235px, 0.85fr) 76px minmax(190px, 0.8fr) minmax(145px, 0.6fr) minmax(225px, 250px);
       align-items: center;
-      min-width: 1102px;
+      min-width: 1120px;
     }
 
     .contato-header {
@@ -1691,6 +1746,7 @@
     .contato-nome,
     .contato-ativo,
     .contato-perfil,
+    .contato-vendedor,
     .contato-compra {
       color: var(--text-main);
       font-weight: 900;
@@ -1758,6 +1814,155 @@
       color: #0d8a6a;
       font-size: 0.82rem;
       line-height: 1;
+    }
+
+    .contato-header > .contato-coluna-menu-host {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 6px;
+      overflow: visible;
+    }
+
+    .contato-coluna-menu-toggle {
+      width: 24px;
+      height: 24px;
+      flex: 0 0 24px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid rgba(18, 112, 87, 0.22);
+      border-radius: 5px;
+      padding: 0;
+      background: #fff;
+      color: #176b58;
+      cursor: pointer;
+    }
+
+    .contato-coluna-menu-toggle:hover,
+    .contato-coluna-menu-toggle.ativo {
+      border-color: #0d8a6a;
+      background: #e7f8f1;
+      color: #087f5b;
+    }
+
+    .contato-coluna-menu-toggle svg {
+      width: 14px;
+      height: 14px;
+      stroke-width: 2.1;
+    }
+
+    .contato-coluna-menu {
+      position: absolute;
+      top: calc(100% + 3px);
+      left: 5px;
+      z-index: 60;
+      display: none;
+      width: 240px;
+      border: 1px solid rgba(18, 66, 75, 0.18);
+      border-radius: 8px;
+      padding: 7px;
+      background: #fff;
+      color: var(--text-main);
+      box-shadow: 0 16px 34px rgba(16, 57, 66, 0.2);
+      text-transform: none;
+    }
+
+    .contato-coluna-menu.aberto {
+      display: grid;
+      gap: 6px;
+    }
+
+    .contato-sort-menu button {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 0;
+      border-radius: 6px;
+      padding: 9px;
+      background: transparent;
+      color: #087f5b;
+      font: inherit;
+      font-weight: 900;
+      cursor: pointer;
+      text-align: left;
+    }
+
+    .contato-sort-menu button:hover {
+      background: #eaf8f3;
+    }
+
+    .contato-sort-menu button span {
+      color: var(--text-main);
+      font-size: 0.72rem;
+      font-weight: 800;
+    }
+
+    .contato-filter-search {
+      width: 100%;
+      height: 34px;
+      border: 1px solid rgba(74, 127, 151, 0.34);
+      border-radius: 6px;
+      padding: 0 9px;
+      color: var(--text-main);
+      font: inherit;
+      font-size: 0.76rem;
+      font-weight: 750;
+      outline: none;
+    }
+
+    .contato-filter-search:focus {
+      border-color: #0d8a6a;
+      box-shadow: 0 0 0 2px rgba(13, 138, 106, 0.12);
+    }
+
+    .contato-filter-options {
+      max-height: 220px;
+      overflow-y: auto;
+      border: 1px solid rgba(18, 66, 75, 0.1);
+      border-radius: 6px;
+    }
+
+    .contato-filter-option {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 31px;
+      padding: 5px 8px;
+      border-bottom: 1px solid rgba(18, 66, 75, 0.08);
+      color: var(--text-main);
+      font-size: 0.74rem;
+      font-weight: 750;
+      cursor: pointer;
+      white-space: normal;
+    }
+
+    .contato-filter-option:last-child {
+      border-bottom: 0;
+    }
+
+    .contato-filter-option:hover,
+    .contato-filter-all {
+      background: #f0f8f5;
+    }
+
+    .contato-filter-option input {
+      width: 15px;
+      height: 15px;
+      flex: 0 0 15px;
+      accent-color: #0d8a6a;
+    }
+
+    .contato-filter-apply {
+      min-height: 34px;
+      border: 0;
+      border-radius: 7px;
+      background: #0d8a6a;
+      color: #fff;
+      font: inherit;
+      font-size: 0.74rem;
+      font-weight: 900;
+      cursor: pointer;
     }
 
     .contato-link {
@@ -4024,6 +4229,17 @@
         grid-template-columns: 1fr;
       }
 
+      .contato-toolbar > * {
+        grid-column: auto !important;
+      }
+
+      .contato-periodo-field {
+        width: 100%;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-left: 0;
+      }
+
+
       .dashboard-top {
         flex-direction: column;
         align-items: stretch;
@@ -4789,7 +5005,19 @@
 
       <section class="consulta-card contato-lista-card">
         <div class="consulta-card-title">
-          <strong id="contato-lista-titulo">Clientes da cidade</strong>
+          <div class="contato-lista-heading">
+            <strong id="contato-lista-titulo">Clientes da cidade</strong>
+            <div class="contato-periodo-field" aria-label="Filtrar lista pelo periodo da ultima compra">
+              <label class="contato-periodo-input" for="contato-compra-inicial">
+                <span>Inicial</span>
+                <input id="contato-compra-inicial" type="date">
+              </label>
+              <label class="contato-periodo-input" for="contato-compra-final">
+                <span>Final</span>
+                <input id="contato-compra-final" type="date">
+              </label>
+            </div>
+          </div>
           <span class="consulta-status" id="contato-status">Selecione estado e cidade.</span>
         </div>
         <div class="contato-lista" id="contato-clientes-lista">

@@ -120,6 +120,8 @@ const contatoSomenteAtivos = document.getElementById('contato-somente-ativos');
 const contatoPerfil = document.getElementById('contato-perfil');
 const contatoEstado = document.getElementById('contato-estado');
 const contatoCidade = document.getElementById('contato-cidade');
+const contatoCompraInicial = document.getElementById('contato-compra-inicial');
+const contatoCompraFinal = document.getElementById('contato-compra-final');
 const botaoExibirContatosAtualizados = document.getElementById('contato-exibir-atualizados');
 const contatoClientesLista = document.getElementById('contato-clientes-lista');
 const contatoStatus = document.getElementById('contato-status');
@@ -143,6 +145,8 @@ let volumePanelAberto = false;
 let contatoBuscaTimer = null;
 let contatoClientesAtuais = [];
 let contatoOrdenacaoUltimaCompra = '';
+let contatoOrdenacaoColuna = { coluna: '', direcao: '' };
+let contatoFiltrosColuna = { perfil: null, vendedor: null };
 let contatoDetalheAtual = null;
 let contatoOrigemLista = 'nenhuma';
 let produtoFotoAtual = null;
@@ -1062,7 +1066,30 @@ function obterValorOrdenacaoUltimaCompra(cliente) {
 }
 
 function obterClientesContatoOrdenados() {
-  const clientes = [...contatoClientesAtuais];
+  const dataInicial = Number(String(contatoCompraInicial.value || '').replace(/-/g, ''));
+  const dataFinal = Number(String(contatoCompraFinal.value || '').replace(/-/g, ''));
+  const clientes = contatoClientesAtuais.filter((cliente) => {
+    const perfil = String(cliente.PERFIL || 'Sem perfil');
+    const vendedor = String(cliente.VENDEDOR || 'Sem vendedor');
+    if (contatoFiltrosColuna.perfil && !contatoFiltrosColuna.perfil.has(perfil)) return false;
+    if (contatoFiltrosColuna.vendedor && !contatoFiltrosColuna.vendedor.has(vendedor)) return false;
+    if (!dataInicial && !dataFinal) return true;
+    const ultimaCompra = obterValorOrdenacaoUltimaCompra(cliente);
+    if (!ultimaCompra) return false;
+    if (dataInicial && ultimaCompra < dataInicial) return false;
+    if (dataFinal && ultimaCompra > dataFinal) return false;
+    return true;
+  });
+
+  if (contatoOrdenacaoColuna.coluna) {
+    return clientes.sort((a, b) => {
+      const coluna = contatoOrdenacaoColuna.coluna;
+      const comparacao = coluna === 'codigo'
+        ? Number(a.CODPARC || 0) - Number(b.CODPARC || 0)
+        : String(a.NOMEPARC || '').localeCompare(String(b.NOMEPARC || ''), 'pt-BR', { sensitivity: 'base', numeric: true });
+      return contatoOrdenacaoColuna.direcao === 'asc' ? comparacao : -comparacao;
+    });
+  }
 
   if (!contatoOrdenacaoUltimaCompra) {
     return clientes;
@@ -1084,8 +1111,139 @@ function obterClientesContatoOrdenados() {
 }
 
 function alternarOrdenacaoUltimaCompraContato() {
+  contatoOrdenacaoColuna = { coluna: '', direcao: '' };
   contatoOrdenacaoUltimaCompra = contatoOrdenacaoUltimaCompra === 'desc' ? 'asc' : 'desc';
   desenharClientesContato();
+}
+
+function valoresUnicosContato(coluna) {
+  const propriedade = coluna === 'perfil' ? 'PERFIL' : 'VENDEDOR';
+  const fallback = coluna === 'perfil' ? 'Sem perfil' : 'Sem vendedor';
+  return [...new Set(contatoClientesAtuais.map((cliente) => String(cliente[propriedade] || fallback)))]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base', numeric: true }));
+}
+
+function criarMenuOrdenacaoContato(coluna) {
+  const alfabetico = coluna === 'cliente';
+  return `
+    <div class="contato-coluna-menu contato-sort-menu">
+      <button type="button" data-contato-sort="${coluna}" data-direcao="asc">${alfabetico ? 'A-Z' : '1-9'} <span>Ordenar crescente</span></button>
+      <button type="button" data-contato-sort="${coluna}" data-direcao="desc">${alfabetico ? 'Z-A' : '9-1'} <span>Ordenar decrescente</span></button>
+    </div>
+  `;
+}
+
+function criarMenuFiltroContato(coluna) {
+  const valores = valoresUnicosContato(coluna);
+  const selecao = contatoFiltrosColuna[coluna];
+  const todosMarcados = !selecao || valores.every((valor) => selecao.has(valor));
+  return `
+    <div class="contato-coluna-menu contato-filter-menu" data-filter-menu="${coluna}">
+      <input class="contato-filter-search" type="search" placeholder="Pesquisar" aria-label="Pesquisar ${coluna}">
+      <div class="contato-filter-options">
+        <label class="contato-filter-option contato-filter-all">
+          <input type="checkbox" data-filter-all ${todosMarcados ? 'checked' : ''}> <span>Selecionar todos</span>
+        </label>
+        ${valores.map((valor) => `
+          <label class="contato-filter-option" data-filter-text="${escaparAtributo(valor.toLowerCase())}">
+            <input type="checkbox" data-filter-value="${escaparAtributo(valor)}" ${!selecao || selecao.has(valor) ? 'checked' : ''}> <span>${escaparHtml(valor)}</span>
+          </label>
+        `).join('')}
+      </div>
+      <button class="contato-filter-apply" type="button">Aplicar</button>
+    </div>
+  `;
+}
+
+function criarCabecalhoMenuContato(rotulo, coluna, tipo) {
+  const ativo = tipo === 'filtro' && contatoFiltrosColuna[coluna] !== null;
+  return `
+    <div class="contato-coluna-menu-host">
+      <span>${rotulo}</span>
+      <button class="contato-coluna-menu-toggle${ativo ? ' ativo' : ''}" type="button" data-contato-menu="${coluna}" aria-label="Filtrar ou ordenar ${rotulo}" title="Filtrar ou ordenar ${rotulo}">
+        <i data-lucide="${tipo === 'filtro' ? 'list-filter' : 'arrow-up-down'}" aria-hidden="true"></i>
+      </button>
+      ${tipo === 'filtro' ? criarMenuFiltroContato(coluna) : criarMenuOrdenacaoContato(coluna)}
+    </div>
+  `;
+}
+
+function configurarMenusColunasContato() {
+  contatoClientesLista.querySelectorAll('.contato-coluna-menu').forEach((menu) => {
+    menu.addEventListener('click', (event) => event.stopPropagation());
+  });
+
+  contatoClientesLista.querySelectorAll('.contato-coluna-menu-toggle').forEach((botao) => {
+    botao.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const menu = botao.parentElement.querySelector('.contato-coluna-menu');
+      const abrir = !menu.classList.contains('aberto');
+      fecharMenusColunasContato();
+      menu.classList.toggle('aberto', abrir);
+      if (abrir) menu.querySelector('input[type="search"]')?.focus();
+    });
+  });
+
+  contatoClientesLista.querySelectorAll('[data-contato-sort]').forEach((botao) => {
+    botao.addEventListener('click', () => {
+      contatoOrdenacaoUltimaCompra = '';
+      contatoOrdenacaoColuna = { coluna: botao.dataset.contatoSort, direcao: botao.dataset.direcao };
+      desenharClientesContato();
+    });
+  });
+
+  contatoClientesLista.querySelectorAll('[data-filter-menu]').forEach((menu) => {
+    const pesquisa = menu.querySelector('.contato-filter-search');
+    const selecionarTodos = menu.querySelector('[data-filter-all]');
+    const opcoes = [...menu.querySelectorAll('[data-filter-value]')];
+    pesquisa.addEventListener('input', () => {
+      const termo = pesquisa.value.trim().toLocaleLowerCase('pt-BR');
+      menu.querySelectorAll('[data-filter-text]').forEach((opcao) => {
+        opcao.hidden = Boolean(termo) && !opcao.dataset.filterText.includes(termo);
+      });
+    });
+    selecionarTodos.addEventListener('change', () => {
+      opcoes.forEach((opcao) => { opcao.checked = selecionarTodos.checked; });
+    });
+    opcoes.forEach((opcao) => {
+      opcao.addEventListener('change', () => {
+        selecionarTodos.checked = opcoes.every((item) => item.checked);
+      });
+    });
+    menu.querySelector('.contato-filter-apply').addEventListener('click', () => {
+      const marcados = new Set(opcoes.filter((opcao) => opcao.checked).map((opcao) => opcao.dataset.filterValue));
+      contatoFiltrosColuna[menu.dataset.filterMenu] = marcados.size === opcoes.length ? null : marcados;
+      desenharClientesContato();
+    });
+  });
+}
+
+function fecharMenusColunasContato() {
+  document.querySelectorAll('.contato-coluna-menu.aberto').forEach((menu) => menu.classList.remove('aberto'));
+}
+
+function criarCabecalhoListaContato(indicadorOrdenacao) {
+  return `
+    <div class="contato-header">
+      <div aria-label="Limite de credito"></div>
+      ${criarCabecalhoMenuContato('Codigo', 'codigo', 'ordenacao')}
+      ${criarCabecalhoMenuContato('Cliente', 'cliente', 'ordenacao')}
+      <div>Ativo</div>
+      ${criarCabecalhoMenuContato('Perfil', 'perfil', 'filtro')}
+      ${criarCabecalhoMenuContato('Vendedor', 'vendedor', 'filtro')}
+      <div>
+        <button class="contato-sort-button" type="button" id="contato-ordenar-ultima-compra">
+          Ultima compra <span aria-hidden="true">${indicadorOrdenacao}</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function configurarCabecalhoListaContato() {
+  document.getElementById('contato-ordenar-ultima-compra')?.addEventListener('click', alternarOrdenacaoUltimaCompraContato);
+  configurarMenusColunasContato();
+  atualizarIcones();
 }
 
 function contatoValorPreenchido(valor) {
@@ -1795,8 +1953,14 @@ function desenharClientesContato() {
   const clientes = obterClientesContatoOrdenados();
 
   if (!clientes.length) {
-    contatoClientesLista.innerHTML = '<div class="consulta-empty">Nenhum cliente encontrado para esta cidade.</div>';
+    const periodoAtivo = contatoCompraInicial.value || contatoCompraFinal.value;
+    const indicadorVazio = contatoOrdenacaoUltimaCompra === 'asc' ? '&uarr;' : contatoOrdenacaoUltimaCompra === 'desc' ? '&darr;' : '&varr;';
+    contatoClientesLista.innerHTML = `
+      ${criarCabecalhoListaContato(indicadorVazio)}
+      <div class="consulta-empty">${periodoAtivo ? 'Nenhum cliente da lista possui ultima compra neste periodo.' : 'Nenhum cliente encontrado para os filtros selecionados.'}</div>
+    `;
     contatoStatus.textContent = '0 clientes';
+    configurarCabecalhoListaContato();
     return;
   }
 
@@ -1814,6 +1978,7 @@ function desenharClientesContato() {
         </div>
         <div class="contato-ativo">${escaparHtml(cliente.ATIVO || '-')}</div>
         <div class="contato-perfil" title="${escaparAtributo(cliente.PERFIL || '-')}">${escaparHtml(cliente.PERFIL || '-')}</div>
+        <div class="contato-vendedor" title="${escaparAtributo(cliente.VENDEDOR || 'Sem vendedor')}">${escaparHtml(cliente.VENDEDOR || 'Sem vendedor')}</div>
         <div class="contato-compra">
           <span>${escaparHtml(cliente.ULTIMA_COMPRA || 'Sem compra')}</span>
           <span class="contato-status-badge">${escaparHtml(rotuloStatusContato(statusContato))}</span>
@@ -1823,27 +1988,20 @@ function desenharClientesContato() {
   }).join('');
 
   contatoClientesLista.innerHTML = `
-    <div class="contato-header">
-      <div aria-label="Limite de credito"></div>
-      <div>Codigo</div>
-      <div>Cliente</div>
-      <div>Ativo</div>
-      <div>Perfil</div>
-      <div>
-        <button class="contato-sort-button" type="button" id="contato-ordenar-ultima-compra">
-          Ultima compra <span aria-hidden="true">${indicadorOrdenacao}</span>
-        </button>
-      </div>
-    </div>
+    ${criarCabecalhoListaContato(indicadorOrdenacao)}
     ${linhas}
   `;
-  document.getElementById('contato-ordenar-ultima-compra')?.addEventListener('click', alternarOrdenacaoUltimaCompraContato);
-  contatoStatus.textContent = `${clientes.length} clientes`;
-  atualizarIcones();
+  configurarCabecalhoListaContato();
+  const periodoAtivo = contatoCompraInicial.value || contatoCompraFinal.value;
+  contatoStatus.textContent = periodoAtivo
+    ? `${clientes.length} de ${contatoClientesAtuais.length} clientes no periodo`
+    : `${clientes.length} clientes`;
 }
 
 function renderizarClientesContato(clientes = []) {
   contatoClientesAtuais = clientes;
+  contatoOrdenacaoColuna = { coluna: '', direcao: '' };
+  contatoFiltrosColuna = { perfil: null, vendedor: null };
   mostrarListaContato();
   desenharClientesContato();
 }
@@ -1961,7 +2119,7 @@ async function carregarEstadosContato() {
     }
 
     const estados = payload.estados || [];
-    contatoEstado.innerHTML = '<option value="">Selecione o estado</option>';
+    contatoEstado.innerHTML = '<option value="">Selecione o estado</option><option value="todos">Todos os estados</option>';
     estados.forEach((estado) => {
       const option = document.createElement('option');
       option.value = estado.UF;
@@ -2008,6 +2166,7 @@ async function carregarCidadesContato() {
     }
 
     const cidades = payload.cidades || [];
+    contatoCidade.innerHTML = '<option value="">Selecione a cidade</option><option value="todos">Todas as cidades</option>';
     cidades.forEach((cidade) => {
       const option = document.createElement('option');
       option.value = cidade.CODCID;
@@ -2024,6 +2183,7 @@ async function carregarCidadesContato() {
 async function carregarClientesContato() {
   const codPerfil = contatoPerfil.value;
   const codCidade = contatoCidade.value;
+  const uf = contatoEstado.value;
   limparBuscaContato();
   mostrarListaContato();
   contatoListaTitulo.textContent = 'Clientes da cidade';
@@ -2048,7 +2208,13 @@ async function carregarClientesContato() {
   contatoClientesLista.innerHTML = '<div class="consulta-empty">Buscando clientes da cidade...</div>';
 
   try {
-    const res = await fetch(`/api/contatos/clientes?perfil=${encodeURIComponent(codPerfil)}&cidade=${encodeURIComponent(codCidade)}&ativos=${parametroAtivosContato()}`);
+    const params = new URLSearchParams({
+      perfil: codPerfil,
+      uf,
+      cidade: codCidade,
+      ativos: parametroAtivosContato()
+    });
+    const res = await fetch(`/api/contatos/clientes?${params}`);
     const payload = await res.json();
 
     if (!res.ok) {
@@ -3762,6 +3928,18 @@ consultaProdutoCodigo.addEventListener('keydown', (event) => {
 contatoPerfil.addEventListener('change', carregarEstadosContato);
 contatoEstado.addEventListener('change', carregarCidadesContato);
 contatoCidade.addEventListener('change', carregarClientesContato);
+contatoCompraInicial.addEventListener('change', () => {
+  if (contatoCompraFinal.value && contatoCompraInicial.value > contatoCompraFinal.value) {
+    contatoCompraFinal.value = contatoCompraInicial.value;
+  }
+  desenharClientesContato();
+});
+contatoCompraFinal.addEventListener('change', () => {
+  if (contatoCompraInicial.value && contatoCompraFinal.value < contatoCompraInicial.value) {
+    contatoCompraInicial.value = contatoCompraFinal.value;
+  }
+  desenharClientesContato();
+});
 botaoExibirContatosAtualizados.addEventListener('click', carregarClientesAtualizadosContato);
 contatoBusca.addEventListener('input', agendarBuscaContato);
 contatoSomenteAtivos.addEventListener('change', alternarFiltroAtivosContato);
@@ -3848,7 +4026,10 @@ scanQtd.addEventListener('keydown', (event) => {
     adicionarConferenciaPorCodigo();
   }
 });
-document.addEventListener('click', fecharMenusOrdenacaoItens);
+document.addEventListener('click', () => {
+  fecharMenusOrdenacaoItens();
+  fecharMenusColunasContato();
+});
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && produtoFotoModal && !produtoFotoModal.hidden) {
     fecharModalFotoProduto();
