@@ -3038,6 +3038,67 @@
       line-height: 1.35;
     }
 
+    .pos-conferencia-loading {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      margin: 14px 0 4px;
+      padding: 14px;
+      border: 1px solid rgba(15, 148, 114, 0.18);
+      border-radius: 12px;
+      background: rgba(235, 249, 244, 0.92);
+      color: #08745a;
+      font-weight: 850;
+    }
+
+    .pos-conferencia-spinner {
+      width: 24px;
+      height: 24px;
+      flex: 0 0 24px;
+      border: 3px solid rgba(15, 148, 114, 0.2);
+      border-top-color: #0f9472;
+      border-radius: 50%;
+      animation: pos-conferencia-spin 0.75s linear infinite;
+    }
+
+    @keyframes pos-conferencia-spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .pos-conferencia-modal.is-processing .pos-conferencia-loading {
+      display: flex;
+    }
+
+    .pos-conferencia-modal.is-processing .pos-conferencia-actions,
+    .pos-conferencia-modal.is-processing .documentos-fiscais-panel {
+      display: none;
+    }
+
+    .pos-conferencia-modal.has-error .pos-conferencia-dialog {
+      border-color: rgba(196, 45, 35, 0.24);
+    }
+
+    .pos-conferencia-modal.has-error .pos-conferencia-dialog h3,
+    .pos-conferencia-modal.has-error .pos-conferencia-dialog p {
+      color: #b42318;
+    }
+
+    .pos-conferencia-modal.has-billing-warning .pos-conferencia-dialog {
+      border-color: rgba(217, 119, 6, 0.3);
+    }
+
+    .pos-conferencia-modal.has-billing-warning .pos-conferencia-dialog h3 {
+      color: #9a4f00;
+    }
+
+    .pos-conferencia-modal.has-error #imprimir-etiqueta-volume {
+      display: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .pos-conferencia-spinner { animation-duration: 1.5s; }
+    }
+
     .volume-panel {
       display: none;
       margin-top: 10px;
@@ -4508,6 +4569,11 @@
         <div class="pos-conferencia-dialog" role="dialog" aria-modal="true" aria-labelledby="pos-conferencia-titulo">
           <h3 id="pos-conferencia-titulo">Conferencia concluida</h3>
           <p id="pos-conferencia-texto">Pedido conferido com sucesso.</p>
+
+          <div class="pos-conferencia-loading" id="pos-conferencia-loading" role="status" aria-live="assertive">
+            <span class="pos-conferencia-spinner" aria-hidden="true"></span>
+            <span>Finalizando conferencia e processando faturamento...</span>
+          </div>
 
           <div class="volume-panel" id="volume-panel">
             <div class="fila-field">

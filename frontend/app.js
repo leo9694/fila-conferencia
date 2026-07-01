@@ -89,6 +89,7 @@ const corteStatus = document.getElementById('corte-status');
 const botaoCancelarCorte = document.getElementById('cancelar-corte');
 const botaoConfirmarCorte = document.getElementById('confirmar-corte');
 const posConferenciaModal = document.getElementById('pos-conferencia-modal');
+const posConferenciaTitulo = document.getElementById('pos-conferencia-titulo');
 const posConferenciaTexto = document.getElementById('pos-conferencia-texto');
 const volumePanel = document.getElementById('volume-panel');
 const volumeQtd = document.getElementById('volume-qtd');
@@ -2631,6 +2632,13 @@ async function abrirDocumentoFiscal(botao) {
 }
 
 function abrirModalPosConferencia(pedido, faturamento) {
+  posConferenciaModal.classList.remove('is-processing', 'has-error');
+  const faturamentoPendente = faturamento?.status === 'ERRO';
+  posConferenciaModal.classList.toggle('has-billing-warning', faturamentoPendente);
+  posConferenciaTitulo.textContent = faturamentoPendente
+    ? 'Conferencia finalizada, mas faturamento pendente'
+    : 'Conferencia concluida';
+  botaoVoltarListaPosConferencia.textContent = 'Voltar para lista';
   pedidoConcluido = pedido;
   volumePanelAberto = false;
   volumePanel.classList.remove('active');
@@ -2638,13 +2646,50 @@ function abrirModalPosConferencia(pedido, faturamento) {
   volumeStatus.textContent = '';
   posConferenciaDocumentos.hidden = false;
   botaoImprimirEtiquetaVolume.textContent = 'Imprimir etiqueta';
-  posConferenciaTexto.textContent = `Pedido ${pedido.NUNOTA} conferido com sucesso.`;
+  posConferenciaTexto.textContent = faturamentoPendente
+    ? `Pedido ${pedido.NUNOTA} conferido com sucesso. O faturamento ficou pendente no Sankhya.`
+    : `Pedido ${pedido.NUNOTA} conferido com sucesso.`;
   posConferenciaModal.hidden = false;
   atualizarIcones();
   carregarDocumentosFiscaisPedido(pedido, posConferenciaDocumentos, faturamento);
 }
 
+function abrirModalProcessandoConferencia(pedido) {
+  pedidoConcluido = null;
+  volumePanelAberto = false;
+  volumePanel.classList.remove('active');
+  posConferenciaModal.classList.add('is-processing');
+  posConferenciaModal.classList.remove('has-error', 'has-billing-warning');
+  posConferenciaTitulo.textContent = 'Finalizando conferencia';
+  botaoVoltarListaPosConferencia.textContent = 'Voltar para lista';
+  posConferenciaTexto.textContent = `Aguarde enquanto o pedido ${pedido.NUNOTA} e finalizado e faturado no Sankhya.`;
+  posConferenciaDocumentos.hidden = true;
+  posConferenciaDocumentos.innerHTML = '';
+  posConferenciaModal.hidden = false;
+  atualizarIcones();
+}
+
+function exibirErroModalConferencia(payload, error = null) {
+  const detalhes = [
+    payload?.erro,
+    ...(Array.isArray(payload?.detalhesSankhya) ? payload.detalhesSankhya : []),
+    payload?.detalhes,
+    error?.message
+  ].filter(Boolean);
+
+  posConferenciaModal.classList.remove('is-processing');
+  posConferenciaModal.classList.add('has-error');
+  posConferenciaTitulo.textContent = 'Nao foi possivel concluir';
+  posConferenciaTexto.textContent = detalhes.join(' - ') || 'O Sankhya nao concluiu a conferencia. Tente novamente.';
+  posConferenciaDocumentos.hidden = true;
+  posConferenciaDocumentos.innerHTML = '';
+  botaoVoltarListaPosConferencia.textContent = 'Fechar e revisar';
+}
+
 function abrirModalEtiquetaPedido(pedido) {
+  posConferenciaModal.classList.remove('is-processing', 'has-error', 'has-billing-warning');
+  posConferenciaTitulo.textContent = 'Imprimir etiqueta de volume';
+  botaoVoltarListaPosConferencia.textContent = 'Voltar para lista';
   pedidoConcluido = pedido;
   volumePanelAberto = true;
   volumePanel.classList.add('active');
@@ -2663,12 +2708,20 @@ function abrirModalEtiquetaPedido(pedido) {
 }
 
 function fecharModalPosConferenciaEVoltar() {
+  const deveRevisar = posConferenciaModal.classList.contains('has-error');
   posConferenciaModal.hidden = true;
+  posConferenciaModal.classList.remove('is-processing', 'has-error', 'has-billing-warning');
   volumeStatus.textContent = '';
   posConferenciaDocumentos.hidden = true;
   posConferenciaDocumentos.innerHTML = '';
   volumePanel.classList.remove('active');
   pedidoConcluido = null;
+  botaoVoltarListaPosConferencia.textContent = 'Voltar para lista';
+  if (deveRevisar) {
+    botaoConfirmarConferencia.disabled = false;
+    scanCodigo.focus();
+    return;
+  }
   buscarFilaConferencia();
 }
 
@@ -3388,6 +3441,7 @@ async function confirmarConferencia() {
 
   botaoConfirmarConferencia.disabled = true;
   confirmarStatus.textContent = 'Confirmando conferencia no Sankhya...';
+  abrirModalProcessandoConferencia(pedidoSelecionado);
 
   try {
     const res = await fetch('/api/fila-conferencia/confirmar', {
@@ -3410,6 +3464,7 @@ async function confirmarConferencia() {
     if (!res.ok) {
       confirmarStatus.innerHTML = montarErroConfirmacao(payload);
       renderizarResumoConferencia();
+      exibirErroModalConferencia(payload);
       return;
     }
 
@@ -3422,6 +3477,7 @@ async function confirmarConferencia() {
     console.error('Erro ao confirmar conferencia:', error);
     confirmarStatus.innerHTML = `<span class="danger-text">${error.message}</span>`;
     renderizarResumoConferencia();
+    exibirErroModalConferencia(null, error);
   }
 }
 
