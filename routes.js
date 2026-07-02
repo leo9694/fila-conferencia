@@ -12,10 +12,14 @@ const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
 const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
 const { criarContatoStatusStore } = require('./api/contatoStatusStore');
 const { gerarPedidoVendaPdf } = require('./api/pedidoVendaPdf');
+const { criarPedidoPrintStore } = require('./api/pedidoPrintStore');
 
 const conferenciaTimerStore = criarConferenciaTimerStore();
 const conferenciaProgressStore = criarConferenciaProgressStore();
 const contatoStatusStore = criarContatoStatusStore({
+  namespace: process.env.SANKHYA_API_BASE_URL || 'padrao'
+});
+const pedidoPrintStore = criarPedidoPrintStore({
   namespace: process.env.SANKHYA_API_BASE_URL || 'padrao'
 });
 const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Cuiaba';
@@ -1121,7 +1125,9 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         NOME_CONFERENTE: row.NOME_CONFERENTE || null,
         QTDVOL: normalizarNumero(row.QTDVOL),
         QTD_ITENS: normalizarNumero(row.QTD_ITENS),
-        QTD_TOTAL: normalizarNumero(row.QTD_TOTAL)
+        QTD_TOTAL: normalizarNumero(row.QTD_TOTAL),
+        PEDIDO_IMPRESSO: Boolean(pedidoPrintStore.obter(row.NUNOTA)),
+        IMPRESSAO_PEDIDO: pedidoPrintStore.obter(row.NUNOTA)
       }))
     });
   } catch (err) {
@@ -2665,6 +2671,7 @@ router.get('/fila-conferencia/pedidos/:nunota/pdf', async (req, res) => {
       itens,
       logoPath: path.join(__dirname, 'frontend', 'favicon.png')
     });
+    pedidoPrintStore.registrar(nunota, req.usuario?.codUsu);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `inline; filename="pedido-venda-${nunota}.pdf"`);
     res.setHeader('Cache-Control', 'private, no-store');

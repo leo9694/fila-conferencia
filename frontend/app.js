@@ -2968,6 +2968,10 @@ async function abrirPdfPedido() {
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     novaAba.location.replace(url);
+    pedidoPreviewSelecionado.PEDIDO_IMPRESSO = true;
+    const pedidoNaFila = filaPedidos.find((pedido) => Number(pedido.NUNOTA) === Number(nunota));
+    if (pedidoNaFila) pedidoNaFila.PEDIDO_IMPRESSO = true;
+    renderizarPedidosFila();
     setTimeout(() => URL.revokeObjectURL(url), 120000);
   } catch (error) {
     novaAba.close();
@@ -3472,6 +3476,9 @@ function renderizarPedidosFila() {
     card.className = `pedido-operacao-card ${emAndamento ? 'andamento' : ''} ${pedidoSelecionado?.NUNOTA === pedido.NUNOTA ? 'active' : ''}`;
     card.innerHTML = `
       <div class="pedido-list-action">
+        ${pedido.PEDIDO_IMPRESSO
+          ? '<span class="pedido-print-indicator" aria-label="Pedido ja impresso" title="Pedido ja impresso"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7"/><path d="m9 17 2 2 4-4"/></svg></span>'
+          : ''}
         ${pedido.STATUS_CONFERENCIA === 'CONFERIDO'
           ? '<button class="pedido-label-button" type="button" aria-label="Gerar etiqueta de volume" title="Gerar etiqueta de volume"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V4h3"/><path d="M17 4h3v3"/><path d="M20 17v3h-3"/><path d="M7 20H4v-3"/><path d="M7 8h10v8H7z"/><path d="M9 11h6"/><path d="M9 14h4"/></svg></button>'
           : ''}

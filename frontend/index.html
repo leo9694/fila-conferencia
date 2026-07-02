@@ -751,7 +751,7 @@
     .pedido-operacao-card {
       display: grid;
       grid-template-columns:
-        38px
+        64px
         minmax(88px, 0.78fr)
         minmax(104px, 0.9fr)
         minmax(78px, 0.66fr)
@@ -783,7 +783,7 @@
     .pedido-operacao-card > strong {
       min-width: 0;
       padding: 7px 8px;
-      border-right: 1px solid rgba(18, 66, 75, 0.10);
+      border-right: none;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -1054,6 +1054,31 @@
       overflow: visible !important;
       text-overflow: clip !important;
       white-space: normal !important;
+      gap: 4px;
+    }
+
+    .pedido-print-indicator {
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #e8f8f1;
+      color: #078965;
+      border: 1px solid rgba(7, 137, 101, 0.25);
+      box-shadow: 0 3px 8px rgba(7, 137, 101, 0.14);
+      flex: 0 0 auto;
+    }
+
+    .pedido-print-indicator svg {
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.1;
+      stroke-linecap: round;
+      stroke-linejoin: round;
     }
 
     .scan-panel {
