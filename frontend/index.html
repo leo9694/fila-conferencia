@@ -389,7 +389,8 @@
     }
 
     .btn-start,
-    .btn-back {
+    .btn-back,
+    .btn-print-order {
       border: none;
       border-radius: 14px;
       min-height: 48px;
@@ -407,6 +408,21 @@
       background: #fff;
       color: var(--accent);
       border: 1px solid #9ec0f6;
+    }
+
+    .btn-print-order {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: #eefaf6;
+      color: var(--accent);
+      border: 1px solid #9fd9c7;
+    }
+
+    .btn-print-order svg {
+      width: 18px;
+      height: 18px;
     }
 
     .conferencia-screen {
@@ -1965,6 +1981,55 @@
       cursor: pointer;
     }
 
+    .contato-pagination {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      min-height: 38px;
+    }
+
+    .contato-pagination[hidden] {
+      display: none;
+    }
+
+    .contato-pagination button {
+      width: 34px;
+      height: 34px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid rgba(13, 138, 106, 0.28);
+      border-radius: 7px;
+      padding: 0;
+      background: #fff;
+      color: #087f5b;
+      cursor: pointer;
+    }
+
+    .contato-pagination button:hover:not(:disabled) {
+      background: #eaf8f3;
+      border-color: #0d8a6a;
+    }
+
+    .contato-pagination button:disabled {
+      cursor: default;
+      opacity: 0.38;
+    }
+
+    .contato-pagination button svg {
+      width: 17px;
+      height: 17px;
+      stroke-width: 2.2;
+    }
+
+    .contato-pagination-info {
+      min-width: 130px;
+      color: var(--text-soft);
+      font-size: 0.74rem;
+      font-weight: 900;
+      text-align: center;
+    }
+
     .contato-link {
       border: 0;
       background: transparent;
@@ -2214,9 +2279,19 @@
 
     .contato-limite-form {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr);
       align-items: end;
       gap: 10px;
+    }
+
+    .contato-credito-fields {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .contato-credito-full {
+      grid-column: 1 / -1;
     }
 
     .contato-limite-form label > span {
@@ -2262,7 +2337,45 @@
       font-weight: 900;
     }
 
+    .contato-credito-fields select,
+    .contato-credito-fields textarea {
+      width: 100%;
+      border: 1px solid rgba(13, 138, 106, 0.28);
+      border-radius: 10px;
+      padding: 9px 10px;
+      background: #fff;
+      color: var(--text-main);
+      font: inherit;
+      font-size: 0.78rem;
+      font-weight: 750;
+      outline: none;
+    }
+
+    .contato-credito-fields select {
+      min-height: 40px;
+    }
+
+    .contato-credito-fields textarea {
+      min-height: 78px;
+      resize: vertical;
+      line-height: 1.4;
+    }
+
+    .contato-credito-fields textarea[readonly] {
+      background: #f4f7f8;
+      color: var(--text-soft);
+      cursor: default;
+    }
+
+    .contato-credito-fields select:focus,
+    .contato-credito-fields textarea:focus:not([readonly]) {
+      border-color: #0d8a6a;
+      box-shadow: 0 0 0 3px rgba(13, 138, 106, 0.1);
+    }
+
     .contato-limite-save {
+      justify-self: end;
+      min-width: 140px;
       min-height: 40px;
       padding: 0 16px;
       border: 0;
@@ -2288,6 +2401,16 @@
       font-size: 0.7rem;
       font-weight: 850;
       flex-wrap: wrap;
+    }
+
+    .contato-limite-feedback-inline {
+      flex-wrap: nowrap;
+      margin-top: 6px;
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.72);
+      white-space: nowrap;
+      overflow-x: auto;
     }
 
     .contato-limite-indicador {
@@ -2318,8 +2441,11 @@
     }
 
     .contato-limite-status {
-      margin-left: auto;
+      display: block;
+      min-height: 18px;
+      margin-top: 8px;
       font-weight: 900;
+      text-align: right;
     }
 
     .contato-limite-status.success {
@@ -4195,8 +4321,26 @@
     .pedido-preview-actions {
       display: flex;
       gap: 8px;
-      flex-wrap: wrap;
+      flex: 0 0 auto;
+      flex-wrap: nowrap;
       justify-content: flex-end;
+    }
+
+    .pedido-preview-head > div:first-child {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+
+    .pedido-preview-actions .btn-back,
+    .pedido-preview-actions .btn-print-order,
+    .pedido-preview-actions .btn-start {
+      min-width: 0;
+      padding-inline: 18px;
+      white-space: nowrap;
+    }
+
+    .pedido-preview-actions .btn-start {
+      width: 210px;
     }
 
     .pedido-preview-summary {
@@ -4271,6 +4415,14 @@
 
       .contato-limite-form {
         grid-template-columns: 1fr;
+      }
+
+      .contato-credito-fields {
+        grid-template-columns: 1fr;
+      }
+
+      .contato-credito-full {
+        grid-column: auto;
       }
 
       .contato-limite-save {
@@ -4437,9 +4589,11 @@
 
       .pedido-preview-actions {
         width: 100%;
+        flex-wrap: wrap;
       }
 
       .pedido-preview-actions .btn-back,
+      .pedido-preview-actions .btn-print-order,
       .pedido-preview-actions .btn-start {
         flex: 1 1 140px;
         min-width: 0;
@@ -4716,6 +4870,10 @@
                 </div>
                 <div class="pedido-preview-actions">
                   <button class="btn-back" id="cancelar-preview-pedido" type="button">Cancelar</button>
+                  <button class="btn-print-order" id="imprimir-preview-pedido" type="button">
+                    <i data-lucide="printer" aria-hidden="true"></i>
+                    Imprimir pedido
+                  </button>
                   <button class="btn-start" id="confirmar-preview-pedido" type="button">Iniciar conferencia</button>
                 </div>
               </div>
@@ -4804,6 +4962,24 @@
           <div class="pos-conferencia-actions">
             <button class="btn-start" id="imprimir-etiqueta-volume" type="button">Imprimir etiqueta</button>
             <button class="btn-back" id="voltar-lista-pos-conferencia" type="button">Voltar para lista</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="pos-conferencia-modal" id="confirmar-volumes-modal" hidden>
+        <div class="pos-conferencia-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmar-volumes-titulo">
+          <h3 id="confirmar-volumes-titulo">Volumes do pedido</h3>
+          <p>Informe a quantidade de volumes antes de finalizar e faturar a conferencia.</p>
+          <div class="volume-panel active">
+            <div class="fila-field">
+              <label for="confirmar-volumes-qtd">Quantidade de volumes</label>
+              <input id="confirmar-volumes-qtd" type="number" min="1" step="1" inputmode="numeric" placeholder="Informe os volumes">
+            </div>
+            <div class="scan-status" id="confirmar-volumes-status" aria-live="polite"></div>
+          </div>
+          <div class="pos-conferencia-actions">
+            <button class="btn-back" id="cancelar-volumes-conferencia" type="button">Cancelar</button>
+            <button class="btn-start" id="confirmar-volumes-conferencia" type="button">Confirmar e faturar</button>
           </div>
         </div>
       </section>
@@ -5023,6 +5199,13 @@
         <div class="contato-lista" id="contato-clientes-lista">
           <div class="consulta-empty">Selecione uma cidade para listar os clientes.</div>
         </div>
+        <nav class="contato-pagination" id="contato-pagination" aria-label="Paginas de clientes" hidden>
+          <button id="contato-pagina-primeira" type="button" title="Primeira pagina" aria-label="Primeira pagina"><i data-lucide="chevrons-left" aria-hidden="true"></i></button>
+          <button id="contato-pagina-anterior" type="button" title="Pagina anterior" aria-label="Pagina anterior"><i data-lucide="chevron-left" aria-hidden="true"></i></button>
+          <span class="contato-pagination-info" id="contato-pagina-info">Pagina 1 de 1</span>
+          <button id="contato-pagina-proxima" type="button" title="Proxima pagina" aria-label="Proxima pagina"><i data-lucide="chevron-right" aria-hidden="true"></i></button>
+          <button id="contato-pagina-ultima" type="button" title="Ultima pagina" aria-label="Ultima pagina"><i data-lucide="chevrons-right" aria-hidden="true"></i></button>
+        </nav>
       </section>
 
       <section class="consulta-card contato-detalhe-card" id="contato-detalhe-card" hidden>

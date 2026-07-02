@@ -50,6 +50,7 @@ const pedidoPreviewStatus = document.getElementById('pedido-preview-status');
 const pedidoPreviewItensLista = document.getElementById('pedido-preview-itens-lista');
 const pedidoPreviewDocumentos = document.getElementById('pedido-preview-documentos');
 const botaoCancelarPreviewPedido = document.getElementById('cancelar-preview-pedido');
+const botaoImprimirPreviewPedido = document.getElementById('imprimir-preview-pedido');
 const botaoConfirmarPreviewPedido = document.getElementById('confirmar-preview-pedido');
 const pedidoEmConferenciaCard = document.getElementById('pedido-em-conferencia-card');
 const botaoVoltarListaFila = document.getElementById('voltar-lista-fila');
@@ -97,6 +98,11 @@ const volumeStatus = document.getElementById('volume-status');
 const posConferenciaDocumentos = document.getElementById('pos-conferencia-documentos');
 const botaoImprimirEtiquetaVolume = document.getElementById('imprimir-etiqueta-volume');
 const botaoVoltarListaPosConferencia = document.getElementById('voltar-lista-pos-conferencia');
+const confirmarVolumesModal = document.getElementById('confirmar-volumes-modal');
+const confirmarVolumesQtd = document.getElementById('confirmar-volumes-qtd');
+const confirmarVolumesStatus = document.getElementById('confirmar-volumes-status');
+const botaoCancelarVolumesConferencia = document.getElementById('cancelar-volumes-conferencia');
+const botaoConfirmarVolumesConferencia = document.getElementById('confirmar-volumes-conferencia');
 const metricAndamento = document.getElementById('metric-andamento');
 const metricAguardando = document.getElementById('metric-aguardando');
 const metricConferidos = document.getElementById('metric-conferidos');
@@ -126,6 +132,12 @@ const botaoExibirContatosAtualizados = document.getElementById('contato-exibir-a
 const contatoClientesLista = document.getElementById('contato-clientes-lista');
 const contatoStatus = document.getElementById('contato-status');
 const contatoListaTitulo = document.getElementById('contato-lista-titulo');
+const contatoPagination = document.getElementById('contato-pagination');
+const contatoPaginaPrimeira = document.getElementById('contato-pagina-primeira');
+const contatoPaginaAnterior = document.getElementById('contato-pagina-anterior');
+const contatoPaginaProxima = document.getElementById('contato-pagina-proxima');
+const contatoPaginaUltima = document.getElementById('contato-pagina-ultima');
+const contatoPaginaInfo = document.getElementById('contato-pagina-info');
 const contatoDetalheCard = document.getElementById('contato-detalhe-card');
 const contatoDetalheAvatar = document.getElementById('contato-detalhe-avatar');
 const contatoDetalheNome = document.getElementById('contato-detalhe-nome');
@@ -147,6 +159,8 @@ let contatoClientesAtuais = [];
 let contatoOrdenacaoUltimaCompra = '';
 let contatoOrdenacaoColuna = { coluna: '', direcao: '' };
 let contatoFiltrosColuna = { perfil: null, vendedor: null };
+let contatoPaginacao = { pagina: 1, tamanho: 50, total: 0, totalPaginas: 1 };
+let contatoFacetas = { perfis: [], vendedores: [] };
 let contatoDetalheAtual = null;
 let contatoOrigemLista = 'nenhuma';
 let produtoFotoAtual = null;
@@ -1066,6 +1080,8 @@ function obterValorOrdenacaoUltimaCompra(cliente) {
 }
 
 function obterClientesContatoOrdenados() {
+  if (contatoOrigemLista === 'cidade') return [...contatoClientesAtuais];
+
   const dataInicial = Number(String(contatoCompraInicial.value || '').replace(/-/g, ''));
   const dataFinal = Number(String(contatoCompraFinal.value || '').replace(/-/g, ''));
   const clientes = contatoClientesAtuais.filter((cliente) => {
@@ -1113,10 +1129,14 @@ function obterClientesContatoOrdenados() {
 function alternarOrdenacaoUltimaCompraContato() {
   contatoOrdenacaoColuna = { coluna: '', direcao: '' };
   contatoOrdenacaoUltimaCompra = contatoOrdenacaoUltimaCompra === 'desc' ? 'asc' : 'desc';
-  desenharClientesContato();
+  if (contatoOrigemLista === 'cidade') carregarClientesContato(1, true);
+  else desenharClientesContato();
 }
 
 function valoresUnicosContato(coluna) {
+  if (contatoOrigemLista === 'cidade') {
+    return coluna === 'perfil' ? contatoFacetas.perfis : contatoFacetas.vendedores;
+  }
   const propriedade = coluna === 'perfil' ? 'PERFIL' : 'VENDEDOR';
   const fallback = coluna === 'perfil' ? 'Sem perfil' : 'Sem vendedor';
   return [...new Set(contatoClientesAtuais.map((cliente) => String(cliente[propriedade] || fallback)))]
@@ -1188,7 +1208,8 @@ function configurarMenusColunasContato() {
     botao.addEventListener('click', () => {
       contatoOrdenacaoUltimaCompra = '';
       contatoOrdenacaoColuna = { coluna: botao.dataset.contatoSort, direcao: botao.dataset.direcao };
-      desenharClientesContato();
+      if (contatoOrigemLista === 'cidade') carregarClientesContato(1, true);
+      else desenharClientesContato();
     });
   });
 
@@ -1213,7 +1234,8 @@ function configurarMenusColunasContato() {
     menu.querySelector('.contato-filter-apply').addEventListener('click', () => {
       const marcados = new Set(opcoes.filter((opcao) => opcao.checked).map((opcao) => opcao.dataset.filterValue));
       contatoFiltrosColuna[menu.dataset.filterMenu] = marcados.size === opcoes.length ? null : marcados;
-      desenharClientesContato();
+      if (contatoOrigemLista === 'cidade') carregarClientesContato(1, true);
+      else desenharClientesContato();
     });
   });
 }
@@ -1244,6 +1266,26 @@ function configurarCabecalhoListaContato() {
   document.getElementById('contato-ordenar-ultima-compra')?.addEventListener('click', alternarOrdenacaoUltimaCompraContato);
   configurarMenusColunasContato();
   atualizarIcones();
+}
+
+function atualizarPaginacaoContato() {
+  const ativa = contatoOrigemLista === 'cidade' && contatoPaginacao.total > 0;
+  contatoPagination.hidden = !ativa;
+  if (!ativa) return;
+
+  const { pagina, totalPaginas, total } = contatoPaginacao;
+  contatoPaginaInfo.textContent = `Pagina ${pagina} de ${totalPaginas} | ${total} clientes`;
+  contatoPaginaPrimeira.disabled = pagina <= 1;
+  contatoPaginaAnterior.disabled = pagina <= 1;
+  contatoPaginaProxima.disabled = pagina >= totalPaginas;
+  contatoPaginaUltima.disabled = pagina >= totalPaginas;
+  atualizarIcones();
+}
+
+function irParaPaginaContato(pagina) {
+  const destino = Math.max(1, Math.min(Number(pagina) || 1, contatoPaginacao.totalPaginas || 1));
+  if (destino === contatoPaginacao.pagina) return;
+  carregarClientesContato(destino, true);
 }
 
 function contatoValorPreenchido(valor) {
@@ -1294,7 +1336,7 @@ function rotuloStatusContato(status) {
 
 function criarIndicadorLimiteCreditoLista(cliente = {}) {
   const limite = Number(cliente.LIMCRED || 0);
-  const definido = limite > 0;
+  const definido = cliente.LIMCRED_CADASTRADO === 'S';
   const titulo = definido
     ? `Limite definido: ${formatarMoeda(limite)}`
     : 'Sem limite de credito definido';
@@ -1492,49 +1534,78 @@ function montarEnderecoContato(parceiro = {}) {
   return partes.join(' - ');
 }
 
-function criarPainelLimiteCredito(parceiro = {}) {
+function criarPainelLimiteCredito(parceiro = {}, situacoes = []) {
   const limiteDefinido = Number(parceiro.LIMCRED || 0);
   const sugestao = Number(parceiro.SUGESTAO_LIMCRED || 0);
   const qtdPedidos = Number(parceiro.QTD_PEDIDOS_SUGESTAO || 0);
-  const possuiLimite = limiteDefinido > 0;
+  const possuiLimite = parceiro.LIMCRED_CADASTRADO === 'S';
   const possuiSugestao = sugestao > 0 && qtdPedidos > 0;
-  const valorCampo = possuiLimite ? limiteDefinido : possuiSugestao ? sugestao : '';
+  const sugestaoPorFaixa = !possuiSugestao
+    ? 0
+    : sugestao < 2000
+      ? 2000
+      : sugestao <= 5000
+        ? 5000
+        : sugestao;
+  const valorCampo = possuiLimite ? limiteDefinido : possuiSugestao ? sugestaoPorFaixa : '';
   const tipoIndicador = possuiLimite ? 'definido' : 'sugestao';
   const icone = possuiLimite ? 'circle-check' : 'lightbulb';
   const textoIndicador = possuiLimite
-    ? 'Valor definido no Sankhya'
+    ? limiteDefinido === 0 && possuiSugestao
+      ? `Valor definido no Sankhya | Media (${qtdPedidos} pedidos): ${formatarMoeda(sugestao)}`
+      : 'Valor definido no Sankhya'
     : possuiSugestao
-      ? `Sugestao: media dos ultimos ${qtdPedidos} pedidos`
+      ? `Sugestao: ${formatarMoeda(sugestaoPorFaixa)} | Media (${qtdPedidos} pedidos): ${formatarMoeda(sugestao)}`
       : 'Sem limite definido e sem historico de pedidos';
+  const opcoesSituacao = situacoes.map((item) => `
+    <option value="${escaparAtributo(item.VALOR)}" ${String(item.VALOR) === String(parceiro.SITUACAO || '') ? 'selected' : ''}>${escaparHtml(item.OPCAO)}</option>
+  `).join('');
 
   return `
     <div class="contato-info-section contato-limite-section">
       <h3><span class="contato-section-icon">${iconeContato('documento')}</span>Limite de credito</h3>
       <div class="contato-limite-form">
-        <label>
-          <span>Valor do limite</span>
-          <div class="contato-limite-input-wrap">
-            <span>R$</span>
-            <input
-              id="contato-limite-credito"
-              type="number"
-              min="0"
-              step="0.01"
-              inputmode="decimal"
-              value="${valorCampo === '' ? '' : escaparAtributo(Number(valorCampo).toFixed(2))}"
-              placeholder="Sem sugestao"
-            >
+        <div class="contato-credito-fields">
+          <label>
+            <span>Valor do limite</span>
+            <div class="contato-limite-input-wrap">
+              <span>R$</span>
+              <input
+                id="contato-limite-credito"
+                type="number"
+                min="0"
+                step="0.01"
+                inputmode="decimal"
+                value="${valorCampo === '' ? '' : escaparAtributo(Number(valorCampo).toFixed(2))}"
+                placeholder="Sem sugestao"
+              >
+            </div>
+          </label>
+          <label>
+            <span>Situacao de credito</span>
+            <select id="contato-situacao-credito">
+              <option value="">Selecione</option>
+              ${opcoesSituacao}
+            </select>
+          </label>
+          <div class="contato-limite-feedback contato-limite-feedback-inline contato-credito-full">
+            <span class="contato-limite-indicador ${tipoIndicador}" id="contato-limite-indicador">
+              <i data-lucide="${icone}" aria-hidden="true"></i>
+            </span>
+            <span id="contato-limite-origem">${escaparHtml(textoIndicador)}</span>
           </div>
-        </label>
-        <button class="contato-limite-save" id="contato-salvar-limite" type="button">Salvar limite</button>
+          <label class="contato-credito-full">
+            <span>Observacoes</span>
+            <textarea id="contato-observacoes" maxlength="4000" rows="4">${escaparHtml(parceiro.OBSERVACOES || '')}</textarea>
+          </label>
+          <label class="contato-credito-full">
+            <span>Motivo do bloqueio</span>
+            <textarea id="contato-motivo-bloqueio" rows="3" readonly>${escaparHtml(parceiro.MOTBLOQ || '')}</textarea>
+          </label>
+        </div>
+        <button class="contato-limite-save" id="contato-salvar-limite" type="button">Salvar</button>
       </div>
-      <div class="contato-limite-feedback">
-        <span class="contato-limite-indicador ${tipoIndicador}" id="contato-limite-indicador">
-          <i data-lucide="${icone}" aria-hidden="true"></i>
-        </span>
-        <span id="contato-limite-origem">${escaparHtml(textoIndicador)}</span>
-        <span class="contato-limite-status" id="contato-limite-status" aria-live="polite"></span>
-      </div>
+      <span class="contato-limite-status" id="contato-limite-status" aria-live="polite"></span>
     </div>
   `;
 }
@@ -1559,7 +1630,7 @@ async function voltarERecarregarListaContato() {
   }
 
   if (contatoCidade.value) {
-    await carregarClientesContato();
+    await carregarClientesContato(contatoPaginacao.pagina, true);
     return;
   }
 
@@ -1596,6 +1667,7 @@ function renderizarDetalheContato(payload) {
   const parceiro = payload?.parceiro || {};
   const contatos = payload?.contatos || [];
   const perfis = payload?.perfis || [];
+  const situacoes = payload?.situacoes || [];
   const endereco = montarEnderecoContato(parceiro);
   contatoDetalheAtual = parceiro;
 
@@ -1611,7 +1683,7 @@ function renderizarDetalheContato(payload) {
 
   contatoDetalheConteudo.innerHTML = `
     <div class="contato-detalhe-col">
-      ${criarPainelLimiteCredito(parceiro)}
+      ${criarPainelLimiteCredito(parceiro, situacoes)}
       <div class="contato-info-section">
         <h3><span class="contato-section-icon">${iconeContato('documento')}</span>Informacoes basicas</h3>
         <div class="contato-info-grid">
@@ -1731,16 +1803,25 @@ async function salvarLimiteCreditoCliente() {
   if (!contatoDetalheAtual?.CODPARC) return;
 
   const input = document.getElementById('contato-limite-credito');
+  const situacaoInput = document.getElementById('contato-situacao-credito');
+  const observacoesInput = document.getElementById('contato-observacoes');
   const botao = document.getElementById('contato-salvar-limite');
   const status = document.getElementById('contato-limite-status');
   const indicador = document.getElementById('contato-limite-indicador');
   const origem = document.getElementById('contato-limite-origem');
-  if (!input || !botao) return;
+  if (!input || !situacaoInput || !observacoesInput || !botao) return;
 
   const limiteCredito = Number(input.value);
   if (!Number.isFinite(limiteCredito) || limiteCredito < 0 || input.value.trim() === '') {
     status.textContent = 'Informe um valor valido.';
     status.className = 'contato-limite-status error';
+    return;
+  }
+
+  if (!situacaoInput.value) {
+    status.textContent = 'Selecione a situacao de credito.';
+    status.className = 'contato-limite-status error';
+    situacaoInput.focus();
     return;
   }
 
@@ -1752,7 +1833,12 @@ async function salvarLimiteCreditoCliente() {
     const res = await fetch(`/api/contatos/clientes/${encodeURIComponent(contatoDetalheAtual.CODPARC)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ acao: 'salvar-limite', limiteCredito })
+      body: JSON.stringify({
+        acao: 'salvar-limite',
+        limiteCredito,
+        situacao: situacaoInput.value,
+        observacoes: observacoesInput.value
+      })
     });
     const resposta = await res.json();
 
@@ -1762,11 +1848,22 @@ async function salvarLimiteCreditoCliente() {
 
     const limiteSalvo = Number(resposta.parceiro?.LIMCRED ?? limiteCredito);
     input.value = limiteSalvo.toFixed(2);
-    contatoDetalheAtual = { ...contatoDetalheAtual, LIMCRED: limiteSalvo };
+    contatoDetalheAtual = {
+      ...contatoDetalheAtual,
+      LIMCRED: limiteSalvo,
+      LIMCRED_CADASTRADO: resposta.parceiro?.LIMCRED_CADASTRADO || 'S',
+      SITUACAO: resposta.parceiro?.SITUACAO ?? situacaoInput.value,
+      OBSERVACOES: resposta.parceiro?.OBSERVACOES ?? observacoesInput.value,
+      MOTBLOQ: resposta.parceiro?.MOTBLOQ ?? contatoDetalheAtual.MOTBLOQ
+    };
+    atualizarClienteContatoNaLista(contatoDetalheAtual.CODPARC, {
+      LIMCRED: limiteSalvo,
+      LIMCRED_CADASTRADO: 'S'
+    });
     indicador.className = 'contato-limite-indicador definido';
     indicador.innerHTML = '<i data-lucide="circle-check" aria-hidden="true"></i>';
     origem.textContent = 'Valor definido no Sankhya';
-    status.textContent = 'Limite salvo.';
+    status.textContent = 'Informacoes de credito salvas.';
     status.className = 'contato-limite-status success';
     atualizarIcones();
   } catch (error) {
@@ -1961,6 +2058,7 @@ function desenharClientesContato() {
     `;
     contatoStatus.textContent = '0 clientes';
     configurarCabecalhoListaContato();
+    atualizarPaginacaoContato();
     return;
   }
 
@@ -1993,15 +2091,37 @@ function desenharClientesContato() {
   `;
   configurarCabecalhoListaContato();
   const periodoAtivo = contatoCompraInicial.value || contatoCompraFinal.value;
-  contatoStatus.textContent = periodoAtivo
-    ? `${clientes.length} de ${contatoClientesAtuais.length} clientes no periodo`
-    : `${clientes.length} clientes`;
+  contatoStatus.textContent = contatoOrigemLista === 'cidade'
+    ? `${contatoClientesAtuais.length} nesta pagina de ${contatoPaginacao.total} clientes`
+    : periodoAtivo
+      ? `${clientes.length} de ${contatoClientesAtuais.length} clientes no periodo`
+      : `${clientes.length} clientes`;
+  atualizarPaginacaoContato();
 }
 
-function renderizarClientesContato(clientes = []) {
+function renderizarClientesContato(clientes = [], paginacao = null, facetas = null, preservarGrade = false) {
   contatoClientesAtuais = clientes;
-  contatoOrdenacaoColuna = { coluna: '', direcao: '' };
-  contatoFiltrosColuna = { perfil: null, vendedor: null };
+  if (facetas) {
+    contatoFacetas = {
+      perfis: Array.isArray(facetas.perfis) ? facetas.perfis : [],
+      vendedores: Array.isArray(facetas.vendedores) ? facetas.vendedores : []
+    };
+  }
+  contatoPaginacao = paginacao
+    ? {
+        pagina: Number(paginacao.pagina) || 1,
+        tamanho: Number(paginacao.tamanho) || 50,
+        total: Number(paginacao.total) || 0,
+        totalPaginas: Number(paginacao.totalPaginas) || 1
+      }
+    : { pagina: 1, tamanho: 50, total: clientes.length, totalPaginas: 1 };
+  if (!preservarGrade) {
+    contatoOrdenacaoColuna = { coluna: '', direcao: '' };
+    contatoOrdenacaoUltimaCompra = '';
+    contatoFiltrosColuna = { perfil: null, vendedor: null };
+    contatoCompraInicial.value = '';
+    contatoCompraFinal.value = '';
+  }
   mostrarListaContato();
   desenharClientesContato();
 }
@@ -2013,6 +2133,7 @@ async function carregarClientesAtualizadosContato() {
   contatoListaTitulo.textContent = 'Clientes atualizados';
   contatoStatus.textContent = 'Carregando atualizados...';
   contatoClientesLista.innerHTML = '<div class="consulta-empty">Buscando todos os cadastros atualizados...</div>';
+  contatoPagination.hidden = true;
   botaoExibirContatosAtualizados.disabled = true;
 
   try {
@@ -2047,6 +2168,7 @@ function limparSelecaoContato(mensagem = 'Selecione perfil, estado e cidade.') {
   contatoClientesAtuais = [];
   contatoOrdenacaoUltimaCompra = '';
   contatoClientesLista.innerHTML = '<div class="consulta-empty">Selecione uma cidade para listar os clientes.</div>';
+  contatoPagination.hidden = true;
   contatoStatus.textContent = mensagem;
 }
 
@@ -2180,7 +2302,7 @@ async function carregarCidadesContato() {
   }
 }
 
-async function carregarClientesContato() {
+async function carregarClientesContato(pagina = 1, preservarGrade = false) {
   const codPerfil = contatoPerfil.value;
   const codCidade = contatoCidade.value;
   const uf = contatoEstado.value;
@@ -2202,6 +2324,14 @@ async function carregarClientesContato() {
     return;
   }
 
+  if (!preservarGrade) {
+    contatoOrdenacaoColuna = { coluna: '', direcao: '' };
+    contatoOrdenacaoUltimaCompra = '';
+    contatoFiltrosColuna = { perfil: null, vendedor: null };
+    contatoCompraInicial.value = '';
+    contatoCompraFinal.value = '';
+  }
+
   contatoOrigemLista = 'cidade';
 
   contatoStatus.textContent = 'Carregando clientes...';
@@ -2212,8 +2342,24 @@ async function carregarClientesContato() {
       perfil: codPerfil,
       uf,
       cidade: codCidade,
-      ativos: parametroAtivosContato()
+      ativos: parametroAtivosContato(),
+      pagina: String(Number(pagina) || 1)
     });
+    if (contatoCompraInicial.value) params.set('dataInicial', contatoCompraInicial.value);
+    if (contatoCompraFinal.value) params.set('dataFinal', contatoCompraFinal.value);
+    if (contatoFiltrosColuna.perfil !== null) {
+      params.set('perfisGrade', JSON.stringify([...contatoFiltrosColuna.perfil]));
+    }
+    if (contatoFiltrosColuna.vendedor !== null) {
+      params.set('vendedoresGrade', JSON.stringify([...contatoFiltrosColuna.vendedor]));
+    }
+    if (contatoOrdenacaoColuna.coluna) {
+      params.set('ordenar', contatoOrdenacaoColuna.coluna);
+      params.set('direcao', contatoOrdenacaoColuna.direcao);
+    } else if (contatoOrdenacaoUltimaCompra) {
+      params.set('ordenar', 'ultima');
+      params.set('direcao', contatoOrdenacaoUltimaCompra);
+    }
     const res = await fetch(`/api/contatos/clientes?${params}`);
     const payload = await res.json();
 
@@ -2221,7 +2367,7 @@ async function carregarClientesContato() {
       throw new Error(payload.erro || 'Erro ao carregar clientes');
     }
 
-    renderizarClientesContato(payload.clientes || []);
+    renderizarClientesContato(payload.clientes || [], payload.paginacao, payload.facetas, preservarGrade);
   } catch (error) {
     contatoStatus.textContent = 'Erro ao carregar clientes';
     contatoClientesLista.innerHTML = `<div class="consulta-empty">${escaparHtml(error.message)}</div>`;
@@ -2232,6 +2378,7 @@ async function buscarClientesContato() {
   const termo = contatoBusca.value.trim();
   mostrarListaContato();
   contatoListaTitulo.textContent = termo ? 'Resultados da pesquisa' : 'Clientes da cidade';
+  contatoPagination.hidden = true;
 
   if (!termo) {
     if (contatoCidade.value) {
@@ -2794,6 +2941,39 @@ async function abrirDocumentoFiscal(botao) {
     }
   } finally {
     botao.disabled = false;
+  }
+}
+
+async function abrirPdfPedido() {
+  const nunota = pedidoPreviewSelecionado?.NUNOTA;
+  if (!nunota || !botaoImprimirPreviewPedido) return;
+
+  const novaAba = window.open('', '_blank');
+  if (!novaAba) {
+    scanStatus.textContent = 'O navegador bloqueou a nova guia do pedido.';
+    return;
+  }
+
+  novaAba.document.write('<p style="font-family:Arial;padding:20px">Gerando PDF do pedido...</p>');
+  novaAba.document.close();
+  botaoImprimirPreviewPedido.disabled = true;
+
+  try {
+    const res = await fetch(`/api/fila-conferencia/pedidos/${nunota}/pdf`);
+    const contentType = res.headers.get('content-type') || '';
+    if (!res.ok || !contentType.includes('application/pdf')) {
+      const payload = await res.json().catch(() => ({}));
+      throw new Error([payload.erro, payload.detalhes].filter(Boolean).join(' - ') || 'PDF indisponivel');
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    novaAba.location.replace(url);
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+  } catch (error) {
+    novaAba.close();
+    scanStatus.textContent = error.message;
+  } finally {
+    botaoImprimirPreviewPedido.disabled = false;
   }
 }
 
@@ -3446,6 +3626,7 @@ async function abrirPreviewPedido(pedido) {
     ? 'Conferido'
     : pedidoPreviewStatus.textContent;
   botaoConfirmarPreviewPedido.disabled = !pedidoPodeIniciarConferencia(pedido);
+  botaoImprimirPreviewPedido.hidden = pedido.STATUS_CONFERENCIA === 'CONFERIDO';
   botaoConfirmarPreviewPedido.textContent = pedidoPodeIniciarConferencia(pedido)
     ? 'Iniciar conferencia'
     : 'Pedido ja conferido';
@@ -3589,7 +3770,12 @@ function adicionarConferenciaPorCodigo() {
   scanCodigo.focus();
 }
 
-async function confirmarConferencia() {
+function fecharModalVolumesConferencia() {
+  confirmarVolumesModal.hidden = true;
+  confirmarVolumesStatus.textContent = '';
+}
+
+function solicitarVolumesConferencia() {
   if (!pedidoSelecionado) {
     return;
   }
@@ -3605,6 +3791,26 @@ async function confirmarConferencia() {
     return;
   }
 
+  confirmarVolumesStatus.textContent = '';
+  const volumesAtuais = Number(pedidoSelecionado.QTDVOL || 0);
+  confirmarVolumesQtd.value = Number.isInteger(volumesAtuais) && volumesAtuais > 0
+    ? String(volumesAtuais)
+    : '';
+  confirmarVolumesModal.hidden = false;
+  setTimeout(() => {
+    confirmarVolumesQtd.focus();
+    confirmarVolumesQtd.select();
+  }, 0);
+}
+
+async function confirmarConferencia(volumes) {
+  if (!pedidoSelecionado || !Number.isInteger(volumes) || volumes <= 0) {
+    confirmarVolumesStatus.innerHTML = '<span class="danger-text">Informe uma quantidade valida de volumes.</span>';
+    return;
+  }
+
+  fecharModalVolumesConferencia();
+
   botaoConfirmarConferencia.disabled = true;
   confirmarStatus.textContent = 'Confirmando conferencia no Sankhya...';
   abrirModalProcessandoConferencia(pedidoSelecionado);
@@ -3617,6 +3823,7 @@ async function confirmarConferencia() {
         nunota: pedidoSelecionado.NUNOTA,
         nuconf: pedidoSelecionado.nuconf,
         codUsu: usuarioLogado.codUsu,
+        volumes,
         itens: itensPedidoSelecionado.map((item) => ({
           sequencia: item.sequencia,
           codProd: item.codProd,
@@ -3634,7 +3841,7 @@ async function confirmarConferencia() {
       return;
     }
 
-    const pedidoFinalizado = { ...pedidoSelecionado };
+    const pedidoFinalizado = { ...pedidoSelecionado, QTDVOL: volumes };
     confirmarStatus.innerHTML = '<span class="success-text">Conferencia confirmada.</span>';
     filaPedidos = filaPedidos.filter((pedido) => pedido.NUNOTA !== pedidoSelecionado.NUNOTA);
     limparPedidoConferencia('Pedido conferido. Selecione o proximo pedido.');
@@ -3927,22 +4134,28 @@ consultaProdutoCodigo.addEventListener('keydown', (event) => {
 });
 contatoPerfil.addEventListener('change', carregarEstadosContato);
 contatoEstado.addEventListener('change', carregarCidadesContato);
-contatoCidade.addEventListener('change', carregarClientesContato);
+contatoCidade.addEventListener('change', () => carregarClientesContato(1));
 contatoCompraInicial.addEventListener('change', () => {
   if (contatoCompraFinal.value && contatoCompraInicial.value > contatoCompraFinal.value) {
     contatoCompraFinal.value = contatoCompraInicial.value;
   }
-  desenharClientesContato();
+  if (contatoOrigemLista === 'cidade') carregarClientesContato(1, true);
+  else desenharClientesContato();
 });
 contatoCompraFinal.addEventListener('change', () => {
   if (contatoCompraInicial.value && contatoCompraFinal.value < contatoCompraInicial.value) {
     contatoCompraInicial.value = contatoCompraFinal.value;
   }
-  desenharClientesContato();
+  if (contatoOrigemLista === 'cidade') carregarClientesContato(1, true);
+  else desenharClientesContato();
 });
 botaoExibirContatosAtualizados.addEventListener('click', carregarClientesAtualizadosContato);
 contatoBusca.addEventListener('input', agendarBuscaContato);
 contatoSomenteAtivos.addEventListener('change', alternarFiltroAtivosContato);
+contatoPaginaPrimeira.addEventListener('click', () => irParaPaginaContato(1));
+contatoPaginaAnterior.addEventListener('click', () => irParaPaginaContato(contatoPaginacao.pagina - 1));
+contatoPaginaProxima.addEventListener('click', () => irParaPaginaContato(contatoPaginacao.pagina + 1));
+contatoPaginaUltima.addEventListener('click', () => irParaPaginaContato(contatoPaginacao.totalPaginas));
 contatoClientesLista.addEventListener('click', (event) => {
   const botaoCliente = event.target.closest('.contato-link');
   if (!botaoCliente) return;
@@ -3974,6 +4187,7 @@ filaBuscaPedido.addEventListener('keydown', (event) => {
   }
 });
 botaoCancelarPreviewPedido.addEventListener('click', fecharPreviewPedido);
+botaoImprimirPreviewPedido.addEventListener('click', abrirPdfPedido);
 botaoConfirmarPreviewPedido.addEventListener('click', () => {
   if (pedidoPreviewSelecionado) {
     selecionarPedidoConferencia(pedidoPreviewSelecionado);
@@ -4012,7 +4226,22 @@ volumeQtd.addEventListener('keydown', (event) => {
   }
 });
 botaoScanAdicionar.addEventListener('click', adicionarConferenciaPorCodigo);
-botaoConfirmarConferencia.addEventListener('click', confirmarConferencia);
+botaoConfirmarConferencia.addEventListener('click', solicitarVolumesConferencia);
+botaoCancelarVolumesConferencia.addEventListener('click', fecharModalVolumesConferencia);
+botaoConfirmarVolumesConferencia.addEventListener('click', () => {
+  confirmarConferencia(Number(confirmarVolumesQtd.value));
+});
+confirmarVolumesQtd.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    confirmarConferencia(Number(confirmarVolumesQtd.value));
+  }
+});
+confirmarVolumesModal.addEventListener('click', (event) => {
+  if (event.target === confirmarVolumesModal) {
+    fecharModalVolumesConferencia();
+  }
+});
 scanCodigo.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();

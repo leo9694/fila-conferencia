@@ -1,4 +1,5 @@
 const express = require('express');
+const path = require('path');
 const router = express.Router();
 const {
   downloadDirectFile,
@@ -10,6 +11,7 @@ const {
 const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
 const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
 const { criarContatoStatusStore } = require('./api/contatoStatusStore');
+const { gerarPedidoVendaPdf } = require('./api/pedidoVendaPdf');
 
 const conferenciaTimerStore = criarConferenciaTimerStore();
 const conferenciaProgressStore = criarConferenciaProgressStore();
@@ -77,6 +79,33 @@ function sqlFiltroPerfilContato(perfil) {
 
 function sqlFiltroAtivoContato(valor) {
   return String(valor || '1') === '0' ? '' : "AND NVL(PAR.ATIVO, 'S') = 'S'";
+}
+
+function obterListaFiltroContato(valor) {
+  if (valor === undefined || valor === null || valor === '') return null;
+  try {
+    const lista = JSON.parse(String(valor));
+    return Array.isArray(lista)
+      ? lista.map((item) => String(item || '').trim()).filter(Boolean).slice(0, 500)
+      : [];
+  } catch {
+    return null;
+  }
+}
+
+function sqlFiltroListaTexto(expressao, valores) {
+  if (valores === null) return '';
+  if (!valores.length) return 'AND 1 = 0';
+  return `AND ${expressao} IN (${valores.map((valor) => `'${textoSql(valor)}'`).join(', ')})`;
+}
+
+function sqlFiltroPeriodoCompra(dataInicial, dataFinal) {
+  const inicial = /^\d{4}-\d{2}-\d{2}$/.test(String(dataInicial || '')) ? dataInicial : null;
+  const final = /^\d{4}-\d{2}-\d{2}$/.test(String(dataFinal || '')) ? dataFinal : null;
+  return [
+    inicial ? `AND ULTIMA_COMPRA.DTULTCOMPRA >= TO_DATE('${inicial}', 'YYYY-MM-DD')` : '',
+    final ? `AND ULTIMA_COMPRA.DTULTCOMPRA < TO_DATE('${final}', 'YYYY-MM-DD') + 1` : ''
+  ].filter(Boolean).join('\n');
 }
 
 function valorTextoContato(valor, limite = 255) {
@@ -1514,6 +1543,22 @@ router.get('/contatos/clientes', async (req, res) => {
     const filtroUf = cidadeOriginal === 'todos' && ufOriginal && ufOriginal !== 'TODOS'
       ? `AND UFS.UF = '${uf}'`
       : '';
+    const pagina = obterNumeroInteiro(req.query.pagina) || 1;
+    const tamanhoPagina = 50;
+    const perfisGrade = obterListaFiltroContato(req.query.perfisGrade);
+    const vendedoresGrade = obterListaFiltroContato(req.query.vendedoresGrade);
+    const filtroPerfilGrade = sqlFiltroListaTexto("NVL(TPP.DESCRTIPPARC, 'Sem perfil')", perfisGrade);
+    const filtroVendedorGrade = sqlFiltroListaTexto("NVL(VEN.APELIDO, 'Sem vendedor')", vendedoresGrade);
+    const filtroPeriodo = sqlFiltroPeriodoCompra(req.query.dataInicial, req.query.dataFinal);
+    const colunaOrdenacao = ['codigo', 'cliente', 'ultima'].includes(String(req.query.ordenar))
+      ? String(req.query.ordenar)
+      : 'cliente';
+    const direcaoOrdenacao = String(req.query.direcao).toLowerCase() === 'desc' ? 'DESC' : 'ASC';
+    const ordemSql = colunaOrdenacao === 'codigo'
+      ? `PAR.CODPARC ${direcaoOrdenacao}`
+      : colunaOrdenacao === 'ultima'
+        ? `ULTIMA_COMPRA.DTULTCOMPRA ${direcaoOrdenacao} NULLS LAST, PAR.NOMEPARC ASC`
+        : `PAR.NOMEPARC ${direcaoOrdenacao}, PAR.CODPARC ${direcaoOrdenacao}`;
 
     if (filtroPerfil === null) {
       res.status(400).json({ erro: 'Informe o perfil' });
@@ -1525,43 +1570,97 @@ router.get('/contatos/clientes', async (req, res) => {
       return;
     }
 
-    const rows = await executeQuery(`
-      SELECT
-        PAR.CODPARC,
-        PAR.NOMEPARC,
-        CAST(NVL(PAR.LIMCRED, 0) AS NUMBER(15,2)) AS LIMCRED,
-        CASE WHEN NVL(PAR.ATIVO, 'S') = 'S' THEN 'Sim' ELSE 'Nao' END AS ATIVO,
-        NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS PERFIL,
-        NVL(VEN.APELIDO, 'Sem vendedor') AS VENDEDOR,
-        TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'DD/MM/YYYY') AS ULTIMA_COMPRA,
-        TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'YYYYMMDD') AS ULTIMA_COMPRA_ORD,
-        TO_CHAR(PAR.AD_DTATUCONTATO, 'DD/MM/YYYY') AS DATA_ATUALIZACAO_CONTATO
+    const joinsBase = `
       FROM TGFPAR PAR
-      LEFT JOIN TGFTPP TPP
-        ON TPP.CODTIPPARC = PAR.CODTIPPARC
-      LEFT JOIN TGFVEN VEN
-        ON VEN.CODVEND = PAR.CODVEND
-      LEFT JOIN TSICID CID
-        ON CID.CODCID = PAR.CODCID
-      LEFT JOIN TSIUFS UFS
-        ON UFS.CODUF = CID.UF
+      LEFT JOIN TGFTPP TPP ON TPP.CODTIPPARC = PAR.CODTIPPARC
+      LEFT JOIN TGFVEN VEN ON VEN.CODVEND = PAR.CODVEND
+      LEFT JOIN TSICID CID ON CID.CODCID = PAR.CODCID
+      LEFT JOIN TSIUFS UFS ON UFS.CODUF = CID.UF
       LEFT JOIN (
         SELECT CODPARC, MAX(DTNEG) AS DTULTCOMPRA
         FROM TGFCAB
         WHERE TIPMOV IN ('P', 'V')
           AND STATUSNOTA = 'L'
         GROUP BY CODPARC
-      ) ULTIMA_COMPRA
-        ON ULTIMA_COMPRA.CODPARC = PAR.CODPARC
+      ) ULTIMA_COMPRA ON ULTIMA_COMPRA.CODPARC = PAR.CODPARC
       WHERE NVL(PAR.CLIENTE, 'N') = 'S'
         ${filtroAtivo}
         ${filtroPerfil}
         ${filtroCidade}
         ${filtroUf}
-      ORDER BY PAR.NOMEPARC
+    `;
+
+    const [facetasPerfil, facetasVendedor] = await Promise.all([
+      executeQuery(`
+        SELECT DISTINCT NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS VALOR
+        ${joinsBase}
+        ORDER BY VALOR
+      `),
+      executeQuery(`
+        SELECT DISTINCT NVL(VEN.APELIDO, 'Sem vendedor') AS VALOR
+        ${joinsBase}
+        ORDER BY VALOR
+      `)
+    ]);
+
+    const filtrosGrade = `${filtroPerfilGrade}\n${filtroVendedorGrade}\n${filtroPeriodo}`;
+    const [totalRow] = await executeQuery(`SELECT COUNT(*) AS TOTAL ${joinsBase} ${filtrosGrade}`);
+    const total = normalizarNumero(totalRow?.TOTAL);
+    const totalPaginas = Math.max(1, Math.ceil(total / tamanhoPagina));
+    const paginaValida = Math.min(pagina, totalPaginas);
+    const inicioValido = ((paginaValida - 1) * tamanhoPagina) + 1;
+    const fimValido = paginaValida * tamanhoPagina;
+
+    const rows = await executeQuery(`
+      SELECT *
+      FROM (
+        SELECT RESULTADO_PAGINADO.*, ROWNUM AS RN
+        FROM (
+          SELECT
+            PAR.CODPARC,
+            PAR.NOMEPARC,
+            CAST(NVL(PAR.LIMCRED, 0) AS NUMBER(15,2)) AS LIMCRED,
+            CASE WHEN PAR.LIMCRED IS NULL THEN 'N' ELSE 'S' END AS LIMCRED_CADASTRADO,
+            CASE WHEN NVL(PAR.ATIVO, 'S') = 'S' THEN 'Sim' ELSE 'Nao' END AS ATIVO,
+            NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS PERFIL,
+            NVL(VEN.APELIDO, 'Sem vendedor') AS VENDEDOR,
+            TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'DD/MM/YYYY') AS ULTIMA_COMPRA,
+            TO_CHAR(ULTIMA_COMPRA.DTULTCOMPRA, 'YYYYMMDD') AS ULTIMA_COMPRA_ORD,
+            TO_CHAR(PAR.AD_DTATUCONTATO, 'DD/MM/YYYY') AS DATA_ATUALIZACAO_CONTATO
+          FROM TGFPAR PAR
+          LEFT JOIN TGFTPP TPP ON TPP.CODTIPPARC = PAR.CODTIPPARC
+          LEFT JOIN TGFVEN VEN ON VEN.CODVEND = PAR.CODVEND
+          LEFT JOIN TSICID CID ON CID.CODCID = PAR.CODCID
+          LEFT JOIN TSIUFS UFS ON UFS.CODUF = CID.UF
+          LEFT JOIN (
+            SELECT CODPARC, MAX(DTNEG) AS DTULTCOMPRA
+            FROM TGFCAB
+            WHERE TIPMOV IN ('P', 'V')
+              AND STATUSNOTA = 'L'
+            GROUP BY CODPARC
+          ) ULTIMA_COMPRA ON ULTIMA_COMPRA.CODPARC = PAR.CODPARC
+          WHERE NVL(PAR.CLIENTE, 'N') = 'S'
+            ${filtroAtivo}
+            ${filtroPerfil}
+            ${filtroCidade}
+            ${filtroUf}
+            ${filtrosGrade}
+          ORDER BY ${ordemSql}
+        ) RESULTADO_PAGINADO
+        WHERE ROWNUM <= ${fimValido}
+      )
+      WHERE RN >= ${inicioValido}
+      ORDER BY RN
     `);
 
-    res.json({ clientes: anexarStatusContato(rows) });
+    res.json({
+      clientes: anexarStatusContato(rows),
+      paginacao: { pagina: paginaValida, tamanho: tamanhoPagina, total, totalPaginas },
+      facetas: {
+        perfis: facetasPerfil.map((item) => item.VALOR).filter(Boolean),
+        vendedores: facetasVendedor.map((item) => item.VALOR).filter(Boolean)
+      }
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: 'Erro ao buscar clientes' });
@@ -1594,6 +1693,7 @@ router.get('/contatos/busca', async (req, res) => {
           PAR.CODPARC,
           PAR.NOMEPARC,
           CAST(NVL(PAR.LIMCRED, 0) AS NUMBER(15,2)) AS LIMCRED,
+          CASE WHEN PAR.LIMCRED IS NULL THEN 'N' ELSE 'S' END AS LIMCRED_CADASTRADO,
           CASE WHEN NVL(PAR.ATIVO, 'S') = 'S' THEN 'Sim' ELSE 'Nao' END AS ATIVO,
           NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS PERFIL,
           NVL(VEN.APELIDO, 'Sem vendedor') AS VENDEDOR,
@@ -1644,6 +1744,7 @@ router.get('/contatos/atualizados', async (req, res) => {
         PAR.CODPARC,
         PAR.NOMEPARC,
         CAST(NVL(PAR.LIMCRED, 0) AS NUMBER(15,2)) AS LIMCRED,
+        CASE WHEN PAR.LIMCRED IS NULL THEN 'N' ELSE 'S' END AS LIMCRED_CADASTRADO,
         CASE WHEN NVL(PAR.ATIVO, 'S') = 'S' THEN 'Sim' ELSE 'Nao' END AS ATIVO,
         NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS PERFIL,
         NVL(VEN.APELIDO, 'Sem vendedor') AS VENDEDOR,
@@ -1709,6 +1810,10 @@ router.get('/contatos/clientes/:codParc', async (req, res) => {
         PAR.EMAILDANFE,
         PAR.EMAILNOTIFENTREGA,
         CAST(NVL(PAR.LIMCRED, 0) AS NUMBER(15,2)) AS LIMCRED,
+        CASE WHEN PAR.LIMCRED IS NULL THEN 'N' ELSE 'S' END AS LIMCRED_CADASTRADO,
+        PAR.SITUACAO,
+        PAR.OBSERVACOES,
+        PAR.MOTBLOQ,
         CAST(NVL(SUGESTAO_LIMITE.MEDIA_PEDIDOS, 0) AS NUMBER(15,2)) AS SUGESTAO_LIMCRED,
         NVL(SUGESTAO_LIMITE.QTD_PEDIDOS, 0) AS QTD_PEDIDOS_SUGESTAO,
         TO_CHAR(PAR.DTULTCONTATO, 'DD/MM/YYYY') AS DTULTCONTATO,
@@ -1803,7 +1908,16 @@ router.get('/contatos/clientes/:codParc', async (req, res) => {
       ORDER BY DESCRTIPPARC
     `);
 
-    res.json({ parceiro, contatos, perfis });
+    const situacoes = await executeQuery(`
+      SELECT OPC.VALOR, OPC.OPCAO
+      FROM TDDCAM CAM
+      JOIN TDDOPC OPC ON OPC.NUCAMPO = CAM.NUCAMPO
+      WHERE UPPER(CAM.NOMETAB) = 'TGFPAR'
+        AND UPPER(CAM.NOMECAMPO) = 'SITUACAO'
+      ORDER BY OPC.ORDEM NULLS LAST, OPC.OPCAO
+    `);
+
+    res.json({ parceiro, contatos, perfis, situacoes });
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: 'Erro ao buscar dados do cliente' });
@@ -1863,13 +1977,31 @@ router.patch('/contatos/clientes/:codParc', async (req, res) => {
 
     if (acao === 'salvar-limite') {
       const limiteCredito = obterValorMonetario(req.body?.limiteCredito);
+      const situacao = valorTextoContato(req.body?.situacao, 1).toUpperCase();
+      const observacoes = valorTextoContato(req.body?.observacoes, 4000);
 
       if (limiteCredito === null) {
         res.status(400).json({ erro: 'Informe um limite de credito valido' });
         return;
       }
 
+      const [situacaoValida] = await executeQuery(`
+        SELECT OPC.VALOR
+        FROM TDDCAM CAM
+        JOIN TDDOPC OPC ON OPC.NUCAMPO = CAM.NUCAMPO
+        WHERE UPPER(CAM.NOMETAB) = 'TGFPAR'
+          AND UPPER(CAM.NOMECAMPO) = 'SITUACAO'
+          AND OPC.VALOR = '${textoSql(situacao)}'
+      `);
+
+      if (!situacao || !situacaoValida) {
+        res.status(400).json({ erro: 'Selecione uma situacao de credito valida' });
+        return;
+      }
+
       campos.LIMCRED = numeroApi(limiteCredito);
+      campos.SITUACAO = situacao;
+      campos.OBSERVACOES = observacoes;
     }
 
     const contatos = Array.isArray(req.body?.contatos) ? req.body.contatos : [];
@@ -1925,6 +2057,10 @@ router.patch('/contatos/clientes/:codParc', async (req, res) => {
         PAR.CODPARC,
         PAR.CODTIPPARC,
         CAST(NVL(PAR.LIMCRED, 0) AS NUMBER(15,2)) AS LIMCRED,
+        CASE WHEN PAR.LIMCRED IS NULL THEN 'N' ELSE 'S' END AS LIMCRED_CADASTRADO,
+        PAR.SITUACAO,
+        PAR.OBSERVACOES,
+        PAR.MOTBLOQ,
         NVL(TPP.DESCRTIPPARC, 'Sem perfil') AS PERFIL,
         TO_CHAR(PAR.AD_DTATUCONTATO, 'DD/MM/YYYY') AS DATA_ATUALIZACAO_CONTATO
       FROM TGFPAR PAR
@@ -2133,10 +2269,11 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
   const nunota = obterNumeroInteiro(req.body?.nunota);
   const nuconfInformado = obterNumeroInteiro(req.body?.nuconf);
   const codUsu = obterCodigoUsuario(req.usuario?.codUsu);
+  const volumes = obterNumeroInteiro(req.body?.volumes);
   const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
 
-  if (!nunota || codUsu === null || itens.length === 0) {
-    res.status(400).json({ erro: 'Informe pedido, usuario logado e itens conferidos' });
+  if (!nunota || codUsu === null || !volumes || itens.length === 0) {
+    res.status(400).json({ erro: 'Informe pedido, usuario logado, quantidade de volumes e itens conferidos' });
     return;
   }
 
@@ -2232,6 +2369,13 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       });
       return;
     }
+
+    await atualizarRegistroApi(
+      'CabecalhoNota',
+      { NUNOTA: nunota },
+      { QTDVOL: volumes }
+    );
+    pedido.QTDVOL = volumes;
 
     let nuconf = Number(pedido.NUCONFATUAL || nuconfInformado || 0);
     if (!nuconf) {
@@ -2428,6 +2572,106 @@ router.get('/fila-conferencia/pedidos/:nunota/documentos', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: 'Erro ao consultar documentos do faturamento', detalhes: err.message });
+  }
+});
+
+router.get('/fila-conferencia/pedidos/:nunota/pdf', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+
+  if (!nunota) {
+    res.status(400).json({ erro: 'Informe um pedido valido' });
+    return;
+  }
+
+  try {
+    const [pedido] = await executeQuery(`
+      SELECT
+        CAB.NUNOTA,
+        CAB.DTNEG,
+        CAB.OBSERVACAO,
+        CAB.CODPARC,
+        PAR.NOMEPARC,
+        PAR.CGC_CPF,
+        PAR.IDENTINSCESTAD,
+        PAR.TELEFONE AS TELEFONE_CLIENTE,
+        PAR.CEP,
+        CAB.CODVEND,
+        VEN.APELIDO AS VENDEDOR,
+        CAB.CODPARCTRANSP,
+        TRA.NOMEPARC AS TRANSPORTADORA,
+        EMP.RAZAOSOCIAL AS NOME_EMPRESA,
+        EMP.TELEFONE AS TELEFONE_EMPRESA,
+        EMP.EMAIL AS EMAIL_EMPRESA,
+        ENDC.NOMEEND AS ENDERECO_CLIENTE,
+        PAR.NUMEND,
+        BAI.NOMEBAI AS BAIRRO,
+        CID.NOMECID AS CIDADE,
+        UFS.UF,
+        ENDE.NOMEEND AS LOGRADOURO_EMPRESA,
+        EMP.NUMEND AS NUMERO_EMPRESA,
+        BAIE.NOMEBAI AS BAIRRO_EMPRESA,
+        CIDE.NOMECID AS CIDADE_EMPRESA,
+        UFSE.UF AS UF_EMPRESA
+      FROM TGFCAB CAB
+      LEFT JOIN TGFPAR PAR ON PAR.CODPARC = CAB.CODPARC
+      LEFT JOIN TGFVEN VEN ON VEN.CODVEND = CAB.CODVEND
+      LEFT JOIN TGFPAR TRA ON TRA.CODPARC = CAB.CODPARCTRANSP
+      LEFT JOIN TSIEMP EMP ON EMP.CODEMP = CAB.CODEMP
+      LEFT JOIN TSIEND ENDC ON ENDC.CODEND = PAR.CODEND
+      LEFT JOIN TSIBAI BAI ON BAI.CODBAI = PAR.CODBAI
+      LEFT JOIN TSICID CID ON CID.CODCID = PAR.CODCID
+      LEFT JOIN TSIUFS UFS ON UFS.CODUF = CID.UF
+      LEFT JOIN TSIEND ENDE ON ENDE.CODEND = EMP.CODEND
+      LEFT JOIN TSIBAI BAIE ON BAIE.CODBAI = EMP.CODBAI
+      LEFT JOIN TSICID CIDE ON CIDE.CODCID = EMP.CODCID
+      LEFT JOIN TSIUFS UFSE ON UFSE.CODUF = CIDE.UF
+      WHERE CAB.NUNOTA = ${nunota}
+        AND CAB.TIPMOV = 'P'
+        AND CAB.STATUSNOTA = 'L'
+    `);
+
+    if (!pedido) {
+      res.status(404).json({ erro: 'Pedido confirmado nao encontrado' });
+      return;
+    }
+
+    const itens = await executeQuery(`
+      SELECT
+        ITE.SEQUENCIA,
+        ITE.CODPROD,
+        PRO.DESCRPROD,
+        ITE.CODVOL,
+        CAST(NVL(ITE.QTDNEG, 0) AS NUMBER(15,3)) AS QTDNEG,
+        ITE.CONTROLE,
+        ITE.CODLOCALORIG AS LOCAL,
+        PRO.CODGRUPOPROD,
+        GRU.DESCRGRUPOPROD
+      FROM TGFITE ITE
+      LEFT JOIN TGFPRO PRO ON PRO.CODPROD = ITE.CODPROD
+      LEFT JOIN TGFGRU GRU ON GRU.CODGRUPOPROD = PRO.CODGRUPOPROD
+      WHERE ITE.NUNOTA = ${nunota}
+      ORDER BY PRO.CODGRUPOPROD, ITE.SEQUENCIA
+    `);
+
+    pedido.ENDERECO_CLIENTE = [pedido.ENDERECO_CLIENTE, pedido.NUMEND].filter(Boolean).join(' - ');
+    pedido.ENDERECO_EMPRESA = [
+      [pedido.LOGRADOURO_EMPRESA, pedido.NUMERO_EMPRESA].filter(Boolean).join(', '),
+      pedido.BAIRRO_EMPRESA,
+      [pedido.CIDADE_EMPRESA, pedido.UF_EMPRESA].filter(Boolean).join('-')
+    ].filter(Boolean).join(' - ');
+
+    const pdf = await gerarPedidoVendaPdf({
+      pedido,
+      itens,
+      logoPath: path.join(__dirname, 'frontend', 'favicon.png')
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="pedido-venda-${nunota}.pdf"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(pdf);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao gerar PDF do pedido', detalhes: err.message });
   }
 });
 
