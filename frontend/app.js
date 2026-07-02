@@ -3105,8 +3105,8 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
           </div>
           <div class="cliente-texto">
             <div class="section-label inverse-label">Destino</div>
-            <strong class="${classeNome}">${nomeParc}</strong>
-            <em class="${classeRazao}">${razaoSocial}</em>
+            <strong class="fit-one-line ${classeNome}" data-min-font="7">${nomeParc}</strong>
+            <em class="fit-one-line ${classeRazao}" data-min-font="6">${razaoSocial}</em>
           </div>
         </div>
 
@@ -3119,8 +3119,8 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
           </div>
           <div class="endereco-texto">
             <div class="section-label">Endereco</div>
-            <div class="endereco">${endereco}</div>
-            <div class="cidade">${cidadeUf}</div>
+            <div class="endereco fit-one-line" data-min-font="6">${endereco}</div>
+            <div class="cidade fit-one-line" data-min-font="8">${cidadeUf}</div>
           </div>
         </div>
 
@@ -3135,7 +3135,7 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
           </div>
           <div>
             <div class="section-label">Transportadora</div>
-            <div class="transportadora">${transportadora}</div>
+            <div class="transportadora fit-one-line" data-min-font="6">${transportadora}</div>
           </div>
           <img class="label-logo" src="${escaparAtributo(logoUrl)}" alt="Norte Sul">
         </div>
@@ -3264,6 +3264,7 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
       text-overflow: clip;
       transform-origin: left center;
     }
+    .cliente-texto { min-width: 0; }
     .cliente strong {
       font-size: 10.2pt;
       line-height: 1;
@@ -3296,8 +3297,8 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
       line-height: 1;
       font-weight: 800;
       white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      overflow: visible;
+      text-overflow: clip;
       max-width: 70mm;
     }
     .cidade {
@@ -3306,8 +3307,8 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
       line-height: 0.9;
       font-weight: 900;
       white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      overflow: visible;
+      text-overflow: clip;
       max-width: 66mm;
     }
     .transportadora-bloco {
@@ -3319,6 +3320,7 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
       padding-top: 0.65mm;
       margin-top: 0.15mm;
     }
+    .transportadora-bloco > div:nth-child(2) { min-width: 0; }
     .transportadora-bloco::before {
       content: "";
       position: absolute;
@@ -3334,8 +3336,8 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
       line-height: 1;
       font-weight: 900;
       white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      overflow: visible;
+      text-overflow: clip;
       max-width: 64mm;
     }
     .label-logo {
@@ -3360,9 +3362,22 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
 <body>
   ${paginas}
   <script>
+    function ajustarTextoEmUmaLinha(elemento) {
+      const minimo = Number(elemento.dataset.minFont || 6);
+      let tamanho = Number.parseFloat(window.getComputedStyle(elemento).fontSize);
+
+      while (elemento.scrollWidth > elemento.clientWidth && tamanho > minimo) {
+        tamanho = Math.max(minimo, tamanho - 0.25);
+        elemento.style.fontSize = tamanho + 'px';
+      }
+    }
+
     window.onload = () => {
-      window.focus();
-      window.print();
+      document.querySelectorAll('.fit-one-line').forEach(ajustarTextoEmUmaLinha);
+      window.requestAnimationFrame(() => {
+        window.focus();
+        window.print();
+      });
     };
   </script>
 </body>
