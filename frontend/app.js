@@ -92,9 +92,6 @@ const botaoConfirmarCorte = document.getElementById('confirmar-corte');
 const posConferenciaModal = document.getElementById('pos-conferencia-modal');
 const posConferenciaTitulo = document.getElementById('pos-conferencia-titulo');
 const posConferenciaTexto = document.getElementById('pos-conferencia-texto');
-const volumePanel = document.getElementById('volume-panel');
-const volumeQtd = document.getElementById('volume-qtd');
-const volumeStatus = document.getElementById('volume-status');
 const posConferenciaDocumentos = document.getElementById('pos-conferencia-documentos');
 const botaoImprimirEtiquetaVolume = document.getElementById('imprimir-etiqueta-volume');
 const botaoVoltarListaPosConferencia = document.getElementById('voltar-lista-pos-conferencia');
@@ -153,7 +150,6 @@ let itensPedidoPreview = [];
 let itensPedidoSelecionado = [];
 let itemCorteSelecionado = null;
 let pedidoConcluido = null;
-let volumePanelAberto = false;
 let contatoBuscaTimer = null;
 let contatoClientesAtuais = [];
 let contatoOrdenacaoUltimaCompra = '';
@@ -2990,10 +2986,6 @@ function abrirModalPosConferencia(pedido, faturamento) {
     : 'Conferencia concluida';
   botaoVoltarListaPosConferencia.textContent = 'Voltar para lista';
   pedidoConcluido = pedido;
-  volumePanelAberto = false;
-  volumePanel.classList.remove('active');
-  volumeQtd.value = '1';
-  volumeStatus.textContent = '';
   posConferenciaDocumentos.hidden = false;
   botaoImprimirEtiquetaVolume.textContent = 'Imprimir etiqueta';
   posConferenciaTexto.textContent = faturamentoPendente
@@ -3006,8 +2998,6 @@ function abrirModalPosConferencia(pedido, faturamento) {
 
 function abrirModalProcessandoConferencia(pedido) {
   pedidoConcluido = null;
-  volumePanelAberto = false;
-  volumePanel.classList.remove('active');
   posConferenciaModal.classList.add('is-processing');
   posConferenciaModal.classList.remove('has-error', 'has-billing-warning');
   posConferenciaTitulo.textContent = 'Finalizando conferencia';
@@ -3041,30 +3031,22 @@ function abrirModalEtiquetaPedido(pedido) {
   posConferenciaTitulo.textContent = 'Imprimir etiqueta de volume';
   botaoVoltarListaPosConferencia.textContent = 'Voltar para lista';
   pedidoConcluido = pedido;
-  volumePanelAberto = true;
-  volumePanel.classList.add('active');
-  volumeQtd.value = String(Math.max(1, Number(pedido.QTDVOL || 1)));
-  volumeStatus.textContent = '';
   posConferenciaDocumentos.hidden = true;
   posConferenciaDocumentos.innerHTML = '';
   botaoImprimirEtiquetaVolume.textContent = 'Gerar etiqueta';
-  posConferenciaTexto.textContent = `Informe a quantidade de volumes para imprimir as etiquetas do pedido ${pedido.NUNOTA}.`;
+  posConferenciaTexto.textContent = Number(pedido.QTDVOL || 0) > 0
+    ? `O pedido ${pedido.NUNOTA} possui ${pedido.QTDVOL} volume(s) registrado(s).`
+    : `O pedido ${pedido.NUNOTA} nao possui quantidade de volumes registrada.`;
   posConferenciaModal.hidden = false;
   atualizarIcones();
-  setTimeout(() => {
-    volumeQtd.focus();
-    volumeQtd.select();
-  }, 0);
 }
 
 function fecharModalPosConferenciaEVoltar() {
   const deveRevisar = posConferenciaModal.classList.contains('has-error');
   posConferenciaModal.hidden = true;
   posConferenciaModal.classList.remove('is-processing', 'has-error', 'has-billing-warning');
-  volumeStatus.textContent = '';
   posConferenciaDocumentos.hidden = true;
   posConferenciaDocumentos.innerHTML = '';
-  volumePanel.classList.remove('active');
   pedidoConcluido = null;
   botaoVoltarListaPosConferencia.textContent = 'Voltar para lista';
   if (deveRevisar) {
@@ -3392,32 +3374,22 @@ async function imprimirEtiquetaVolume() {
     return;
   }
 
-  if (!volumePanelAberto) {
-    volumePanelAberto = true;
-    volumePanel.classList.add('active');
-    botaoImprimirEtiquetaVolume.textContent = 'Gerar etiqueta';
-    setTimeout(() => {
-      volumeQtd.focus();
-      volumeQtd.select();
-    }, 0);
-    return;
-  }
-
-  const volumes = Number(volumeQtd.value);
+  const volumes = Number(pedidoConcluido.QTDVOL || 0);
   if (!Number.isInteger(volumes) || volumes <= 0) {
-    volumeStatus.innerHTML = '<span class="danger-text">Informe uma quantidade valida de volumes.</span>';
+    posConferenciaTexto.textContent = 'Este pedido nao possui quantidade de volumes registrada no Sankhya.';
     return;
   }
 
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
-    volumeStatus.innerHTML = '<span class="danger-text">O navegador bloqueou a aba de impressao.</span>';
+    posConferenciaTexto.textContent = 'O navegador bloqueou a aba de impressao.';
     return;
   }
 
   printWindow.document.write('<p style="font-family:Arial;padding:16px">Gerando etiqueta...</p>');
   printWindow.document.close();
-  volumeStatus.textContent = 'Gravando volumes e gerando etiqueta...';
+  botaoImprimirEtiquetaVolume.disabled = true;
+  botaoImprimirEtiquetaVolume.textContent = 'Gerando etiqueta...';
 
   try {
     const res = await fetch(`/api/fila-conferencia/pedidos/${pedidoConcluido.NUNOTA}/etiquetas-volume`, {
@@ -3434,10 +3406,13 @@ async function imprimirEtiquetaVolume() {
     printWindow.document.open();
     printWindow.document.write(montarHtmlEtiquetas(payload.etiqueta, volumes));
     printWindow.document.close();
-    volumeStatus.innerHTML = '<span class="success-text">Etiqueta gerada.</span>';
+    posConferenciaTexto.textContent = `${volumes} etiqueta(s) gerada(s) para o pedido ${pedidoConcluido.NUNOTA}.`;
   } catch (error) {
     printWindow.close();
-    volumeStatus.innerHTML = `<span class="danger-text">${escaparHtml(error.message)}</span>`;
+    posConferenciaTexto.textContent = error.message;
+  } finally {
+    botaoImprimirEtiquetaVolume.disabled = false;
+    botaoImprimirEtiquetaVolume.textContent = 'Imprimir etiqueta';
   }
 }
 
@@ -4226,12 +4201,6 @@ corteQtd.addEventListener('keydown', (event) => {
 });
 botaoImprimirEtiquetaVolume.addEventListener('click', imprimirEtiquetaVolume);
 botaoVoltarListaPosConferencia.addEventListener('click', fecharModalPosConferenciaEVoltar);
-volumeQtd.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    imprimirEtiquetaVolume();
-  }
-});
 botaoScanAdicionar.addEventListener('click', adicionarConferenciaPorCodigo);
 botaoConfirmarConferencia.addEventListener('click', solicitarVolumesConferencia);
 botaoCancelarVolumesConferencia.addEventListener('click', fecharModalVolumesConferencia);
