@@ -630,13 +630,30 @@ async function gerarDocumentoFiscalSankhya(nunota, tipo) {
 }
 
 async function gerarDocumentosFiscaisCombinados(nunota) {
-  const [danfe, boleto] = await Promise.all([
+  const resultados = await Promise.allSettled([
     gerarDocumentoFiscalSankhya(nunota, 'danfe'),
     gerarDocumentoFiscalSankhya(nunota, 'boleto')
   ]);
+  const arquivos = resultados
+    .filter((resultado) => resultado.status === 'fulfilled')
+    .map((resultado) => resultado.value);
+
+  if (arquivos.length === 0) {
+    const detalhes = resultados
+      .filter((resultado) => resultado.status === 'rejected')
+      .map((resultado) => resultado.reason?.message)
+      .filter(Boolean)
+      .join(' ');
+    throw new Error(detalhes || 'O Sankhya nao retornou DANFE nem boleto.');
+  }
+
+  if (arquivos.length === 1) {
+    return arquivos[0];
+  }
+
   const destino = await PDFDocument.create();
 
-  for (const arquivo of [danfe, boleto]) {
+  for (const arquivo of arquivos) {
     const origem = await PDFDocument.load(arquivo);
     const paginas = await destino.copyPages(origem, origem.getPageIndices());
     paginas.forEach((pagina) => destino.addPage(pagina));
@@ -2676,7 +2693,7 @@ router.get('/fila-conferencia/pedidos/:nunota/pdf', async (req, res) => {
       LEFT JOIN TGFPRO PRO ON PRO.CODPROD = ITE.CODPROD
       LEFT JOIN TGFGRU GRU ON GRU.CODGRUPOPROD = PRO.CODGRUPOPROD
       WHERE ITE.NUNOTA = ${nunota}
-      ORDER BY PRO.CODGRUPOPROD, ITE.SEQUENCIA
+      ORDER BY PRO.CODGRUPOPROD, UPPER(PRO.DESCRPROD), ITE.SEQUENCIA
     `);
 
     pedido.ENDERECO_CLIENTE = [pedido.ENDERECO_CLIENTE, pedido.NUMEND].filter(Boolean).join(' - ');

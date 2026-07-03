@@ -2832,7 +2832,7 @@ function confirmarCorteItem() {
   scanCodigo.focus();
 }
 
-function renderizarPainelDocumentosFiscais(container, situacao = {}, fallback = null, documentosCombinados = false) {
+function renderizarPainelDocumentosFiscais(container, situacao = {}, fallback = null, documentosCombinados = false, desabilitarBoleto = false) {
   if (!container) return;
 
   const faturado = Boolean(situacao.faturado || situacao.nota || fallback?.status === 'FATURADO');
@@ -2858,16 +2858,28 @@ function renderizarPainelDocumentosFiscais(container, situacao = {}, fallback = 
     situacao.danfe?.motivo,
     situacao.boleto?.motivo
   ].filter(Boolean).join(' ');
+  const boletoIndisponivel = desabilitarBoleto || !situacao.boleto?.disponivel;
+  const danfeIndisponivel = !situacao.danfe?.disponivel;
+  const tipoDocumentoCombinado = !danfeIndisponivel && boletoIndisponivel
+    ? 'danfe'
+    : danfeIndisponivel && !boletoIndisponivel
+      ? 'boleto'
+      : 'completo';
+  const textoDocumentoCombinado = tipoDocumentoCombinado === 'danfe'
+    ? 'Abrir DANFE'
+    : tipoDocumentoCombinado === 'boleto'
+      ? 'Abrir boleto'
+      : 'Abrir DANFE + boleto';
 
   container.hidden = false;
   const botoesDocumentos = documentosCombinados
-    ? `<button class="documento-fiscal-button" type="button" data-documento="completo" data-nunota="${escaparAtributo(nunota)}" title="Abrir DANFE e boleto no mesmo PDF">
-        <i data-lucide="files" aria-hidden="true"></i>Abrir DANFE + boleto
+    ? `<button class="documento-fiscal-button" type="button" data-documento="${tipoDocumentoCombinado}" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(textoDocumentoCombinado)}">
+        <i data-lucide="files" aria-hidden="true"></i>${textoDocumentoCombinado}
       </button>`
     : `<button class="documento-fiscal-button" type="button" data-documento="danfe" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(situacao.danfe?.motivo || 'Abrir DANFE')}">
         <i data-lucide="file-text" aria-hidden="true"></i>Abrir DANFE
       </button>
-      <button class="documento-fiscal-button" type="button" data-documento="boleto" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(situacao.boleto?.motivo || 'Abrir boleto')}">
+      <button class="documento-fiscal-button" type="button" data-documento="boleto" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(desabilitarBoleto ? 'Bonificacao nao gera boleto' : situacao.boleto?.motivo || 'Abrir boleto')}" ${boletoIndisponivel ? 'disabled' : ''}>
         <i data-lucide="barcode" aria-hidden="true"></i>Abrir boleto
       </button>`;
 
@@ -2883,7 +2895,7 @@ function renderizarPainelDocumentosFiscais(container, situacao = {}, fallback = 
   atualizarIcones();
 }
 
-async function carregarDocumentosFiscaisPedido(pedido, container, fallback = null, documentosCombinados = false) {
+async function carregarDocumentosFiscaisPedido(pedido, container, fallback = null, documentosCombinados = false, desabilitarBoleto = false) {
   if (!pedido?.NUNOTA || !container) return;
 
   container.hidden = false;
@@ -2893,7 +2905,7 @@ async function carregarDocumentosFiscaisPedido(pedido, container, fallback = nul
     const res = await fetch(`/api/fila-conferencia/pedidos/${pedido.NUNOTA}/documentos`);
     const payload = await res.json();
     if (!res.ok) throw new Error(payload.erro || 'Erro ao consultar documentos');
-    renderizarPainelDocumentosFiscais(container, payload, fallback, documentosCombinados);
+    renderizarPainelDocumentosFiscais(container, payload, fallback, documentosCombinados, desabilitarBoleto);
   } catch (error) {
     renderizarPainelDocumentosFiscais(container, {}, {
       status: 'ERRO',
@@ -3642,7 +3654,7 @@ async function abrirPreviewPedido(pedido) {
   pedidoPreviewDocumentos.hidden = pedido.STATUS_CONFERENCIA !== 'CONFERIDO';
   pedidoPreviewDocumentos.innerHTML = '';
   if (pedido.STATUS_CONFERENCIA === 'CONFERIDO') {
-    carregarDocumentosFiscaisPedido(pedido, pedidoPreviewDocumentos);
+    carregarDocumentosFiscaisPedido(pedido, pedidoPreviewDocumentos, null, false, Number(pedido.CODTIPOPER) === 6);
   }
   renderizarEstadoVazio(pedidoPreviewItensLista, 'Carregando itens do pedido...');
 
