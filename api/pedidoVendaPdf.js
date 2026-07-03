@@ -23,6 +23,26 @@ function dataHora(valor) {
   return Number.isNaN(data.getTime()) ? String(valor) : data.toLocaleString('pt-BR');
 }
 
+function escreverLinhaAjustada(doc, valor, x, y, largura, options = {}) {
+  const conteudo = texto(valor);
+  const fonte = options.font || 'Helvetica';
+  const tamanhoMinimo = options.minSize || 5;
+  let tamanho = options.maxSize || 10;
+
+  doc.font(fonte).fontSize(tamanho);
+  while (doc.widthOfString(conteudo) > largura && tamanho > tamanhoMinimo) {
+    tamanho = Math.max(tamanhoMinimo, tamanho - 0.25);
+    doc.fontSize(tamanho);
+  }
+
+  doc.text(conteudo, x, y, {
+    width: largura,
+    height: options.height || 13,
+    align: options.align || 'left',
+    lineBreak: false
+  });
+}
+
 function criarBufferPdf(construir) {
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ size: 'A4', margins: { top: PAGE.margin, bottom: 28, left: PAGE.margin, right: PAGE.margin }, bufferPages: true });
@@ -49,19 +69,33 @@ function desenharCabecalho(doc, pedido, logoPath) {
     .text(texto(pedido.TELEFONE_EMPRESA), 390, 51, { width: direita - 390, align: 'right' });
 
   doc.moveTo(82, 76).lineTo(direita, 76).lineWidth(1).strokeColor(COLORS.grid).stroke();
-  doc.font('Helvetica-Bold').fontSize(16).text(`PEDIDO DE VENDA ${pedido.NUNOTA}`, 82, 82, { width: 330 });
+  const tituloPedido = Number(pedido.CODTIPOPER) === 6 ? 'PEDIDO DE BONIFICACAO' : 'PEDIDO DE VENDA';
+  escreverLinhaAjustada(doc, `${tituloPedido} ${pedido.NUNOTA}`, 82, 82, 330, {
+    font: 'Helvetica-Bold',
+    maxSize: 16,
+    minSize: 11,
+    height: 18
+  });
   doc.fontSize(7.5)
     .text(`DT IMPRESSAO: ${new Date().toLocaleString('pt-BR')}`, 405, 82, { width: direita - 405, align: 'right' })
     .text(`DT PEDIDO: ${dataHora(pedido.DTNEG)}`, 405, 94, { width: direita - 405, align: 'right' });
   doc.moveTo(esquerda, 109).lineTo(direita, 109).stroke();
 
   doc.font('Helvetica-Bold').fontSize(10).text('CLIENTE', 28, 122);
-  doc.font('Helvetica').text(`${texto(pedido.CODPARC)} - ${texto(pedido.NOMEPARC)}`, 76, 122, { width: 470 });
+  escreverLinhaAjustada(doc, `${texto(pedido.CODPARC)} - ${texto(pedido.NOMEPARC)}`, 76, 122, 470, {
+    maxSize: 10,
+    minSize: 5.5
+  });
+  doc.font('Helvetica-Bold').fontSize(9).text('RAZAO SOCIAL:', 28, 139);
+  escreverLinhaAjustada(doc, pedido.RAZAOSOCIAL, 103, 139, 443, {
+    maxSize: 9,
+    minSize: 5.5
+  });
   const campos = [
-    ['CNPJ:', pedido.CGC_CPF, 36, 141, 280], ['IE:', pedido.IDENTINSCESTAD, 405, 141, 150],
-    ['END:', pedido.ENDERECO_CLIENTE, 44, 158, 330], ['BAIRRO:', pedido.BAIRRO, 380, 158, 175],
-    ['CIDADE:', [pedido.CIDADE, pedido.UF].filter(Boolean).join('-'), 28, 175, 320], ['CEP:', pedido.CEP, 394, 175, 160],
-    ['FONE:', pedido.TELEFONE_CLIENTE, 37, 192, 300]
+    ['CNPJ:', pedido.CGC_CPF, 36, 157, 280], ['IE:', pedido.IDENTINSCESTAD, 405, 157, 150],
+    ['END:', pedido.ENDERECO_CLIENTE, 44, 174, 330], ['BAIRRO:', pedido.BAIRRO, 380, 174, 175],
+    ['CIDADE:', [pedido.CIDADE, pedido.UF].filter(Boolean).join('-'), 28, 191, 320], ['CEP:', pedido.CEP, 394, 191, 160],
+    ['FONE:', pedido.TELEFONE_CLIENTE, 37, 208, 300]
   ];
   campos.forEach(([rotulo, valor, x, y, largura]) => {
     doc.font('Helvetica-Bold').text(rotulo, x, y);
@@ -72,13 +106,13 @@ function desenharCabecalho(doc, pedido, logoPath) {
       lineBreak: false
     });
   });
-  doc.font('Helvetica-Bold').fontSize(10).text('TRANS:', 28, 210);
-  doc.font('Helvetica').fontSize(9).text(texto(pedido.TRANSPORTADORA), 72, 209, {
+  doc.font('Helvetica-Bold').fontSize(10).text('TRANS:', 28, 226);
+  doc.font('Helvetica').fontSize(9).text(texto(pedido.TRANSPORTADORA), 72, 225, {
     width: direita - 72,
     height: 26,
     lineGap: 1
   });
-  doc.y = 244;
+  doc.y = 260;
 }
 
 function desenharCabecalhoTabela(doc, grupo) {

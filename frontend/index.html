@@ -752,7 +752,7 @@
       display: grid;
       grid-template-columns:
         64px
-        minmax(88px, 0.78fr)
+        minmax(136px, 1fr)
         minmax(104px, 0.9fr)
         minmax(78px, 0.66fr)
         minmax(160px, 2.1fr)
@@ -985,15 +985,48 @@
       display: flex;
       justify-content: center;
       align-items: center;
+      gap: 5px;
       overflow: visible !important;
       text-overflow: clip !important;
       padding-inline: 12px !important;
+    }
+
+    .pedido-status-type-icon {
+      width: 22px;
+      height: 22px;
+      flex: 0 0 22px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid currentColor;
+      border-radius: 6px;
+    }
+
+    .pedido-status-type-icon svg {
+      width: 13px;
+      height: 13px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .pedido-status-type-icon.venda {
+      color: #087f65;
+      background: #e7f8f2;
+    }
+
+    .pedido-status-type-icon.bonificacao {
+      color: #9a6200;
+      background: #fff4d1;
     }
 
     .pedido-status-mini {
       display: inline-flex;
       align-items: center;
       justify-content: center;
+      gap: 4px;
       margin-top: 0;
       border-radius: 999px;
       padding: 3px 8px;
@@ -1002,9 +1035,9 @@
       font-size: 0.6rem;
       font-weight: 900;
       text-transform: uppercase;
-      max-width: 100%;
-      overflow: hidden;
-      text-overflow: ellipsis;
+      max-width: none;
+      overflow: visible;
+      text-overflow: clip;
       white-space: nowrap;
     }
 

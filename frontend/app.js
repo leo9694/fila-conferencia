@@ -2832,7 +2832,7 @@ function confirmarCorteItem() {
   scanCodigo.focus();
 }
 
-function renderizarPainelDocumentosFiscais(container, situacao = {}, fallback = null) {
+function renderizarPainelDocumentosFiscais(container, situacao = {}, fallback = null, documentosCombinados = false) {
   if (!container) return;
 
   const faturado = Boolean(situacao.faturado || situacao.nota || fallback?.status === 'FATURADO');
@@ -2860,24 +2860,30 @@ function renderizarPainelDocumentosFiscais(container, situacao = {}, fallback = 
   ].filter(Boolean).join(' ');
 
   container.hidden = false;
+  const botoesDocumentos = documentosCombinados
+    ? `<button class="documento-fiscal-button" type="button" data-documento="completo" data-nunota="${escaparAtributo(nunota)}" title="Abrir DANFE e boleto no mesmo PDF">
+        <i data-lucide="files" aria-hidden="true"></i>Abrir DANFE + boleto
+      </button>`
+    : `<button class="documento-fiscal-button" type="button" data-documento="danfe" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(situacao.danfe?.motivo || 'Abrir DANFE')}">
+        <i data-lucide="file-text" aria-hidden="true"></i>Abrir DANFE
+      </button>
+      <button class="documento-fiscal-button" type="button" data-documento="boleto" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(situacao.boleto?.motivo || 'Abrir boleto')}">
+        <i data-lucide="barcode" aria-hidden="true"></i>Abrir boleto
+      </button>`;
+
   container.innerHTML = `
     <div class="documentos-fiscais-info">
       <strong>Faturado | Nota interna: ${escaparHtml(nunota)}${escaparHtml(numeroNota)}</strong>
       <span class="documentos-fiscais-feedback">${escaparHtml(mensagens || 'DANFE e boleto podem ser abertos nas guias abaixo.')}</span>
     </div>
     <div class="documentos-fiscais-actions">
-      <button class="documento-fiscal-button" type="button" data-documento="danfe" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(situacao.danfe?.motivo || 'Abrir DANFE')}">
-        <i data-lucide="file-text" aria-hidden="true"></i>Abrir DANFE
-      </button>
-      <button class="documento-fiscal-button" type="button" data-documento="boleto" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(situacao.boleto?.motivo || 'Abrir boleto')}">
-        <i data-lucide="barcode" aria-hidden="true"></i>Abrir boleto
-      </button>
+      ${botoesDocumentos}
     </div>
   `;
   atualizarIcones();
 }
 
-async function carregarDocumentosFiscaisPedido(pedido, container, fallback = null) {
+async function carregarDocumentosFiscaisPedido(pedido, container, fallback = null, documentosCombinados = false) {
   if (!pedido?.NUNOTA || !container) return;
 
   container.hidden = false;
@@ -2887,7 +2893,7 @@ async function carregarDocumentosFiscaisPedido(pedido, container, fallback = nul
     const res = await fetch(`/api/fila-conferencia/pedidos/${pedido.NUNOTA}/documentos`);
     const payload = await res.json();
     if (!res.ok) throw new Error(payload.erro || 'Erro ao consultar documentos');
-    renderizarPainelDocumentosFiscais(container, payload, fallback);
+    renderizarPainelDocumentosFiscais(container, payload, fallback, documentosCombinados);
   } catch (error) {
     renderizarPainelDocumentosFiscais(container, {}, {
       status: 'ERRO',
@@ -2899,7 +2905,7 @@ async function carregarDocumentosFiscaisPedido(pedido, container, fallback = nul
 async function abrirDocumentoFiscal(botao) {
   const nunota = botao?.dataset?.nunota;
   const tipo = botao?.dataset?.documento;
-  if (!nunota || !['danfe', 'boleto'].includes(tipo)) return;
+  if (!nunota || !['danfe', 'boleto', 'completo'].includes(tipo)) return;
 
   const painel = botao.closest('.documentos-fiscais-panel');
   const feedback = painel?.querySelector('.documentos-fiscais-feedback');
@@ -2913,7 +2919,8 @@ async function abrirDocumentoFiscal(botao) {
   novaAba.document.write('<p style="font-family:Arial;padding:20px">Carregando documento do Sankhya...</p>');
   novaAba.document.close();
   botao.disabled = true;
-  if (feedback) feedback.textContent = `Gerando ${tipo === 'danfe' ? 'DANFE' : 'boleto'} no Sankhya...`;
+  const nomeDocumento = tipo === 'danfe' ? 'DANFE' : tipo === 'boleto' ? 'boleto' : 'DANFE e boleto';
+  if (feedback) feedback.textContent = `Gerando ${nomeDocumento} no Sankhya...`;
 
   try {
     const res = await fetch(`/api/fila-conferencia/notas/${nunota}/documentos/${tipo}`);
@@ -2927,7 +2934,7 @@ async function abrirDocumentoFiscal(botao) {
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     novaAba.location.replace(url);
-    if (feedback) feedback.textContent = `${tipo === 'danfe' ? 'DANFE' : 'Boleto'} aberto em nova guia.`;
+    if (feedback) feedback.textContent = `${nomeDocumento} aberto em nova guia.`;
     setTimeout(() => URL.revokeObjectURL(url), 120000);
   } catch (error) {
     novaAba.close();
@@ -2993,7 +3000,7 @@ function abrirModalPosConferencia(pedido, faturamento) {
     : `Pedido ${pedido.NUNOTA} conferido com sucesso.`;
   posConferenciaModal.hidden = false;
   atualizarIcones();
-  carregarDocumentosFiscaisPedido(pedido, posConferenciaDocumentos, faturamento);
+  carregarDocumentosFiscaisPedido(pedido, posConferenciaDocumentos, faturamento, true);
 }
 
 function abrirModalProcessandoConferencia(pedido) {
@@ -3463,6 +3470,10 @@ function renderizarPedidosFila() {
   pedidosFiltrados.forEach((pedido) => {
     const card = document.createElement('div');
     const emAndamento = pedido.STATUS_CONFERENCIA === 'EM ANDAMENTO';
+    const iconeTipoPedido = Number(pedido.CODTIPOPER) === 6
+      ? '<span class="pedido-status-type-icon bonificacao"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M7.5 8C5 8 4 6.7 4 5.5S5 3 6.5 3C9 3 12 8 12 8M16.5 8C19 8 20 6.7 20 5.5S19 3 17.5 3C15 3 12 8 12 8"/></svg></span>'
+      : '<span class="pedido-status-type-icon venda"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l1 13H5L6 8Z"/><path d="M9 10V6a3 3 0 0 1 6 0v4"/></svg></span>';
+    const tituloTipoPedido = Number(pedido.CODTIPOPER) === 6 ? 'Pedido de bonificacao' : 'Pedido de venda';
     card.className = `pedido-operacao-card ${emAndamento ? 'andamento' : ''} ${pedidoSelecionado?.NUNOTA === pedido.NUNOTA ? 'active' : ''}`;
     card.innerHTML = `
       <div class="pedido-list-action">
@@ -3473,7 +3484,8 @@ function renderizarPedidosFila() {
           ? '<button class="pedido-label-button" type="button" aria-label="Gerar etiqueta de volume" title="Gerar etiqueta de volume"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V4h3"/><path d="M17 4h3v3"/><path d="M20 17v3h-3"/><path d="M7 20H4v-3"/><path d="M7 8h10v8H7z"/><path d="M9 11h6"/><path d="M9 14h4"/></svg></button>'
           : ''}
       </div>
-      <div class="pedido-list-status">
+      <div class="pedido-list-status" title="${tituloTipoPedido}">
+        ${iconeTipoPedido}
         ${emAndamento
         ? `<span class="pedido-status-mini">${pedido.NOME_CONFERENTE || 'Em andamento'}</span>`
           : pedido.STATUS_CONFERENCIA === 'CONFERIDO'
@@ -3482,7 +3494,7 @@ function renderizarPedidosFila() {
       </div>
       <strong>Pedido ${pedido.NUNOTA}</strong>
       <div class="pedido-meta">${formatarData(pedido.DTNEG)}</div>
-      <div class="pedido-cliente" title="${pedido.EMPRESA || '-'}">${pedido.EMPRESA || '-'}</div>
+      <div class="pedido-cliente" title="${escaparAtributo(`${pedido.CODIGO_PARCEIRO || '-'} - ${pedido.EMPRESA || '-'}`)}">${escaparHtml(`${pedido.CODIGO_PARCEIRO || '-'} - ${pedido.EMPRESA || '-'}`)}</div>
       <div class="pedido-meta">${formatarMoeda(pedido.VLRNOTA)}</div>
       <div class="pedido-meta">${pedido.QTD_ITENS} | ${formatarQuantidade(pedido.QTD_TOTAL)} un.</div>
     `;

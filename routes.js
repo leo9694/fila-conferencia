@@ -1,5 +1,6 @@
 const express = require('express');
 const path = require('path');
+const { PDFDocument } = require('pdf-lib');
 const router = express.Router();
 const {
   downloadDirectFile,
@@ -628,6 +629,22 @@ async function gerarDocumentoFiscalSankhya(nunota, tipo) {
   return pdf;
 }
 
+async function gerarDocumentosFiscaisCombinados(nunota) {
+  const [danfe, boleto] = await Promise.all([
+    gerarDocumentoFiscalSankhya(nunota, 'danfe'),
+    gerarDocumentoFiscalSankhya(nunota, 'boleto')
+  ]);
+  const destino = await PDFDocument.create();
+
+  for (const arquivo of [danfe, boleto]) {
+    const origem = await PDFDocument.load(arquivo);
+    const paginas = await destino.copyPages(origem, origem.getPageIndices());
+    paginas.forEach((pagina) => destino.addPage(pagina));
+  }
+
+  return Buffer.from(await destino.save());
+}
+
 function coletarDetalhesSankhya(valor, prefixo = '') {
   if (!valor || typeof valor !== 'object') {
     return [];
@@ -1071,6 +1088,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         CAB.DTNEG,
         CAB.NUNOTA,
         CAB.CODEMP,
+        CAB.CODTIPOPER,
         PAR.RAZAOSOCIAL AS EMPRESA,
         CAB.CODPARC AS CODIGO_PARCEIRO,
         CAST(NVL(CAB.VLRNOTA, 0) AS NUMBER(15,2)) AS VLRNOTA,
@@ -1098,7 +1116,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
       WHERE ${filtroBusca}
         AND CAB.CODTIPOPER IN (5, 6, 237)
         AND CAB.STATUSNOTA = 'L'
-      GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.CODEMP, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA, CAB.QTDVOL,
+      GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.CODEMP, CAB.CODTIPOPER, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA, CAB.QTDVOL,
         CAB.NUCONFATUAL, CONF.STATUS, USU.NOMEUSU
       ORDER BY
         CASE
@@ -2593,10 +2611,12 @@ router.get('/fila-conferencia/pedidos/:nunota/pdf', async (req, res) => {
     const [pedido] = await executeQuery(`
       SELECT
         CAB.NUNOTA,
+        CAB.CODTIPOPER,
         CAB.DTNEG,
         CAB.OBSERVACAO,
         CAB.CODPARC,
         PAR.NOMEPARC,
+        PAR.RAZAOSOCIAL,
         PAR.CGC_CPF,
         PAR.IDENTINSCESTAD,
         PAR.TELEFONE AS TELEFONE_CLIENTE,
@@ -2686,7 +2706,7 @@ router.get('/fila-conferencia/notas/:nunota/documentos/:tipo', async (req, res) 
   const nunota = obterNumeroInteiro(req.params.nunota);
   const tipo = String(req.params.tipo || '').toLowerCase();
 
-  if (!nunota || !['danfe', 'boleto'].includes(tipo)) {
+  if (!nunota || !['danfe', 'boleto', 'completo'].includes(tipo)) {
     res.status(400).json({ erro: 'Informe uma nota e um tipo de documento validos' });
     return;
   }
@@ -2705,15 +2725,17 @@ router.get('/fila-conferencia/notas/:nunota/documentos/:tipo', async (req, res) 
       return;
     }
 
-    const pdf = await gerarDocumentoFiscalSankhya(nunota, tipo);
+    const pdf = tipo === 'completo'
+      ? await gerarDocumentosFiscaisCombinados(nunota)
+      : await gerarDocumentoFiscalSankhya(nunota, tipo);
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `inline; filename="${tipo}-${nunota}.pdf"`);
+    res.setHeader('Content-Disposition', `inline; filename="${tipo === 'completo' ? 'danfe-boleto' : tipo}-${nunota}.pdf"`);
     res.setHeader('Cache-Control', 'private, no-store');
     res.send(pdf);
   } catch (err) {
     console.error(err);
     res.status(409).json({
-      erro: `Nao foi possivel abrir ${tipo === 'danfe' ? 'o DANFE' : 'o boleto'}`,
+      erro: `Nao foi possivel abrir ${tipo === 'danfe' ? 'o DANFE' : tipo === 'boleto' ? 'o boleto' : 'o DANFE e boleto'}`,
       detalhes: err.message
     });
   }
