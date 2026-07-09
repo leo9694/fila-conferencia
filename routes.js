@@ -52,6 +52,12 @@ function tipoMovimentoConferencia(modo) {
   return obterModoConferencia(modo) === 'entrada' ? 'C' : 'P';
 }
 
+function condicaoStatusConferencia(modo, alias = 'CAB') {
+  return obterModoConferencia(modo) === 'entrada'
+    ? `${alias}.STATUSNOTA = 'A'`
+    : `${alias}.STATUSNOTA = 'L'`;
+}
+
 function obterDataHoje() {
   const agora = new Date();
   const ano = agora.getFullYear();
@@ -1286,7 +1292,7 @@ router.get('/empresas', async (req, res) => {
       WHERE (
         (CAB.CODTIPOPER IN (${TOPS_CONFERENCIA.saida.join(', ')}) AND CAB.TIPMOV = 'P' AND CAB.STATUSNOTA = 'L')
         OR
-        (CAB.CODTIPOPER IN (${TOPS_CONFERENCIA.entrada.join(', ')}) AND CAB.TIPMOV = 'C' AND CAB.STATUSNOTA = 'A' AND CAB.LIBCONF = 'S')
+        (CAB.CODTIPOPER IN (${TOPS_CONFERENCIA.entrada.join(', ')}) AND CAB.TIPMOV = 'C' AND CAB.STATUSNOTA = 'A')
       )
         AND CAB.CODEMP IS NOT NULL
       ORDER BY EMP.RAZAOSOCIAL, TO_CHAR(CAB.CODEMP)
@@ -1406,9 +1412,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
       WHERE ${filtroBusca}
         AND CAB.CODTIPOPER IN (${tops})
         AND CAB.TIPMOV = '${tipMov}'
-        AND ${modo === 'entrada'
-          ? "CAB.STATUSNOTA = 'A' AND CAB.LIBCONF = 'S'"
-          : "CAB.STATUSNOTA = 'L'"}
+        AND ${condicaoStatusConferencia(modo)}
         ${modo === 'entrada' ? `AND TOP_ATUAL.NUCCO IS NOT NULL
         AND NVL(CCO_ATUAL.EXPLODIRLOTE, 'N') = 'N'` : ''}
       GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.CODEMP, CAB.CODTIPOPER, CAB.TIPMOV, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA, CAB.QTDVOL,
@@ -2656,9 +2660,7 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
       WHERE CAB.NUNOTA = ${nunota}
         AND CAB.CODTIPOPER IN (${tops})
         AND CAB.TIPMOV = '${tipMov}'
-        AND ${modo === 'entrada'
-          ? "CAB.STATUSNOTA = 'A' AND CAB.LIBCONF = 'S'"
-          : "CAB.STATUSNOTA = 'L'"}
+        AND ${condicaoStatusConferencia(modo)}
     `);
 
     const pedido = pedidoRows[0];
@@ -2828,7 +2830,6 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
       !TOPS_CONFERENCIA.entrada.includes(Number(pedido.CODTIPOPER))
       || pedido.TIPMOV !== 'C'
       || pedido.STATUSNOTA !== 'A'
-      || pedido.LIBCONF !== 'S'
     )) {
       res.status(409).json({ erro: 'Nota nao esta liberada para conferencia de entrada no Sankhya' });
       return;
@@ -2910,9 +2911,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       WHERE CAB.NUNOTA = ${nunota}
         AND CAB.CODTIPOPER IN (${tops})
         AND CAB.TIPMOV = '${tipMov}'
-        AND ${modo === 'entrada'
-          ? "CAB.STATUSNOTA = 'A' AND CAB.LIBCONF = 'S'"
-          : "CAB.STATUSNOTA = 'L'"}
+        AND ${condicaoStatusConferencia(modo)}
     `);
 
     const pedido = pedidoRows[0];
