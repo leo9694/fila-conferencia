@@ -54,7 +54,7 @@ function tipoMovimentoConferencia(modo) {
 
 function condicaoStatusConferencia(modo, alias = 'CAB') {
   return obterModoConferencia(modo) === 'entrada'
-    ? `${alias}.STATUSNOTA = 'A'`
+    ? `${alias}.STATUSNOTA IN ('A', 'P', 'L')`
     : `${alias}.STATUSNOTA = 'L'`;
 }
 
@@ -1402,11 +1402,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         ON ITE.NUNOTA = CAB.NUNOTA
       LEFT JOIN TGFTOP TOP_ATUAL
         ON TOP_ATUAL.CODTIPOPER = CAB.CODTIPOPER
-       AND TOP_ATUAL.DHALTER = (
-         SELECT MAX(T.DHALTER)
-           FROM TGFTOP T
-          WHERE T.CODTIPOPER = CAB.CODTIPOPER
-       )
+       AND TOP_ATUAL.DHALTER = CAB.DHTIPOPER
       LEFT JOIN TGFCCO CCO_ATUAL
         ON CCO_ATUAL.NUCCO = TOP_ATUAL.NUCCO
       WHERE ${filtroBusca}
@@ -2650,11 +2646,7 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
         ON CONF.NUCONF = CAB.NUCONFATUAL
       LEFT JOIN TGFTOP TOP
         ON TOP.CODTIPOPER = CAB.CODTIPOPER
-       AND TOP.DHALTER = (
-         SELECT MAX(T.DHALTER)
-           FROM TGFTOP T
-          WHERE T.CODTIPOPER = CAB.CODTIPOPER
-       )
+       AND TOP.DHALTER = CAB.DHTIPOPER
       LEFT JOIN TGFCCO CCO
         ON CCO.NUCCO = TOP.NUCCO
       WHERE CAB.NUNOTA = ${nunota}
@@ -2829,7 +2821,7 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
     if (modo === 'entrada' && (
       !TOPS_CONFERENCIA.entrada.includes(Number(pedido.CODTIPOPER))
       || pedido.TIPMOV !== 'C'
-      || pedido.STATUSNOTA !== 'A'
+      || !['A', 'P', 'L'].includes(String(pedido.STATUSNOTA || '').toUpperCase())
     )) {
       res.status(409).json({ erro: 'Nota nao esta liberada para conferencia de entrada no Sankhya' });
       return;
@@ -2901,11 +2893,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
         ON CONF.NUCONF = CAB.NUCONFATUAL
       LEFT JOIN TGFTOP TOP
         ON TOP.CODTIPOPER = CAB.CODTIPOPER
-       AND TOP.DHALTER = (
-         SELECT MAX(T.DHALTER)
-           FROM TGFTOP T
-          WHERE T.CODTIPOPER = CAB.CODTIPOPER
-       )
+       AND TOP.DHALTER = CAB.DHTIPOPER
       LEFT JOIN TGFCCO CCO
         ON CCO.NUCCO = TOP.NUCCO
       WHERE CAB.NUNOTA = ${nunota}
