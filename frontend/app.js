@@ -78,6 +78,7 @@ const botaoAbrirConsultaProdutos = document.getElementById('abrir-consulta-produ
 const scanCodigo = document.getElementById('scan-codigo');
 const scanControleField = document.getElementById('scan-controle-field');
 const scanControle = document.getElementById('scan-controle');
+const scanControleOpcoes = document.getElementById('scan-controle-opcoes');
 const scanQtd = document.getElementById('scan-qtd');
 const botaoScanAdicionar = document.getElementById('scan-adicionar');
 const scanStatus = document.getElementById('scan-status');
@@ -872,6 +873,48 @@ function obterDescricaoEntradaCodigo(entrada) {
   if (entrada.tipo === 'REFERENCIA') return 'referencia';
   if (entrada.tipo === 'CODIGO_PRODUTO') return 'codigo do produto';
   return entrada.descricao || 'codigo de barras';
+}
+
+function obterItensCompativeisCodigo(codigo) {
+  const codigoNormalizado = normalizarCodigo(codigo);
+  if (!codigoNormalizado) return [];
+
+  return itensPedidoSelecionado
+    .map((candidate) => ({
+      item: candidate,
+      entrada: obterEntradaCodigoItem(candidate, codigoNormalizado)
+    }))
+    .filter((candidate) => candidate.entrada);
+}
+
+function atualizarOpcoesControleEntrada() {
+  if (!scanControleOpcoes || filaModoConferencia !== 'entrada') return;
+
+  const controles = [...new Set(obterItensCompativeisCodigo(scanCodigo.value)
+    .map(({ item }) => String(item.controle || '').trim())
+    .filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true, sensitivity: 'base' }));
+
+  scanControle.placeholder = controles.length > 0
+    ? 'Selecione ou digite o lote'
+    : 'Digite o lote, se houver';
+  scanControleOpcoes.innerHTML = controles
+    .map((controle) => `
+      <button class="controle-lote-opcao" type="button" role="option" data-controle="${escaparAtributo(controle)}">
+        ${escaparHtml(controle)}
+      </button>
+    `)
+    .join('');
+}
+
+function abrirOpcoesControleEntrada() {
+  if (!scanControleOpcoes || filaModoConferencia !== 'entrada') return;
+  atualizarOpcoesControleEntrada();
+  scanControleOpcoes.classList.toggle('active', Boolean(scanControleOpcoes.children.length));
+}
+
+function fecharOpcoesControleEntrada() {
+  scanControleOpcoes?.classList.remove('active');
 }
 
 function itemEstaOk(item) {
@@ -3744,6 +3787,8 @@ function limparPedidoConferencia(mensagem = 'Selecione um pedido para iniciar.')
   confirmarStatus.textContent = '';
   scanCodigo.value = '';
   scanControle.value = '';
+  if (scanControleOpcoes) scanControleOpcoes.innerHTML = '';
+  fecharOpcoesControleEntrada();
   scanQtd.value = '1';
   renderizarFotoProdutoVazia();
   atualizarControlesConferencia();
@@ -3916,6 +3961,7 @@ async function selecionarPedidoConferencia(pedido) {
     fecharPreviewPedido();
     scanStatus.textContent = '';
     renderizarItensConferencia();
+    atualizarOpcoesControleEntrada();
     scanCodigo.focus();
   } catch (error) {
     console.error('Erro ao selecionar pedido:', error);
@@ -3938,13 +3984,29 @@ function adicionarConferenciaPorCodigo() {
     return;
   }
 
-  const itensCompativeis = itensPedidoSelecionado
-    .map((candidate) => ({
-      item: candidate,
-      entrada: obterEntradaCodigoItem(candidate, codigo)
-    }))
-    .filter((candidate) => candidate.entrada);
-  const match = itensCompativeis.find((candidate) => quantidadePendenteItem(candidate.item) > 0) || itensCompativeis[0];
+  const itensCompativeis = obterItensCompativeisCodigo(codigo);
+  const controlesCompativeis = [...new Set(itensCompativeis
+    .map((candidate) => String(candidate.item.controle || '').trim())
+    .filter(Boolean))];
+
+  if (filaModoConferencia === 'entrada' && controlesCompativeis.length > 1 && !controleInformado) {
+    atualizarOpcoesControleEntrada();
+    scanStatus.innerHTML = '<span class="danger-text">Este produto possui mais de um lote/controle. Selecione ou digite o lote recebido.</span>';
+    scanControle.focus();
+    return;
+  }
+
+  const matchControle = controleInformado
+    ? itensCompativeis.find((candidate) =>
+      String(candidate.item.controle || '').trim().toUpperCase() === controleInformado.toUpperCase()
+        && quantidadePendenteItem(candidate.item) > 0
+    ) || itensCompativeis.find((candidate) =>
+      String(candidate.item.controle || '').trim().toUpperCase() === controleInformado.toUpperCase()
+    )
+    : null;
+  const match = matchControle
+    || itensCompativeis.find((candidate) => quantidadePendenteItem(candidate.item) > 0)
+    || itensCompativeis[0];
   const item = match?.item;
 
   if (!item) {
@@ -3992,6 +4054,8 @@ function adicionarConferenciaPorCodigo() {
   mostrarFotoProduto(item, 'ultimo');
   scanCodigo.value = '';
   scanControle.value = '';
+  if (scanControleOpcoes) scanControleOpcoes.innerHTML = '';
+  fecharOpcoesControleEntrada();
   scanQtd.value = '1';
   renderizarItensConferencia();
   salvarProgressoConferencia();
@@ -4265,6 +4329,8 @@ function atualizarModoFilaConferencia() {
   scanControleField.hidden = !entrada;
   scanControle.disabled = !entrada || !pedidoSelecionado;
   if (!entrada) scanControle.value = '';
+  if (scanControleOpcoes) scanControleOpcoes.innerHTML = '';
+  fecharOpcoesControleEntrada();
   const tituloLista = filaCountPedidos.previousElementSibling;
   if (tituloLista) tituloLista.textContent = entrada ? 'Notas de entrada' : 'Pedidos';
   atualizarIcones();
@@ -4520,17 +4586,44 @@ scanCodigo.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
     if (filaModoConferencia === 'entrada') {
+      atualizarOpcoesControleEntrada();
       scanControle.focus();
       scanControle.select();
+      abrirOpcoesControleEntrada();
     } else {
       scanQtd.focus();
       scanQtd.select();
     }
   }
 });
+scanCodigo.addEventListener('input', () => {
+  if (filaModoConferencia === 'entrada') {
+    atualizarOpcoesControleEntrada();
+  }
+});
+scanControle.addEventListener('focus', abrirOpcoesControleEntrada);
+scanControle.addEventListener('input', abrirOpcoesControleEntrada);
+scanControleField?.addEventListener('click', (event) => {
+  event.stopPropagation();
+});
+scanControleOpcoes?.addEventListener('click', (event) => {
+  const botao = event.target.closest('.controle-lote-opcao');
+  if (!botao) return;
+
+  scanControle.value = botao.dataset.controle || '';
+  fecharOpcoesControleEntrada();
+  scanQtd.focus();
+  scanQtd.select();
+});
+scanControleOpcoes?.addEventListener('mousedown', (event) => {
+  if (event.target.closest('.controle-lote-opcao')) {
+    event.preventDefault();
+  }
+});
 scanControle.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
+    fecharOpcoesControleEntrada();
     scanQtd.focus();
     scanQtd.select();
   }
@@ -4592,6 +4685,7 @@ document.addEventListener(
 document.addEventListener('click', () => {
   fecharMenusOrdenacaoItens();
   fecharMenusColunasContato();
+  fecharOpcoesControleEntrada();
 });
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && filaScreen.classList.contains('mobile-sidebar-open')) {
