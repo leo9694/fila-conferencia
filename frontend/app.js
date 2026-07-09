@@ -32,6 +32,12 @@ const filaDataInicial = document.getElementById('fila-data-inicial');
 const filaDataFinal = document.getElementById('fila-data-final');
 const filaEmpresa = document.getElementById('fila-empresa');
 const filaUsuarioLogado = document.getElementById('fila-usuario-logado');
+const filaTituloOperacao = document.querySelector('.fila-toolbar-top h2');
+const botaoModoEntrada = document.getElementById('fila-modo-entrada');
+const filaModoIcone = document.getElementById('fila-modo-icone');
+const filaModoTitulo = document.getElementById('fila-modo-titulo');
+const filaModoDescricao = document.getElementById('fila-modo-descricao');
+const filaSidebarTitle = document.getElementById('fila-sidebar-title');
 const homeUsuarioLogado = document.getElementById('home-usuario-logado');
 const botaoLogout = document.getElementById('logout-button');
 const botaoBuscarFilaConferencia = document.getElementById('buscar-fila-conferencia');
@@ -67,6 +73,8 @@ const pedidoConferenciaTitulo = document.getElementById('pedido-conferencia-titu
 const pedidoConferenciaStatus = document.getElementById('pedido-conferencia-status');
 const botaoAbrirConsultaProdutos = document.getElementById('abrir-consulta-produtos');
 const scanCodigo = document.getElementById('scan-codigo');
+const scanControleField = document.getElementById('scan-controle-field');
+const scanControle = document.getElementById('scan-controle');
 const scanQtd = document.getElementById('scan-qtd');
 const botaoScanAdicionar = document.getElementById('scan-adicionar');
 const scanStatus = document.getElementById('scan-status');
@@ -141,9 +149,18 @@ const contatoDetalheNome = document.getElementById('contato-detalhe-nome');
 const contatoDetalheSubtitulo = document.getElementById('contato-detalhe-subtitulo');
 const contatoDetalheAtivo = document.getElementById('contato-detalhe-ativo');
 const contatoDetalheConteudo = document.getElementById('contato-detalhe-conteudo');
+const botaoCriarCardBitrix = document.getElementById('criar-card-bitrix');
+const contatoBitrixStatus = document.getElementById('contato-bitrix-status');
+const bitrixConfirmModal = document.getElementById('bitrix-confirm-modal');
+const bitrixConfirmText = document.getElementById('bitrix-confirm-text');
+const bitrixCardTitle = document.getElementById('bitrix-card-title');
+const bitrixConfirmResult = document.getElementById('bitrix-confirm-result');
+const botaoCancelarBitrix = document.getElementById('bitrix-confirm-cancel');
+const botaoConfirmarBitrix = document.getElementById('bitrix-confirm-submit');
 const botaoVoltarListaContatos = document.getElementById('voltar-lista-contatos');
 const botaoProximoClienteContatos = document.getElementById('proximo-cliente-contatos');
 let filaPedidos = [];
+let filaModoConferencia = 'saida';
 let pedidoSelecionado = null;
 let pedidoPreviewSelecionado = null;
 let itensPedidoPreview = [];
@@ -154,9 +171,9 @@ let contatoBuscaTimer = null;
 let contatoClientesAtuais = [];
 let contatoOrdenacaoUltimaCompra = '';
 let contatoOrdenacaoColuna = { coluna: '', direcao: '' };
-let contatoFiltrosColuna = { perfil: null, vendedor: null };
+let contatoFiltrosColuna = { perfil: null, vendedor: null, status: null };
 let contatoPaginacao = { pagina: 1, tamanho: 50, total: 0, totalPaginas: 1 };
-let contatoFacetas = { perfis: [], vendedores: [] };
+let contatoFacetas = { perfis: [], vendedores: [], status: ['Pendente', 'Aguardando', 'Atualizado'] };
 let contatoDetalheAtual = null;
 let contatoOrigemLista = 'nenhuma';
 let produtoFotoAtual = null;
@@ -888,6 +905,7 @@ function pedidoPodeIniciarConferencia(pedido) {
 function atualizarControlesConferencia() {
   const temPedido = Boolean(pedidoSelecionado);
   scanCodigo.disabled = !temPedido;
+  scanControle.disabled = !temPedido || filaModoConferencia !== 'entrada';
   scanQtd.disabled = !temPedido;
   botaoScanAdicionar.disabled = !temPedido;
 }
@@ -1083,8 +1101,10 @@ function obterClientesContatoOrdenados() {
   const clientes = contatoClientesAtuais.filter((cliente) => {
     const perfil = String(cliente.PERFIL || 'Sem perfil');
     const vendedor = String(cliente.VENDEDOR || 'Sem vendedor');
+    const status = rotuloStatusContato(obterStatusContatoCliente(cliente));
     if (contatoFiltrosColuna.perfil && !contatoFiltrosColuna.perfil.has(perfil)) return false;
     if (contatoFiltrosColuna.vendedor && !contatoFiltrosColuna.vendedor.has(vendedor)) return false;
+    if (contatoFiltrosColuna.status && !contatoFiltrosColuna.status.has(status)) return false;
     if (!dataInicial && !dataFinal) return true;
     const ultimaCompra = obterValorOrdenacaoUltimaCompra(cliente);
     if (!ultimaCompra) return false;
@@ -1131,11 +1151,14 @@ function alternarOrdenacaoUltimaCompraContato() {
 
 function valoresUnicosContato(coluna) {
   if (contatoOrigemLista === 'cidade') {
-    return coluna === 'perfil' ? contatoFacetas.perfis : contatoFacetas.vendedores;
+    if (coluna === 'perfil') return contatoFacetas.perfis;
+    if (coluna === 'vendedor') return contatoFacetas.vendedores;
+    return contatoFacetas.status;
   }
-  const propriedade = coluna === 'perfil' ? 'PERFIL' : 'VENDEDOR';
-  const fallback = coluna === 'perfil' ? 'Sem perfil' : 'Sem vendedor';
-  return [...new Set(contatoClientesAtuais.map((cliente) => String(cliente[propriedade] || fallback)))]
+  const valores = coluna === 'status'
+    ? contatoClientesAtuais.map((cliente) => rotuloStatusContato(obterStatusContatoCliente(cliente)))
+    : contatoClientesAtuais.map((cliente) => String(cliente[coluna === 'perfil' ? 'PERFIL' : 'VENDEDOR'] || (coluna === 'perfil' ? 'Sem perfil' : 'Sem vendedor')));
+  return [...new Set(valores)]
     .sort((a, b) => a.localeCompare(b, 'pt-BR', { sensitivity: 'base', numeric: true }));
 }
 
@@ -1249,10 +1272,14 @@ function criarCabecalhoListaContato(indicadorOrdenacao) {
       <div>Ativo</div>
       ${criarCabecalhoMenuContato('Perfil', 'perfil', 'filtro')}
       ${criarCabecalhoMenuContato('Vendedor', 'vendedor', 'filtro')}
-      <div>
+      <div class="contato-coluna-menu-host">
         <button class="contato-sort-button" type="button" id="contato-ordenar-ultima-compra">
           Ultima compra <span aria-hidden="true">${indicadorOrdenacao}</span>
         </button>
+        <button class="contato-coluna-menu-toggle${contatoFiltrosColuna.status !== null ? ' ativo' : ''}" type="button" data-contato-menu="status" aria-label="Filtrar status" title="Filtrar status">
+          <i data-lucide="list-filter" aria-hidden="true"></i>
+        </button>
+        ${criarMenuFiltroContato('status')}
       </div>
     </div>
   `;
@@ -1666,6 +1693,9 @@ function renderizarDetalheContato(payload) {
   const situacoes = payload?.situacoes || [];
   const endereco = montarEnderecoContato(parceiro);
   contatoDetalheAtual = parceiro;
+  botaoCriarCardBitrix.disabled = false;
+  contatoBitrixStatus.textContent = '';
+  contatoBitrixStatus.className = 'contato-bitrix-status';
 
   contatoDetalheNome.textContent = parceiro.NOMEPARC || 'Cliente';
   contatoDetalheAvatar.textContent = obterIniciaisContato(parceiro.NOMEPARC);
@@ -1674,7 +1704,11 @@ function renderizarDetalheContato(payload) {
     <span aria-hidden="true">|</span>
     ${criarSelectPerfilCliente(perfis, parceiro.CODTIPPARC)}
   `;
-  contatoDetalheAtivo.textContent = `Ativo: ${valorContato(parceiro.ATIVO)} | ${rotuloStatusContato(obterStatusContatoCliente(parceiro))}`;
+  const statusContato = obterStatusContatoCliente(parceiro);
+  contatoDetalheAtivo.innerHTML = `
+    <span class="contato-header-status contato-header-status-active"><span></span>Ativo</span>
+    <span class="contato-header-status contato-header-status-${escaparAtributo(statusContato)}"><span></span>${escaparHtml(rotuloStatusContato(statusContato))}</span>
+  `;
   atualizarBotaoProximoClienteContato(parceiro.CODPARC);
 
   contatoDetalheConteudo.innerHTML = `
@@ -1710,7 +1744,8 @@ function renderizarDetalheContato(payload) {
       <div class="contato-info-section">
         <h3><span class="contato-section-icon">${iconeContato('telefone')}</span>Contato principal da empresa</h3>
         <div class="contato-edit-form" id="contato-edit-form">
-          ${criarCampoContatoEditavel('telefone', 'telefonePrincipal', 'Telefone principal', parceiro.FAX || parceiro.TELEFONE)}
+          ${criarCampoContatoEditavel('telefone', 'telefonePrincipal', 'Telefone principal', parceiro.TELEFONE || '')}
+          ${criarCampoContatoEditavel('telefone', 'celularPrincipal', 'Celular principal', parceiro.FAX || '')}
           ${criarCampoContatoEditavel('email', 'email', 'Email', parceiro.EMAIL)}
         </div>
       </div>
@@ -1891,7 +1926,9 @@ function validarCamposContatoObrigatorios(dados, contatos) {
   const contatoTransporte = contatos.find((contato) => contato.tipo === 'transporte');
   const contatoFinanceiro = contatos.find((contato) => contato.tipo === 'financeiro');
 
-  if (!contatoValorPreenchido(dados.telefonePrincipal)) faltando.push('telefone principal');
+  if (!contatoValorPreenchido(dados.telefonePrincipal) && !contatoValorPreenchido(dados.celularPrincipal)) {
+    faltando.push('telefone ou celular principal');
+  }
   if (!contatoValorPreenchido(dados.email)) faltando.push('email principal');
 
   [
@@ -2017,6 +2054,8 @@ async function abrirDetalheContato(codParc) {
   mostrarDetalheContato();
   atualizarBotaoProximoClienteContato(codParc);
   contatoDetalheAtual = null;
+  botaoCriarCardBitrix.disabled = true;
+  contatoBitrixStatus.textContent = '';
   contatoDetalheNome.textContent = 'Carregando cliente...';
   contatoDetalheAvatar.textContent = '--';
   contatoDetalheSubtitulo.textContent = `Codigo ${codParc}`;
@@ -2039,6 +2078,81 @@ async function abrirDetalheContato(codParc) {
     contatoDetalheSubtitulo.textContent = '';
     contatoDetalheAtivo.textContent = 'Erro';
     contatoDetalheConteudo.innerHTML = `<div class="consulta-empty">${escaparHtml(error.message)}</div>`;
+  }
+}
+
+function abrirConfirmacaoCardBitrix() {
+  if (!contatoDetalheAtual?.CODPARC || botaoCriarCardBitrix.disabled) return;
+  bitrixConfirmModal.classList.remove('is-processing');
+  bitrixConfirmText.textContent = `Confirma a criacao do card para ${contatoDetalheAtual.CODPARC} - ${contatoDetalheAtual.NOMEPARC || 'este cliente'}?`;
+  bitrixCardTitle.value = `${contatoDetalheAtual.CODPARC} - ${contatoDetalheAtual.NOMEPARC || 'Cliente'}`;
+  bitrixCardTitle.disabled = false;
+  bitrixConfirmResult.textContent = '';
+  bitrixConfirmResult.className = 'bitrix-confirm-result';
+  botaoCancelarBitrix.textContent = 'Cancelar';
+  botaoCancelarBitrix.disabled = false;
+  botaoConfirmarBitrix.textContent = 'Confirmar envio';
+  botaoConfirmarBitrix.disabled = false;
+  botaoConfirmarBitrix.hidden = false;
+  bitrixConfirmModal.hidden = false;
+  atualizarIcones();
+}
+
+function fecharConfirmacaoCardBitrix() {
+  if (bitrixConfirmModal.classList.contains('is-processing')) return;
+  bitrixConfirmModal.hidden = true;
+}
+
+async function criarCardBitrixCliente() {
+  if (!contatoDetalheAtual?.CODPARC || botaoConfirmarBitrix.disabled) return;
+  const codParc = contatoDetalheAtual.CODPARC;
+  const tituloCard = bitrixCardTitle.value.trim();
+  if (!tituloCard) {
+    bitrixConfirmResult.textContent = 'Informe o nome do card.';
+    bitrixConfirmResult.className = 'bitrix-confirm-result error';
+    bitrixCardTitle.focus();
+    return;
+  }
+  botaoCriarCardBitrix.disabled = true;
+  botaoConfirmarBitrix.disabled = true;
+  botaoCancelarBitrix.disabled = true;
+  bitrixCardTitle.disabled = true;
+  bitrixConfirmModal.classList.add('is-processing');
+  bitrixConfirmResult.textContent = '';
+  bitrixConfirmResult.className = 'bitrix-confirm-result';
+  contatoBitrixStatus.textContent = 'Enviando...';
+  contatoBitrixStatus.className = 'contato-bitrix-status';
+
+  try {
+    const res = await fetch(`/api/contatos/clientes/${encodeURIComponent(codParc)}/bitrix`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tituloCard })
+    });
+    const payload = await res.json();
+    if (!res.ok) throw new Error([payload.erro, payload.detalhes].filter(Boolean).join(' - ') || 'Erro ao criar card');
+    const mensagem = payload.negocio?.criado
+      ? `Card criado em ${payload.funil?.nome || 'Atualizacao Cadastral'}, etapa ${payload.etapa?.nome || 'Aguardando Contato'}.`
+      : 'Este cliente ja possui card nesse funil.';
+    contatoBitrixStatus.textContent = mensagem;
+    contatoBitrixStatus.classList.add('success');
+    bitrixConfirmResult.textContent = mensagem;
+    bitrixConfirmResult.classList.add('success');
+    botaoCancelarBitrix.textContent = 'Fechar';
+    botaoConfirmarBitrix.hidden = true;
+  } catch (error) {
+    contatoBitrixStatus.textContent = error.message;
+    contatoBitrixStatus.classList.add('error');
+    bitrixConfirmResult.textContent = error.message;
+    bitrixConfirmResult.classList.add('error');
+    botaoCancelarBitrix.textContent = 'Fechar';
+    botaoConfirmarBitrix.textContent = 'Tentar novamente';
+  } finally {
+    bitrixConfirmModal.classList.remove('is-processing');
+    botaoCriarCardBitrix.disabled = false;
+    botaoCancelarBitrix.disabled = false;
+    bitrixCardTitle.disabled = false;
+    botaoConfirmarBitrix.disabled = false;
   }
 }
 
@@ -2100,7 +2214,8 @@ function renderizarClientesContato(clientes = [], paginacao = null, facetas = nu
   if (facetas) {
     contatoFacetas = {
       perfis: Array.isArray(facetas.perfis) ? facetas.perfis : [],
-      vendedores: Array.isArray(facetas.vendedores) ? facetas.vendedores : []
+      vendedores: Array.isArray(facetas.vendedores) ? facetas.vendedores : [],
+      status: Array.isArray(facetas.status) ? facetas.status : ['Pendente', 'Aguardando', 'Atualizado']
     };
   }
   contatoPaginacao = paginacao
@@ -2114,7 +2229,7 @@ function renderizarClientesContato(clientes = [], paginacao = null, facetas = nu
   if (!preservarGrade) {
     contatoOrdenacaoColuna = { coluna: '', direcao: '' };
     contatoOrdenacaoUltimaCompra = '';
-    contatoFiltrosColuna = { perfil: null, vendedor: null };
+    contatoFiltrosColuna = { perfil: null, vendedor: null, status: null };
     contatoCompraInicial.value = '';
     contatoCompraFinal.value = '';
   }
@@ -2323,7 +2438,7 @@ async function carregarClientesContato(pagina = 1, preservarGrade = false) {
   if (!preservarGrade) {
     contatoOrdenacaoColuna = { coluna: '', direcao: '' };
     contatoOrdenacaoUltimaCompra = '';
-    contatoFiltrosColuna = { perfil: null, vendedor: null };
+    contatoFiltrosColuna = { perfil: null, vendedor: null, status: null };
     contatoCompraInicial.value = '';
     contatoCompraFinal.value = '';
   }
@@ -2348,6 +2463,9 @@ async function carregarClientesContato(pagina = 1, preservarGrade = false) {
     }
     if (contatoFiltrosColuna.vendedor !== null) {
       params.set('vendedoresGrade', JSON.stringify([...contatoFiltrosColuna.vendedor]));
+    }
+    if (contatoFiltrosColuna.status !== null) {
+      params.set('statusGrade', JSON.stringify([...contatoFiltrosColuna.status]));
     }
     if (contatoOrdenacaoColuna.coluna) {
       params.set('ordenar', contatoOrdenacaoColuna.coluna);
@@ -2574,8 +2692,10 @@ function salvarProgressoConferencia() {
       itens: itensPedidoSelecionado.map((item) => ({
         sequencia: item.sequencia,
         qtdConferida: normalizarQuantidade(item.qtdConferida),
-        qtdCortada: quantidadeCortadaItem(item)
-      }))
+        qtdCortada: quantidadeCortadaItem(item),
+        leituras: Array.isArray(item.leituras) ? item.leituras : []
+      })),
+      modo: filaModoConferencia
     })
   }).catch((error) => {
     console.error('Erro ao salvar progresso da conferencia:', error);
@@ -2589,7 +2709,11 @@ function criarLinhaItemConferencia(item, quantidade, classe, rotuloQuantidade, o
   const codigoProduto = escaparAtributo(item.codProd);
   const codigoBarras = escaparAtributo(item.codigoBarras || '-');
   const unidade = escaparAtributo(item.codVol);
-  const controle = escaparAtributo(item.controle || '-');
+  const controlesLidos = [...new Set((item.leituras || [])
+    .map((leitura) => String(leitura.controle || '').trim())
+    .filter(Boolean))];
+  const controleExibido = controlesLidos.length > 0 ? controlesLidos.join(', ') : (item.controle || '-');
+  const controle = escaparAtributo(controleExibido);
   const quantidadeTexto = rotuloQuantidade || formatarQuantidade(quantidade);
   const quantidadeComUnidade = `${quantidadeTexto} - ${item.codVol || '-'}`;
   row.innerHTML = `
@@ -2597,7 +2721,7 @@ function criarLinhaItemConferencia(item, quantidade, classe, rotuloQuantidade, o
     <div class="item-code" title="${codigoProduto}">${item.codProd}</div>
     <div class="item-name" title="${descricao}">${item.descrProd}</div>
     <div class="item-qtd" title="${escaparAtributo(quantidadeComUnidade)}">${quantidadeComUnidade}</div>
-    <div class="item-unit" title="${controle}">${item.controle || '-'}</div>
+    <div class="item-unit" title="${controle}">${escaparHtml(controleExibido)}</div>
     <div class="item-codes" title="${codigoBarras}">${item.codigoBarras || '-'}</div>
   `;
 
@@ -2770,6 +2894,7 @@ function desfazerConferenciaItem(sequencia) {
 
   const quantidadeAnterior = item.qtdConferida;
   item.qtdConferida = 0;
+  item.leituras = [];
   const corteAnterior = quantidadeCortadaItem(item);
   item.qtdCortada = 0;
   scanStatus.innerHTML = `<span class="success-text">${item.codProd} voltou para itens em conferencia. Conferido removido: ${formatarQuantidade(quantidadeAnterior)}${corteAnterior > 0 ? ` | corte removido: ${formatarQuantidade(corteAnterior)}` : ''}.</span>`;
@@ -2996,23 +3121,47 @@ async function abrirPdfPedido() {
   }
 }
 
-function abrirModalPosConferencia(pedido, faturamento) {
+function renderizarDocumentosAuxiliaresEntrada(documentos) {
+  const itens = [
+    documentos?.notaDevolucao
+      ? `Nota de devolucao: ${documentos.notaDevolucao}`
+      : null,
+    documentos?.pedidoComplementar
+      ? `Pedido complementar: ${documentos.pedidoComplementar}`
+      : null
+  ].filter(Boolean);
+
+  posConferenciaDocumentos.hidden = itens.length === 0;
+  posConferenciaDocumentos.innerHTML = itens.length > 0
+    ? `<strong>Documentos auxiliares gerados pelo Sankhya</strong><span>${itens.map(escaparHtml).join(' | ')}</span>`
+    : '';
+}
+
+function abrirModalPosConferencia(pedido, faturamento, documentosAuxiliares = null) {
+  const entrada = filaModoConferencia === 'entrada';
   posConferenciaModal.classList.remove('is-processing', 'has-error');
-  const faturamentoPendente = faturamento?.status === 'ERRO';
+  const faturamentoPendente = !entrada && faturamento?.status === 'ERRO';
   posConferenciaModal.classList.toggle('has-billing-warning', faturamentoPendente);
   posConferenciaTitulo.textContent = faturamentoPendente
     ? 'Conferencia finalizada, mas faturamento pendente'
     : 'Conferencia concluida';
   botaoVoltarListaPosConferencia.textContent = 'Voltar para lista';
   pedidoConcluido = pedido;
-  posConferenciaDocumentos.hidden = false;
+  posConferenciaDocumentos.hidden = entrada;
+  botaoImprimirEtiquetaVolume.hidden = entrada;
   botaoImprimirEtiquetaVolume.textContent = 'Imprimir etiqueta';
-  posConferenciaTexto.textContent = faturamentoPendente
+  posConferenciaTexto.textContent = entrada
+    ? `Nota de entrada ${pedido.NUNOTA} conferida com sucesso.`
+    : faturamentoPendente
     ? `Pedido ${pedido.NUNOTA} conferido com sucesso. O faturamento ficou pendente no Sankhya.`
     : `Pedido ${pedido.NUNOTA} conferido com sucesso.`;
   posConferenciaModal.hidden = false;
   atualizarIcones();
-  carregarDocumentosFiscaisPedido(pedido, posConferenciaDocumentos, faturamento, true);
+  if (entrada) {
+    renderizarDocumentosAuxiliaresEntrada(documentosAuxiliares);
+  } else {
+    carregarDocumentosFiscaisPedido(pedido, posConferenciaDocumentos, faturamento, true);
+  }
 }
 
 function abrirModalProcessandoConferencia(pedido) {
@@ -3021,7 +3170,10 @@ function abrirModalProcessandoConferencia(pedido) {
   posConferenciaModal.classList.remove('has-error', 'has-billing-warning');
   posConferenciaTitulo.textContent = 'Finalizando conferencia';
   botaoVoltarListaPosConferencia.textContent = 'Voltar para lista';
-  posConferenciaTexto.textContent = `Aguarde enquanto o pedido ${pedido.NUNOTA} e finalizado e faturado no Sankhya.`;
+  posConferenciaTexto.textContent = filaModoConferencia === 'entrada'
+    ? `Aguarde enquanto a nota de entrada ${pedido.NUNOTA} e finalizada no Sankhya.`
+    : `Aguarde enquanto o pedido ${pedido.NUNOTA} e finalizado e faturado no Sankhya.`;
+  botaoImprimirEtiquetaVolume.hidden = true;
   posConferenciaDocumentos.hidden = true;
   posConferenciaDocumentos.innerHTML = '';
   posConferenciaModal.hidden = false;
@@ -3050,6 +3202,7 @@ function abrirModalEtiquetaPedido(pedido) {
   posConferenciaTitulo.textContent = 'Imprimir etiqueta de volume';
   botaoVoltarListaPosConferencia.textContent = 'Voltar para lista';
   pedidoConcluido = pedido;
+  botaoImprimirEtiquetaVolume.hidden = false;
   posConferenciaDocumentos.hidden = true;
   posConferenciaDocumentos.innerHTML = '';
   botaoImprimirEtiquetaVolume.textContent = 'Gerar etiqueta';
@@ -3460,8 +3613,8 @@ function renderizarPedidosFila() {
     renderizarEstadoVazio(
       filaPedidosLista,
       filaPedidos.length === 0 && !temBuscaPedido
-        ? 'Nenhum pedido encontrado para os filtros.'
-        : 'Nenhum pedido encontrado com esse numero.'
+        ? `Nenhum ${filaModoConferencia === 'entrada' ? 'documento de entrada' : 'pedido'} encontrado para os filtros.`
+        : `Nenhum ${filaModoConferencia === 'entrada' ? 'documento de entrada' : 'pedido'} encontrado com esse numero.`
     );
     return;
   }
@@ -3471,7 +3624,7 @@ function renderizarPedidosFila() {
   header.innerHTML = `
     <div></div>
     <div>Status</div>
-    <div>Pedido</div>
+    <div>${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'}</div>
     <div>Data</div>
     <div>Cliente</div>
     <div>Valor</div>
@@ -3482,17 +3635,24 @@ function renderizarPedidosFila() {
   pedidosFiltrados.forEach((pedido) => {
     const card = document.createElement('div');
     const emAndamento = pedido.STATUS_CONFERENCIA === 'EM ANDAMENTO';
-    const iconeTipoPedido = Number(pedido.CODTIPOPER) === 6
+    const entrada = filaModoConferencia === 'entrada';
+    const conferido = pedido.STATUS_CONFERENCIA === 'CONFERIDO';
+    const bonificacao = Number(pedido.CODTIPOPER) === (entrada ? 21 : 6);
+    const iconeTipoPedido = bonificacao
       ? '<span class="pedido-status-type-icon bonificacao"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M7.5 8C5 8 4 6.7 4 5.5S5 3 6.5 3C9 3 12 8 12 8M16.5 8C19 8 20 6.7 20 5.5S19 3 17.5 3C15 3 12 8 12 8"/></svg></span>'
-      : '<span class="pedido-status-type-icon venda"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l1 13H5L6 8Z"/><path d="M9 10V6a3 3 0 0 1 6 0v4"/></svg></span>';
-    const tituloTipoPedido = Number(pedido.CODTIPOPER) === 6 ? 'Pedido de bonificacao' : 'Pedido de venda';
-    card.className = `pedido-operacao-card ${emAndamento ? 'andamento' : ''} ${pedidoSelecionado?.NUNOTA === pedido.NUNOTA ? 'active' : ''}`;
+      : entrada
+        ? '<span class="pedido-status-type-icon entrada"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 19h14"/></svg></span>'
+        : '<span class="pedido-status-type-icon venda"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l1 13H5L6 8Z"/><path d="M9 10V6a3 3 0 0 1 6 0v4"/></svg></span>';
+    const tituloTipoPedido = bonificacao
+      ? (entrada ? 'Bonificacao de entrada' : 'Pedido de bonificacao')
+      : (entrada ? 'Compra de produtos' : 'Pedido de venda');
+    card.className = `pedido-operacao-card ${emAndamento ? 'andamento' : ''} ${conferido ? 'conferido' : ''} ${pedidoSelecionado?.NUNOTA === pedido.NUNOTA ? 'active' : ''}`;
     card.innerHTML = `
       <div class="pedido-list-action">
         ${pedido.PEDIDO_IMPRESSO
           ? '<span class="pedido-print-indicator" aria-label="Pedido ja impresso" title="Pedido ja impresso"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="7"/><path d="m9 17 2 2 4-4"/></svg></span>'
           : ''}
-        ${pedido.STATUS_CONFERENCIA === 'CONFERIDO'
+        ${pedido.STATUS_CONFERENCIA === 'CONFERIDO' && !entrada
           ? '<button class="pedido-label-button" type="button" aria-label="Gerar etiqueta de volume" title="Gerar etiqueta de volume"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7V4h3"/><path d="M17 4h3v3"/><path d="M20 17v3h-3"/><path d="M7 20H4v-3"/><path d="M7 8h10v8H7z"/><path d="M9 11h6"/><path d="M9 14h4"/></svg></button>'
           : ''}
       </div>
@@ -3504,7 +3664,7 @@ function renderizarPedidosFila() {
             ? '<span class="pedido-status-mini conferido">Conferido</span>'
           : '<span class="pedido-status-mini novo">Novo</span>'}
       </div>
-      <strong>Pedido ${pedido.NUNOTA}</strong>
+      <strong>${entrada ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}</strong>
       <div class="pedido-meta">${formatarData(pedido.DTNEG)}</div>
       <div class="pedido-cliente" title="${escaparAtributo(`${pedido.CODIGO_PARCEIRO || '-'} - ${pedido.EMPRESA || '-'}`)}">${escaparHtml(`${pedido.CODIGO_PARCEIRO || '-'} - ${pedido.EMPRESA || '-'}`)}</div>
       <div class="pedido-meta">${formatarMoeda(pedido.VLRNOTA)}</div>
@@ -3530,7 +3690,7 @@ function renderizarPedidoEmConferencia() {
 
   pedidoEmConferenciaCard.innerHTML = `
     <div class="pedido-operacao-card pedido-side-card active ${pedidoSelecionado.STATUS_CONFERENCIA === 'EM ANDAMENTO' ? 'andamento' : ''}">
-      <strong class="pedido-side-title"><i data-lucide="clipboard-list"></i>Pedido ${pedidoSelecionado.NUNOTA}</strong>
+      <strong class="pedido-side-title"><i data-lucide="clipboard-list"></i>${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'} ${pedidoSelecionado.NUNOTA}</strong>
       <div class="pedido-side-meta">
         <span><i data-lucide="calendar-days"></i>${formatarData(pedidoSelecionado.DTNEG)}</span>
         <span><i data-lucide="tag"></i>${formatarMoeda(pedidoSelecionado.VLRNOTA)}</span>
@@ -3565,6 +3725,7 @@ function limparPedidoConferencia(mensagem = 'Selecione um pedido para iniciar.')
   scanStatus.textContent = mensagem;
   confirmarStatus.textContent = '';
   scanCodigo.value = '';
+  scanControle.value = '';
   scanQtd.value = '1';
   renderizarFotoProdutoVazia();
   atualizarControlesConferencia();
@@ -3597,7 +3758,8 @@ async function buscarFilaConferencia() {
   try {
     const params = new URLSearchParams({
       dataInicial: filaDataInicial.value,
-      dataFinal: filaDataFinal.value
+      dataFinal: filaDataFinal.value,
+      modo: filaModoConferencia
     });
 
     if (empresa) {
@@ -3617,8 +3779,8 @@ async function buscarFilaConferencia() {
 
     filaPedidos = payload.itens || [];
     scanStatus.textContent = pedidoBusca
-      ? 'Pedido localizado. Selecione para visualizar os itens.'
-      : 'Selecione um pedido para conferir.';
+      ? `${filaModoConferencia === 'entrada' ? 'Nota de entrada localizada' : 'Pedido localizado'}. Selecione para visualizar os itens.`
+      : `Selecione ${filaModoConferencia === 'entrada' ? 'uma nota de entrada' : 'um pedido'} para conferir.`;
     renderizarPedidosFila();
   } catch (error) {
     console.error('Erro ao buscar fila de conferencia:', error);
@@ -3637,11 +3799,12 @@ async function abrirPreviewPedido(pedido) {
   pedidoPreviewSelecionado = pedido;
   itensPedidoPreview = [];
   pedidoPreview.hidden = false;
-  pedidoPreviewTitulo.textContent = `Pedido ${pedido.NUNOTA}`;
+  pedidoPreviewTitulo.textContent = `${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}`;
   pedidoPreviewMeta.textContent = `${formatarData(pedido.DTNEG)} | ${pedido.EMPRESA || '-'}`;
   pedidoPreviewValor.textContent = formatarMoeda(pedido.VLRNOTA);
   pedidoPreviewItens.textContent = pedido.QTD_ITENS;
   pedidoPreviewUnidades.textContent = formatarQuantidade(pedido.QTD_TOTAL);
+  botaoImprimirPreviewPedido.innerHTML = `<i data-lucide="printer" aria-hidden="true"></i>Imprimir ${filaModoConferencia === 'entrada' ? 'nota' : 'pedido'}`;
   pedidoPreviewStatus.textContent = pedido.STATUS_CONFERENCIA === 'EM ANDAMENTO' ? 'Continuar' : 'Novo';
   pedidoPreviewStatus.textContent = pedido.STATUS_CONFERENCIA === 'CONFERIDO'
     ? 'Conferido'
@@ -3650,13 +3813,14 @@ async function abrirPreviewPedido(pedido) {
   botaoImprimirPreviewPedido.hidden = pedido.STATUS_CONFERENCIA === 'CONFERIDO';
   botaoConfirmarPreviewPedido.textContent = pedidoPodeIniciarConferencia(pedido)
     ? 'Iniciar conferencia'
-    : 'Pedido ja conferido';
-  pedidoPreviewDocumentos.hidden = pedido.STATUS_CONFERENCIA !== 'CONFERIDO';
+    : `${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'} ja conferido`;
+  pedidoPreviewDocumentos.hidden = pedido.STATUS_CONFERENCIA !== 'CONFERIDO' || filaModoConferencia === 'entrada';
   pedidoPreviewDocumentos.innerHTML = '';
-  if (pedido.STATUS_CONFERENCIA === 'CONFERIDO') {
+  if (pedido.STATUS_CONFERENCIA === 'CONFERIDO' && filaModoConferencia === 'saida') {
     carregarDocumentosFiscaisPedido(pedido, pedidoPreviewDocumentos, null, false, Number(pedido.CODTIPOPER) === 6);
   }
   renderizarEstadoVazio(pedidoPreviewItensLista, 'Carregando itens do pedido...');
+  atualizarIcones();
 
   try {
     const res = await fetch(`/api/fila-conferencia/pedidos/${pedido.NUNOTA}/itens`);
@@ -3684,7 +3848,7 @@ async function selecionarPedidoConferencia(pedido) {
   itensPedidoSelecionado = [];
   confirmarStatus.textContent = '';
   scanStatus.textContent = 'Iniciando conferencia no Sankhya...';
-  pedidoConferenciaTitulo.textContent = `Pedido ${pedido.NUNOTA}`;
+  pedidoConferenciaTitulo.textContent = `${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}`;
   filaContexto.textContent = `Periodo ${formatarPeriodo(filaDataInicial.value, filaDataFinal.value)} | ${filaEmpresa.options[filaEmpresa.selectedIndex]?.textContent || '-'} | ${formatarUsuarioLogado()}`;
   atualizarControlesConferencia();
   renderizarPedidosFila();
@@ -3696,7 +3860,8 @@ async function selecionarPedidoConferencia(pedido) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         nunota: pedido.NUNOTA,
-        codUsu: usuarioLogado.codUsu
+        codUsu: usuarioLogado.codUsu,
+        modo: filaModoConferencia
       })
     });
     const iniciarPayload = await iniciarRes.json();
@@ -3727,7 +3892,8 @@ async function selecionarPedidoConferencia(pedido) {
     itensPedidoSelecionado = (itensCarregados || itensPedidoPreview || []).map((item) => ({
       ...item,
       qtdConferida: normalizarQuantidade(item.qtdConferida),
-      qtdCortada: normalizarQuantidade(item.qtdCortada)
+      qtdCortada: normalizarQuantidade(item.qtdCortada),
+      leituras: Array.isArray(item.leituras) ? item.leituras : []
     }));
     fecharPreviewPedido();
     scanStatus.textContent = '';
@@ -3742,6 +3908,7 @@ async function selecionarPedidoConferencia(pedido) {
 
 function adicionarConferenciaPorCodigo() {
   const codigo = normalizarCodigo(scanCodigo.value);
+  const controleInformado = filaModoConferencia === 'entrada' ? scanControle.value.trim() : '';
   const qtd = Number(scanQtd.value || 1);
 
   if (!pedidoSelecionado || !codigo) {
@@ -3772,19 +3939,41 @@ function adicionarConferenciaPorCodigo() {
   const qtdConvertida = qtd * multiplicador;
   const pendente = quantidadePendenteItem(item);
 
-  if (qtdConvertida > pendente) {
+  if (filaModoConferencia !== 'entrada' && qtdConvertida > pendente) {
     scanStatus.innerHTML = `<span class="danger-text">Quantidade maior que o pendente do item. Pendente: ${formatarQuantidade(pendente)}.</span>`;
     scanQtd.select();
     return;
   }
 
   item.qtdConferida += qtdConvertida;
+  item.leituras = Array.isArray(item.leituras) ? item.leituras : [];
+  const leituraExistente = item.leituras.find((leitura) =>
+    normalizarCodigo(leitura.codigo) === codigo
+      && String(leitura.codVol || '') === String(match.entrada.codVol || item.codVol || 'UN')
+      && String(leitura.controle || '').trim() === String(controleInformado || item.controle || '').trim()
+      && Number(leitura.multiplicador || 1) === multiplicador
+  );
+  if (leituraExistente) {
+    leituraExistente.quantidade += qtd;
+    leituraExistente.quantidadeConvertida += qtdConvertida;
+  } else {
+    item.leituras.push({
+      codigo,
+      tipo: match.entrada.tipo || 'CODIGO_BARRAS',
+      codVol: match.entrada.codVol || item.codVol || 'UN',
+      controle: controleInformado || item.controle || '',
+      multiplicador,
+      quantidade: qtd,
+      quantidadeConvertida: qtdConvertida
+    });
+  }
   const detalheConversao = multiplicador !== 1
     ? ` (${formatarQuantidade(qtd)} x ${formatarQuantidade(multiplicador)} = ${formatarQuantidade(qtdConvertida)} un.)`
     : '';
   scanStatus.innerHTML = `<span class="success-text">${item.codProd} conferido por ${obterDescricaoEntradaCodigo(match.entrada)}${detalheConversao}: ${formatarQuantidade(item.qtdConferida)} de ${formatarQuantidade(item.qtdNeg)}.</span>`;
   mostrarFotoProduto(item, 'ultimo');
   scanCodigo.value = '';
+  scanControle.value = '';
   scanQtd.value = '1';
   renderizarItensConferencia();
   salvarProgressoConferencia();
@@ -3798,6 +3987,11 @@ function fecharModalVolumesConferencia() {
 
 function solicitarVolumesConferencia() {
   if (!pedidoSelecionado) {
+    return;
+  }
+
+  if (filaModoConferencia === 'entrada') {
+    confirmarConferencia(0);
     return;
   }
 
@@ -3825,7 +4019,8 @@ function solicitarVolumesConferencia() {
 }
 
 async function confirmarConferencia(volumes) {
-  if (!pedidoSelecionado || !Number.isInteger(volumes) || volumes <= 0) {
+  const volumesInvalidos = filaModoConferencia === 'saida' ? volumes <= 0 : volumes < 0;
+  if (!pedidoSelecionado || !Number.isInteger(volumes) || volumesInvalidos) {
     confirmarVolumesStatus.innerHTML = '<span class="danger-text">Informe uma quantidade valida de volumes.</span>';
     return;
   }
@@ -3844,12 +4039,14 @@ async function confirmarConferencia(volumes) {
         nunota: pedidoSelecionado.NUNOTA,
         nuconf: pedidoSelecionado.nuconf,
         codUsu: usuarioLogado.codUsu,
+        modo: filaModoConferencia,
         volumes,
         itens: itensPedidoSelecionado.map((item) => ({
           sequencia: item.sequencia,
           codProd: item.codProd,
           qtdConferida: item.qtdConferida,
-          qtdCortada: quantidadeCortadaItem(item)
+          qtdCortada: quantidadeCortadaItem(item),
+          leituras: Array.isArray(item.leituras) ? item.leituras : []
         }))
       })
     });
@@ -3866,7 +4063,7 @@ async function confirmarConferencia(volumes) {
     confirmarStatus.innerHTML = '<span class="success-text">Conferencia confirmada.</span>';
     filaPedidos = filaPedidos.filter((pedido) => pedido.NUNOTA !== pedidoSelecionado.NUNOTA);
     limparPedidoConferencia('Pedido conferido. Selecione o proximo pedido.');
-    abrirModalPosConferencia(pedidoFinalizado, payload.faturamento);
+    abrirModalPosConferencia(pedidoFinalizado, payload.faturamento, payload.documentosAuxiliares);
   } catch (error) {
     console.error('Erro ao confirmar conferencia:', error);
     confirmarStatus.innerHTML = `<span class="danger-text">${error.message}</span>`;
@@ -4028,6 +4225,43 @@ function abrirFila() {
   history.pushState({ tela: 'fila' }, '', '#fila-conferencia');
 }
 
+function textoInicialModoFila() {
+  return filaModoConferencia === 'entrada'
+    ? 'Informe os filtros para buscar notas de entrada.'
+    : 'Informe os filtros para buscar pedidos.';
+}
+
+function atualizarModoFilaConferencia() {
+  const entrada = filaModoConferencia === 'entrada';
+  filaScreen.classList.toggle('fila-modo-entrada', entrada);
+  botaoModoEntrada.classList.toggle('active', entrada);
+  botaoModoEntrada.setAttribute('aria-checked', entrada ? 'true' : 'false');
+  botaoModoEntrada.setAttribute('aria-label', entrada ? 'Modo atual: conferencia de entrada' : 'Modo atual: conferencia de saida');
+  filaModoTitulo.textContent = entrada ? 'Conferencia de entrada' : 'Conferencia de saida';
+  filaModoDescricao.textContent = entrada ? 'Recebimento de mercadorias' : 'Separacao e expedicao de pedidos';
+  filaModoIcone.setAttribute('data-lucide', entrada ? 'package-plus' : 'package-check');
+  filaTituloOperacao.textContent = entrada ? 'Conferencia de Entrada' : 'Fila de Conferencia';
+  botaoBuscarFilaConferencia.textContent = entrada ? 'Buscar entradas' : 'Buscar pedidos';
+  filaBuscaPedido.placeholder = entrada ? 'Numero da nota de entrada' : 'Numero do pedido';
+  filaSidebarTitle.textContent = entrada ? 'Entrada em conferencia' : 'Pedido em conferencia';
+  scanControleField.hidden = !entrada;
+  scanControle.disabled = !entrada || !pedidoSelecionado;
+  if (!entrada) scanControle.value = '';
+  const tituloLista = filaCountPedidos.previousElementSibling;
+  if (tituloLista) tituloLista.textContent = entrada ? 'Notas de entrada' : 'Pedidos';
+  atualizarIcones();
+}
+
+function alternarModoFilaConferencia() {
+  filaModoConferencia = filaModoConferencia === 'entrada' ? 'saida' : 'entrada';
+  filaPedidos = [];
+  pedidoSelecionado = null;
+  itensPedidoSelecionado = [];
+  atualizarModoFilaConferencia();
+  renderizarPedidosFila();
+  limparPedidoConferencia(textoInicialModoFila());
+}
+
 function voltarParaHomeViaHistorico() {
   if (window.history.length > 1) {
     window.history.back();
@@ -4184,6 +4418,12 @@ contatoClientesLista.addEventListener('click', (event) => {
 });
 botaoVoltarListaContatos.addEventListener('click', voltarERecarregarListaContato);
 botaoProximoClienteContatos?.addEventListener('click', abrirProximoClienteContato);
+botaoCriarCardBitrix?.addEventListener('click', abrirConfirmacaoCardBitrix);
+botaoCancelarBitrix?.addEventListener('click', fecharConfirmacaoCardBitrix);
+botaoConfirmarBitrix?.addEventListener('click', criarCardBitrixCliente);
+bitrixConfirmModal?.addEventListener('click', (event) => {
+  if (event.target === bitrixConfirmModal) fecharConfirmacaoCardBitrix();
+});
 botaoExibirAcompanhamento.addEventListener('click', abrirConferencia);
 botaoVoltarHomeAcompanhamento.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeFila.addEventListener('click', voltarParaHomeViaHistorico);
@@ -4201,6 +4441,7 @@ produtoFotoModal.addEventListener('click', (event) => {
   }
 });
 botaoBuscarFilaConferencia.addEventListener('click', buscarFilaConferencia);
+botaoModoEntrada.addEventListener('click', alternarModoFilaConferencia);
 filaBuscaPedido.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
@@ -4260,6 +4501,18 @@ confirmarVolumesModal.addEventListener('click', (event) => {
 scanCodigo.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
+    if (filaModoConferencia === 'entrada') {
+      scanControle.focus();
+      scanControle.select();
+    } else {
+      scanQtd.focus();
+      scanQtd.select();
+    }
+  }
+});
+scanControle.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
     scanQtd.focus();
     scanQtd.select();
   }
@@ -4275,6 +4528,9 @@ document.addEventListener('click', () => {
   fecharMenusColunasContato();
 });
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && bitrixConfirmModal && !bitrixConfirmModal.hidden) {
+    fecharConfirmacaoCardBitrix();
+  }
   if (event.key === 'Escape' && produtoFotoModal && !produtoFotoModal.hidden) {
     fecharModalFotoProduto();
   }

@@ -653,6 +653,103 @@
       border-radius: 12px;
     }
 
+    .fila-mode-toggle {
+      width: 100%;
+      min-height: 54px;
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) 38px;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 10px;
+      border: 2px solid #49b997;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #e4f8f0 0%, #f7fffc 100%);
+      color: var(--text-main);
+      text-align: left;
+      cursor: pointer;
+      transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+    }
+
+    .fila-mode-toggle-icon {
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      background: #bfead9;
+      color: #047857;
+    }
+
+    .fila-mode-toggle-icon svg { width: 18px; height: 18px; }
+
+    .fila-mode-toggle-copy {
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .fila-mode-toggle-copy strong { color: #06654d; font-size: 0.74rem; font-weight: 900; }
+    .fila-mode-toggle-copy small { color: #387565; font-size: 0.6rem; font-weight: 800; }
+
+    .fila-mode-toggle-control {
+      width: 38px;
+      height: 21px;
+      padding: 3px;
+      border-radius: 999px;
+      background: #15966f;
+      transition: background 160ms ease;
+    }
+
+    .fila-mode-toggle-control span {
+      width: 15px;
+      height: 15px;
+      display: block;
+      border-radius: 50%;
+      background: #fff;
+      box-shadow: 0 1px 4px rgba(14, 43, 51, 0.22);
+      transition: transform 160ms ease;
+    }
+
+    .fila-mode-toggle.active {
+      border-color: #5475dc;
+      background: linear-gradient(135deg, #dfe7ff 0%, #f5f7ff 100%);
+      box-shadow: 0 0 0 3px rgba(59, 92, 204, 0.14);
+    }
+
+    .fila-mode-toggle.active .fila-mode-toggle-icon { background: #dce4ff; color: #2946a3; }
+    .fila-mode-toggle.active .fila-mode-toggle-copy strong { color: #263f9b; }
+    .fila-mode-toggle.active .fila-mode-toggle-copy small { color: #5367a7; }
+    .fila-mode-toggle.active .fila-mode-toggle-control { background: #3b5ccc; }
+    .fila-mode-toggle.active .fila-mode-toggle-control span { transform: translateX(17px); }
+
+    .fila-screen.fila-modo-entrada {
+      background:
+        radial-gradient(circle at top right, rgba(91, 111, 214, 0.18), transparent 30%),
+        linear-gradient(180deg, #f4f6ff 0%, #e9edfb 100%);
+    }
+
+    .fila-screen.fila-modo-entrada .fila-operacao-panel,
+    .fila-screen.fila-modo-entrada .fila-pedidos-stage,
+    .fila-screen.fila-modo-entrada .fila-workspace,
+    .fila-screen.fila-modo-entrada .pedido-lista,
+    .fila-screen.fila-modo-entrada .conferencia-box {
+      border-color: rgba(59, 92, 204, 0.22);
+      box-shadow: 0 14px 30px rgba(41, 70, 163, 0.10);
+    }
+
+    .fila-screen.fila-modo-entrada .home-kicker,
+    .fila-screen.fila-modo-entrada .fila-operacao-panel h2 { color: #2946a3; }
+
+    .fila-screen.fila-modo-entrada .fila-pedido-search-panel {
+      border-color: rgba(59, 92, 204, 0.28);
+      background: linear-gradient(180deg, #eef2ff 0%, #fff 100%);
+    }
+
+    .fila-screen.fila-modo-entrada .fila-pedido-search-panel input { border-color: rgba(59, 92, 204, 0.42); }
+    .fila-screen.fila-modo-entrada .btn-start { border-color: #3b5ccc; background: #3b5ccc; }
+    .fila-screen.fila-modo-entrada .btn-start:hover { border-color: #2946a3; background: #2946a3; }
+
     .scan-panel .fila-field label {
       font-size: 0.62rem;
       margin-bottom: 4px;
@@ -886,6 +983,16 @@
       background: rgba(255, 246, 201, 0.92);
     }
 
+    .fila-screen.fila-modo-entrada .pedido-operacao-card.conferido {
+      border-left-color: #059669;
+      background: #bcefd2;
+    }
+
+    .fila-screen.fila-modo-entrada .pedido-operacao-card.conferido.active {
+      border-left-color: #047857;
+      background: #a7e6c3;
+    }
+
     .pedido-operacao-card strong {
       display: block;
       font-size: 0.78rem;
@@ -1022,6 +1129,11 @@
       background: #fff4d1;
     }
 
+    .pedido-status-type-icon.entrada {
+      color: #2946a3;
+      background: #e7ecff;
+    }
+
     .pedido-status-mini {
       display: inline-flex;
       align-items: center;
@@ -1124,6 +1236,10 @@
       border-radius: 12px;
       background: rgba(239, 247, 250, 0.96);
       border: 1px solid rgba(18, 66, 75, 0.08);
+    }
+
+    .fila-screen.fila-modo-entrada .scan-panel {
+      grid-template-columns: minmax(0, 1fr) minmax(130px, 180px) 96px 150px;
     }
 
     .scan-panel .btn-start {
@@ -1411,6 +1527,23 @@
       gap: 10px;
     }
 
+    .atualizacao-contato-app {
+      grid-template-rows: auto auto auto minmax(0, 1fr);
+    }
+
+    .contato-page-heading {
+      padding: 2px 2px 0;
+    }
+
+    .contato-page-heading h1 {
+      margin: 2px 0 0;
+      color: var(--text-main);
+      font-size: clamp(1.75rem, 2.35vw, 2.35rem);
+      font-weight: 900;
+      line-height: 1.04;
+      letter-spacing: 0;
+    }
+
     .consulta-toolbar,
     .contato-toolbar,
     .consulta-card {
@@ -1430,17 +1563,25 @@
     }
 
     .contato-toolbar {
-      grid-template-columns: repeat(13, minmax(0, 1fr));
+      grid-template-columns: minmax(190px, 2fr) minmax(105px, .78fr) minmax(170px, 1.3fr) minmax(115px, .82fr) minmax(170px, 1.3fr) auto auto;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 16px;
+      border-radius: 13px;
     }
 
-    .contato-toolbar > :nth-child(1) { grid-column: span 2; }
-    .contato-toolbar > :nth-child(2) { grid-column: span 2; }
-    .contato-toolbar > :nth-child(3) { grid-column: span 1; }
-    .contato-toolbar > :nth-child(4) { grid-column: span 2; }
-    .contato-toolbar > :nth-child(5) { grid-column: span 1; }
-    .contato-toolbar > :nth-child(6) { grid-column: span 2; }
-    .contato-toolbar > :nth-child(7) { grid-column: span 2; }
-    .contato-toolbar > :nth-child(8) { grid-column: span 1; }
+    .contato-toolbar > * { grid-column: auto; }
+
+    .contato-toolbar .fila-field > label {
+      margin-bottom: 4px;
+      font-size: 0.58rem;
+    }
+
+    .contato-toolbar select,
+    .contato-toolbar .btn-back,
+    .contato-toolbar .contato-updated-button {
+      min-height: 40px;
+      height: 40px;
     }
 
     .contato-periodo-field {
@@ -1511,10 +1652,10 @@
     }
 
     .contato-busca-field {
-      background: linear-gradient(180deg, rgba(234, 250, 244, 0.95), rgba(255, 255, 255, 0.95));
-      border: 1px solid rgba(19, 145, 113, 0.22);
-      border-radius: 12px;
-      padding: 8px;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      padding: 0;
     }
 
     .contato-busca-field input {
@@ -1537,10 +1678,10 @@
     }
 
     .contato-toggle-field {
-      min-height: 56px;
+      min-height: 40px;
       display: flex;
       align-items: center;
-      padding: 10px 8px;
+      padding: 15px 2px 0;
     }
 
     .contato-toggle-field .form-check {
@@ -2127,17 +2268,17 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 22px;
-      padding: 28px 32px;
+      gap: 18px;
+      padding: 18px 20px;
       border: 1px solid rgba(18, 66, 75, 0.08);
-      border-radius: 18px;
+      border-radius: 13px;
       background: rgba(255, 255, 255, 0.88);
       box-shadow: 0 16px 34px rgba(16, 57, 66, 0.08);
     }
 
     .contato-detalhe-top h2 {
-      margin: 0 0 8px;
-      font-size: 1.8rem;
+      margin: 0 0 6px;
+      font-size: 1.65rem;
       font-weight: 900;
       letter-spacing: 0;
       color: var(--text-main);
@@ -2146,13 +2287,191 @@
     .contato-detalhe-brand {
       display: flex;
       align-items: center;
-      gap: 24px;
+      gap: 18px;
+      flex: 1 1 auto;
       min-width: 0;
     }
 
+    .contato-bitrix-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 7px;
+      flex-wrap: wrap;
+    }
+
+    .contato-bitrix-button {
+      min-height: 30px;
+      padding: 0 11px;
+      border: 1px solid #169bd5;
+      border-radius: 7px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #eaf8fe;
+      color: #0879ab;
+      font: inherit;
+      font-size: 0.72rem;
+      font-weight: 900;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .contato-bitrix-button:hover:not(:disabled) {
+      background: #d8f2fd;
+      border-color: #0879ab;
+    }
+
+    .contato-bitrix-button:disabled {
+      cursor: wait;
+      opacity: 0.62;
+    }
+
+    .contato-bitrix-button svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    .contato-bitrix-status {
+      min-height: 28px;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 10px;
+      border-radius: 8px;
+      font-size: 0.68rem;
+      font-weight: 800;
+      color: var(--text-soft);
+    }
+
+    .contato-bitrix-status:empty { display: none; }
+    .contato-bitrix-status.success { color: #087f5b; background: #e2f6ed; }
+    .contato-bitrix-status.error { color: #c8231a; }
+
+    .bitrix-confirm-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1300;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background: rgba(15, 42, 49, 0.52);
+      backdrop-filter: blur(4px);
+    }
+
+    .bitrix-confirm-modal[hidden] { display: none; }
+
+    .bitrix-confirm-dialog {
+      width: min(440px, 100%);
+      padding: 22px;
+      border: 1px solid rgba(22, 155, 213, 0.22);
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: 0 24px 65px rgba(11, 40, 48, 0.24);
+    }
+
+    .bitrix-confirm-head {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      margin-bottom: 10px;
+    }
+
+    .bitrix-confirm-icon {
+      width: 38px;
+      height: 38px;
+      flex: 0 0 38px;
+      display: grid;
+      place-items: center;
+      border-radius: 9px;
+      background: #eaf8fe;
+      color: #0879ab;
+    }
+
+    .bitrix-confirm-icon svg { width: 20px; height: 20px; }
+    .bitrix-confirm-dialog h3 { margin: 0; font-size: 1.08rem; }
+    .bitrix-confirm-dialog p { margin: 0; color: var(--text-soft); font-weight: 700; line-height: 1.45; }
+
+    .bitrix-confirm-destination {
+      margin-top: 14px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #f0faf6;
+      color: #087f5b;
+      font-size: 0.78rem;
+      font-weight: 900;
+    }
+
+    .bitrix-confirm-field {
+      display: block;
+      margin-top: 14px;
+    }
+
+    .bitrix-confirm-field span {
+      display: block;
+      margin-bottom: 5px;
+      color: #006b5a;
+      font-size: 0.62rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .bitrix-confirm-field input {
+      width: 100%;
+      height: 44px;
+      padding: 0 12px;
+      border: 1px solid #d7e8e4;
+      border-radius: 12px;
+      background: #fff;
+      color: #073047;
+      font: inherit;
+      font-size: 0.82rem;
+      font-weight: 800;
+      outline: none;
+    }
+
+    .bitrix-confirm-field input:focus {
+      border-color: #008f76;
+      box-shadow: 0 0 0 3px rgba(0, 143, 118, 0.12);
+    }
+
+    .bitrix-confirm-field input:disabled {
+      background: #f1f5f4;
+      color: #64748b;
+    }
+
+    .bitrix-confirm-loading {
+      display: none;
+      align-items: center;
+      gap: 9px;
+      margin-top: 14px;
+      color: #0879ab;
+      font-weight: 900;
+    }
+
+    .bitrix-confirm-modal.is-processing .bitrix-confirm-loading { display: flex; }
+
+    .bitrix-confirm-result {
+      min-height: 18px;
+      margin-top: 12px;
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .bitrix-confirm-result.success { color: #087f5b; }
+    .bitrix-confirm-result.error { color: #c8231a; }
+
+    .bitrix-confirm-actions {
+      display: grid;
+      grid-template-columns: 1fr 1.25fr;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .bitrix-confirm-actions button { min-height: 42px; }
+
     .contato-avatar {
-      width: 104px;
-      height: 104px;
+      width: 82px;
+      height: 82px;
       border-radius: 50%;
       display: grid;
       place-items: center;
@@ -2161,7 +2480,7 @@
         radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.82), transparent 44%),
         linear-gradient(145deg, rgba(218, 244, 236, 0.98), rgba(229, 240, 237, 0.98));
       color: #087f5b;
-      font-size: 2.2rem;
+      font-size: 1.9rem;
       font-weight: 900;
       box-shadow: inset 0 0 0 1px rgba(13, 138, 106, 0.06);
     }
@@ -2240,11 +2559,70 @@
     }
 
     .contato-detalhe-actions {
+      min-width: 325px;
+      align-self: stretch;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .contato-detalhe-statuses,
+    .contato-detalhe-navigation {
       display: flex;
       align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
       justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .contato-detalhe-navigation .btn-back {
+      min-height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+    }
+
+    .contato-detalhe-navigation svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .contato-header-status {
+      min-height: 25px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 9px;
+      border-radius: 999px;
+      color: #176b58;
+      background: #e5f5ee;
+      font-size: 0.62rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .contato-header-status > span {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .contato-header-status-atualizado {
+      color: #087c9f;
+      background: #e1f4fa;
+    }
+
+    .contato-header-status-aguardando {
+      color: #a35d00;
+      background: #fff0cc;
+    }
+
+    .contato-header-status-pendente {
+      color: #c8231a;
+      background: #ffe5e2;
     }
 
     .contato-next-button {
@@ -2295,6 +2673,25 @@
       font-size: 0.78rem;
       font-weight: 900;
       text-transform: uppercase;
+    }
+
+    @media (min-width: 901px) and (max-width: 1180px) {
+      .contato-toolbar {
+        grid-template-columns: minmax(210px, 2fr) minmax(120px, 1fr) minmax(170px, 1.4fr) minmax(120px, 1fr);
+      }
+
+      .contato-toolbar .contato-updated-button,
+      .contato-toolbar .btn-back {
+        width: 100%;
+      }
+
+      .contato-detalhe-top {
+        align-items: flex-start;
+      }
+
+      .contato-detalhe-actions {
+        min-width: 285px;
+      }
     }
 
     .contato-detalhe-grid {
@@ -4431,6 +4828,15 @@
         grid-template-columns: 1fr;
       }
 
+      .fila-screen.fila-modo-entrada .scan-panel {
+        grid-template-columns: minmax(0, 1fr) minmax(110px, 0.45fr);
+      }
+
+      .fila-screen.fila-modo-entrada .scan-panel > .fila-field:first-child,
+      .fila-screen.fila-modo-entrada .scan-panel .btn-start {
+        grid-column: 1 / -1;
+      }
+
       .contato-toolbar > * {
         grid-column: auto !important;
       }
@@ -4488,12 +4894,35 @@
       }
 
       .contato-detalhe-actions {
+        width: 100%;
+        min-width: 0;
         justify-content: stretch;
+        align-items: stretch;
+      }
+
+      .contato-detalhe-statuses,
+      .contato-detalhe-navigation {
+        justify-content: flex-start;
+        flex-wrap: wrap;
       }
 
       .contato-detalhe-actions .btn-back,
       .contato-next-button {
         flex: 1 1 150px;
+      }
+
+      .contato-bitrix-row {
+        align-items: flex-start;
+      }
+
+      .contato-perfil-edit {
+        width: 100%;
+        flex-wrap: wrap;
+      }
+
+      .contato-perfil-edit select {
+        min-width: min(100%, 240px);
+        flex: 1 1 190px;
       }
 
       .pos-conferencia-actions {
@@ -4545,9 +4974,10 @@
         gap: 8px;
       }
 
+      .fila-mode-toggle,
       .fila-pedido-search-panel,
-      .fila-filtros .fila-field:nth-child(4),
-      .fila-filtros .fila-field:nth-child(5),
+      .fila-company-field,
+      .fila-user-field,
       .fila-filtros .btn-start,
       .fila-filtros .btn-back {
         grid-column: 1 / -1;
@@ -4789,6 +5219,264 @@
         min-height: 180px;
       }
     }
+    /* Polimento visual: filtros e cabecalho do perfil de contato */
+    .atualizacao-contato-screen {
+      --contact-primary: #008f76;
+      --contact-primary-dark: #006b5a;
+      --contact-primary-soft: #e8f7f3;
+      --contact-text: #073047;
+      --contact-muted: #64748b;
+      --contact-border: #d7e8e4;
+      background: #f4faf9;
+    }
+
+    .atualizacao-contato-screen .contato-toolbar,
+    .atualizacao-contato-screen .contato-detalhe-top {
+      background: #fff;
+      border: 1px solid var(--contact-border);
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(7, 48, 71, 0.07);
+    }
+
+    .atualizacao-contato-screen .contato-toolbar {
+      gap: 14px;
+      padding: 16px;
+    }
+
+    .atualizacao-contato-screen .contato-toolbar .fila-field > label,
+    .atualizacao-contato-screen .contato-toolbar .form-check-label {
+      margin: 0 0 5px;
+      color: var(--contact-primary-dark);
+      font-size: 0.58rem;
+      font-weight: 900;
+      line-height: 1;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .atualizacao-contato-screen .contato-toolbar input:not([type="checkbox"]),
+    .atualizacao-contato-screen .contato-toolbar select,
+    .atualizacao-contato-screen .contato-toolbar button {
+      height: 44px;
+      min-height: 44px;
+      border-radius: 12px;
+      border-color: var(--contact-border);
+    }
+
+    .atualizacao-contato-screen .contato-busca-field input {
+      padding: 0 13px;
+      color: var(--contact-text);
+      font-size: 0.82rem;
+      box-shadow: none;
+    }
+
+    .atualizacao-contato-screen .contato-toolbar select {
+      color: var(--contact-text);
+      background-color: #fff;
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .atualizacao-contato-screen .contato-toolbar input:focus,
+    .atualizacao-contato-screen .contato-toolbar select:focus {
+      border-color: var(--contact-primary);
+      box-shadow: 0 0 0 3px rgba(0, 143, 118, 0.12);
+    }
+
+    .atualizacao-contato-screen .contato-toggle-field {
+      min-height: 44px;
+      padding-top: 15px;
+    }
+
+    .atualizacao-contato-screen .contato-toggle-field .form-check-input {
+      width: 36px;
+      height: 20px;
+      min-height: 20px;
+      border: 1px solid #b7cec8;
+      background-color: #dce9e6;
+      box-shadow: none;
+      transition: background-color 160ms ease, border-color 160ms ease, box-shadow 160ms ease;
+    }
+
+    .atualizacao-contato-screen .contato-toggle-field .form-check-input:checked {
+      border-color: var(--contact-primary);
+      background-color: var(--contact-primary);
+      box-shadow: 0 0 0 3px rgba(0, 143, 118, 0.10);
+    }
+
+    .atualizacao-contato-screen .contato-updated-button {
+      padding: 0 15px;
+      border: 1px solid rgba(0, 143, 118, 0.38);
+      background: #fff;
+      color: var(--contact-primary-dark);
+      box-shadow: none;
+    }
+
+    .atualizacao-contato-screen .contato-updated-button:hover {
+      border-color: var(--contact-primary);
+      background: var(--contact-primary-soft);
+      color: var(--contact-primary-dark);
+    }
+
+    .atualizacao-contato-screen .contato-toolbar .btn-back {
+      padding: 0 15px;
+      border: 1px solid var(--contact-border);
+      background: #fff;
+      color: var(--contact-text);
+      box-shadow: none;
+    }
+
+    .atualizacao-contato-screen .contato-toolbar .btn-back:hover {
+      border-color: #bad7d0;
+      background: #f7fbfa;
+    }
+
+    .atualizacao-contato-screen .contato-detalhe-top {
+      min-height: 138px;
+      padding: 20px 24px;
+    }
+
+    .atualizacao-contato-screen .contato-detalhe-brand {
+      gap: 20px;
+      align-items: center;
+    }
+
+    .atualizacao-contato-screen .contato-avatar {
+      width: 88px;
+      height: 88px;
+      border: 6px solid #eef8f5;
+      background: linear-gradient(145deg, #45b894 0%, #008f76 58%, #006b5a 100%);
+      color: #fff;
+      font-size: 1.9rem;
+      box-shadow: 0 8px 20px rgba(0, 107, 90, 0.20), inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+    }
+
+    .atualizacao-contato-screen .contato-bitrix-row {
+      gap: 10px;
+      margin-bottom: 8px;
+    }
+
+    .atualizacao-contato-screen .contato-bitrix-button {
+      min-height: 34px;
+      padding: 0 12px;
+      border-color: rgba(0, 143, 118, 0.36);
+      border-radius: 10px;
+      background: #fff;
+      color: var(--contact-primary-dark);
+    }
+
+    .atualizacao-contato-screen .contato-bitrix-button:hover:not(:disabled) {
+      border-color: var(--contact-primary);
+      background: var(--contact-primary-soft);
+    }
+
+    .atualizacao-contato-screen .contato-bitrix-status.success {
+      min-height: 30px;
+      padding: 0 11px;
+      border: 1px solid #ccecdf;
+      border-radius: 999px;
+      background: var(--contact-primary-soft);
+      color: var(--contact-primary-dark);
+    }
+
+    .atualizacao-contato-screen .contato-bitrix-status.success::before {
+      content: "\2713";
+      width: 16px;
+      height: 16px;
+      margin-right: 6px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 50%;
+      background: #ccecdf;
+      color: var(--contact-primary-dark);
+      font-size: 0.62rem;
+      font-weight: 950;
+    }
+
+    .atualizacao-contato-screen .contato-detalhe-top h2 {
+      margin-bottom: 7px;
+      color: var(--contact-text);
+      line-height: 1.12;
+    }
+
+    .atualizacao-contato-screen .contato-detalhe-subtitle {
+      color: var(--contact-muted);
+    }
+
+    .atualizacao-contato-screen .contato-perfil-edit select {
+      height: 38px;
+      border-color: var(--contact-border);
+      border-radius: 10px;
+      background: #fff;
+    }
+
+    .atualizacao-contato-screen .contato-perfil-save {
+      min-height: 38px;
+      padding: 0 15px;
+      border: 1px solid var(--contact-primary);
+      border-radius: 10px;
+      background: var(--contact-primary);
+      box-shadow: 0 5px 12px rgba(0, 143, 118, 0.16);
+    }
+
+    .atualizacao-contato-screen .contato-perfil-save:hover {
+      border-color: var(--contact-primary-dark);
+      background: var(--contact-primary-dark);
+    }
+
+    .atualizacao-contato-screen .contato-header-status {
+      border: 1px solid #d3ece5;
+      color: var(--contact-primary-dark);
+      background: var(--contact-primary-soft);
+    }
+
+    .atualizacao-contato-screen .contato-header-status-atualizado {
+      border-color: #cce9f1;
+      color: #087c9f;
+      background: #e8f7fb;
+    }
+
+    .atualizacao-contato-screen .contato-detalhe-navigation .btn-back,
+    .atualizacao-contato-screen .contato-next-button {
+      min-height: 44px;
+      height: 44px;
+      border-radius: 12px;
+    }
+
+    .atualizacao-contato-screen .contato-detalhe-navigation .btn-back {
+      border: 1px solid var(--contact-border);
+      background: #fff;
+      color: var(--contact-primary-dark);
+      box-shadow: none;
+    }
+
+    .atualizacao-contato-screen .contato-next-button {
+      border-color: var(--contact-primary);
+      background: var(--contact-primary);
+      box-shadow: 0 7px 16px rgba(0, 143, 118, 0.20);
+    }
+
+    .atualizacao-contato-screen .contato-next-button:hover:not(:disabled) {
+      border-color: var(--contact-primary-dark);
+      background: var(--contact-primary-dark);
+      box-shadow: 0 9px 20px rgba(0, 107, 90, 0.23);
+    }
+
+    @media (max-width: 900px) {
+      .atualizacao-contato-screen .contato-toolbar {
+        gap: 10px;
+        padding: 12px;
+      }
+
+      .atualizacao-contato-screen .contato-detalhe-top {
+        padding: 18px;
+      }
+
+      .atualizacao-contato-screen .contato-avatar {
+        width: 76px;
+        height: 76px;
+      }
+    }
   </style>
 </head>
 
@@ -4876,6 +5564,15 @@
             </div>
 
             <div class="fila-filtros">
+              <button class="fila-mode-toggle" id="fila-modo-entrada" type="button" role="switch" aria-checked="false">
+                <span class="fila-mode-toggle-icon"><i id="fila-modo-icone" data-lucide="package-check" aria-hidden="true"></i></span>
+                <span class="fila-mode-toggle-copy">
+                  <strong id="fila-modo-titulo">Conferencia de saida</strong>
+                  <small id="fila-modo-descricao">Separacao e expedicao de pedidos</small>
+                </span>
+                <span class="fila-mode-toggle-control" aria-hidden="true"><span></span></span>
+              </button>
+
               <div class="fila-field fila-pedido-search-panel">
                 <label for="fila-busca-pedido">Buscar pedido</label>
                 <input id="fila-busca-pedido" inputmode="numeric" autocomplete="off" placeholder="Numero do pedido">
@@ -4891,14 +5588,14 @@
                 <input type="date" id="fila-data-final">
               </div>
 
-              <div class="fila-field">
+              <div class="fila-field fila-company-field">
                 <label for="fila-empresa">Empresa</label>
                 <select id="fila-empresa">
                   <option value="">Selecione a empresa</option>
                 </select>
               </div>
 
-              <div class="fila-field">
+              <div class="fila-field fila-user-field">
                 <label>Conferente</label>
                 <div class="fila-user-chip" id="fila-usuario-logado">Usuario logado</div>
               </div>
@@ -5054,7 +5751,7 @@
         <aside class="pedido-lista">
           <div class="box-title">
             <span class="sidebar-title-icon"><i data-lucide="clipboard-check"></i></span>
-            <span>Pedido em conferencia</span>
+            <span id="fila-sidebar-title">Pedido em conferencia</span>
           </div>
           <div id="pedido-em-conferencia-card">
             <div class="empty-state">Nenhum pedido selecionado.</div>
@@ -5112,6 +5809,10 @@
             <div class="fila-field">
               <label for="scan-codigo">Codigo de barras ou produto</label>
               <input class="scan-input" id="scan-codigo" autocomplete="off" placeholder="Bipe ou digite o codigo" disabled>
+            </div>
+            <div class="fila-field" id="scan-controle-field" hidden>
+              <label for="scan-controle">Controle/lote</label>
+              <input class="scan-input" id="scan-controle" autocomplete="off" placeholder="Informe o controle" disabled>
             </div>
             <div class="fila-field">
               <label for="scan-qtd">Qtd.</label>
@@ -5192,11 +5893,11 @@
 
   <section class="screen atualizacao-contato-screen" id="atualizacao-contato-screen">
     <div class="atualizacao-contato-app">
+      <div class="contato-page-heading">
+        <div class="home-kicker">Cadastro comercial</div>
+        <h1>Atualizacao de Contato</h1>
+      </div>
       <div class="contato-toolbar">
-        <div>
-          <div class="home-kicker">Cadastro comercial</div>
-          <h1>Atualizacao de Contato</h1>
-        </div>
         <div class="fila-field contato-busca-field">
           <label for="contato-busca">Pesquisa inteligente</label>
           <input id="contato-busca" type="search" placeholder="Codigo, nome ou CNPJ">
@@ -5263,18 +5964,30 @@
           <div class="contato-detalhe-brand">
             <div class="contato-avatar" id="contato-detalhe-avatar">--</div>
             <div>
-              <div class="home-kicker">Perfil do cliente</div>
+              <div class="contato-bitrix-row">
+                <div class="home-kicker">Perfil do cliente</div>
+                <button class="contato-bitrix-button" id="criar-card-bitrix" type="button">
+                  <i data-lucide="send" aria-hidden="true"></i>
+                  <span>Criar card no Bitrix</span>
+                </button>
+                <span class="contato-bitrix-status" id="contato-bitrix-status" aria-live="polite"></span>
+              </div>
               <h2 id="contato-detalhe-nome">Cliente</h2>
               <p class="contato-detalhe-subtitle" id="contato-detalhe-subtitulo">Dados cadastrais e contatos</p>
             </div>
           </div>
           <div class="contato-detalhe-actions">
-            <span class="contato-pill" id="contato-detalhe-ativo">Ativo</span>
-            <button class="btn-back" id="voltar-lista-contatos" type="button">Voltar para lista</button>
-            <button class="contato-next-button" id="proximo-cliente-contatos" type="button">
-              <span>Proximo cliente</span>
-              <i data-lucide="arrow-right" aria-hidden="true"></i>
-            </button>
+            <div class="contato-detalhe-statuses" id="contato-detalhe-ativo"></div>
+            <div class="contato-detalhe-navigation">
+              <button class="btn-back" id="voltar-lista-contatos" type="button">
+                <i data-lucide="list" aria-hidden="true"></i>
+                <span>Voltar para lista</span>
+              </button>
+              <button class="contato-next-button" id="proximo-cliente-contatos" type="button">
+                <span>Proximo cliente</span>
+                <i data-lucide="arrow-right" aria-hidden="true"></i>
+              </button>
+            </div>
           </div>
         </div>
         <div class="contato-detalhe-grid" id="contato-detalhe-conteudo">
@@ -5394,6 +6107,30 @@
           <div class="pool-count" id="count-conferidos">0 pedidos</div>
         </div>
         <div id="pool-conferidos"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="bitrix-confirm-modal" id="bitrix-confirm-modal" hidden>
+    <div class="bitrix-confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="bitrix-confirm-title">
+      <div class="bitrix-confirm-head">
+        <span class="bitrix-confirm-icon"><i data-lucide="send" aria-hidden="true"></i></span>
+        <h3 id="bitrix-confirm-title">Criar card no Bitrix</h3>
+      </div>
+      <p id="bitrix-confirm-text">Confirma a criacao do card para este cliente?</p>
+      <label class="bitrix-confirm-field" for="bitrix-card-title">
+        <span>Nome do card</span>
+        <input id="bitrix-card-title" type="text" maxlength="255" autocomplete="off">
+      </label>
+      <div class="bitrix-confirm-destination">Atualizacao Cadastral &rsaquo; Aguardando Contato</div>
+      <div class="bitrix-confirm-loading" role="status">
+        <span class="pos-conferencia-spinner" aria-hidden="true"></span>
+        <span>Enviando dados e criando o card...</span>
+      </div>
+      <div class="bitrix-confirm-result" id="bitrix-confirm-result" aria-live="polite"></div>
+      <div class="bitrix-confirm-actions">
+        <button class="btn-back" id="bitrix-confirm-cancel" type="button">Cancelar</button>
+        <button class="btn-start" id="bitrix-confirm-submit" type="button">Confirmar envio</button>
       </div>
     </div>
   </section>

@@ -69,7 +69,11 @@ function desenharCabecalho(doc, pedido, logoPath) {
     .text(texto(pedido.TELEFONE_EMPRESA), 390, 51, { width: direita - 390, align: 'right' });
 
   doc.moveTo(82, 76).lineTo(direita, 76).lineWidth(1).strokeColor(COLORS.grid).stroke();
-  const tituloPedido = Number(pedido.CODTIPOPER) === 6 ? 'PEDIDO DE BONIFICACAO' : 'PEDIDO DE VENDA';
+  const entrada = String(pedido.TIPMOV || '').toUpperCase() === 'C';
+  const bonificacao = Number(pedido.CODTIPOPER) === (entrada ? 21 : 6);
+  const tituloPedido = bonificacao
+    ? (entrada ? 'BONIFICACAO DE ENTRADA' : 'PEDIDO DE BONIFICACAO')
+    : (entrada ? 'NOTA DE COMPRA' : 'PEDIDO DE VENDA');
   escreverLinhaAjustada(doc, `${tituloPedido} ${pedido.NUNOTA}`, 82, 82, 330, {
     font: 'Helvetica-Bold',
     maxSize: 16,
@@ -78,11 +82,13 @@ function desenharCabecalho(doc, pedido, logoPath) {
   });
   doc.fontSize(7.5)
     .text(`DT IMPRESSAO: ${new Date().toLocaleString('pt-BR')}`, 405, 82, { width: direita - 405, align: 'right' })
-    .text(`DT PEDIDO: ${dataHora(pedido.DTNEG)}`, 405, 94, { width: direita - 405, align: 'right' });
+    .text(`${entrada ? 'DT NOTA' : 'DT PEDIDO'}: ${dataHora(pedido.DTNEG)}`, 405, 94, { width: direita - 405, align: 'right' });
   doc.moveTo(esquerda, 109).lineTo(direita, 109).stroke();
 
-  doc.font('Helvetica-Bold').fontSize(10).text('CLIENTE', 28, 122);
-  escreverLinhaAjustada(doc, `${texto(pedido.CODPARC)} - ${texto(pedido.NOMEPARC)}`, 76, 122, 470, {
+  const rotuloParceiro = entrada ? 'FORNECEDOR' : 'CLIENTE';
+  const inicioParceiro = entrada ? 101 : 76;
+  doc.font('Helvetica-Bold').fontSize(10).text(rotuloParceiro, 28, 122);
+  escreverLinhaAjustada(doc, `${texto(pedido.CODPARC)} - ${texto(pedido.NOMEPARC)}`, inicioParceiro, 122, 546 - inicioParceiro, {
     maxSize: 10,
     minSize: 5.5
   });
