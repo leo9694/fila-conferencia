@@ -59,6 +59,9 @@ const botaoCancelarPreviewPedido = document.getElementById('cancelar-preview-ped
 const botaoImprimirPreviewPedido = document.getElementById('imprimir-preview-pedido');
 const botaoConfirmarPreviewPedido = document.getElementById('confirmar-preview-pedido');
 const pedidoEmConferenciaCard = document.getElementById('pedido-em-conferencia-card');
+const mobileSidebarToggle = document.getElementById('mobile-sidebar-toggle');
+const mobileSidebarBackdrop = document.getElementById('mobile-sidebar-backdrop');
+const pedidoSidebar = document.getElementById('pedido-sidebar');
 const botaoVoltarListaFila = document.getElementById('voltar-lista-fila');
 const produtoFotoPanel = document.getElementById('produto-foto-panel');
 const produtoFotoTitulo = document.querySelector('#produto-foto-panel .produto-foto-head strong');
@@ -910,10 +913,25 @@ function atualizarControlesConferencia() {
   botaoScanAdicionar.disabled = !temPedido;
 }
 
+function ehMobileConferencia() {
+  return window.matchMedia('(max-width: 900px)').matches && filaScreen.classList.contains('conferencia-mode');
+}
+
+function alternarSidebarMobileConferencia(aberto) {
+  if (!mobileSidebarToggle || !mobileSidebarBackdrop || !pedidoSidebar) return;
+
+  filaScreen.classList.toggle('mobile-sidebar-open', aberto);
+  mobileSidebarBackdrop.hidden = !aberto;
+  mobileSidebarToggle.setAttribute('aria-expanded', aberto ? 'true' : 'false');
+  document.body.classList.toggle('mobile-sidebar-lock', aberto);
+  atualizarIcones();
+}
+
 function mostrarEtapaPedidosFila() {
   filaEtapaConferencia.classList.remove('active');
   filaEtapaPedidos.classList.add('active');
   filaScreen.classList.remove('conferencia-mode');
+  alternarSidebarMobileConferencia(false);
 }
 
 function mostrarEtapaConferenciaFila() {
@@ -4523,16 +4541,72 @@ scanQtd.addEventListener('keydown', (event) => {
     adicionarConferenciaPorCodigo();
   }
 });
+mobileSidebarToggle?.addEventListener('click', () => {
+  alternarSidebarMobileConferencia(!filaScreen.classList.contains('mobile-sidebar-open'));
+});
+mobileSidebarBackdrop?.addEventListener('click', () => {
+  alternarSidebarMobileConferencia(false);
+});
+
+let toqueSidebarMobile = null;
+document.addEventListener(
+  'touchstart',
+  (event) => {
+    if (!ehMobileConferencia() || !event.touches.length) return;
+
+    const toque = event.touches[0];
+    const sidebarAberta = filaScreen.classList.contains('mobile-sidebar-open');
+    if (toque.clientX <= 30 || sidebarAberta) {
+      toqueSidebarMobile = {
+        startX: toque.clientX,
+        startY: toque.clientY,
+        sidebarAberta,
+      };
+    }
+  },
+  { passive: true }
+);
+document.addEventListener(
+  'touchend',
+  (event) => {
+    if (!toqueSidebarMobile || !event.changedTouches.length) return;
+
+    const toque = event.changedTouches[0];
+    const deslocamentoX = toque.clientX - toqueSidebarMobile.startX;
+    const deslocamentoY = Math.abs(toque.clientY - toqueSidebarMobile.startY);
+
+    if (deslocamentoY < 70) {
+      if (!toqueSidebarMobile.sidebarAberta && deslocamentoX > 56) {
+        alternarSidebarMobileConferencia(true);
+      }
+
+      if (toqueSidebarMobile.sidebarAberta && deslocamentoX < -56) {
+        alternarSidebarMobileConferencia(false);
+      }
+    }
+
+    toqueSidebarMobile = null;
+  },
+  { passive: true }
+);
 document.addEventListener('click', () => {
   fecharMenusOrdenacaoItens();
   fecharMenusColunasContato();
 });
 document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && filaScreen.classList.contains('mobile-sidebar-open')) {
+    alternarSidebarMobileConferencia(false);
+  }
   if (event.key === 'Escape' && bitrixConfirmModal && !bitrixConfirmModal.hidden) {
     fecharConfirmacaoCardBitrix();
   }
   if (event.key === 'Escape' && produtoFotoModal && !produtoFotoModal.hidden) {
     fecharModalFotoProduto();
+  }
+});
+window.addEventListener('resize', () => {
+  if (!ehMobileConferencia() && filaScreen.classList.contains('mobile-sidebar-open')) {
+    alternarSidebarMobileConferencia(false);
   }
 });
 

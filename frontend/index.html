@@ -793,6 +793,11 @@
       color: #fff;
     }
 
+    .mobile-sidebar-toggle,
+    .mobile-sidebar-backdrop {
+      display: none;
+    }
+
     .fila-workspace {
       display: grid;
       grid-template-columns: 260px minmax(0, 1fr);
@@ -4947,6 +4952,12 @@
         min-height: auto;
       }
 
+      .fila-screen.conferencia-mode {
+        height: auto;
+        min-height: 100dvh;
+        overflow: auto;
+      }
+
       .fila-pedidos-layout {
         grid-template-columns: 1fr;
         width: 100%;
@@ -5049,6 +5060,67 @@
         grid-column: 1 / -1;
       }
 
+      .fila-screen.conferencia-mode .pedido-side-card {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 8px;
+        width: 100%;
+        min-width: 0;
+        padding: 12px;
+        border-left-width: 5px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, rgba(226, 248, 239, 0.98), rgba(248, 253, 251, 0.98));
+        cursor: default;
+      }
+
+      .fila-screen.conferencia-mode .pedido-side-card > div,
+      .fila-screen.conferencia-mode .pedido-side-card > strong {
+        grid-column: auto;
+        grid-row: auto;
+        padding: 0;
+        min-width: 0;
+        overflow: visible;
+        text-overflow: clip;
+        white-space: normal;
+      }
+
+      .fila-screen.conferencia-mode .pedido-side-title {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        margin: 0;
+        font-size: 0.78rem;
+        line-height: 1.2;
+      }
+
+      .fila-screen.conferencia-mode .pedido-side-meta {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 6px 10px;
+        font-size: 0.64rem;
+      }
+
+      .fila-screen.conferencia-mode .pedido-side-meta span {
+        justify-content: flex-start;
+        min-width: 0;
+        white-space: normal;
+      }
+
+      .fila-screen.conferencia-mode .pedido-side-cliente {
+        margin: 0;
+        font-size: 0.72rem;
+        line-height: 1.18;
+        overflow-wrap: anywhere;
+      }
+
+      .fila-screen.conferencia-mode .pedido-side-card .pedido-status-mini {
+        justify-self: start;
+        max-width: 100%;
+        margin: 0;
+        white-space: normal;
+        text-align: center;
+      }
+
       .pedido-list-status {
         grid-column: 3;
         grid-row: 1;
@@ -5093,11 +5165,57 @@
       }
 
       .fila-screen.conferencia-mode .fila-workspace {
+        display: block;
+        position: relative;
         height: auto;
+        min-height: calc(100vh - 16px);
+        padding: 8px;
+        background: transparent;
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
       }
 
-      .fila-workspace {
-        padding: 8px;
+      .fila-screen.conferencia-mode .mobile-sidebar-toggle {
+        position: sticky;
+        top: 8px;
+        z-index: 50;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        width: 100%;
+        min-height: 42px;
+        margin: 0 0 8px;
+        border: 1px solid rgba(13, 138, 106, 0.22);
+        border-radius: 13px;
+        background: linear-gradient(180deg, #ffffff, #ecfbf7);
+        color: var(--accent);
+        font-size: 0.86rem;
+        font-weight: 900;
+        box-shadow: 0 10px 22px rgba(16, 57, 66, 0.10);
+      }
+
+      .fila-screen.conferencia-mode .mobile-sidebar-toggle svg {
+        width: 17px;
+        height: 17px;
+        stroke-width: 2.5;
+      }
+
+      .fila-screen.conferencia-mode .mobile-sidebar-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 68;
+        background: rgba(7, 28, 36, 0.34);
+        backdrop-filter: blur(2px);
+      }
+
+      .fila-screen.conferencia-mode.mobile-sidebar-open .mobile-sidebar-backdrop {
+        display: block;
+      }
+
+      body.mobile-sidebar-lock {
+        overflow: hidden;
       }
 
       .pedido-lista,
@@ -5106,8 +5224,64 @@
         border-radius: 14px;
       }
 
-      .pedido-lista {
+      .fila-screen.conferencia-mode .pedido-lista {
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 70;
+        width: min(86vw, 330px);
+        max-width: 330px;
+        height: 100dvh;
+        max-height: 100dvh;
+        padding: 12px;
+        border-radius: 0 18px 18px 0;
+        background: rgba(255, 255, 255, 0.98);
+        box-shadow: 20px 0 42px rgba(9, 40, 50, 0.24);
         overflow-y: auto;
+        transform: translateX(calc(-100% + 15px));
+        transition: transform 0.22s ease, box-shadow 0.22s ease;
+        overscroll-behavior: contain;
+      }
+
+      .fila-screen.conferencia-mode .pedido-lista::after {
+        content: "";
+        position: fixed;
+        top: 45%;
+        right: -8px;
+        width: 5px;
+        height: 62px;
+        border-radius: 99px;
+        background: rgba(7, 48, 71, 0.50);
+        box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.78);
+      }
+
+      .fila-screen.conferencia-mode.mobile-sidebar-open .pedido-lista {
+        transform: translateX(0);
+      }
+
+      .fila-screen.conferencia-mode.mobile-sidebar-open .pedido-lista::after {
+        opacity: 0.35;
+      }
+
+      .fila-screen.conferencia-mode .conferencia-box {
+        min-height: calc(100vh - 66px);
+        height: auto;
+        overflow: visible;
+        padding: 10px;
+      }
+
+      .fila-screen.conferencia-mode .conferencia-box > .box-title {
+        align-items: flex-start;
+        gap: 8px;
+      }
+
+      .fila-screen.conferencia-mode .box-title-actions {
+        flex-wrap: wrap;
+      }
+
+      .fila-screen.conferencia-mode .btn-consulta-produtos {
+        min-height: 34px;
+        padding: 0 10px;
+        font-size: 0.68rem;
       }
 
       .scan-panel {
@@ -5127,7 +5301,7 @@
       }
 
       .itens-scroll {
-        max-height: 260px;
+        max-height: 34vh;
       }
 
       .produto-foto-frame {
@@ -5748,7 +5922,12 @@
 
       <div class="fila-etapa" id="fila-etapa-conferencia">
         <div class="fila-workspace">
-        <aside class="pedido-lista">
+        <button class="mobile-sidebar-toggle" id="mobile-sidebar-toggle" type="button" aria-controls="pedido-sidebar" aria-expanded="false">
+          <i data-lucide="panel-left-open"></i>
+          Resumo da conferencia
+        </button>
+        <div class="mobile-sidebar-backdrop" id="mobile-sidebar-backdrop" hidden></div>
+        <aside class="pedido-lista" id="pedido-sidebar" aria-label="Resumo da conferencia">
           <div class="box-title">
             <span class="sidebar-title-icon"><i data-lucide="clipboard-check"></i></span>
             <span id="fila-sidebar-title">Pedido em conferencia</span>
