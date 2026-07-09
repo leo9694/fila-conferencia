@@ -1244,7 +1244,7 @@
     }
 
     .fila-screen.fila-modo-entrada .scan-panel {
-      grid-template-columns: minmax(0, 1fr) minmax(130px, 180px) 96px 150px;
+      grid-template-columns: minmax(220px, 1fr) minmax(130px, 0.56fr) 86px minmax(118px, 0.42fr) minmax(118px, 0.42fr) 150px;
     }
 
     .controle-lote-combo {
@@ -1405,6 +1405,11 @@
       min-height: 28px;
       min-width: 100%;
       width: max-content;
+    }
+
+    .itens-grid-header.entrada-datas,
+    .item-row.entrada-datas {
+      grid-template-columns: var(--itens-grid-entrada-columns, 34px 84px 220px 132px 148px 112px 112px 126px);
     }
 
     .itens-grid-header {
@@ -3421,6 +3426,13 @@
       min-width: max-content;
     }
 
+    .item-date {
+      color: var(--text-soft);
+      font-size: 0.68rem;
+      font-weight: 900;
+      text-align: center;
+    }
+
     .item-action {
       border: none;
       border-radius: 8px;
@@ -4883,11 +4895,15 @@
       }
 
       .fila-screen.fila-modo-entrada .scan-panel {
-        grid-template-columns: minmax(0, 1fr) minmax(110px, 0.45fr);
+        grid-template-columns: minmax(0, 1fr) minmax(92px, 0.36fr);
       }
 
       .fila-screen.fila-modo-entrada .scan-panel > .fila-field:first-child,
       .fila-screen.fila-modo-entrada .scan-panel .btn-start {
+        grid-column: 1 / -1;
+      }
+
+      .fila-screen.fila-modo-entrada #scan-controle-field {
         grid-column: 1 / -1;
       }
 
@@ -5360,6 +5376,11 @@
       .itens-grid-header,
       .item-row {
         min-width: 810px;
+      }
+
+      .itens-grid-header.entrada-datas,
+      .item-row.entrada-datas {
+        min-width: 1030px;
       }
 
       .corte-modal {
@@ -6048,6 +6069,14 @@
             <div class="fila-field">
               <label for="scan-qtd">Qtd.</label>
               <input class="qtd-input" id="scan-qtd" type="number" min="1" step="1" value="1" disabled>
+            </div>
+            <div class="fila-field scan-data-entrada" id="scan-fabricacao-field" hidden>
+              <label for="scan-fabricacao">Fabricacao</label>
+              <input class="scan-input" id="scan-fabricacao" type="date" disabled>
+            </div>
+            <div class="fila-field scan-data-entrada" id="scan-validade-field" hidden>
+              <label for="scan-validade">Validade</label>
+              <input class="scan-input" id="scan-validade" type="date" disabled>
             </div>
             <button class="btn-start" id="scan-adicionar" type="button" disabled>Conferir</button>
           </div>

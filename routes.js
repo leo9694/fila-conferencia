@@ -1166,12 +1166,27 @@ async function sincronizarDetalhesConferenciaEntrada({ nuconf, nunota, itens }) 
   `);
   const detalhesDesejados = consolidarLeiturasEntrada(itensNota, itens);
   const detalhesExistentes = await executeQuery(`
-    SELECT SEQCONF
+    SELECT
+      SEQCONF,
+      CODPROD,
+      CODVOL,
+      NVL(TRIM(CONTROLE), ' ') AS CONTROLE,
+      CODBARRA
     FROM TGFCOI2
     WHERE NUCONF = ${nuconf}
     ORDER BY SEQCONF
   `);
   const sequenciasExistentes = new Set(detalhesExistentes.map((item) => Number(item.SEQCONF)));
+  const chaveDetalheEntrada = (detalhe) => [
+    Number(detalhe.CODPROD),
+    normalizarControleConferencia(detalhe.CONTROLE),
+    String(detalhe.CODVOL || '').trim(),
+    String(detalhe.CODBARRA || '').trim()
+  ].join('|');
+  const detalhesExistentesPorChave = new Map(
+    detalhesExistentes.map((item) => [chaveDetalheEntrada(item), Number(item.SEQCONF)])
+  );
+  const sequenciasUsadas = new Set();
   const dhAlter = formatarDataHoraSankhya();
 
   for (let indice = 0; indice < detalhesDesejados.length; indice += 1) {
@@ -1183,16 +1198,21 @@ async function sincronizarDetalhesConferenciaEntrada({ nuconf, nunota, itens }) 
       QTDCONFVOLPAD: numeroApi(detalhe.QTDCONFVOLPAD),
       DHALTER: dhAlter
     };
-    if (sequenciasExistentes.has(seqConf)) {
-      await atualizarRegistroApi('DetalhesConferencia', { NUCONF: nuconf, SEQCONF: seqConf }, campos);
+    const seqNaturalExistente = detalhesExistentesPorChave.get(chaveDetalheEntrada(detalhe));
+    const seqDestino = seqNaturalExistente || (sequenciasExistentes.has(seqConf) ? seqConf : null);
+
+    if (seqDestino) {
+      await atualizarRegistroApi('DetalhesConferencia', { NUCONF: nuconf, SEQCONF: seqDestino }, campos);
+      sequenciasUsadas.add(seqDestino);
     } else {
       await salvarRegistroApi('DetalhesConferencia', { NUCONF: nuconf, SEQCONF: seqConf, ...campos });
+      sequenciasUsadas.add(seqConf);
     }
   }
 
   for (const detalheExistente of detalhesExistentes) {
     const seqConf = Number(detalheExistente.SEQCONF);
-    if (seqConf <= detalhesDesejados.length) continue;
+    if (sequenciasUsadas.has(seqConf)) continue;
     await atualizarRegistroApi(
       'DetalhesConferencia',
       { NUCONF: nuconf, SEQCONF: seqConf },
@@ -1226,6 +1246,102 @@ function normalizarDataSankhya(valor) {
   }
 
   return texto;
+}
+
+function formatarDataCampoSankhya(valor) {
+  if (!valor) return null;
+
+  const texto = String(valor).trim();
+  const isoMatch = texto.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, ano, mes, dia] = isoMatch;
+    return `${dia}/${mes}/${ano}`;
+  }
+
+  const brMatch = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (brMatch) {
+    const [, dia, mes, ano] = brMatch;
+    return `${dia}/${mes}/${ano}`;
+  }
+
+  const sankhyaMatch = texto.match(/^(\d{2})(\d{2})(\d{4})/);
+  if (sankhyaMatch) {
+    const [, dia, mes, ano] = sankhyaMatch;
+    return `${dia}/${mes}/${ano}`;
+  }
+
+  return texto;
+}
+
+async function atualizarDatasEstoqueEntrada({ itensPedido, itensInformados }) {
+  const itensPorSequencia = new Map(itensPedido.map((item) => [Number(item.SEQUENCIA), item]));
+  const atualizacoes = [];
+  const chavesAtualizadas = new Set();
+
+  for (const itemInformado of itensInformados) {
+    const itemPedido = itensPorSequencia.get(Number(itemInformado.sequencia));
+    if (!itemPedido || !Array.isArray(itemInformado.leituras)) continue;
+
+    for (const leitura of itemInformado.leituras) {
+      const dtValidade = formatarDataCampoSankhya(leitura.dtValidade);
+      const dtFabricacao = formatarDataCampoSankhya(leitura.dtFabricacao);
+      if (!dtValidade && !dtFabricacao) continue;
+
+      const controle = normalizarControleConferencia(leitura.controle || itemPedido.CONTROLE);
+      const chave = [
+        itemPedido.CODEMP,
+        itemPedido.CODPROD,
+        itemPedido.CODLOCALORIG || 0,
+        controle,
+        dtFabricacao || '',
+        dtValidade || ''
+      ].join('|');
+      if (chavesAtualizadas.has(chave)) continue;
+      chavesAtualizadas.add(chave);
+
+      const estoques = await executeQuery(`
+        SELECT
+          CODEMP,
+          CODPROD,
+          CODLOCAL,
+          NVL(TRIM(CONTROLE), ' ') AS CONTROLE,
+          CODPARC,
+          TIPO
+        FROM TGFEST
+        WHERE CODEMP = ${Number(itemPedido.CODEMP)}
+          AND CODPROD = ${Number(itemPedido.CODPROD)}
+          AND CODLOCAL = ${Number(itemPedido.CODLOCALORIG || 0)}
+          AND NVL(TRIM(CONTROLE), ' ') = '${textoSql(controle)}'
+      `);
+
+      for (const estoque of estoques) {
+        const campos = {};
+        if (dtValidade) campos.DTVAL = dtValidade;
+        if (dtFabricacao) campos.DTFABRICACAO = dtFabricacao;
+
+        await atualizarRegistroApi(
+          'Estoque',
+          {
+            CODEMP: estoque.CODEMP,
+            CODPROD: estoque.CODPROD,
+            CODLOCAL: estoque.CODLOCAL,
+            CONTROLE: normalizarControleConferencia(estoque.CONTROLE),
+            CODPARC: estoque.CODPARC,
+            TIPO: estoque.TIPO
+          },
+          campos
+        );
+        atualizacoes.push({
+          codProd: estoque.CODPROD,
+          controle: normalizarControleConferencia(estoque.CONTROLE).trim(),
+          dtValidade,
+          dtFabricacao
+        });
+      }
+    }
+  }
+
+  return atualizacoes;
 }
 
 function normalizarLinhaConferencia(row) {
@@ -1476,8 +1592,26 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
         ITE.PRODUTONFE,
         PRO.REFERENCIA,
         PRO.AD_CODBAR,
-        PRO.AD_CBARANT
+        PRO.AD_CBARANT,
+        (
+          SELECT TO_CHAR(MAX(EST.DTVAL), 'YYYY-MM-DD')
+          FROM TGFEST EST
+          WHERE EST.CODPROD = ITE.CODPROD
+            AND EST.CODEMP = CAB.CODEMP
+            AND NVL(TRIM(EST.CONTROLE), ' ') = NVL(TRIM(ITE.CONTROLE), ' ')
+            AND EST.DTVAL IS NOT NULL
+        ) AS DTVAL,
+        (
+          SELECT TO_CHAR(MAX(EST.DTFABRICACAO), 'YYYY-MM-DD')
+          FROM TGFEST EST
+          WHERE EST.CODPROD = ITE.CODPROD
+            AND EST.CODEMP = CAB.CODEMP
+            AND NVL(TRIM(EST.CONTROLE), ' ') = NVL(TRIM(ITE.CONTROLE), ' ')
+            AND EST.DTFABRICACAO IS NOT NULL
+        ) AS DTFABRICACAO
       FROM TGFITE ITE
+      LEFT JOIN TGFCAB CAB
+        ON CAB.NUNOTA = ITE.NUNOTA
       LEFT JOIN TGFPRO PRO
         ON PRO.CODPROD = ITE.CODPROD
       WHERE ITE.NUNOTA = ${nunota}
@@ -1604,6 +1738,8 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
           qtdNeg: normalizarNumero(row.QTDNEG),
           vlrUnit: normalizarNumero(row.VLRUNIT),
           codigoBarras: row.CODIGO_BARRAS || '',
+          dtValidade: row.DTVAL || '',
+          dtFabricacao: row.DTFABRICACAO || '',
           codigos: codigosConferencia.map((item) => item.codigo),
           codigosConferencia,
           qtdConferida: progresso
@@ -2941,20 +3077,23 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
 
     const itensPedido = await executeQuery(`
       SELECT
-        SEQUENCIA,
-        CODPROD,
-        CODVOL,
-        CODLOCALORIG,
-        CONTROLE,
-        NVL(QTDNEG, 0) AS QTDNEG,
-        NVL(VLRUNIT, 0) AS VLRUNIT,
-        NVL(VLRTOT, 0) AS VLRTOT,
-        NVL(VLRDESC, 0) AS VLRDESC,
-        NVL(PERCDESC, 0) AS PERCDESC,
-        NVL(GTINNFE, PRODUTONFE) AS CODBARRA
-      FROM TGFITE
-      WHERE NUNOTA = ${nunota}
-      ORDER BY SEQUENCIA
+        CAB.CODEMP,
+        ITE.SEQUENCIA,
+        ITE.CODPROD,
+        ITE.CODVOL,
+        ITE.CODLOCALORIG,
+        ITE.CONTROLE,
+        NVL(ITE.QTDNEG, 0) AS QTDNEG,
+        NVL(ITE.VLRUNIT, 0) AS VLRUNIT,
+        NVL(ITE.VLRTOT, 0) AS VLRTOT,
+        NVL(ITE.VLRDESC, 0) AS VLRDESC,
+        NVL(ITE.PERCDESC, 0) AS PERCDESC,
+        NVL(ITE.GTINNFE, ITE.PRODUTONFE) AS CODBARRA
+      FROM TGFITE ITE
+      JOIN TGFCAB CAB
+        ON CAB.NUNOTA = ITE.NUNOTA
+      WHERE ITE.NUNOTA = ${nunota}
+      ORDER BY ITE.SEQUENCIA
     `);
 
     const conferidosPorSequencia = new Map(
@@ -3165,6 +3304,10 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       WHERE NUCONF = ${nuconf}
     `);
 
+    const datasEstoqueAtualizadas = modo === 'entrada'
+      ? await atualizarDatasEstoqueEntrada({ itensPedido, itensInformados: itens })
+      : [];
+
     conferenciaProgressStore.remover(nunota);
 
     const notaFaturada = await consultarFaturamentoExistente(nunota);
@@ -3208,6 +3351,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       documentosAuxiliares: modo === 'entrada'
         ? documentosAuxiliaresConferencia(conferenciaConferida)
         : null,
+      datasEstoqueAtualizadas,
       faturamento,
       resultadoFinalizacao,
       resultadoDivergenciaEntrada

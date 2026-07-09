@@ -80,6 +80,10 @@ const scanControleField = document.getElementById('scan-controle-field');
 const scanControle = document.getElementById('scan-controle');
 const scanControleOpcoes = document.getElementById('scan-controle-opcoes');
 const scanQtd = document.getElementById('scan-qtd');
+const scanValidadeField = document.getElementById('scan-validade-field');
+const scanValidade = document.getElementById('scan-validade');
+const scanFabricacaoField = document.getElementById('scan-fabricacao-field');
+const scanFabricacao = document.getElementById('scan-fabricacao');
 const botaoScanAdicionar = document.getElementById('scan-adicionar');
 const scanStatus = document.getElementById('scan-status');
 const itensPendentesLista = document.getElementById('itens-pendentes-lista');
@@ -370,6 +374,37 @@ function formatarData(dataISO) {
 
   const data = new Date(texto);
   return Number.isNaN(data.getTime()) ? '-' : data.toLocaleDateString('pt-BR');
+}
+
+function formatarDataInput(dataValor) {
+  if (!dataValor) return '';
+
+  const texto = String(dataValor).trim();
+  const isoMatch = texto.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (isoMatch) {
+    const [, ano, mes, dia] = isoMatch;
+    return `${ano}-${mes}-${dia}`;
+  }
+
+  const brMatch = texto.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (brMatch) {
+    const [, dia, mes, ano] = brMatch;
+    return `${ano}-${mes}-${dia}`;
+  }
+
+  const sankhyaMatch = texto.match(/^(\d{2})(\d{2})(\d{4})/);
+  if (sankhyaMatch) {
+    const [, dia, mes, ano] = sankhyaMatch;
+    return `${ano}-${mes}-${dia}`;
+  }
+
+  const data = new Date(texto);
+  if (Number.isNaN(data.getTime())) return '';
+
+  const ano = data.getFullYear();
+  const mes = String(data.getMonth() + 1).padStart(2, '0');
+  const dia = String(data.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
 }
 
 function formatarDataHora(dataISO) {
@@ -887,6 +922,48 @@ function obterItensCompativeisCodigo(codigo) {
     .filter((candidate) => candidate.entrada);
 }
 
+function obterItemEntradaParaDatas() {
+  if (filaModoConferencia !== 'entrada') return null;
+
+  const itensCompativeis = obterItensCompativeisCodigo(scanCodigo.value);
+  if (itensCompativeis.length === 0) return null;
+
+  const controleInformado = String(scanControle?.value || '').trim().toUpperCase();
+  if (controleInformado) {
+    return itensCompativeis.find(({ item }) =>
+      String(item.controle || '').trim().toUpperCase() === controleInformado
+    )?.item || itensCompativeis[0].item;
+  }
+
+  return itensCompativeis.find(({ item }) => quantidadePendenteItem(item) > 0)?.item
+    || itensCompativeis[0].item;
+}
+
+function preencherDatasEntradaPorItem(item, { preservarDigitado = false } = {}) {
+  if (filaModoConferencia !== 'entrada' || !item) return;
+
+  const validade = formatarDataInput(item.dtValidade);
+  const fabricacao = formatarDataInput(item.dtFabricacao);
+
+  if (scanValidade && (!preservarDigitado || !scanValidade.value)) {
+    scanValidade.value = validade;
+  }
+
+  if (scanFabricacao && (!preservarDigitado || !scanFabricacao.value)) {
+    scanFabricacao.value = fabricacao;
+  }
+}
+
+function atualizarDatasEntradaPorLeitura({ preservarDigitado = false } = {}) {
+  if (filaModoConferencia !== 'entrada') return;
+  preencherDatasEntradaPorItem(obterItemEntradaParaDatas(), { preservarDigitado });
+}
+
+function limparDatasEntrada() {
+  if (scanValidade) scanValidade.value = '';
+  if (scanFabricacao) scanFabricacao.value = '';
+}
+
 function atualizarOpcoesControleEntrada() {
   if (!scanControleOpcoes || filaModoConferencia !== 'entrada') return;
 
@@ -953,6 +1030,8 @@ function atualizarControlesConferencia() {
   scanCodigo.disabled = !temPedido;
   scanControle.disabled = !temPedido || filaModoConferencia !== 'entrada';
   scanQtd.disabled = !temPedido;
+  if (scanValidade) scanValidade.disabled = !temPedido || filaModoConferencia !== 'entrada';
+  if (scanFabricacao) scanFabricacao.disabled = !temPedido || filaModoConferencia !== 'entrada';
   botaoScanAdicionar.disabled = !temPedido;
 }
 
@@ -2765,7 +2844,8 @@ function salvarProgressoConferencia() {
 
 function criarLinhaItemConferencia(item, quantidade, classe, rotuloQuantidade, options = {}) {
   const row = document.createElement('div');
-  row.className = `item-row ${classe}`;
+  const entradaDatas = filaModoConferencia === 'entrada';
+  row.className = `item-row ${classe}${entradaDatas ? ' entrada-datas' : ''}`;
   const descricao = escaparAtributo(item.descrProd);
   const codigoProduto = escaparAtributo(item.codProd);
   const codigoBarras = escaparAtributo(item.codigoBarras || '-');
@@ -2777,12 +2857,19 @@ function criarLinhaItemConferencia(item, quantidade, classe, rotuloQuantidade, o
   const controle = escaparAtributo(controleExibido);
   const quantidadeTexto = rotuloQuantidade || formatarQuantidade(quantidade);
   const quantidadeComUnidade = `${quantidadeTexto} - ${item.codVol || '-'}`;
+  const datasLidas = Array.isArray(item.leituras) ? item.leituras : [];
+  const dataValidadeExibida = datasLidas.find((leitura) => leitura.dtValidade)?.dtValidade || item.dtValidade || '';
+  const dataFabricacaoExibida = datasLidas.find((leitura) => leitura.dtFabricacao)?.dtFabricacao || item.dtFabricacao || '';
   row.innerHTML = `
     <div>${options.desfazer ? '<button class="item-action item-action-return" type="button" aria-label="Voltar item para conferencia" title="Voltar item para conferencia"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 4 12l6 6"/><path d="M5 12h15"/></svg></button>' : ''}${options.cortar ? '<button class="item-action item-action-cut" type="button" aria-label="Cortar quantidade do item" title="Cortar quantidade do item"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="M8.5 8.5 19 19"/><path d="M8.5 15.5 19 5"/></svg></button>' : ''}</div>
     <div class="item-code" title="${codigoProduto}">${item.codProd}</div>
     <div class="item-name" title="${descricao}">${item.descrProd}</div>
     <div class="item-qtd" title="${escaparAtributo(quantidadeComUnidade)}">${quantidadeComUnidade}</div>
     <div class="item-unit" title="${controle}">${escaparHtml(controleExibido)}</div>
+    ${entradaDatas ? `
+      <div class="item-date" title="${escaparAtributo(formatarData(dataFabricacaoExibida))}">${formatarData(dataFabricacaoExibida)}</div>
+      <div class="item-date" title="${escaparAtributo(formatarData(dataValidadeExibida))}">${formatarData(dataValidadeExibida)}</div>
+    ` : ''}
     <div class="item-codes" title="${codigoBarras}">${item.codigoBarras || '-'}</div>
   `;
 
@@ -2810,8 +2897,11 @@ function criarLinhaItemConferencia(item, quantidade, classe, rotuloQuantidade, o
 
 function criarCabecalhoItens() {
   const header = document.createElement('div');
-  header.className = 'itens-grid-header';
-  const colunas = ['', 'Produto', 'Descricao (Produto)', 'Quantidade', 'Controle', 'Cod. Barras'];
+  const entradaDatas = filaModoConferencia === 'entrada';
+  header.className = `itens-grid-header${entradaDatas ? ' entrada-datas' : ''}`;
+  const colunas = entradaDatas
+    ? ['', 'Produto', 'Descricao (Produto)', 'Quantidade', 'Controle', 'Fabricacao', 'Validade', 'Cod. Barras']
+    : ['', 'Produto', 'Descricao (Produto)', 'Quantidade', 'Controle', 'Cod. Barras'];
   header.innerHTML = colunas.map((coluna, index) => `
     <div class="itens-grid-col-header${index === 1 || index === 2 ? ' coluna-ordenavel' : ''}">
       <span>${coluna}</span>
@@ -3973,6 +4063,8 @@ async function selecionarPedidoConferencia(pedido) {
 function adicionarConferenciaPorCodigo() {
   const codigo = normalizarCodigo(scanCodigo.value);
   const controleInformado = filaModoConferencia === 'entrada' ? scanControle.value.trim() : '';
+  const dtValidadeInformada = filaModoConferencia === 'entrada' ? formatarDataInput(scanValidade?.value) : '';
+  const dtFabricacaoInformada = filaModoConferencia === 'entrada' ? formatarDataInput(scanFabricacao?.value) : '';
   const qtd = Number(scanQtd.value || 1);
 
   if (!pedidoSelecionado || !codigo) {
@@ -4018,6 +4110,8 @@ function adicionarConferenciaPorCodigo() {
   const multiplicador = Math.max(0, Number(match.entrada.multiplicador) || 1);
   const qtdConvertida = qtd * multiplicador;
   const pendente = quantidadePendenteItem(item);
+  const dtValidadeLeitura = dtValidadeInformada || formatarDataInput(item.dtValidade);
+  const dtFabricacaoLeitura = dtFabricacaoInformada || formatarDataInput(item.dtFabricacao);
 
   if (filaModoConferencia !== 'entrada' && qtdConvertida > pendente) {
     scanStatus.innerHTML = `<span class="danger-text">Quantidade maior que o pendente do item. Pendente: ${formatarQuantidade(pendente)}.</span>`;
@@ -4031,6 +4125,8 @@ function adicionarConferenciaPorCodigo() {
     normalizarCodigo(leitura.codigo) === codigo
       && String(leitura.codVol || '') === String(match.entrada.codVol || item.codVol || 'UN')
       && String(leitura.controle || '').trim() === String(controleInformado || item.controle || '').trim()
+      && String(leitura.dtValidade || '') === String(dtValidadeLeitura || '')
+      && String(leitura.dtFabricacao || '') === String(dtFabricacaoLeitura || '')
       && Number(leitura.multiplicador || 1) === multiplicador
   );
   if (leituraExistente) {
@@ -4042,6 +4138,8 @@ function adicionarConferenciaPorCodigo() {
       tipo: match.entrada.tipo || 'CODIGO_BARRAS',
       codVol: match.entrada.codVol || item.codVol || 'UN',
       controle: controleInformado || item.controle || '',
+      dtValidade: dtValidadeLeitura,
+      dtFabricacao: dtFabricacaoLeitura,
       multiplicador,
       quantidade: qtd,
       quantidadeConvertida: qtdConvertida
@@ -4054,6 +4152,7 @@ function adicionarConferenciaPorCodigo() {
   mostrarFotoProduto(item, 'ultimo');
   scanCodigo.value = '';
   scanControle.value = '';
+  limparDatasEntrada();
   if (scanControleOpcoes) scanControleOpcoes.innerHTML = '';
   fecharOpcoesControleEntrada();
   scanQtd.value = '1';
@@ -4327,8 +4426,15 @@ function atualizarModoFilaConferencia() {
   filaBuscaPedido.placeholder = entrada ? 'Numero da nota de entrada' : 'Numero do pedido';
   filaSidebarTitle.textContent = entrada ? 'Entrada em conferencia' : 'Pedido em conferencia';
   scanControleField.hidden = !entrada;
+  if (scanValidadeField) scanValidadeField.hidden = !entrada;
+  if (scanFabricacaoField) scanFabricacaoField.hidden = !entrada;
   scanControle.disabled = !entrada || !pedidoSelecionado;
-  if (!entrada) scanControle.value = '';
+  if (scanValidade) scanValidade.disabled = !entrada || !pedidoSelecionado;
+  if (scanFabricacao) scanFabricacao.disabled = !entrada || !pedidoSelecionado;
+  if (!entrada) {
+    scanControle.value = '';
+    limparDatasEntrada();
+  }
   if (scanControleOpcoes) scanControleOpcoes.innerHTML = '';
   fecharOpcoesControleEntrada();
   const tituloLista = filaCountPedidos.previousElementSibling;
@@ -4587,6 +4693,7 @@ scanCodigo.addEventListener('keydown', (event) => {
     event.preventDefault();
     if (filaModoConferencia === 'entrada') {
       atualizarOpcoesControleEntrada();
+      atualizarDatasEntradaPorLeitura();
       scanControle.focus();
       scanControle.select();
       abrirOpcoesControleEntrada();
@@ -4599,10 +4706,14 @@ scanCodigo.addEventListener('keydown', (event) => {
 scanCodigo.addEventListener('input', () => {
   if (filaModoConferencia === 'entrada') {
     atualizarOpcoesControleEntrada();
+    atualizarDatasEntradaPorLeitura();
   }
 });
 scanControle.addEventListener('focus', abrirOpcoesControleEntrada);
-scanControle.addEventListener('input', abrirOpcoesControleEntrada);
+scanControle.addEventListener('input', () => {
+  abrirOpcoesControleEntrada();
+  atualizarDatasEntradaPorLeitura();
+});
 scanControleField?.addEventListener('click', (event) => {
   event.stopPropagation();
 });
@@ -4611,6 +4722,7 @@ scanControleOpcoes?.addEventListener('click', (event) => {
   if (!botao) return;
 
   scanControle.value = botao.dataset.controle || '';
+  atualizarDatasEntradaPorLeitura();
   fecharOpcoesControleEntrada();
   scanQtd.focus();
   scanQtd.select();
