@@ -1367,6 +1367,8 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         AND (CAB.NUCONFATUAL IS NULL OR CONF.STATUS IN ('A', 'F'))
         ${modo === 'saida' ? `AND NVL(CAB.AD_STATUSINTPED, '0') = '1'
         AND NVL(CAB.AD_STATUSCOMERCIAL, '0') = '1'` : ''}
+        ${modo === 'entrada' ? `AND CAB.LIBCONF = 'S'
+        ` : ''}
         ${sqlFiltroEmpresa(empresa)}`;
 
     const rows = await executeQuery(`
