@@ -116,6 +116,10 @@ const confirmarVolumesQtd = document.getElementById('confirmar-volumes-qtd');
 const confirmarVolumesStatus = document.getElementById('confirmar-volumes-status');
 const botaoCancelarVolumesConferencia = document.getElementById('cancelar-volumes-conferencia');
 const botaoConfirmarVolumesConferencia = document.getElementById('confirmar-volumes-conferencia');
+const entradaAlteracoesModal = document.getElementById('entrada-alteracoes-modal');
+const entradaAlteracoesLista = document.getElementById('entrada-alteracoes-lista');
+const botaoCancelarAlteracoesEntrada = document.getElementById('cancelar-alteracoes-entrada');
+const botaoConfirmarAlteracoesEntrada = document.getElementById('confirmar-alteracoes-entrada');
 const metricAndamento = document.getElementById('metric-andamento');
 const metricAguardando = document.getElementById('metric-aguardando');
 const metricConferidos = document.getElementById('metric-conferidos');
@@ -188,6 +192,7 @@ let produtoFotoAtual = null;
 let ordenacaoItens = { coluna: '', direcao: '' };
 const itensGridMinimos = [34, 78, 210, 122, 148, 118];
 const itensGridLarguras = [34, 92, 240, 142, 170, 132];
+const STORAGE_NAVEGACAO_FILA = 'filaConferencia:navegacaoAtual';
 
 function aplicarLargurasGridItens() {
   document.documentElement.style.setProperty(
@@ -291,6 +296,51 @@ function temUsuarioLogado() {
   return usuarioLogado?.codUsu !== null && usuarioLogado?.codUsu !== undefined;
 }
 
+function salvarNavegacaoFila(extra = {}) {
+  if (!temUsuarioLogado()) return;
+
+  const estado = {
+    tela: 'fila',
+    etapa: filaEtapaConferencia.classList.contains('active') ? 'conferencia' : 'pedidos',
+    modo: filaModoConferencia,
+    dataInicial: filaDataInicial.value || obterDataHoje(),
+    dataFinal: filaDataFinal.value || filaDataInicial.value || obterDataHoje(),
+    empresa: filaEmpresa.value || '',
+    buscaPedido: filaBuscaPedido.value || '',
+    pedido: pedidoSelecionado
+      ? {
+        ...pedidoSelecionado,
+        nuconf: pedidoSelecionado.nuconf || pedidoSelecionado.NUCONFATUAL || null
+      }
+      : null,
+    ...extra
+  };
+
+  try {
+    sessionStorage.setItem(STORAGE_NAVEGACAO_FILA, JSON.stringify(estado));
+  } catch (error) {
+    console.warn('Nao foi possivel salvar a navegacao da fila:', error);
+  }
+}
+
+function obterNavegacaoFilaSalva() {
+  try {
+    const texto = sessionStorage.getItem(STORAGE_NAVEGACAO_FILA);
+    return texto ? JSON.parse(texto) : null;
+  } catch (error) {
+    console.warn('Nao foi possivel ler a navegacao da fila:', error);
+    return null;
+  }
+}
+
+function limparNavegacaoFilaSalva() {
+  try {
+    sessionStorage.removeItem(STORAGE_NAVEGACAO_FILA);
+  } catch (error) {
+    console.warn('Nao foi possivel limpar a navegacao da fila:', error);
+  }
+}
+
 function atualizarUsuarioLogadoNaTela() {
   const texto = formatarUsuarioLogado();
   homeUsuarioLogado.textContent = texto;
@@ -299,6 +349,7 @@ function atualizarUsuarioLogadoNaTela() {
 
 function mostrarLogin(mensagem = '') {
   usuarioLogado = null;
+  limparNavegacaoFilaSalva();
   loginScreen.classList.add('active');
   homeScreen.classList.remove('active');
   conferenciaScreen.classList.remove('active');
@@ -1054,12 +1105,14 @@ function mostrarEtapaPedidosFila() {
   filaEtapaPedidos.classList.add('active');
   filaScreen.classList.remove('conferencia-mode');
   alternarSidebarMobileConferencia(false);
+  salvarNavegacaoFila({ etapa: 'pedidos', pedido: null });
 }
 
 function mostrarEtapaConferenciaFila() {
   filaEtapaPedidos.classList.remove('active');
   filaEtapaConferencia.classList.add('active');
   filaScreen.classList.add('conferencia-mode');
+  salvarNavegacaoFila({ etapa: 'conferencia' });
 }
 
 function calcularResumoConferencia() {
@@ -2822,6 +2875,8 @@ function salvarProgressoConferencia() {
     return;
   }
 
+  salvarNavegacaoFila({ etapa: 'conferencia' });
+
   fetch('/api/fila-conferencia/progresso', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -3275,34 +3330,58 @@ async function abrirPdfPedido() {
 function renderizarDocumentosAuxiliaresEntrada(documentos) {
   const itens = [
     documentos?.notaDevolucao
-      ? `Nota de devolucao: ${documentos.notaDevolucao}`
+      ? { titulo: 'Nota de devolucao', numero: documentos.notaDevolucao }
       : null,
     documentos?.pedidoComplementar
-      ? `Pedido complementar: ${documentos.pedidoComplementar}`
+      ? { titulo: 'Pedido complementar', numero: documentos.pedidoComplementar }
       : null
   ].filter(Boolean);
 
-  posConferenciaDocumentos.hidden = itens.length === 0;
-  posConferenciaDocumentos.innerHTML = itens.length > 0
-    ? `<strong>Documentos auxiliares gerados pelo Sankhya</strong><span>${itens.map(escaparHtml).join(' | ')}</span>`
-    : '';
+  posConferenciaDocumentos.hidden = false;
+  posConferenciaDocumentos.innerHTML = `
+    <div class="entrada-sucesso-panel">
+      <div class="entrada-sucesso-row">
+        <i data-lucide="clipboard-check"></i>
+        <div>
+          <span>Status</span>
+          Finalizada OK no Sankhya
+        </div>
+      </div>
+      <div class="entrada-sucesso-docs">
+        ${itens.length > 0
+          ? itens.map((item) => `
+            <div class="entrada-sucesso-doc">
+              <small>${escaparHtml(item.titulo)}</small>
+              <strong>${escaparHtml(item.numero)}</strong>
+            </div>
+          `).join('')
+          : '<div class="entrada-sucesso-empty">Nenhum documento auxiliar foi retornado pelo Sankhya.</div>'}
+      </div>
+    </div>
+  `;
+  atualizarIcones();
 }
 
 function abrirModalPosConferencia(pedido, faturamento, documentosAuxiliares = null) {
   const entrada = filaModoConferencia === 'entrada';
-  posConferenciaModal.classList.remove('is-processing', 'has-error');
+  posConferenciaModal.classList.remove('is-processing', 'has-error', 'is-entrada-success');
   const faturamentoPendente = !entrada && faturamento?.status === 'ERRO';
   posConferenciaModal.classList.toggle('has-billing-warning', faturamentoPendente);
-  posConferenciaTitulo.textContent = faturamentoPendente
-    ? 'Conferencia finalizada, mas faturamento pendente'
-    : 'Conferencia concluida';
+  if (entrada) {
+    posConferenciaModal.classList.add('is-entrada-success');
+  }
+  posConferenciaTitulo.innerHTML = entrada
+    ? '<span class="entrada-sucesso-head"><span class="entrada-sucesso-icon"><i data-lucide="package-check"></i></span><span><strong class="entrada-sucesso-title">Entrada concluida</strong><span class="entrada-sucesso-subtitle">Nota finalizada com sucesso no Sankhya.</span></span></span>'
+    : faturamentoPendente
+      ? 'Conferencia finalizada, mas faturamento pendente'
+      : 'Conferencia concluida';
   botaoVoltarListaPosConferencia.textContent = 'Voltar para lista';
   pedidoConcluido = pedido;
   posConferenciaDocumentos.hidden = entrada;
   botaoImprimirEtiquetaVolume.hidden = entrada;
   botaoImprimirEtiquetaVolume.textContent = 'Imprimir etiqueta';
   posConferenciaTexto.textContent = entrada
-    ? `Nota de entrada ${pedido.NUNOTA} conferida com sucesso.`
+    ? `Nota de entrada ${pedido.NUNOTA}`
     : faturamentoPendente
     ? `Pedido ${pedido.NUNOTA} conferido com sucesso. O faturamento ficou pendente no Sankhya.`
     : `Pedido ${pedido.NUNOTA} conferido com sucesso.`;
@@ -3879,7 +3958,7 @@ function limparPedidoConferencia(mensagem = 'Selecione um pedido para iniciar.')
   scanControle.value = '';
   if (scanControleOpcoes) scanControleOpcoes.innerHTML = '';
   fecharOpcoesControleEntrada();
-  scanQtd.value = '1';
+  scanQtd.value = '';
   renderizarFotoProdutoVazia();
   atualizarControlesConferencia();
   renderizarItensConferencia();
@@ -3935,12 +4014,100 @@ async function buscarFilaConferencia() {
       ? `${filaModoConferencia === 'entrada' ? 'Nota de entrada localizada' : 'Pedido localizado'}. Selecione para visualizar os itens.`
       : `Selecione ${filaModoConferencia === 'entrada' ? 'uma nota de entrada' : 'um pedido'} para conferir.`;
     renderizarPedidosFila();
+    salvarNavegacaoFila({ etapa: 'pedidos', pedido: null });
   } catch (error) {
     console.error('Erro ao buscar fila de conferencia:', error);
     filaPedidos = [];
     renderizarPedidosFila();
     scanStatus.textContent = error.message;
   }
+}
+
+async function restaurarConferenciaEmAndamento(estado) {
+  const pedido = estado?.pedido;
+  if (!pedido?.NUNOTA) return false;
+
+  filaModoConferencia = estado.modo === 'entrada' ? 'entrada' : 'saida';
+  filaDataInicial.value = estado.dataInicial || obterDataHoje();
+  filaDataFinal.value = estado.dataFinal || filaDataInicial.value;
+  filaEmpresa.value = estado.empresa || '';
+  filaBuscaPedido.value = estado.buscaPedido || '';
+  atualizarModoFilaConferencia();
+  mostrarHomeESuspenderRefresh();
+  mostrarFila();
+
+  pedidoSelecionado = {
+    ...pedido,
+    nuconf: pedido.nuconf || pedido.NUCONFATUAL || null,
+    STATUS_CONFERENCIA: pedido.STATUS_CONFERENCIA || 'EM ANDAMENTO'
+  };
+  itensPedidoSelecionado = [];
+  confirmarStatus.textContent = '';
+  scanStatus.textContent = 'Restaurando conferencia em andamento...';
+  pedidoConferenciaTitulo.textContent = `${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'} ${pedidoSelecionado.NUNOTA}`;
+  filaContexto.textContent = `Periodo ${formatarPeriodo(filaDataInicial.value, filaDataFinal.value)} | ${filaEmpresa.options[filaEmpresa.selectedIndex]?.textContent || '-'} | ${formatarUsuarioLogado()}`;
+  mostrarEtapaConferenciaFila();
+  renderizarPedidoEmConferencia();
+  atualizarControlesConferencia();
+
+  try {
+    const res = await fetch(`/api/fila-conferencia/pedidos/${pedidoSelecionado.NUNOTA}/itens`);
+    const payload = await res.json();
+
+    if (!res.ok) {
+      throw new Error(payload.erro || 'Erro ao restaurar itens da conferencia');
+    }
+
+    itensPedidoSelecionado = (payload.itens || []).map((item) => ({
+      ...item,
+      qtdConferida: normalizarQuantidade(item.qtdConferida),
+      qtdCortada: normalizarQuantidade(item.qtdCortada),
+      leituras: Array.isArray(item.leituras) ? item.leituras : []
+    }));
+    scanStatus.textContent = '';
+    fecharPreviewPedido();
+    renderizarItensConferencia();
+    atualizarOpcoesControleEntrada();
+    salvarNavegacaoFila({ etapa: 'conferencia' });
+    history.replaceState({ tela: 'fila', etapa: 'conferencia' }, '', '#fila-conferencia');
+    setTimeout(() => scanCodigo.focus(), 0);
+    return true;
+  } catch (error) {
+    console.error('Erro ao restaurar conferencia:', error);
+    scanStatus.textContent = error.message;
+    renderizarItensConferencia();
+    return true;
+  }
+}
+
+async function restaurarNavegacaoFilaSalva() {
+  const estado = obterNavegacaoFilaSalva();
+  if (!estado || estado.tela !== 'fila') return false;
+
+  filaModoConferencia = estado.modo === 'entrada' ? 'entrada' : 'saida';
+  filaDataInicial.value = estado.dataInicial || obterDataHoje();
+  filaDataFinal.value = estado.dataFinal || filaDataInicial.value;
+  filaEmpresa.value = estado.empresa || '';
+  filaBuscaPedido.value = estado.buscaPedido || '';
+  atualizarModoFilaConferencia();
+
+  if (estado.etapa === 'conferencia' && estado.pedido?.NUNOTA) {
+    return restaurarConferenciaEmAndamento(estado);
+  }
+
+  mostrarHomeESuspenderRefresh();
+  mostrarFila();
+  mostrarEtapaPedidosFila();
+  history.replaceState({ tela: 'fila', etapa: 'pedidos' }, '', '#fila-conferencia');
+
+  if (filaEmpresa.value || filaBuscaPedido.value) {
+    await buscarFilaConferencia();
+  } else {
+    renderizarPedidosFila();
+    scanStatus.textContent = textoInicialModoFila();
+  }
+
+  return true;
 }
 
 async function abrirPreviewPedido(pedido) {
@@ -4052,6 +4219,7 @@ async function selecionarPedidoConferencia(pedido) {
     scanStatus.textContent = '';
     renderizarItensConferencia();
     atualizarOpcoesControleEntrada();
+    salvarNavegacaoFila({ etapa: 'conferencia' });
     scanCodigo.focus();
   } catch (error) {
     console.error('Erro ao selecionar pedido:', error);
@@ -4065,7 +4233,7 @@ function adicionarConferenciaPorCodigo() {
   const controleInformado = filaModoConferencia === 'entrada' ? scanControle.value.trim() : '';
   const dtValidadeInformada = filaModoConferencia === 'entrada' ? formatarDataInput(scanValidade?.value) : '';
   const dtFabricacaoInformada = filaModoConferencia === 'entrada' ? formatarDataInput(scanFabricacao?.value) : '';
-  const qtd = Number(scanQtd.value || 1);
+  const qtd = Number(scanQtd.value);
 
   if (!pedidoSelecionado || !codigo) {
     return;
@@ -4155,7 +4323,7 @@ function adicionarConferenciaPorCodigo() {
   limparDatasEntrada();
   if (scanControleOpcoes) scanControleOpcoes.innerHTML = '';
   fecharOpcoesControleEntrada();
-  scanQtd.value = '1';
+  scanQtd.value = '';
   renderizarItensConferencia();
   salvarProgressoConferencia();
   scanCodigo.focus();
@@ -4166,12 +4334,172 @@ function fecharModalVolumesConferencia() {
   confirmarVolumesStatus.textContent = '';
 }
 
+function normalizarControleEntrada(valor) {
+  return String(valor ?? '').trim();
+}
+
+function normalizarDataEntrada(valor) {
+  return formatarDataInput(valor);
+}
+
+function formatarDataAlteracaoEntrada(valor) {
+  const data = normalizarDataEntrada(valor);
+  return data ? formatarData(data) : '-';
+}
+
+function valoresUnicosEntrada(valores) {
+  return [...new Set(valores
+    .map((valor) => String(valor ?? '').trim())
+    .filter(Boolean))];
+}
+
+function obterAlteracoesConferenciaEntrada() {
+  if (filaModoConferencia !== 'entrada') return [];
+
+  return itensPedidoSelecionado
+    .map((item) => {
+      const leituras = Array.isArray(item.leituras) ? item.leituras : [];
+      const detalhes = [];
+      const controleOriginal = normalizarControleEntrada(item.controle);
+      const fabricacaoOriginal = normalizarDataEntrada(item.dtFabricacao);
+      const validadeOriginal = normalizarDataEntrada(item.dtValidade);
+
+      const controlesLidos = valoresUnicosEntrada(leituras.map((leitura) => normalizarControleEntrada(leitura.controle)));
+      const fabricacoesLidas = valoresUnicosEntrada(leituras.map((leitura) => normalizarDataEntrada(leitura.dtFabricacao)));
+      const validadesLidas = valoresUnicosEntrada(leituras.map((leitura) => normalizarDataEntrada(leitura.dtValidade)));
+      const controlesDiferentes = controlesLidos.filter((valor) => valor !== controleOriginal);
+      const fabricacoesDiferentes = fabricacoesLidas.filter((valor) => valor !== fabricacaoOriginal);
+      const validadesDiferentes = validadesLidas.filter((valor) => valor !== validadeOriginal);
+      const qtdCortada = quantidadeCortadaItem(item);
+
+      if (controlesDiferentes.length > 0) {
+        detalhes.push({
+          campo: 'Lote/controle',
+          de: controleOriginal || '-',
+          para: controlesDiferentes.join(', ')
+        });
+      }
+
+      if (fabricacoesDiferentes.length > 0) {
+        detalhes.push({
+          campo: 'Fabricacao',
+          de: formatarDataAlteracaoEntrada(fabricacaoOriginal),
+          para: fabricacoesDiferentes.map(formatarDataAlteracaoEntrada).join(', ')
+        });
+      }
+
+      if (validadesDiferentes.length > 0) {
+        detalhes.push({
+          campo: 'Validade',
+          de: formatarDataAlteracaoEntrada(validadeOriginal),
+          para: validadesDiferentes.map(formatarDataAlteracaoEntrada).join(', ')
+        });
+      }
+
+      if (qtdCortada > 0) {
+        detalhes.push({
+          campo: 'Corte',
+          de: `${formatarQuantidade(item.qtdNeg)} negociado(s)`,
+          para: `${formatarQuantidade(qtdCortada)} cortado(s)`
+        });
+      }
+
+      if (item.qtdConferida > item.qtdNeg) {
+        detalhes.push({
+          campo: 'Quantidade maior',
+          de: `${formatarQuantidade(item.qtdNeg)} negociado(s)`,
+          para: `${formatarQuantidade(item.qtdConferida)} conferido(s)`
+        });
+      }
+
+      return detalhes.length > 0 ? { item, detalhes } : null;
+    })
+    .filter(Boolean);
+}
+
+function fecharModalAlteracoesEntrada() {
+  if (!entradaAlteracoesModal) return;
+  entradaAlteracoesModal.hidden = true;
+  if (entradaAlteracoesLista) entradaAlteracoesLista.innerHTML = '';
+}
+
+function obterIconeAlteracaoEntrada(campo) {
+  const chave = String(campo || '').toLowerCase();
+  if (chave.includes('lote') || chave.includes('controle')) return 'tag';
+  if (chave.includes('fabrica') || chave.includes('validade')) return 'calendar-days';
+  if (chave.includes('corte')) return 'scissors';
+  if (chave.includes('quantidade')) return 'package-plus';
+  return 'circle-alert';
+}
+
+function abrirModalAlteracoesEntrada(alteracoes) {
+  if (!entradaAlteracoesModal || !entradaAlteracoesLista) {
+    confirmarConferencia(0);
+    return;
+  }
+
+  const totalDivergencias = alteracoes.reduce((total, alteracao) => total + alteracao.detalhes.length, 0);
+  const itensHtml = alteracoes
+    .map(({ item, detalhes }) => `
+      <article class="entrada-alteracoes-item">
+        <div class="entrada-alteracoes-item-head">
+          <strong class="entrada-alteracoes-produto">
+            <i data-lucide="package"></i>
+            <span>Produto ${escaparHtml(item.codProd)} - ${escaparHtml(item.descricao)}</span>
+          </strong>
+          <span class="entrada-alteracoes-badge">${detalhes.length} ${detalhes.length === 1 ? 'divergencia' : 'divergencias'}</span>
+        </div>
+        <div class="entrada-alteracoes-detalhes">
+          ${detalhes.map((detalhe) => `
+            <div class="entrada-alteracoes-detalhe">
+              <span class="entrada-alteracoes-campo">
+                <i data-lucide="${obterIconeAlteracaoEntrada(detalhe.campo)}"></i>
+                ${escaparHtml(detalhe.campo)}
+              </span>
+              <strong>${escaparHtml(detalhe.de)}</strong>
+              <span class="entrada-alteracoes-seta">-></span>
+              <strong class="entrada-alteracoes-depois">${escaparHtml(detalhe.para)}</strong>
+            </div>
+          `).join('')}
+        </div>
+      </article>
+    `)
+    .join('');
+
+  entradaAlteracoesLista.innerHTML = `
+    <div class="entrada-alteracoes-resumo">
+      <strong><i data-lucide="triangle-alert"></i> ${alteracoes.length} ${alteracoes.length === 1 ? 'item com divergencia' : 'itens com divergencia'}</strong>
+      <span>${totalDivergencias} ${totalDivergencias === 1 ? 'alteracao encontrada' : 'alteracoes encontradas'}. Revise antes de confirmar.</span>
+    </div>
+    ${itensHtml}
+  `;
+  entradaAlteracoesModal.hidden = false;
+  atualizarIcones();
+}
+
 function solicitarVolumesConferencia() {
   if (!pedidoSelecionado) {
     return;
   }
 
   if (filaModoConferencia === 'entrada') {
+    const resumo = calcularResumoConferencia();
+    if (!resumo.pronto) {
+      confirmarStatus.textContent = 'Ainda existem itens divergentes.';
+      return;
+    }
+
+    if (!temUsuarioLogado()) {
+      confirmarStatus.textContent = 'Entre no sistema antes de confirmar.';
+      return;
+    }
+
+    const alteracoes = obterAlteracoesConferenciaEntrada();
+    if (alteracoes.length > 0) {
+      abrirModalAlteracoesEntrada(alteracoes);
+      return;
+    }
+
     confirmarConferencia(0);
     return;
   }
@@ -4243,6 +4571,7 @@ async function confirmarConferencia(volumes) {
     const pedidoFinalizado = { ...pedidoSelecionado, QTDVOL: volumes };
     confirmarStatus.innerHTML = '<span class="success-text">Conferencia confirmada.</span>';
     filaPedidos = filaPedidos.filter((pedido) => pedido.NUNOTA !== pedidoSelecionado.NUNOTA);
+    limparNavegacaoFilaSalva();
     limparPedidoConferencia('Pedido conferido. Selecione o proximo pedido.');
     abrirModalPosConferencia(pedidoFinalizado, payload.faturamento, payload.documentosAuxiliares);
   } catch (error) {
@@ -4403,7 +4732,8 @@ function abrirFila() {
   mostrarEtapaPedidosFila();
   mostrarHomeESuspenderRefresh();
   mostrarFila();
-  history.pushState({ tela: 'fila' }, '', '#fila-conferencia');
+  salvarNavegacaoFila({ etapa: 'pedidos', pedido: null });
+  history.pushState({ tela: 'fila', etapa: 'pedidos' }, '', '#fila-conferencia');
 }
 
 function textoInicialModoFila() {
@@ -4450,9 +4780,14 @@ function alternarModoFilaConferencia() {
   atualizarModoFilaConferencia();
   renderizarPedidosFila();
   limparPedidoConferencia(textoInicialModoFila());
+  salvarNavegacaoFila({ etapa: 'pedidos', pedido: null });
 }
 
 function voltarParaHomeViaHistorico() {
+  if (filaScreen.classList.contains('active')) {
+    limparNavegacaoFilaSalva();
+  }
+
   if (window.history.length > 1) {
     window.history.back();
     return;
@@ -4478,6 +4813,21 @@ async function prepararSessaoAutenticada(usuario) {
   atualizarUsuarioLogadoNaTela();
   prepararTelaInicial();
   await carregarEmpresas();
+
+  if (window.location.hash === '#fila-conferencia') {
+    const restaurouFila = await restaurarNavegacaoFilaSalva();
+
+    if (restaurouFila) {
+      return;
+    }
+
+    mostrarHomeESuspenderRefresh();
+    mostrarFila();
+    mostrarEtapaPedidosFila();
+    history.replaceState({ tela: 'fila', etapa: 'pedidos' }, '', '#fila-conferencia');
+    return;
+  }
+
   if (window.location.hash === '#consulta-produtos') {
     renderizarConsultaVazia();
     mostrarConsultaProdutos();
@@ -4686,6 +5036,16 @@ confirmarVolumesQtd.addEventListener('keydown', (event) => {
 confirmarVolumesModal.addEventListener('click', (event) => {
   if (event.target === confirmarVolumesModal) {
     fecharModalVolumesConferencia();
+  }
+});
+botaoCancelarAlteracoesEntrada?.addEventListener('click', fecharModalAlteracoesEntrada);
+botaoConfirmarAlteracoesEntrada?.addEventListener('click', () => {
+  fecharModalAlteracoesEntrada();
+  confirmarConferencia(0);
+});
+entradaAlteracoesModal?.addEventListener('click', (event) => {
+  if (event.target === entradaAlteracoesModal) {
+    fecharModalAlteracoesEntrada();
   }
 });
 scanCodigo.addEventListener('keydown', (event) => {

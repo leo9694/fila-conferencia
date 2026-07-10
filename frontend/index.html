@@ -3943,6 +3943,120 @@
       color: #9a4f00;
     }
 
+    .pos-conferencia-modal.is-entrada-success .pos-conferencia-dialog {
+      width: min(560px, calc(100vw - 28px));
+      border-radius: 22px;
+      border-color: rgba(59, 92, 204, 0.18);
+      background: linear-gradient(135deg, #fff, #f7f9ff);
+    }
+
+    .entrada-sucesso-head {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 14px;
+      align-items: start;
+      margin-bottom: 14px;
+    }
+
+    .entrada-sucesso-icon {
+      display: grid;
+      place-items: center;
+      width: 50px;
+      height: 50px;
+      border-radius: 16px;
+      background: #e8f0ff;
+      color: #3b5ccc;
+      box-shadow: inset 0 0 0 1px rgba(59, 92, 204, 0.16);
+    }
+
+    .entrada-sucesso-icon i {
+      width: 25px;
+      height: 25px;
+    }
+
+    .entrada-sucesso-title {
+      margin: 0 0 5px;
+      font-size: 1.22rem;
+      color: #12305a;
+      display: block;
+    }
+
+    .entrada-sucesso-subtitle {
+      margin: 0;
+      color: #526273;
+      font-weight: 800;
+      display: block;
+      font-size: 0.9rem;
+    }
+
+    .entrada-sucesso-panel {
+      display: grid;
+      gap: 10px;
+      padding: 12px;
+      border-radius: 16px;
+      border: 1px solid rgba(59, 92, 204, 0.16);
+      background: rgba(232, 240, 255, 0.5);
+    }
+
+    .entrada-sucesso-row {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 10px;
+      align-items: center;
+      padding: 10px;
+      border-radius: 12px;
+      background: #fff;
+      border: 1px solid rgba(18, 66, 75, 0.08);
+      color: #12305a;
+      font-weight: 900;
+    }
+
+    .entrada-sucesso-row i {
+      width: 19px;
+      height: 19px;
+      color: #3b5ccc;
+    }
+
+    .entrada-sucesso-row span {
+      color: #526273;
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      display: block;
+      margin-bottom: 2px;
+    }
+
+    .entrada-sucesso-docs {
+      display: grid;
+      gap: 8px;
+    }
+
+    .entrada-sucesso-doc {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: #fff;
+      border: 1px solid rgba(15, 148, 114, 0.15);
+      color: #08745a;
+      font-weight: 950;
+    }
+
+    .entrada-sucesso-doc small {
+      color: #526273;
+      font-weight: 850;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .entrada-sucesso-empty {
+      color: #526273;
+      font-weight: 800;
+      font-size: 0.86rem;
+    }
+
     .pos-conferencia-modal.has-error #imprimir-etiqueta-volume {
       display: none;
     }
@@ -3962,6 +4076,197 @@
 
     .volume-panel.active {
       display: block;
+    }
+
+    #entrada-alteracoes-modal .pos-conferencia-dialog {
+      width: min(820px, calc(100vw - 28px));
+      padding: 22px;
+      border-radius: 24px;
+    }
+
+    #entrada-alteracoes-modal .pos-conferencia-dialog h3 {
+      font-size: 1.45rem;
+      color: #111827;
+    }
+
+    #entrada-alteracoes-modal .pos-conferencia-dialog p {
+      margin-bottom: 18px;
+      font-weight: 750;
+      color: #526273;
+    }
+
+    .entrada-alteracoes-lista {
+      display: grid;
+      gap: 14px;
+      max-height: min(58vh, 560px);
+      overflow: auto;
+      padding: 2px 4px 2px 0;
+    }
+
+    .entrada-alteracoes-resumo {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 2px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(217, 119, 6, 0.24);
+      background: rgba(255, 247, 237, 0.92);
+      color: #b45309;
+      font-weight: 900;
+    }
+
+    .entrada-alteracoes-resumo strong {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.92rem;
+    }
+
+    .entrada-alteracoes-resumo span {
+      color: #526273;
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .entrada-alteracoes-item {
+      display: grid;
+      gap: 12px;
+      padding: 16px;
+      border: 1px solid rgba(18, 66, 75, 0.12);
+      border-radius: 16px;
+      background: linear-gradient(135deg, #fff, rgba(250, 253, 252, 0.98));
+      box-shadow: 0 10px 26px rgba(16, 57, 66, 0.08);
+    }
+
+    .entrada-alteracoes-item-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .entrada-alteracoes-produto {
+      display: inline-flex;
+      align-items: center;
+      min-width: 0;
+      gap: 10px;
+      color: #111827;
+      font-size: 1rem;
+      line-height: 1.25;
+      font-weight: 950;
+    }
+
+    .entrada-alteracoes-produto i {
+      width: 34px;
+      height: 34px;
+      padding: 7px;
+      border-radius: 12px;
+      background: #eef4ff;
+      color: #2563eb;
+      flex: 0 0 auto;
+    }
+
+    .entrada-alteracoes-badge {
+      flex: 0 0 auto;
+      padding: 7px 12px;
+      border-radius: 999px;
+      background: #fff7ed;
+      border: 1px solid rgba(217, 119, 6, 0.22);
+      color: #b45309;
+      font-size: 0.72rem;
+      font-weight: 950;
+    }
+
+    .entrada-alteracoes-detalhes {
+      display: grid;
+      gap: 0;
+      border-radius: 14px;
+      overflow: hidden;
+      border: 1px solid rgba(18, 66, 75, 0.08);
+    }
+
+    .entrada-alteracoes-detalhe {
+      display: grid;
+      grid-template-columns: minmax(128px, 0.8fr) minmax(150px, 1fr) 24px minmax(150px, 1fr);
+      gap: 12px;
+      align-items: center;
+      padding: 10px 12px;
+      background: rgba(255, 255, 255, 0.92);
+      border-bottom: 1px dashed rgba(18, 66, 75, 0.14);
+      font-size: 0.82rem;
+      font-weight: 850;
+    }
+
+    .entrada-alteracoes-detalhe:last-child {
+      border-bottom: 0;
+    }
+
+    .entrada-alteracoes-campo {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: #334155;
+      text-transform: uppercase;
+      font-size: 0.72rem;
+      letter-spacing: 0.02em;
+    }
+
+    .entrada-alteracoes-campo i {
+      width: 18px;
+      height: 18px;
+      color: #2563eb;
+    }
+
+    .entrada-alteracoes-detalhe span {
+      min-width: 0;
+    }
+
+    .entrada-alteracoes-detalhe strong {
+      display: block;
+      min-width: 0;
+      padding: 9px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(18, 66, 75, 0.1);
+      background: #f8fafc;
+      color: #475569;
+      line-height: 1.25;
+      overflow-wrap: anywhere;
+    }
+
+    .entrada-alteracoes-detalhe .entrada-alteracoes-depois {
+      border-color: rgba(217, 119, 6, 0.22);
+      background: #fff7ed;
+      color: #c2410c;
+    }
+
+    .entrada-alteracoes-seta {
+      text-align: center;
+      color: #64748b;
+      font-size: 1rem;
+      font-weight: 950;
+    }
+
+    @media (max-width: 720px) {
+      #entrada-alteracoes-modal .pos-conferencia-dialog {
+        padding: 16px;
+      }
+
+      .entrada-alteracoes-resumo,
+      .entrada-alteracoes-item-head {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .entrada-alteracoes-detalhe {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+
+      .entrada-alteracoes-seta {
+        text-align: left;
+      }
     }
 
     .pos-conferencia-actions {
@@ -5975,6 +6280,18 @@
         </div>
       </section>
 
+      <section class="pos-conferencia-modal" id="entrada-alteracoes-modal" hidden>
+        <div class="pos-conferencia-dialog" role="dialog" aria-modal="true" aria-labelledby="entrada-alteracoes-titulo">
+          <h3 id="entrada-alteracoes-titulo">Revisar alteracoes da entrada</h3>
+          <p>Estes itens ficaram diferentes da nota. Confirme para finalizar a conferencia.</p>
+          <div class="entrada-alteracoes-lista" id="entrada-alteracoes-lista" aria-live="polite"></div>
+          <div class="pos-conferencia-actions">
+            <button class="btn-back" id="cancelar-alteracoes-entrada" type="button">Voltar e revisar</button>
+            <button class="btn-start" id="confirmar-alteracoes-entrada" type="button">Confirmar e finalizar</button>
+          </div>
+        </div>
+      </section>
+
       <section class="produto-foto-modal" id="produto-foto-modal" hidden>
         <div class="produto-foto-dialog" role="dialog" aria-modal="true" aria-labelledby="produto-foto-modal-titulo">
           <div class="produto-foto-modal-head">
@@ -6068,7 +6385,7 @@
             </div>
             <div class="fila-field">
               <label for="scan-qtd">Qtd.</label>
-              <input class="qtd-input" id="scan-qtd" type="number" min="1" step="1" value="1" disabled>
+              <input class="qtd-input" id="scan-qtd" type="number" min="1" step="1" placeholder="Qtd." disabled>
             </div>
             <div class="fila-field scan-data-entrada" id="scan-fabricacao-field" hidden>
               <label for="scan-fabricacao">Fabricacao</label>

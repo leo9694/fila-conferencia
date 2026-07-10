@@ -43,15 +43,21 @@ function criarConferenciaProgressStore(options = {}) {
       sequencia: Number(item.sequencia),
       qtdConferida: normalizarNumero(item.qtdConferida),
       qtdCortada: normalizarNumero(item.qtdCortada),
-      leituras: Array.isArray(item.leituras) ? item.leituras.map((leitura) => ({
-        codigo: String(leitura.codigo || '').trim(),
-        tipo: String(leitura.tipo || 'CODIGO_BARRAS').trim(),
-        codVol: String(leitura.codVol || '').trim(),
-        controle: String(leitura.controle ?? '').trim(),
-        multiplicador: normalizarNumero(leitura.multiplicador) || 1,
-        quantidade: normalizarNumero(leitura.quantidade),
-        quantidadeConvertida: normalizarNumero(leitura.quantidadeConvertida)
-      })).filter((leitura) => leitura.codigo && leitura.quantidade > 0 && leitura.quantidadeConvertida > 0) : []
+      leituras: Array.isArray(item.leituras) ? item.leituras.map((leitura) => {
+        const dtValidade = String(leitura.dtValidade ?? '').trim();
+        const dtFabricacao = String(leitura.dtFabricacao ?? '').trim();
+        return {
+          codigo: String(leitura.codigo || '').trim(),
+          tipo: String(leitura.tipo || 'CODIGO_BARRAS').trim(),
+          codVol: String(leitura.codVol || '').trim(),
+          controle: String(leitura.controle ?? '').trim(),
+          ...(dtValidade ? { dtValidade } : {}),
+          ...(dtFabricacao ? { dtFabricacao } : {}),
+          multiplicador: normalizarNumero(leitura.multiplicador) || 1,
+          quantidade: normalizarNumero(leitura.quantidade),
+          quantidadeConvertida: normalizarNumero(leitura.quantidadeConvertida)
+        };
+      }).filter((leitura) => leitura.codigo && leitura.quantidade > 0 && leitura.quantidadeConvertida > 0) : []
     })).filter((item) => Number.isInteger(item.sequencia) && item.sequencia > 0) : [];
 
     state[chave] = {
