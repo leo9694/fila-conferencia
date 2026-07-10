@@ -52,6 +52,8 @@ const pedidoPreviewMeta = document.getElementById('pedido-preview-meta');
 const pedidoPreviewValor = document.getElementById('pedido-preview-valor');
 const pedidoPreviewItens = document.getElementById('pedido-preview-itens');
 const pedidoPreviewUnidades = document.getElementById('pedido-preview-unidades');
+const pedidoPreviewVolumesCard = document.getElementById('pedido-preview-volumes-card');
+const pedidoPreviewVolumes = document.getElementById('pedido-preview-volumes');
 const pedidoPreviewStatus = document.getElementById('pedido-preview-status');
 const pedidoPreviewItensLista = document.getElementById('pedido-preview-itens-lista');
 const pedidoPreviewDocumentos = document.getElementById('pedido-preview-documentos');
@@ -3878,7 +3880,7 @@ function formatarTituloPedidoConferencia(pedido) {
   const base = `${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}`;
   const numeroNota = Number(pedido.NUMNOTA || 0);
   if (filaModoConferencia !== 'entrada' || !numeroNota) return base;
-  return `${base} | Nro. Nota ${numeroNota}`;
+  return `Nro. Nota ${numeroNota} | ${base}`;
 }
 
 function renderizarPedidosFila() {
@@ -3902,8 +3904,7 @@ function renderizarPedidosFila() {
   header.innerHTML = `
     <div></div>
     <div>Status</div>
-    <div>${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'}</div>
-    ${filaModoConferencia === 'entrada' ? '<div>Nro. Nota</div>' : ''}
+    ${filaModoConferencia === 'entrada' ? '<div>Nro. Nota</div><div>Nota</div>' : '<div>Pedido</div>'}
     <div>Data</div>
     <div>Cliente</div>
     <div>Valor</div>
@@ -3944,8 +3945,8 @@ function renderizarPedidosFila() {
             ? '<span class="pedido-status-mini conferido">Conferido</span>'
           : '<span class="pedido-status-mini novo">Novo</span>'}
       </div>
-      <strong>${entrada ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}</strong>
       ${entrada ? `<div class="pedido-num-nota">${escaparHtml(numeroNotaFiscal)}</div>` : ''}
+      <strong>${entrada ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}</strong>
       <div class="pedido-meta">${formatarData(pedido.DTNEG)}</div>
       <div class="pedido-cliente" title="${escaparAtributo(`${pedido.CODIGO_PARCEIRO || '-'} - ${pedido.EMPRESA || '-'}`)}">${escaparHtml(`${pedido.CODIGO_PARCEIRO || '-'} - ${pedido.EMPRESA || '-'}`)}</div>
       <div class="pedido-meta">${formatarMoeda(pedido.VLRNOTA)}</div>
@@ -3980,6 +3981,7 @@ function renderizarPedidoEmConferencia() {
       <div class="pedido-side-meta">
         <span><i data-lucide="package"></i>${pedidoSelecionado.QTD_ITENS} itens</span>
         <span><i data-lucide="boxes"></i>${formatarQuantidade(pedidoSelecionado.QTD_TOTAL)} un.</span>
+        ${filaModoConferencia === 'entrada' ? `<span><i data-lucide="layers"></i>${formatarQuantidade(pedidoSelecionado.QTDVOL || 0)} vol.</span>` : ''}
       </div>
       ${pedidoSelecionado.STATUS_CONFERENCIA === 'EM ANDAMENTO' ? '<span class="pedido-status-mini">Conferencia em andamento</span>' : ''}
     </div>
@@ -4175,6 +4177,10 @@ async function abrirPreviewPedido(pedido) {
   pedidoPreviewValor.textContent = formatarMoeda(pedido.VLRNOTA);
   pedidoPreviewItens.textContent = pedido.QTD_ITENS;
   pedidoPreviewUnidades.textContent = formatarQuantidade(pedido.QTD_TOTAL);
+  if (pedidoPreviewVolumesCard && pedidoPreviewVolumes) {
+    pedidoPreviewVolumesCard.hidden = filaModoConferencia !== 'entrada';
+    pedidoPreviewVolumes.textContent = formatarQuantidade(pedido.QTDVOL || 0);
+  }
   botaoImprimirPreviewPedido.innerHTML = `<i data-lucide="printer" aria-hidden="true"></i>Imprimir ${filaModoConferencia === 'entrada' ? 'nota' : 'pedido'}`;
   pedidoPreviewStatus.textContent = pedido.STATUS_CONFERENCIA === 'EM ANDAMENTO' ? 'Continuar' : 'Novo';
   pedidoPreviewStatus.textContent = pedido.STATUS_CONFERENCIA === 'CONFERIDO'
