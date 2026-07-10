@@ -3020,6 +3020,31 @@ function renderizarItensPlanilha(container, itens, modo = 'preview') {
   });
 }
 
+function obterLinhasConferidasEntrada(item) {
+  if (filaModoConferencia !== 'entrada') {
+    return null;
+  }
+
+  const leituras = Array.isArray(item.leituras)
+    ? item.leituras.filter((leitura) => normalizarQuantidade(leitura.quantidadeConvertida) > 0)
+    : [];
+
+  if (leituras.length === 0) {
+    return null;
+  }
+
+  return leituras.map((leitura) => ({
+    item: {
+      ...item,
+      controle: leitura.controle || item.controle || '',
+      dtFabricacao: leitura.dtFabricacao || item.dtFabricacao || '',
+      dtValidade: leitura.dtValidade || item.dtValidade || '',
+      leituras: [leitura]
+    },
+    quantidade: normalizarQuantidade(leitura.quantidadeConvertida)
+  }));
+}
+
 function renderizarItensConferencia() {
   itensPendentesLista.innerHTML = '';
   itensConferidosLista.innerHTML = '';
@@ -3067,14 +3092,29 @@ function renderizarItensConferencia() {
     }
 
     if (quantidadeConferida > 0) {
-      totalConferidos += 1;
-      itensConferidosLista.appendChild(criarLinhaItemConferencia(
-        item,
-        quantidadeConferida,
-        itemTemExcesso(item) ? 'excesso' : (quantidadeCortada > 0 ? 'cortado' : 'ok'),
-        `${formatarQuantidade(quantidadeConferida)} / ${formatarQuantidade(item.qtdNeg)}${quantidadeCortada > 0 ? ` | corte ${formatarQuantidade(quantidadeCortada)}` : ''}`,
-        { desfazer: true }
-      ));
+      const linhasEntrada = obterLinhasConferidasEntrada(item);
+
+      if (linhasEntrada) {
+        linhasEntrada.forEach(({ item: itemLinha, quantidade }) => {
+          totalConferidos += 1;
+          itensConferidosLista.appendChild(criarLinhaItemConferencia(
+            itemLinha,
+            quantidade,
+            itemTemExcesso(item) ? 'excesso' : (quantidadeCortada > 0 ? 'cortado' : 'ok'),
+            `${formatarQuantidade(quantidade)} / ${formatarQuantidade(item.qtdNeg)}${quantidadeCortada > 0 ? ` | corte ${formatarQuantidade(quantidadeCortada)}` : ''}`,
+            { desfazer: true }
+          ));
+        });
+      } else {
+        totalConferidos += 1;
+        itensConferidosLista.appendChild(criarLinhaItemConferencia(
+          item,
+          quantidadeConferida,
+          itemTemExcesso(item) ? 'excesso' : (quantidadeCortada > 0 ? 'cortado' : 'ok'),
+          `${formatarQuantidade(quantidadeConferida)} / ${formatarQuantidade(item.qtdNeg)}${quantidadeCortada > 0 ? ` | corte ${formatarQuantidade(quantidadeCortada)}` : ''}`,
+          { desfazer: true }
+        ));
+      }
     }
   });
 
@@ -4374,9 +4414,9 @@ function obterAlteracoesConferenciaEntrada() {
 
       if (controlesDiferentes.length > 0) {
         detalhes.push({
-          campo: 'Lote/controle',
-          de: controleOriginal || '-',
-          para: controlesDiferentes.join(', ')
+          campo: 'Lote/controle recebido',
+          de: `Nota: ${controleOriginal || '-'}`,
+          para: `Entrada: ${controlesDiferentes.join(', ')}`
         });
       }
 
@@ -4399,16 +4439,20 @@ function obterAlteracoesConferenciaEntrada() {
       if (qtdCortada > 0) {
         detalhes.push({
           campo: 'Corte',
-          de: `${formatarQuantidade(item.qtdNeg)} negociado(s)`,
-          para: `${formatarQuantidade(qtdCortada)} cortado(s)`
+          de: `${formatarQuantidade(item.qtdNeg)} negociado(s)${controleOriginal ? ` | lote ${controleOriginal}` : ''}`,
+          para: `${formatarQuantidade(qtdCortada)} cortado(s)${controleOriginal ? ` | lote ${controleOriginal}` : ''}`
         });
       }
 
       if (item.qtdConferida > item.qtdNeg) {
+        const excedente = item.qtdConferida - item.qtdNeg;
+        const loteExcesso = controlesDiferentes.length > 0
+          ? controlesDiferentes.join(', ')
+          : controleOriginal;
         detalhes.push({
           campo: 'Quantidade maior',
-          de: `${formatarQuantidade(item.qtdNeg)} negociado(s)`,
-          para: `${formatarQuantidade(item.qtdConferida)} conferido(s)`
+          de: `${formatarQuantidade(item.qtdNeg)} negociado(s)${controleOriginal ? ` | lote ${controleOriginal}` : ''}`,
+          para: `${formatarQuantidade(item.qtdConferida)} conferido(s) (${formatarQuantidade(excedente)} acima)${loteExcesso ? ` | lote recebido ${loteExcesso}` : ''}`
         });
       }
 
@@ -4440,12 +4484,24 @@ function abrirModalAlteracoesEntrada(alteracoes) {
 
   const totalDivergencias = alteracoes.reduce((total, alteracao) => total + alteracao.detalhes.length, 0);
   const itensHtml = alteracoes
-    .map(({ item, detalhes }) => `
+    .map(({ item, detalhes }) => {
+      const qtdCortada = quantidadeCortadaItem(item);
+      const resumoItem = [
+        `Negociado: ${formatarQuantidade(item.qtdNeg)} ${item.codVol || ''}`.trim(),
+        `Conferido: ${formatarQuantidade(item.qtdConferida)} ${item.codVol || ''}`.trim(),
+        qtdCortada > 0 ? `Corte: ${formatarQuantidade(qtdCortada)} ${item.codVol || ''}`.trim() : null,
+        item.controle ? `Lote da nota: ${item.controle}` : null
+      ].filter(Boolean);
+
+      return `
       <article class="entrada-alteracoes-item">
         <div class="entrada-alteracoes-item-head">
           <strong class="entrada-alteracoes-produto">
             <i data-lucide="package"></i>
-            <span>Produto ${escaparHtml(item.codProd)} - ${escaparHtml(item.descricao)}</span>
+            <span>
+              Produto ${escaparHtml(item.codProd)} - ${escaparHtml(item.descrProd || item.descricao || '')}
+              <small>${resumoItem.map(escaparHtml).join(' | ')}</small>
+            </span>
           </strong>
           <span class="entrada-alteracoes-badge">${detalhes.length} ${detalhes.length === 1 ? 'divergencia' : 'divergencias'}</span>
         </div>
@@ -4463,7 +4519,8 @@ function abrirModalAlteracoesEntrada(alteracoes) {
           `).join('')}
         </div>
       </article>
-    `)
+    `;
+    })
     .join('');
 
   entradaAlteracoesLista.innerHTML = `
