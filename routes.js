@@ -1477,7 +1477,9 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
     const empresa = obterFiltroEmpresa(req.query.empresa);
     const pedidoBusca = obterNumeroInteiro(req.query.pedido);
     const filtroBusca = pedidoBusca
-      ? `CAB.NUNOTA = ${pedidoBusca}`
+      ? (modo === 'entrada'
+        ? `(CAB.NUNOTA = ${pedidoBusca} OR CAB.NUMNOTA = ${pedidoBusca})`
+        : `CAB.NUNOTA = ${pedidoBusca}`)
       : `CAB.DTNEG >= TO_DATE('${intervalo.inicio}', 'YYYY-MM-DD')
         AND CAB.DTNEG < TO_DATE('${intervalo.fim}', 'YYYY-MM-DD') + 1
         AND (CAB.NUCONFATUAL IS NULL OR CONF.STATUS IN ('A', 'F'))
@@ -1491,6 +1493,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
       SELECT
         CAB.DTNEG,
         CAB.NUNOTA,
+        CAB.NUMNOTA,
         CAB.CODEMP,
         CAB.CODTIPOPER,
         CAB.TIPMOV,
@@ -1529,7 +1532,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         AND ${condicaoStatusConferencia(modo)}
         ${modo === 'entrada' ? `AND TOP_ATUAL.NUCCO IS NOT NULL
         AND NVL(CCO_ATUAL.EXPLODIRLOTE, 'N') = 'N'` : ''}
-      GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.CODEMP, CAB.CODTIPOPER, CAB.TIPMOV, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA, CAB.QTDVOL,
+      GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.NUMNOTA, CAB.CODEMP, CAB.CODTIPOPER, CAB.TIPMOV, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA, CAB.QTDVOL,
         CAB.NUCONFATUAL, CONF.STATUS, USU.NOMEUSU
       ORDER BY
         CASE
@@ -1551,6 +1554,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
       itens: rows.map((row) => ({
         ...row,
         DTNEG: normalizarDataSankhya(row.DTNEG),
+        NUMNOTA: normalizarNumero(row.NUMNOTA),
         NUCONFATUAL: row.NUCONFATUAL ? Number(row.NUCONFATUAL) : null,
         STATUS_CONF: row.STATUS_CONF || null,
         STATUS_CONFERENCIA: row.STATUS_CONFERENCIA,

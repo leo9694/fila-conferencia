@@ -3873,6 +3873,14 @@ async function imprimirEtiquetaVolume() {
   }
 }
 
+function formatarTituloPedidoConferencia(pedido) {
+  if (!pedido) return filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido';
+  const base = `${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}`;
+  const numeroNota = Number(pedido.NUMNOTA || 0);
+  if (filaModoConferencia !== 'entrada' || !numeroNota) return base;
+  return `${base} | Nro. Nota ${numeroNota}`;
+}
+
 function renderizarPedidosFila() {
   filaPedidosLista.innerHTML = '';
   const pedidosFiltrados = filaPedidos;
@@ -3895,6 +3903,7 @@ function renderizarPedidosFila() {
     <div></div>
     <div>Status</div>
     <div>${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'}</div>
+    ${filaModoConferencia === 'entrada' ? '<div>Nro. Nota</div>' : ''}
     <div>Data</div>
     <div>Cliente</div>
     <div>Valor</div>
@@ -3916,6 +3925,7 @@ function renderizarPedidosFila() {
     const tituloTipoPedido = bonificacao
       ? (entrada ? 'Bonificacao de entrada' : 'Pedido de bonificacao')
       : (entrada ? 'Compra de produtos' : 'Pedido de venda');
+    const numeroNotaFiscal = Number(pedido.NUMNOTA || 0) > 0 ? String(pedido.NUMNOTA) : '-';
     card.className = `pedido-operacao-card ${emAndamento ? 'andamento' : ''} ${conferido ? 'conferido' : ''} ${pedidoSelecionado?.NUNOTA === pedido.NUNOTA ? 'active' : ''}`;
     card.innerHTML = `
       <div class="pedido-list-action">
@@ -3935,6 +3945,7 @@ function renderizarPedidosFila() {
           : '<span class="pedido-status-mini novo">Novo</span>'}
       </div>
       <strong>${entrada ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}</strong>
+      ${entrada ? `<div class="pedido-num-nota">${escaparHtml(numeroNotaFiscal)}</div>` : ''}
       <div class="pedido-meta">${formatarData(pedido.DTNEG)}</div>
       <div class="pedido-cliente" title="${escaparAtributo(`${pedido.CODIGO_PARCEIRO || '-'} - ${pedido.EMPRESA || '-'}`)}">${escaparHtml(`${pedido.CODIGO_PARCEIRO || '-'} - ${pedido.EMPRESA || '-'}`)}</div>
       <div class="pedido-meta">${formatarMoeda(pedido.VLRNOTA)}</div>
@@ -3960,7 +3971,7 @@ function renderizarPedidoEmConferencia() {
 
   pedidoEmConferenciaCard.innerHTML = `
     <div class="pedido-operacao-card pedido-side-card active ${pedidoSelecionado.STATUS_CONFERENCIA === 'EM ANDAMENTO' ? 'andamento' : ''}">
-      <strong class="pedido-side-title"><i data-lucide="clipboard-list"></i>${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'} ${pedidoSelecionado.NUNOTA}</strong>
+      <strong class="pedido-side-title"><i data-lucide="clipboard-list"></i>${formatarTituloPedidoConferencia(pedidoSelecionado)}</strong>
       <div class="pedido-side-meta">
         <span><i data-lucide="calendar-days"></i>${formatarData(pedidoSelecionado.DTNEG)}</span>
         <span><i data-lucide="tag"></i>${formatarMoeda(pedidoSelecionado.VLRNOTA)}</span>
@@ -4084,7 +4095,7 @@ async function restaurarConferenciaEmAndamento(estado) {
   itensPedidoSelecionado = [];
   confirmarStatus.textContent = '';
   scanStatus.textContent = 'Restaurando conferencia em andamento...';
-  pedidoConferenciaTitulo.textContent = `${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'} ${pedidoSelecionado.NUNOTA}`;
+  pedidoConferenciaTitulo.textContent = formatarTituloPedidoConferencia(pedidoSelecionado);
   filaContexto.textContent = `Periodo ${formatarPeriodo(filaDataInicial.value, filaDataFinal.value)} | ${filaEmpresa.options[filaEmpresa.selectedIndex]?.textContent || '-'} | ${formatarUsuarioLogado()}`;
   mostrarEtapaConferenciaFila();
   renderizarPedidoEmConferencia();
@@ -4159,7 +4170,7 @@ async function abrirPreviewPedido(pedido) {
   pedidoPreviewSelecionado = pedido;
   itensPedidoPreview = [];
   pedidoPreview.hidden = false;
-  pedidoPreviewTitulo.textContent = `${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}`;
+  pedidoPreviewTitulo.textContent = formatarTituloPedidoConferencia(pedido);
   pedidoPreviewMeta.textContent = `${formatarData(pedido.DTNEG)} | ${pedido.EMPRESA || '-'}`;
   pedidoPreviewValor.textContent = formatarMoeda(pedido.VLRNOTA);
   pedidoPreviewItens.textContent = pedido.QTD_ITENS;
@@ -4208,7 +4219,7 @@ async function selecionarPedidoConferencia(pedido) {
   itensPedidoSelecionado = [];
   confirmarStatus.textContent = '';
   scanStatus.textContent = 'Iniciando conferencia no Sankhya...';
-  pedidoConferenciaTitulo.textContent = `${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}`;
+  pedidoConferenciaTitulo.textContent = formatarTituloPedidoConferencia(pedido);
   filaContexto.textContent = `Periodo ${formatarPeriodo(filaDataInicial.value, filaDataFinal.value)} | ${filaEmpresa.options[filaEmpresa.selectedIndex]?.textContent || '-'} | ${formatarUsuarioLogado()}`;
   atualizarControlesConferencia();
   renderizarPedidosFila();

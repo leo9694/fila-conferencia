@@ -868,6 +868,20 @@
       box-sizing: border-box;
     }
 
+    .fila-screen.fila-modo-entrada .pedido-list-header,
+    .fila-screen.fila-modo-entrada .pedido-operacao-card {
+      grid-template-columns:
+        58px
+        minmax(126px, 0.9fr)
+        minmax(106px, 0.82fr)
+        minmax(92px, 0.72fr)
+        minmax(78px, 0.62fr)
+        minmax(160px, 2fr)
+        minmax(86px, 0.72fr)
+        minmax(92px, 0.78fr);
+      min-width: 760px;
+    }
+
     .pedido-list-header {
       position: sticky;
       top: 0;
@@ -1002,6 +1016,12 @@
       display: block;
       font-size: 0.78rem;
       margin-bottom: 0;
+    }
+
+    .pedido-num-nota {
+      color: #2946a3;
+      font-size: 0.78rem;
+      font-weight: 900;
     }
 
     .pedido-side-card {
