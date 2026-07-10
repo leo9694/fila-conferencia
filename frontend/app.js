@@ -65,6 +65,7 @@ const mobileSidebarToggle = document.getElementById('mobile-sidebar-toggle');
 const mobileSidebarBackdrop = document.getElementById('mobile-sidebar-backdrop');
 const pedidoSidebar = document.getElementById('pedido-sidebar');
 const botaoVoltarListaFila = document.getElementById('voltar-lista-fila');
+const scanProdutoPreview = document.getElementById('scan-produto-preview');
 const produtoFotoPanel = document.getElementById('produto-foto-panel');
 const produtoFotoTitulo = document.querySelector('#produto-foto-panel .produto-foto-head strong');
 const produtoFotoLegenda = document.getElementById('produto-foto-legenda');
@@ -1015,6 +1016,40 @@ function atualizarDatasEntradaPorLeitura({ preservarDigitado = false } = {}) {
 function limparDatasEntrada() {
   if (scanValidade) scanValidade.value = '';
   if (scanFabricacao) scanFabricacao.value = '';
+}
+
+function atualizarProdutoLeituraEntrada() {
+  if (!scanProdutoPreview) return;
+
+  const codigoOriginal = String(scanCodigo?.value || '').trim();
+  const codigo = normalizarCodigo(codigoOriginal);
+  if (filaModoConferencia !== 'entrada' || !codigo) {
+    scanProdutoPreview.hidden = true;
+    scanProdutoPreview.classList.remove('not-found');
+    scanProdutoPreview.innerHTML = '';
+    return;
+  }
+
+  const compativeis = obterItensCompativeisCodigo(codigo);
+  const candidato = compativeis.find(({ item }) => quantidadePendenteItem(item) > 0) || compativeis[0];
+  if (!candidato?.item) {
+    scanProdutoPreview.hidden = false;
+    scanProdutoPreview.classList.add('not-found');
+    scanProdutoPreview.innerHTML = `
+      <span>Codigo digitado</span>
+      <strong>${escaparHtml(codigoOriginal)}</strong>
+      <small>Nenhum produto encontrado nesta nota.</small>
+    `;
+    return;
+  }
+
+  const item = candidato.item;
+  scanProdutoPreview.hidden = false;
+  scanProdutoPreview.classList.remove('not-found');
+  scanProdutoPreview.innerHTML = `
+    <span>Produto identificado</span>
+    <strong>${escaparHtml(item.codProd)} - ${escaparHtml(item.descrProd || 'Produto')}</strong>
+  `;
 }
 
 function atualizarOpcoesControleEntrada() {
@@ -4012,6 +4047,7 @@ function limparPedidoConferencia(mensagem = 'Selecione um pedido para iniciar.')
   if (scanControleOpcoes) scanControleOpcoes.innerHTML = '';
   fecharOpcoesControleEntrada();
   scanQtd.value = '';
+  atualizarProdutoLeituraEntrada();
   renderizarFotoProdutoVazia();
   atualizarControlesConferencia();
   renderizarItensConferencia();
@@ -4276,6 +4312,7 @@ async function selecionarPedidoConferencia(pedido) {
     scanStatus.textContent = '';
     renderizarItensConferencia();
     atualizarOpcoesControleEntrada();
+    atualizarProdutoLeituraEntrada();
     salvarNavegacaoFila({ etapa: 'conferencia' });
     scanCodigo.focus();
   } catch (error) {
@@ -4381,6 +4418,7 @@ function adicionarConferenciaPorCodigo() {
   if (scanControleOpcoes) scanControleOpcoes.innerHTML = '';
   fecharOpcoesControleEntrada();
   scanQtd.value = '';
+  atualizarProdutoLeituraEntrada();
   renderizarItensConferencia();
   salvarProgressoConferencia();
   scanCodigo.focus();
@@ -4841,6 +4879,7 @@ function atualizarModoFilaConferencia() {
   }
   if (scanControleOpcoes) scanControleOpcoes.innerHTML = '';
   fecharOpcoesControleEntrada();
+  atualizarProdutoLeituraEntrada();
   const tituloLista = filaCountPedidos.previousElementSibling;
   if (tituloLista) tituloLista.textContent = entrada ? 'Notas de entrada' : 'Pedidos';
   atualizarIcones();
@@ -5126,6 +5165,7 @@ scanCodigo.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
     if (filaModoConferencia === 'entrada') {
+      atualizarProdutoLeituraEntrada();
       atualizarOpcoesControleEntrada();
       atualizarDatasEntradaPorLeitura();
       scanControle.focus();
@@ -5139,6 +5179,7 @@ scanCodigo.addEventListener('keydown', (event) => {
 });
 scanCodigo.addEventListener('input', () => {
   if (filaModoConferencia === 'entrada') {
+    atualizarProdutoLeituraEntrada();
     atualizarOpcoesControleEntrada();
     atualizarDatasEntradaPorLeitura();
   }

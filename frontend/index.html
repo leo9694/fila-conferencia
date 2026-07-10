@@ -1264,7 +1264,86 @@
     }
 
     .fila-screen.fila-modo-entrada .scan-panel {
-      grid-template-columns: minmax(220px, 1fr) minmax(130px, 0.56fr) 86px minmax(118px, 0.42fr) minmax(118px, 0.42fr) 150px;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      align-items: end;
+    }
+
+    .fila-screen.fila-modo-entrada .scan-panel .scan-codigo-field {
+      grid-column: 1 / span 3;
+    }
+
+    .fila-screen.fila-modo-entrada .scan-panel #scan-controle-field {
+      grid-column: 4 / span 3;
+    }
+
+    .fila-screen.fila-modo-entrada .scan-panel .scan-produto-preview {
+      grid-column: 1 / -1;
+    }
+
+    .fila-screen.fila-modo-entrada .scan-panel .scan-qtd-field {
+      grid-column: 1 / span 2;
+    }
+
+    .fila-screen.fila-modo-entrada .scan-panel #scan-fabricacao-field {
+      grid-column: 3 / span 2;
+    }
+
+    .fila-screen.fila-modo-entrada .scan-panel #scan-validade-field {
+      grid-column: 5 / span 2;
+    }
+
+    .fila-screen.fila-modo-entrada .scan-panel .btn-start {
+      grid-column: 1 / -1;
+    }
+
+    .scan-produto-preview {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
+      min-height: 32px;
+      padding: 6px 10px;
+      border: 1px solid rgba(13, 138, 106, 0.16);
+      border-radius: 10px;
+      background: rgba(232, 247, 243, 0.82);
+      color: var(--text-main);
+      font-size: 0.78rem;
+      font-weight: 900;
+    }
+
+    .scan-produto-preview[hidden] {
+      display: none;
+    }
+
+    .scan-produto-preview span {
+      color: var(--accent);
+      text-transform: uppercase;
+      font-size: 0.64rem;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+    }
+
+    .scan-produto-preview strong {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .scan-produto-preview small {
+      color: var(--text-soft);
+      font-size: 0.68rem;
+      white-space: nowrap;
+    }
+
+    .scan-produto-preview.not-found {
+      border-color: rgba(190, 18, 60, 0.22);
+      background: #fff1f2;
+    }
+
+    .scan-produto-preview.not-found span,
+    .scan-produto-preview.not-found small {
+      color: #b91c1c;
     }
 
     .controle-lote-combo {
@@ -5234,16 +5313,37 @@
       }
 
       .fila-screen.fila-modo-entrada .scan-panel {
-        grid-template-columns: minmax(0, 1fr) minmax(92px, 0.36fr);
+        grid-template-columns: minmax(92px, 0.72fr) minmax(0, 1fr) minmax(0, 1fr);
       }
 
-      .fila-screen.fila-modo-entrada .scan-panel > .fila-field:first-child,
+      .fila-screen.fila-modo-entrada .scan-panel .scan-produto-preview,
       .fila-screen.fila-modo-entrada .scan-panel .btn-start {
         grid-column: 1 / -1;
       }
 
-      .fila-screen.fila-modo-entrada #scan-controle-field {
-        grid-column: 1 / -1;
+      .fila-screen.fila-modo-entrada .scan-panel .scan-codigo-field {
+        grid-column: 1 / span 1;
+      }
+
+      .fila-screen.fila-modo-entrada .scan-panel #scan-controle-field {
+        grid-column: 2 / span 2;
+      }
+
+      .fila-screen.fila-modo-entrada .scan-panel .scan-qtd-field {
+        grid-column: 1 / span 1;
+      }
+
+      .fila-screen.fila-modo-entrada .scan-panel #scan-fabricacao-field {
+        grid-column: 2 / span 1;
+      }
+
+      .fila-screen.fila-modo-entrada .scan-panel #scan-validade-field {
+        grid-column: 3 / span 1;
+      }
+
+      .scan-produto-preview {
+        grid-template-columns: 1fr;
+        gap: 2px;
       }
 
       .contato-toolbar > * {
@@ -6410,7 +6510,8 @@
           </div>
 
           <div class="scan-panel">
-            <div class="fila-field">
+            <div class="scan-produto-preview" id="scan-produto-preview" hidden></div>
+            <div class="fila-field scan-codigo-field">
               <label for="scan-codigo">Codigo de barras ou produto</label>
               <input class="scan-input" id="scan-codigo" autocomplete="off" placeholder="Bipe ou digite o codigo" disabled>
             </div>
@@ -6421,7 +6522,7 @@
                 <div class="controle-lote-opcoes" id="scan-controle-opcoes" role="listbox"></div>
               </div>
             </div>
-            <div class="fila-field">
+            <div class="fila-field scan-qtd-field">
               <label for="scan-qtd">Qtd.</label>
               <input class="qtd-input" id="scan-qtd" type="number" min="1" step="1" placeholder="Qtd." disabled>
             </div>
