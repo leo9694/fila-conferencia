@@ -1714,7 +1714,7 @@
     .consulta-toolbar,
     .contato-toolbar {
       display: grid;
-      grid-template-columns: minmax(220px, 1fr) minmax(280px, 520px) auto;
+      grid-template-columns: minmax(220px, 1fr) minmax(280px, 520px) auto auto;
       gap: 12px;
       align-items: end;
       padding: 14px;
@@ -5885,6 +5885,7 @@
       }
 
       .consulta-toolbar .btn-start,
+      .consulta-toolbar .btn-back,
       .contato-toolbar .btn-back {
         min-width: 0;
         width: 100%;
@@ -6513,7 +6514,7 @@
             <div class="scan-produto-preview" id="scan-produto-preview" hidden></div>
             <div class="fila-field scan-codigo-field">
               <label for="scan-codigo">Codigo de barras ou produto</label>
-              <input class="scan-input" id="scan-codigo" autocomplete="off" placeholder="Bipe ou digite o codigo" disabled>
+              <input class="scan-input" id="scan-codigo" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" placeholder="Bipe ou digite o codigo" disabled>
             </div>
             <div class="fila-field" id="scan-controle-field" hidden>
               <label for="scan-controle">Controle/lote</label>
@@ -6573,6 +6574,7 @@
           <input id="consulta-produto-codigo" autocomplete="off" placeholder="Digite codigo, referencia ou barras">
         </div>
         <button class="btn-start" id="consulta-produto-buscar" type="button">Buscar produto</button>
+        <button class="btn-back" id="consulta-produto-voltar" type="button">Voltar</button>
       </div>
 
       <div class="consulta-grid">

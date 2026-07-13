@@ -134,6 +134,7 @@ const countPendentes = document.getElementById('count-pendentes');
 const countConferidos = document.getElementById('count-conferidos');
 const consultaProdutoCodigo = document.getElementById('consulta-produto-codigo');
 const botaoConsultaProdutoBuscar = document.getElementById('consulta-produto-buscar');
+const botaoConsultaProdutoVoltar = document.getElementById('consulta-produto-voltar');
 const consultaProdutoTitulo = document.getElementById('consulta-produto-titulo');
 const consultaProdutoLegenda = document.getElementById('consulta-produto-legenda');
 const consultaProdutoFoto = document.getElementById('consulta-produto-foto');
@@ -1316,7 +1317,18 @@ function abrirConsultaProdutosMesmaTela() {
   renderizarConsultaVazia();
   mostrarHomeESuspenderRefresh();
   mostrarConsultaProdutos();
-  history.pushState({ tela: 'consulta-produtos' }, '', '#consulta-produtos');
+  history.pushState({ tela: 'consulta-produtos', origem: 'home' }, '', '#consulta-produtos');
+}
+
+function voltarConsultaProdutos() {
+  if (history.state?.origem) {
+    history.back();
+    return;
+  }
+
+  mostrarHomeESuspenderRefresh();
+  mostrarHome();
+  history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);
 }
 
 function obterValorOrdenacaoUltimaCompra(cliente) {
@@ -4046,7 +4058,7 @@ function limparPedidoConferencia(mensagem = 'Selecione um pedido para iniciar.')
   scanControle.value = '';
   if (scanControleOpcoes) scanControleOpcoes.innerHTML = '';
   fecharOpcoesControleEntrada();
-  scanQtd.value = '';
+  scanQtd.value = valorPadraoQuantidadeConferencia();
   atualizarProdutoLeituraEntrada();
   renderizarFotoProdutoVazia();
   atualizarControlesConferencia();
@@ -4259,6 +4271,7 @@ async function selecionarPedidoConferencia(pedido) {
 
   pedidoSelecionado = pedido;
   itensPedidoSelecionado = [];
+  scanQtd.value = valorPadraoQuantidadeConferencia();
   confirmarStatus.textContent = '';
   scanStatus.textContent = 'Iniciando conferencia no Sankhya...';
   pedidoConferenciaTitulo.textContent = formatarTituloPedidoConferencia(pedido);
@@ -4417,7 +4430,7 @@ function adicionarConferenciaPorCodigo() {
   limparDatasEntrada();
   if (scanControleOpcoes) scanControleOpcoes.innerHTML = '';
   fecharOpcoesControleEntrada();
-  scanQtd.value = '';
+  scanQtd.value = valorPadraoQuantidadeConferencia();
   atualizarProdutoLeituraEntrada();
   renderizarItensConferencia();
   salvarProgressoConferencia();
@@ -4854,6 +4867,10 @@ function textoInicialModoFila() {
     : 'Informe os filtros para buscar pedidos.';
 }
 
+function valorPadraoQuantidadeConferencia() {
+  return filaModoConferencia === 'saida' ? '1' : '';
+}
+
 function atualizarModoFilaConferencia() {
   const entrada = filaModoConferencia === 'entrada';
   filaScreen.classList.toggle('fila-modo-entrada', entrada);
@@ -4877,6 +4894,7 @@ function atualizarModoFilaConferencia() {
     scanControle.value = '';
     limparDatasEntrada();
   }
+  scanQtd.value = valorPadraoQuantidadeConferencia();
   if (scanControleOpcoes) scanControleOpcoes.innerHTML = '';
   fecharOpcoesControleEntrada();
   atualizarProdutoLeituraEntrada();
@@ -5034,6 +5052,7 @@ botaoAbrirConsultaHome.addEventListener('click', abrirConsultaProdutosMesmaTela)
 botaoAbrirAtualizacaoContato.addEventListener('click', abrirAtualizacaoContato);
 botaoAbrirConsultaProdutos.addEventListener('click', abrirConsultaProdutos);
 botaoConsultaProdutoBuscar.addEventListener('click', buscarConsultaProduto);
+botaoConsultaProdutoVoltar.addEventListener('click', voltarConsultaProdutos);
 consultaProdutoCodigo.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
@@ -5162,6 +5181,11 @@ entradaAlteracoesModal?.addEventListener('click', (event) => {
   }
 });
 scanCodigo.addEventListener('keydown', (event) => {
+  if (['e', 'E', '+', '-', '.', ','].includes(event.key)) {
+    event.preventDefault();
+    return;
+  }
+
   if (event.key === 'Enter') {
     event.preventDefault();
     if (filaModoConferencia === 'entrada') {
@@ -5178,6 +5202,11 @@ scanCodigo.addEventListener('keydown', (event) => {
   }
 });
 scanCodigo.addEventListener('input', () => {
+  const somenteInteiros = String(scanCodigo.value || '').replace(/\D/g, '');
+  if (scanCodigo.value !== somenteInteiros) {
+    scanCodigo.value = somenteInteiros;
+  }
+
   if (filaModoConferencia === 'entrada') {
     atualizarProdutoLeituraEntrada();
     atualizarOpcoesControleEntrada();
