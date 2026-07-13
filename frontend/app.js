@@ -4235,7 +4235,8 @@ async function abrirPreviewPedido(pedido) {
     ? 'Conferido'
     : pedidoPreviewStatus.textContent;
   botaoConfirmarPreviewPedido.disabled = !pedidoPodeIniciarConferencia(pedido);
-  botaoImprimirPreviewPedido.hidden = pedido.STATUS_CONFERENCIA === 'CONFERIDO';
+  // A impressao continua disponivel mesmo depois da conferencia.
+  botaoImprimirPreviewPedido.hidden = false;
   botaoConfirmarPreviewPedido.textContent = pedidoPodeIniciarConferencia(pedido)
     ? 'Iniciar conferencia'
     : `${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'} ja conferido`;
