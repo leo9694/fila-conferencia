@@ -7,6 +7,98 @@ function controle(valor) {
   return String(valor ?? '').trim() || ' ';
 }
 
+function chaveDetalheEntrada(detalhe) {
+  return [
+    numero(detalhe?.CODPROD),
+    controle(detalhe?.CONTROLE),
+    String(detalhe?.CODVOL || '').trim(),
+    String(detalhe?.CODBARRA || '').trim()
+  ].join('|');
+}
+
+function planejarSincronizacaoDetalhesEntrada(detalhesExistentes, detalhesDesejados) {
+  const existentes = [...detalhesExistentes]
+    .map((detalhe) => ({ ...detalhe, SEQCONF: numero(detalhe.SEQCONF) }))
+    .sort((a, b) => a.SEQCONF - b.SEQCONF);
+  const existentesPorChave = new Map();
+
+  for (const existente of existentes) {
+    const chave = chaveDetalheEntrada(existente);
+    const lista = existentesPorChave.get(chave) || [];
+    lista.push(existente);
+    existentesPorChave.set(chave, lista);
+  }
+
+  const sequenciasUsadas = new Set();
+  const atribuicoes = detalhesDesejados.map((detalhe) => {
+    const correspondente = (existentesPorChave.get(chaveDetalheEntrada(detalhe)) || [])
+      .find((existente) => !sequenciasUsadas.has(existente.SEQCONF));
+
+    if (correspondente) sequenciasUsadas.add(correspondente.SEQCONF);
+    return { detalhe, seqConf: correspondente?.SEQCONF || null, existente: Boolean(correspondente) };
+  });
+
+  const sequenciasLivres = existentes
+    .filter((existente) => !sequenciasUsadas.has(existente.SEQCONF))
+    .map((existente) => existente.SEQCONF);
+  let proximaSequencia = Math.max(0, ...existentes.map((existente) => existente.SEQCONF)) + 1;
+
+  for (const atribuicao of atribuicoes) {
+    if (atribuicao.seqConf) continue;
+    const sequenciaLivre = sequenciasLivres.shift();
+    atribuicao.seqConf = sequenciaLivre || proximaSequencia++;
+    atribuicao.existente = Boolean(sequenciaLivre);
+    sequenciasUsadas.add(atribuicao.seqConf);
+  }
+
+  return {
+    atribuicoes,
+    sequenciasObsoletas: existentes
+      .map((existente) => existente.SEQCONF)
+      .filter((seqConf) => !sequenciasUsadas.has(seqConf))
+  };
+}
+
+function validarDetalhesConferenciaEntrada(detalhesDesejados, detalhesGravados) {
+  const erros = [];
+  const gravadosPorChave = new Map();
+
+  for (const gravado of detalhesGravados) {
+    const chave = chaveDetalheEntrada(gravado);
+    const lista = gravadosPorChave.get(chave) || [];
+    lista.push(gravado);
+    gravadosPorChave.set(chave, lista);
+  }
+
+  if (detalhesGravados.length !== detalhesDesejados.length) {
+    erros.push(`quantidade de linhas esperada ${detalhesDesejados.length}, gravada ${detalhesGravados.length}`);
+  }
+
+  for (const desejado of detalhesDesejados) {
+    const chave = chaveDetalheEntrada(desejado);
+    const correspondentes = gravadosPorChave.get(chave) || [];
+    if (correspondentes.length !== 1) {
+      erros.push(`detalhe ${chave} possui ${correspondentes.length} linha(s)`);
+      continue;
+    }
+
+    const gravado = correspondentes[0];
+    if (Math.abs(numero(gravado.QTDCONF) - numero(desejado.QTDCONF)) > 0.0001) {
+      erros.push(`quantidade da embalagem divergente em ${chave}`);
+    }
+    if (Math.abs(numero(gravado.QTDCONFVOLPAD) - numero(desejado.QTDCONFVOLPAD)) > 0.0001) {
+      erros.push(`quantidade padrao divergente em ${chave}`);
+    }
+  }
+
+  const chavesDesejadas = new Set(detalhesDesejados.map(chaveDetalheEntrada));
+  for (const chave of gravadosPorChave.keys()) {
+    if (!chavesDesejadas.has(chave)) erros.push(`detalhe inesperado ${chave}`);
+  }
+
+  return { valido: erros.length === 0, erros };
+}
+
 function consolidarLeiturasEntrada(itensNota, itensInformados) {
   const porSequencia = new Map(itensNota.map((item) => [Number(item.SEQUENCIA), item]));
   const agrupados = new Map();
@@ -88,6 +180,8 @@ function retornoPossuiDocumentosAuxiliares(resultado) {
 
 module.exports = {
   consolidarLeiturasEntrada,
+  planejarSincronizacaoDetalhesEntrada,
+  validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,
   documentosAuxiliaresConferencia,
   retornoPossuiDocumentosAuxiliares

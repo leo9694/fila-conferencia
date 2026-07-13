@@ -13,6 +13,8 @@ const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
 const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
 const {
   consolidarLeiturasEntrada,
+  planejarSincronizacaoDetalhesEntrada,
+  validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,
   documentosAuxiliaresConferencia,
   retornoPossuiDocumentosAuxiliares
@@ -1171,54 +1173,60 @@ async function sincronizarDetalhesConferenciaEntrada({ nuconf, nunota, itens }) 
       CODPROD,
       CODVOL,
       NVL(TRIM(CONTROLE), ' ') AS CONTROLE,
-      CODBARRA
+      CODBARRA,
+      NVL(QTDCONF, 0) AS QTDCONF,
+      NVL(QTDCONFVOLPAD, 0) AS QTDCONFVOLPAD
     FROM TGFCOI2
     WHERE NUCONF = ${nuconf}
     ORDER BY SEQCONF
   `);
-  const sequenciasExistentes = new Set(detalhesExistentes.map((item) => Number(item.SEQCONF)));
-  const chaveDetalheEntrada = (detalhe) => [
-    Number(detalhe.CODPROD),
-    normalizarControleConferencia(detalhe.CONTROLE),
-    String(detalhe.CODVOL || '').trim(),
-    String(detalhe.CODBARRA || '').trim()
-  ].join('|');
-  const detalhesExistentesPorChave = new Map(
-    detalhesExistentes.map((item) => [chaveDetalheEntrada(item), Number(item.SEQCONF)])
-  );
-  const sequenciasUsadas = new Set();
+  const plano = planejarSincronizacaoDetalhesEntrada(detalhesExistentes, detalhesDesejados);
   const dhAlter = formatarDataHoraSankhya();
 
-  for (let indice = 0; indice < detalhesDesejados.length; indice += 1) {
-    const seqConf = indice + 1;
-    const detalhe = detalhesDesejados[indice];
+  for (const atribuicao of plano.atribuicoes) {
+    const { detalhe, seqConf } = atribuicao;
     const campos = {
       ...detalhe,
       QTDCONF: numeroApi(detalhe.QTDCONF),
       QTDCONFVOLPAD: numeroApi(detalhe.QTDCONFVOLPAD),
       DHALTER: dhAlter
     };
-    const seqNaturalExistente = detalhesExistentesPorChave.get(chaveDetalheEntrada(detalhe));
-    const seqDestino = seqNaturalExistente || (sequenciasExistentes.has(seqConf) ? seqConf : null);
-
-    if (seqDestino) {
-      await atualizarRegistroApi('DetalhesConferencia', { NUCONF: nuconf, SEQCONF: seqDestino }, campos);
-      sequenciasUsadas.add(seqDestino);
+    if (atribuicao.existente) {
+      await atualizarRegistroApi('DetalhesConferencia', { NUCONF: nuconf, SEQCONF: seqConf }, campos);
     } else {
       await salvarRegistroApi('DetalhesConferencia', { NUCONF: nuconf, SEQCONF: seqConf, ...campos });
-      sequenciasUsadas.add(seqConf);
     }
   }
 
-  for (const detalheExistente of detalhesExistentes) {
-    const seqConf = Number(detalheExistente.SEQCONF);
-    if (sequenciasUsadas.has(seqConf)) continue;
+  for (const seqConf of plano.sequenciasObsoletas) {
     await atualizarRegistroApi(
       'DetalhesConferencia',
       { NUCONF: nuconf, SEQCONF: seqConf },
       { QTDCONF: 0, QTDCONFVOLPAD: 0, DHALTER: dhAlter }
     );
   }
+
+  const detalhesGravados = await executeQuery(`
+    SELECT
+      SEQCONF,
+      CODPROD,
+      CODVOL,
+      NVL(TRIM(CONTROLE), ' ') AS CONTROLE,
+      CODBARRA,
+      NVL(QTDCONF, 0) AS QTDCONF,
+      NVL(QTDCONFVOLPAD, 0) AS QTDCONFVOLPAD
+    FROM TGFCOI2
+    WHERE NUCONF = ${nuconf}
+    ORDER BY SEQCONF
+  `);
+  const validacao = validarDetalhesConferenciaEntrada(detalhesDesejados, detalhesGravados);
+  if (!validacao.valido) {
+    throw new Error(
+      `A conferencia de entrada nao foi gravada integralmente no Sankhya. ${validacao.erros.slice(0, 5).join('; ')}`
+    );
+  }
+
+  return detalhesDesejados;
 }
 
 function normalizarDataSankhya(valor) {
