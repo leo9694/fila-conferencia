@@ -2941,12 +2941,31 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
   }
 });
 
+router.get('/fila-conferencia/progresso', (req, res) => {
+  const nunota = obterNumeroInteiro(req.query?.nunota);
+
+  if (!nunota) {
+    res.status(400).json({ erro: 'Informe pedido ou nota da conferencia' });
+    return;
+  }
+
+  const progresso = conferenciaProgressStore.obter(nunota);
+  res.json({
+    ok: true,
+    progresso,
+    resumoCaixas: conferenciaProgressStore.resumoCaixas(nunota)
+  });
+});
+
 router.post('/fila-conferencia/progresso', async (req, res) => {
   const nunota = obterNumeroInteiro(req.body?.nunota);
   const nuconf = obterNumeroInteiro(req.body?.nuconf);
   const codUsu = obterCodigoUsuario(req.usuario?.codUsu);
   const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
   const modo = obterModoConferencia(req.body?.modo);
+  // O progresso da caixa precisa ser compartilhado entre dispositivos, mas nao deve
+  // reaplicar os detalhes nativos da conferencia a cada impressao ou encerramento.
+  const sincronizarSankhya = req.body?.sincronizarSankhya !== false;
 
   if (!nunota || codUsu === null) {
     res.status(400).json({ erro: 'Informe pedido e usuario logado' });
@@ -2990,7 +3009,7 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
       itens
     });
 
-    if (modo === 'entrada') {
+    if (modo === 'entrada' && sincronizarSankhya) {
       const nuconfEntrada = Number(pedido.NUCONFATUAL || nuconf || 0);
       if (!nuconfEntrada) {
         res.status(409).json({ erro: 'Conferencia de entrada ainda nao foi iniciada no Sankhya' });
@@ -3003,11 +3022,58 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
       }));
     }
 
-    res.json({ ok: true, progresso });
+    res.json({ ok: true, progresso, sincronizadoSankhya: modo !== 'entrada' || sincronizarSankhya });
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: 'Erro ao salvar progresso da conferencia' });
   }
+});
+
+router.get('/fila-conferencia/progresso/caixas', (req, res) => {
+  const nunota = obterNumeroInteiro(req.query?.nunota);
+
+  if (!nunota) {
+    res.status(400).json({ erro: 'Informe a nota da conferencia' });
+    return;
+  }
+
+  const resumo = conferenciaProgressStore.resumoCaixas(nunota);
+  res.json({ ok: true, resumo });
+});
+
+router.post('/fila-conferencia/progresso/caixas/encerrar', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.body?.nunota);
+  const caixaId = obterNumeroInteiro(req.body?.caixaId);
+  const modo = obterModoConferencia(req.body?.modo);
+
+  if (!nunota || !caixaId) {
+    res.status(400).json({ erro: 'Informe a nota e a caixa' });
+    return;
+  }
+
+  if (modo !== 'entrada') {
+    res.status(409).json({ erro: 'O fechamento de caixa esta disponivel somente na conferencia de entrada' });
+    return;
+  }
+
+  const resultado = conferenciaProgressStore.encerrarCaixa({ nunota, caixaId });
+  if (!resultado.encontrado) {
+    res.status(404).json({ erro: 'A caixa nao possui leituras salvas para esta nota' });
+    return;
+  }
+
+  if (!resultado.alterado) {
+    res.status(409).json({
+      erro: 'Esta caixa ja foi encerrada em outro dispositivo',
+      resumo: conferenciaProgressStore.resumoCaixas(nunota)
+    });
+    return;
+  }
+
+  res.json({
+    ok: true,
+    resumo: conferenciaProgressStore.resumoCaixas(nunota)
+  });
 });
 
 router.post('/fila-conferencia/confirmar', async (req, res) => {

@@ -89,6 +89,15 @@ const scanFabricacaoField = document.getElementById('scan-fabricacao-field');
 const scanFabricacao = document.getElementById('scan-fabricacao');
 const botaoScanAdicionar = document.getElementById('scan-adicionar');
 const scanStatus = document.getElementById('scan-status');
+const botaoAbrirEntradaCaixa = document.getElementById('abrir-entrada-caixa');
+const entradaCaixaContador = document.getElementById('entrada-caixa-contador');
+const entradaCaixaModal = document.getElementById('entrada-caixa-modal');
+const entradaCaixaResumo = document.getElementById('entrada-caixa-resumo');
+const entradaCaixaLista = document.getElementById('entrada-caixa-lista');
+const botaoFecharEntradaCaixa = document.getElementById('fechar-entrada-caixa');
+const botaoContinuarEntradaCaixa = document.getElementById('continuar-entrada-caixa');
+const botaoZerarEntradaCaixa = document.getElementById('zerar-entrada-caixa');
+const botaoImprimirEntradaCaixa = document.getElementById('imprimir-entrada-caixa');
 const itensPendentesLista = document.getElementById('itens-pendentes-lista');
 const itensConferidosLista = document.getElementById('itens-conferidos-lista');
 const itensPendentesCount = document.getElementById('itens-pendentes-count');
@@ -138,6 +147,11 @@ const botaoConsultaProdutoVoltar = document.getElementById('consulta-produto-vol
 const consultaProdutoTitulo = document.getElementById('consulta-produto-titulo');
 const consultaProdutoLegenda = document.getElementById('consulta-produto-legenda');
 const consultaProdutoFoto = document.getElementById('consulta-produto-foto');
+const botaoConsultaProdutoEtiqueta = document.getElementById('consulta-produto-imprimir-etiqueta');
+const consultaEtiquetaModal = document.getElementById('consulta-etiqueta-modal');
+const consultaEtiquetaLote = document.getElementById('consulta-etiqueta-lote');
+const consultaEtiquetaCancelar = document.getElementById('consulta-etiqueta-cancelar');
+const consultaEtiquetaConfirmar = document.getElementById('consulta-etiqueta-confirmar');
 const consultaProdutoResumo = document.getElementById('consulta-produto-resumo');
 const consultaProdutoDetalhes = document.getElementById('consulta-produto-detalhes');
 const consultaProdutoStatus = document.getElementById('consulta-produto-status');
@@ -178,6 +192,13 @@ const botaoProximoClienteContatos = document.getElementById('proximo-cliente-con
 let filaPedidos = [];
 let filaModoConferencia = 'saida';
 let pedidoSelecionado = null;
+let consultaProdutoAtual = null;
+let sincronizacaoCaixaEntradaInterval = null;
+let sincronizacaoCaixaEntradaEmAndamento = false;
+let salvamentoProgressoEmAndamento = false;
+let salvamentosProgressoPendentes = 0;
+let salvamentoProgressoPendente = Promise.resolve();
+let maiorCaixaEntradaRemota = 0;
 let pedidoPreviewSelecionado = null;
 let itensPedidoPreview = [];
 let itensPedidoSelecionado = [];
@@ -1139,6 +1160,7 @@ function alternarSidebarMobileConferencia(aberto) {
 }
 
 function mostrarEtapaPedidosFila() {
+  pararSincronizacaoCaixaEntrada();
   filaEtapaConferencia.classList.remove('active');
   filaEtapaPedidos.classList.add('active');
   filaScreen.classList.remove('conferencia-mode');
@@ -1151,6 +1173,7 @@ function mostrarEtapaConferenciaFila() {
   filaEtapaConferencia.classList.add('active');
   filaScreen.classList.add('conferencia-mode');
   salvarNavegacaoFila({ etapa: 'conferencia' });
+  iniciarSincronizacaoCaixaEntrada();
 }
 
 function calcularResumoConferencia() {
@@ -1191,9 +1214,11 @@ function renderizarResumoConferencia() {
 }
 
 function renderizarConsultaVazia(mensagem = 'Digite o codigo do produto para visualizar o estoque.') {
+  consultaProdutoAtual = null;
   consultaProdutoTitulo.textContent = 'Produto';
   consultaProdutoLegenda.textContent = 'Informe um codigo para consultar.';
   consultaProdutoFoto.innerHTML = '<div class="consulta-empty">Sem produto selecionado.</div>';
+  botaoConsultaProdutoEtiqueta.disabled = true;
   consultaProdutoResumo.innerHTML = `<div class="consulta-empty">${escaparHtml(mensagem)}</div>`;
   consultaProdutoDetalhes.innerHTML = '<div class="consulta-empty">Nenhum detalhe carregado.</div>';
   consultaProdutoStatus.textContent = 'Aguardando consulta';
@@ -1228,6 +1253,7 @@ function renderizarConsultaProduto(payload) {
   const estoque = payload.estoque || [];
 
   consultaProdutoTitulo.textContent = `${produto.CODPROD} - ${produto.DESCRPROD || 'Produto'}`;
+  botaoConsultaProdutoEtiqueta.disabled = false;
   consultaProdutoLegenda.textContent = `Grupo: ${produto.DESCRGRUPOPROD || produto.CODGRUPOPROD || '-'}`;
   consultaProdutoFoto.innerHTML = `
     <img
@@ -1277,6 +1303,72 @@ function renderizarConsultaProduto(payload) {
   consultaEstoqueStatus.textContent = `${estoque.length} registros`;
 }
 
+function imprimirEtiquetaProdutoConsultado() {
+  const produto = consultaProdutoAtual;
+  if (!produto) return;
+
+  const estoque = Array.isArray(produto.estoque) ? produto.estoque[0] : null;
+  abrirEtiquetaProdutoParaImpressao(estoque);
+}
+
+function montarItemEtiquetaProduto(estoque) {
+  const produto = consultaProdutoAtual;
+  const item = {
+    codProd: produto.produto.CODPROD,
+    descrProd: produto.produto.DESCRPROD || `Produto ${produto.produto.CODPROD}`,
+    controle: estoque?.CONTROLE || '',
+    validade: estoque?.DTVAL || '',
+    fabricacao: '',
+    codVol: produto.produto.CODVOL || 'UN',
+    quantidade: 1
+  };
+  return item;
+}
+
+function abrirEtiquetaProdutoParaImpressao(estoque) {
+  if (!consultaProdutoAtual) return;
+
+  const item = montarItemEtiquetaProduto(estoque);
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    consultaProdutoStatus.textContent = 'O navegador bloqueou a nova aba de impressao.';
+    return;
+  }
+
+  printWindow.document.write(montarHtmlEtiquetasCaixaEntrada('produto', [item]));
+  printWindow.document.close();
+}
+
+function fecharSelecaoEtiquetaProduto() {
+  consultaEtiquetaModal.hidden = true;
+}
+
+function abrirSelecaoEtiquetaProduto() {
+  if (!consultaProdutoAtual) return;
+
+  const estoques = Array.isArray(consultaProdutoAtual.estoque) ? consultaProdutoAtual.estoque : [];
+  consultaEtiquetaLote.innerHTML = estoques.length
+    ? estoques.map((estoque, indice) => {
+      const lote = estoque.CONTROLE || 'Sem Lote';
+      const validade = estoque.DTVAL ? (formatarData(estoque.DTVAL) || 'Sem validade') : 'Sem validade';
+      return `<option value="${indice}">${escaparHtml(lote)} | Validade: ${escaparHtml(validade)}</option>`;
+    }).join('')
+    : '<option value="-1">Sem Lote | Sem validade</option>';
+
+  consultaEtiquetaModal.hidden = false;
+  consultaEtiquetaLote.focus();
+}
+
+function confirmarSelecaoEtiquetaProduto() {
+  if (!consultaProdutoAtual) return;
+  const estoques = Array.isArray(consultaProdutoAtual.estoque) ? consultaProdutoAtual.estoque : [];
+  const indice = Number(consultaEtiquetaLote.value);
+  const estoque = indice >= 0 ? estoques[indice] : null;
+  fecharSelecaoEtiquetaProduto();
+  abrirEtiquetaProdutoParaImpressao(estoque);
+}
+
 async function buscarConsultaProduto() {
   const codigo = consultaProdutoCodigo.value.trim();
 
@@ -1287,6 +1379,8 @@ async function buscarConsultaProduto() {
   }
 
   botaoConsultaProdutoBuscar.disabled = true;
+  consultaProdutoAtual = null;
+  botaoConsultaProdutoEtiqueta.disabled = true;
   consultaProdutoStatus.textContent = 'Consultando produto...';
   consultaProdutoResumo.innerHTML = '<div class="consulta-empty">Buscando informacoes de estoque...</div>';
   consultaProdutoDetalhes.innerHTML = '<div class="consulta-empty">Carregando detalhes...</div>';
@@ -1299,6 +1393,7 @@ async function buscarConsultaProduto() {
       throw new Error(payload.erro || 'Produto nao encontrado');
     }
 
+    consultaProdutoAtual = payload;
     renderizarConsultaProduto(payload);
   } catch (error) {
     consultaProdutoStatus.textContent = 'Erro na consulta';
@@ -2919,31 +3014,433 @@ function mostrarFotoProduto(item, origem = 'selecionado') {
   }, { once: true });
 }
 
-function salvarProgressoConferencia() {
+function salvarProgressoConferencia(options = {}) {
   if (!pedidoSelecionado || !temUsuarioLogado()) {
-    return;
+    return Promise.resolve(null);
   }
 
   salvarNavegacaoFila({ etapa: 'conferencia' });
 
-  fetch('/api/fila-conferencia/progresso', {
+  const dados = {
+    nunota: pedidoSelecionado.NUNOTA,
+    nuconf: pedidoSelecionado.nuconf || pedidoSelecionado.NUCONFATUAL || null,
+    itens: itensPedidoSelecionado.map((item) => ({
+      sequencia: item.sequencia,
+      qtdConferida: normalizarQuantidade(item.qtdConferida),
+      qtdCortada: quantidadeCortadaItem(item),
+      leituras: Array.isArray(item.leituras) ? item.leituras.map((leitura) => ({
+        ...leitura,
+        caixaId: Number(leitura.caixaId) || null,
+        caixaFechada: leitura.caixaFechada === true
+      })) : []
+    })),
+    modo: filaModoConferencia,
+    // Mantem o comportamento habitual das leituras. A caixa usa false para apenas
+    // distribuir seu estado entre dispositivos sem gravar detalhes no Sankhya outra vez.
+    sincronizarSankhya: options.sincronizarSankhya !== false
+  };
+
+  // Mantem os envios em ordem para que uma leitura recente nao seja substituida por um estado anterior.
+  salvamentosProgressoPendentes += 1;
+  salvamentoProgressoPendente = salvamentoProgressoPendente
+    .catch(() => null)
+    .then(async () => {
+      salvamentoProgressoEmAndamento = true;
+      try {
+        const res = await fetch('/api/fila-conferencia/progresso', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(dados)
+        });
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(payload.erro || 'Erro ao salvar progresso da conferencia');
+        return payload;
+      } finally {
+        salvamentoProgressoEmAndamento = false;
+      }
+    })
+    .catch((error) => {
+      console.error('Erro ao salvar progresso da conferencia:', error);
+      return null;
+    })
+    .finally(() => {
+      salvamentosProgressoPendentes = Math.max(0, salvamentosProgressoPendentes - 1);
+    });
+
+  return salvamentoProgressoPendente;
+}
+
+function aplicarProgressoRemotoCaixa(progresso, resumoCaixas = null) {
+  if (!progresso || !pedidoSelecionado || Number(progresso.nunota) !== Number(pedidoSelecionado.NUNOTA)) {
+    return false;
+  }
+
+  const itensPorSequencia = new Map((progresso.itens || []).map((item) => [Number(item.sequencia), item]));
+  let alterou = false;
+  itensPedidoSelecionado.forEach((item) => {
+    const remoto = itensPorSequencia.get(Number(item.sequencia));
+    if (!remoto) return;
+
+    const leiturasAtuais = JSON.stringify(item.leituras || []);
+    const leiturasRemotas = JSON.stringify(remoto.leituras || []);
+    if (leiturasAtuais !== leiturasRemotas || Number(item.qtdConferida) !== Number(remoto.qtdConferida) || Number(item.qtdCortada) !== Number(remoto.qtdCortada)) {
+      item.qtdConferida = normalizarQuantidade(remoto.qtdConferida);
+      item.qtdCortada = normalizarQuantidade(remoto.qtdCortada);
+      item.leituras = Array.isArray(remoto.leituras) ? remoto.leituras : [];
+      alterou = true;
+    }
+  });
+
+  const maiorRemoto = Number(resumoCaixas?.maiorCaixaId || 0);
+  if (maiorRemoto > maiorCaixaEntradaRemota) {
+    maiorCaixaEntradaRemota = maiorRemoto;
+    alterou = true;
+  }
+
+  if (alterou) {
+    renderizarItensConferencia();
+    if (!entradaCaixaModal.hidden) renderizarModalCaixaEntrada();
+  }
+  return alterou;
+}
+
+async function sincronizarCaixaEntrada(forcar = false) {
+  if (filaModoConferencia !== 'entrada' || !pedidoSelecionado || !temUsuarioLogado()
+    || sincronizacaoCaixaEntradaEmAndamento || (!forcar && (salvamentoProgressoEmAndamento || salvamentosProgressoPendentes > 0))) {
+    return null;
+  }
+
+  sincronizacaoCaixaEntradaEmAndamento = true;
+  try {
+    const res = await fetch(`/api/fila-conferencia/progresso?nunota=${encodeURIComponent(pedidoSelecionado.NUNOTA)}`);
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(payload.erro || 'Erro ao sincronizar a caixa');
+    aplicarProgressoRemotoCaixa(payload.progresso, payload.resumoCaixas);
+    return payload;
+  } catch (error) {
+    console.warn('Erro ao sincronizar caixa de entrada:', error);
+    return null;
+  } finally {
+    sincronizacaoCaixaEntradaEmAndamento = false;
+  }
+}
+
+function iniciarSincronizacaoCaixaEntrada() {
+  pararSincronizacaoCaixaEntrada();
+  if (filaModoConferencia !== 'entrada' || !pedidoSelecionado) return;
+  sincronizarCaixaEntrada(true);
+  sincronizacaoCaixaEntradaInterval = window.setInterval(() => sincronizarCaixaEntrada(), 2000);
+}
+
+function pararSincronizacaoCaixaEntrada() {
+  if (sincronizacaoCaixaEntradaInterval) {
+    window.clearInterval(sincronizacaoCaixaEntradaInterval);
+    sincronizacaoCaixaEntradaInterval = null;
+  }
+}
+
+async function encerrarCaixaEntradaNoServidor(caixaId) {
+  const res = await fetch('/api/fila-conferencia/progresso/caixas/encerrar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    keepalive: true,
     body: JSON.stringify({
-      nunota: pedidoSelecionado.NUNOTA,
-      nuconf: pedidoSelecionado.nuconf || pedidoSelecionado.NUCONFATUAL || null,
-      itens: itensPedidoSelecionado.map((item) => ({
-        sequencia: item.sequencia,
-        qtdConferida: normalizarQuantidade(item.qtdConferida),
-        qtdCortada: quantidadeCortadaItem(item),
-        leituras: Array.isArray(item.leituras) ? item.leituras : []
-      })),
+      nunota: pedidoSelecionado?.NUNOTA,
+      caixaId,
       modo: filaModoConferencia
     })
-  }).catch((error) => {
-    console.error('Erro ao salvar progresso da conferencia:', error);
   });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload.erro || 'Nao foi possivel encerrar a caixa');
+  maiorCaixaEntradaRemota = Math.max(maiorCaixaEntradaRemota, Number(payload.resumo?.maiorCaixaId || 0));
+  return payload;
+}
+
+function obterLeiturasCaixasEntrada() {
+  return itensPedidoSelecionado.flatMap((item) => (item.leituras || [])
+    .filter((leitura) => Number(leitura.caixaId) > 0)
+    .map((leitura) => ({ item, leitura })));
+}
+
+function obterCaixaEntradaAtual() {
+  const leituras = obterLeiturasCaixasEntrada();
+  const abertas = leituras.filter(({ leitura }) => leitura.caixaFechada !== true);
+  const caixaAberta = abertas.reduce((maior, { leitura }) => Math.max(maior, Number(leitura.caixaId) || 0), 0);
+  const maiorCaixa = Math.max(
+    maiorCaixaEntradaRemota,
+    leituras.reduce((maior, { leitura }) => Math.max(maior, Number(leitura.caixaId) || 0), 0)
+  );
+  const caixaId = caixaAberta || maiorCaixa + 1 || 1;
+
+  return {
+    caixaId,
+    leituras: abertas.filter(({ leitura }) => Number(leitura.caixaId) === caixaId)
+  };
+}
+
+function agruparItensCaixaEntrada(caixa = obterCaixaEntradaAtual()) {
+  const grupos = new Map();
+
+  caixa.leituras.forEach(({ item, leitura }) => {
+    const controle = String(leitura.controle || item.controle || '').trim();
+    const validade = formatarDataInput(leitura.dtValidade || item.dtValidade || '');
+    const fabricacao = formatarDataInput(leitura.dtFabricacao || item.dtFabricacao || '');
+    const chave = [item.codProd, controle, validade, fabricacao].join('|');
+    const atual = grupos.get(chave) || {
+      codProd: item.codProd,
+      descrProd: item.descrProd || `Produto ${item.codProd}`,
+      controle,
+      validade,
+      fabricacao,
+      codVol: leitura.codVol || item.codVol || 'UN',
+      quantidade: 0
+    };
+    atual.quantidade += normalizarQuantidade(leitura.quantidadeConvertida);
+    grupos.set(chave, atual);
+  });
+
+  return [...grupos.values()];
+}
+
+function atualizarCaixaEntrada() {
+  const visivel = filaModoConferencia === 'entrada' && Boolean(pedidoSelecionado);
+  if (!botaoAbrirEntradaCaixa || !entradaCaixaContador) return;
+
+  botaoAbrirEntradaCaixa.hidden = !visivel;
+  if (!visivel) {
+    entradaCaixaContador.textContent = '0 itens';
+    return;
+  }
+
+  const caixa = obterCaixaEntradaAtual();
+  const grupos = agruparItensCaixaEntrada(caixa);
+  const unidades = grupos.reduce((total, item) => total + item.quantidade, 0);
+  entradaCaixaContador.textContent = `${grupos.length} ${grupos.length === 1 ? 'item' : 'itens'}${unidades > 0 ? ` | ${formatarQuantidade(unidades)} un.` : ''}`;
+}
+
+function renderizarModalCaixaEntrada() {
+  const caixa = obterCaixaEntradaAtual();
+  const grupos = agruparItensCaixaEntrada(caixa);
+  const unidades = grupos.reduce((total, item) => total + item.quantidade, 0);
+
+  entradaCaixaResumo.textContent = grupos.length > 0
+    ? `Caixa ${caixa.caixaId}: ${grupos.length} ${grupos.length === 1 ? 'produto' : 'produtos'} e ${formatarQuantidade(unidades)} unidades.`
+    : `Caixa ${caixa.caixaId}: nenhum item bipado ainda.`;
+  botaoImprimirEntradaCaixa.disabled = grupos.length === 0;
+  botaoZerarEntradaCaixa.disabled = grupos.length === 0;
+
+  if (grupos.length === 0) {
+    entradaCaixaLista.innerHTML = '<div class="empty-state">Bipe os produtos desta caixa para visualizar e imprimir as etiquetas.</div>';
+  } else {
+    entradaCaixaLista.innerHTML = grupos.map((item) => `
+      <div class="entrada-caixa-item">
+        <span class="entrada-caixa-item-icon"><i data-lucide="package"></i></span>
+        <span class="entrada-caixa-item-info">
+          <strong>${escaparHtml(item.codProd)} - ${escaparHtml(item.descrProd)}</strong>
+          <span>Lote: ${escaparHtml(item.controle || '-')} | Validade: ${escaparHtml(formatarData(item.validade) || '-')}</span>
+        </span>
+        <span class="entrada-caixa-item-qtd">${formatarQuantidade(item.quantidade)} ${escaparHtml(item.codVol)}</span>
+      </div>
+    `).join('');
+  }
+
+  atualizarIcones();
+}
+
+function abrirModalCaixaEntrada() {
+  if (filaModoConferencia !== 'entrada' || !pedidoSelecionado) return;
+  renderizarModalCaixaEntrada();
+  entradaCaixaModal.hidden = false;
+}
+
+function fecharModalCaixaEntrada() {
+  entradaCaixaModal.hidden = true;
+  scanCodigo.focus();
+}
+
+function formatarLoteEtiqueta(valor) {
+  const lote = String(valor ?? '').trim();
+  return lote ? lote.slice(-4) : 'Sem Lote';
+}
+
+function formatarValidadeEtiqueta(valor) {
+  const data = formatarDataInput(valor);
+  return data ? formatarData(data) : 'Sem validade';
+}
+
+function montarHtmlEtiquetasCaixaEntrada(caixaId, itens) {
+  const etiquetas = itens.map((item) => `
+    <section class="label">
+      <div class="produto">${escaparHtml(item.codProd)}</div>
+      <div class="linha"></div>
+      <div class="lote-validade fit-text" data-min-font="8">
+        <span>${escaparHtml(formatarLoteEtiqueta(item.controle))}</span>
+        <span>-</span>
+        <span>${escaparHtml(formatarValidadeEtiqueta(item.validade))}</span>
+      </div>
+      <div class="linha"></div>
+      <div class="descricao fit-text" data-min-font="9">${escaparHtml(item.descrProd || '-')}</div>
+    </section>
+  `).join('');
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Etiquetas caixa ${caixaId}</title>
+  <style>
+    @page { size: 100mm 50mm; margin: 0; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #eee; color: #000; font-family: Arial, Helvetica, sans-serif; }
+    .label {
+      position: relative;
+      width: 100mm;
+      height: 50mm;
+      padding: 2.2mm 5mm 2mm;
+      background: #fff;
+      page-break-after: always;
+      overflow: hidden;
+    }
+    .produto {
+      height: 20mm;
+      padding-bottom: 3.8mm;
+      display: grid;
+      place-items: center;
+      font-size: 68pt;
+      line-height: 0.9;
+      font-weight: 950;
+      letter-spacing: 0;
+      transform: translateY(-2mm);
+    }
+    .linha {
+      height: 1.1mm;
+      min-height: 1.1mm;
+      border-top: 1.1mm solid #000;
+      background: transparent;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .lote-validade {
+      height: 12.1mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 2.5mm;
+      font-size: 28pt;
+      line-height: 1;
+      font-weight: 950;
+      white-space: nowrap;
+    }
+    .descricao {
+      height: 10.8mm;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: 17pt;
+      line-height: 1.05;
+      font-weight: 950;
+      text-transform: uppercase;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    @media screen {
+      .label { margin: 10px auto; box-shadow: 0 5px 18px rgba(0,0,0,.24); }
+    }
+    @media print {
+      body { background: #fff; }
+      .label { margin: 0; box-shadow: none; }
+    }
+  </style>
+</head>
+<body>
+  ${etiquetas}
+  <script>
+    function ajustarTexto() {
+      document.querySelectorAll('.fit-text').forEach((elemento) => {
+        let tamanho = parseFloat(getComputedStyle(elemento).fontSize);
+        const minimo = Number(elemento.dataset.minFont || 9);
+        while ((elemento.scrollWidth > elemento.clientWidth || elemento.scrollHeight > elemento.clientHeight) && tamanho > minimo) {
+          tamanho -= 0.5;
+          elemento.style.fontSize = tamanho + 'px';
+        }
+      });
+    }
+    window.addEventListener('load', () => {
+      ajustarTexto();
+      setTimeout(() => window.print(), 180);
+    });
+  <\/script>
+</body>
+</html>`;
+}
+
+async function imprimirEtiquetasCaixaEntrada() {
+  if (window.matchMedia('(max-width: 900px), (pointer: coarse) and (max-width: 1280px)').matches) {
+    entradaCaixaResumo.textContent = 'Imprima esta caixa no computador conectado a impressora de etiquetas.';
+    return;
+  }
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    entradaCaixaResumo.textContent = 'O navegador bloqueou a nova guia de impressao.';
+    return;
+  }
+
+  const progressoSalvo = await salvarProgressoConferencia({ sincronizarSankhya: false });
+  if (!progressoSalvo) {
+    printWindow.close();
+    entradaCaixaResumo.textContent = 'Nao foi possivel sincronizar a caixa antes da impressao.';
+    return;
+  }
+  await sincronizarCaixaEntrada(true);
+  const caixa = obterCaixaEntradaAtual();
+  const grupos = agruparItensCaixaEntrada(caixa);
+  if (grupos.length === 0) {
+    printWindow.close();
+    return;
+  }
+
+  try {
+    await encerrarCaixaEntradaNoServidor(caixa.caixaId);
+  } catch (error) {
+    printWindow.close();
+    entradaCaixaResumo.textContent = error.message;
+    await sincronizarCaixaEntrada(true);
+    return;
+  }
+
+  printWindow.document.write(montarHtmlEtiquetasCaixaEntrada(caixa.caixaId, grupos));
+  printWindow.document.close();
+  caixa.leituras.forEach(({ leitura }) => {
+    leitura.caixaFechada = true;
+  });
+  atualizarCaixaEntrada();
+  fecharModalCaixaEntrada();
+  scanStatus.innerHTML = `<span class="success-text">Caixa ${caixa.caixaId} concluida. ${grupos.length} etiqueta(s) aberta(s) para impressao.</span>`;
+}
+
+async function zerarCaixaEntradaAtual() {
+  const progressoSalvo = await salvarProgressoConferencia({ sincronizarSankhya: false });
+  if (!progressoSalvo) {
+    entradaCaixaResumo.textContent = 'Nao foi possivel sincronizar a caixa antes de zerar.';
+    return;
+  }
+  await sincronizarCaixaEntrada(true);
+  const caixa = obterCaixaEntradaAtual();
+  if (caixa.leituras.length === 0) return;
+
+  try {
+    await encerrarCaixaEntradaNoServidor(caixa.caixaId);
+  } catch (error) {
+    entradaCaixaResumo.textContent = error.message;
+    await sincronizarCaixaEntrada(true);
+    return;
+  }
+
+  caixa.leituras.forEach(({ leitura }) => { leitura.caixaFechada = true; });
+  atualizarCaixaEntrada();
+  fecharModalCaixaEntrada();
+  scanStatus.innerHTML = `<span class="success-text">Caixa ${caixa.caixaId} zerada. Os itens permanecem conferidos.</span>`;
 }
 
 function criarLinhaItemConferencia(item, quantidade, classe, rotuloQuantidade, options = {}) {
@@ -3104,6 +3601,7 @@ function renderizarItensConferencia() {
     renderizarEstadoVazio(itensPendentesLista, 'Selecione um pedido para ver os itens.');
     renderizarEstadoVazio(itensConferidosLista, 'Nenhum item conferido.');
     renderizarResumoConferencia();
+    atualizarCaixaEntrada();
     return;
   }
 
@@ -3179,6 +3677,7 @@ function renderizarItensConferencia() {
   }
 
   renderizarResumoConferencia();
+  atualizarCaixaEntrada();
 }
 
 function desfazerConferenciaItem(sequencia) {
@@ -4046,7 +4545,10 @@ function fecharPreviewPedido() {
 }
 
 function limparPedidoConferencia(mensagem = 'Selecione um pedido para iniciar.') {
+  pararSincronizacaoCaixaEntrada();
+  if (entradaCaixaModal) entradaCaixaModal.hidden = true;
   pedidoSelecionado = null;
+  maiorCaixaEntradaRemota = 0;
   fecharPreviewPedido();
   itensPedidoSelecionado = [];
   pedidoConferenciaTitulo.textContent = 'Nenhum pedido selecionado';
@@ -4397,6 +4899,7 @@ function adicionarConferenciaPorCodigo() {
 
   item.qtdConferida += qtdConvertida;
   item.leituras = Array.isArray(item.leituras) ? item.leituras : [];
+  const caixaEntradaAtual = filaModoConferencia === 'entrada' ? obterCaixaEntradaAtual() : null;
   const leituraExistente = item.leituras.find((leitura) =>
     normalizarCodigo(leitura.codigo) === codigo
       && String(leitura.codVol || '') === String(match.entrada.codVol || item.codVol || 'UN')
@@ -4404,6 +4907,8 @@ function adicionarConferenciaPorCodigo() {
       && String(leitura.dtValidade || '') === String(dtValidadeLeitura || '')
       && String(leitura.dtFabricacao || '') === String(dtFabricacaoLeitura || '')
       && Number(leitura.multiplicador || 1) === multiplicador
+      && (filaModoConferencia !== 'entrada'
+        || (Number(leitura.caixaId) === Number(caixaEntradaAtual.caixaId) && leitura.caixaFechada !== true))
   );
   if (leituraExistente) {
     leituraExistente.quantidade += qtd;
@@ -4418,7 +4923,8 @@ function adicionarConferenciaPorCodigo() {
       dtFabricacao: dtFabricacaoLeitura,
       multiplicador,
       quantidade: qtd,
-      quantidadeConvertida: qtdConvertida
+      quantidadeConvertida: qtdConvertida,
+      ...(caixaEntradaAtual ? { caixaId: caixaEntradaAtual.caixaId, caixaFechada: false } : {})
     });
   }
   const detalheConversao = multiplicador !== 1
@@ -4901,6 +5407,7 @@ function atualizarModoFilaConferencia() {
   atualizarProdutoLeituraEntrada();
   const tituloLista = filaCountPedidos.previousElementSibling;
   if (tituloLista) tituloLista.textContent = entrada ? 'Notas de entrada' : 'Pedidos';
+  atualizarCaixaEntrada();
   atualizarIcones();
 }
 
@@ -5053,6 +5560,12 @@ botaoAbrirConsultaHome.addEventListener('click', abrirConsultaProdutosMesmaTela)
 botaoAbrirAtualizacaoContato.addEventListener('click', abrirAtualizacaoContato);
 botaoAbrirConsultaProdutos.addEventListener('click', abrirConsultaProdutos);
 botaoConsultaProdutoBuscar.addEventListener('click', buscarConsultaProduto);
+botaoConsultaProdutoEtiqueta.addEventListener('click', abrirSelecaoEtiquetaProduto);
+consultaEtiquetaCancelar.addEventListener('click', fecharSelecaoEtiquetaProduto);
+consultaEtiquetaConfirmar.addEventListener('click', confirmarSelecaoEtiquetaProduto);
+consultaEtiquetaModal.addEventListener('click', (event) => {
+  if (event.target === consultaEtiquetaModal) fecharSelecaoEtiquetaProduto();
+});
 botaoConsultaProdutoVoltar.addEventListener('click', voltarConsultaProdutos);
 consultaProdutoCodigo.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
@@ -5123,6 +5636,14 @@ filaBuscaPedido.addEventListener('keydown', (event) => {
 });
 botaoCancelarPreviewPedido.addEventListener('click', fecharPreviewPedido);
 botaoImprimirPreviewPedido.addEventListener('click', abrirPdfPedido);
+botaoAbrirEntradaCaixa.addEventListener('click', abrirModalCaixaEntrada);
+botaoFecharEntradaCaixa.addEventListener('click', fecharModalCaixaEntrada);
+botaoContinuarEntradaCaixa.addEventListener('click', fecharModalCaixaEntrada);
+botaoZerarEntradaCaixa.addEventListener('click', zerarCaixaEntradaAtual);
+botaoImprimirEntradaCaixa.addEventListener('click', imprimirEtiquetasCaixaEntrada);
+entradaCaixaModal.addEventListener('click', (event) => {
+  if (event.target === entradaCaixaModal) fecharModalCaixaEntrada();
+});
 botaoConfirmarPreviewPedido.addEventListener('click', () => {
   if (pedidoPreviewSelecionado) {
     selecionarPedidoConferencia(pedidoPreviewSelecionado);

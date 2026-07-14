@@ -37,15 +37,15 @@ function criarConferenciaProgressStore(options = {}) {
     return state[String(nunota)] || null;
   }
 
-  function salvar({ nunota, nuconf, codUsu, itens }) {
-    const chave = String(nunota);
-    const itensNormalizados = Array.isArray(itens) ? itens.map((item) => ({
+  function normalizarItens(itens) {
+    return (Array.isArray(itens) ? itens : []).map((item) => ({
       sequencia: Number(item.sequencia),
       qtdConferida: normalizarNumero(item.qtdConferida),
       qtdCortada: normalizarNumero(item.qtdCortada),
       leituras: Array.isArray(item.leituras) ? item.leituras.map((leitura) => {
         const dtValidade = String(leitura.dtValidade ?? '').trim();
         const dtFabricacao = String(leitura.dtFabricacao ?? '').trim();
+        const caixaId = normalizarNumero(leitura.caixaId);
         return {
           codigo: String(leitura.codigo || '').trim(),
           tipo: String(leitura.tipo || 'CODIGO_BARRAS').trim(),
@@ -55,10 +55,31 @@ function criarConferenciaProgressStore(options = {}) {
           ...(dtFabricacao ? { dtFabricacao } : {}),
           multiplicador: normalizarNumero(leitura.multiplicador) || 1,
           quantidade: normalizarNumero(leitura.quantidade),
-          quantidadeConvertida: normalizarNumero(leitura.quantidadeConvertida)
+          quantidadeConvertida: normalizarNumero(leitura.quantidadeConvertida),
+          ...(caixaId > 0 ? { caixaId } : {}),
+          ...(caixaId > 0 ? { caixaFechada: leitura.caixaFechada === true } : {})
         };
       }).filter((leitura) => leitura.codigo && leitura.quantidade > 0 && leitura.quantidadeConvertida > 0) : []
-    })).filter((item) => Number.isInteger(item.sequencia) && item.sequencia > 0) : [];
+    })).filter((item) => Number.isInteger(item.sequencia) && item.sequencia > 0);
+  }
+
+  function caixasEncerradas(progresso) {
+    return new Set((progresso?.itens || []).flatMap((item) => item.leituras || [])
+      .filter((leitura) => leitura.caixaFechada === true && normalizarNumero(leitura.caixaId) > 0)
+      .map((leitura) => normalizarNumero(leitura.caixaId)));
+  }
+
+  function salvar({ nunota, nuconf, codUsu, itens }) {
+    const chave = String(nunota);
+    const caixasJaEncerradas = caixasEncerradas(state[chave]);
+    const itensNormalizados = normalizarItens(itens).map((item) => ({
+      ...item,
+      // Uma sincronizacao atrasada de outro dispositivo nunca pode reabrir uma caixa ja impressa/zerada.
+      leituras: item.leituras.map((leitura) => ({
+        ...leitura,
+        ...(caixasJaEncerradas.has(normalizarNumero(leitura.caixaId)) ? { caixaFechada: true } : {})
+      }))
+    }));
 
     state[chave] = {
       nunota: Number(nunota),
@@ -69,6 +90,56 @@ function criarConferenciaProgressStore(options = {}) {
     };
     persistir();
     return state[chave];
+  }
+
+  function resumoCaixas(nunota) {
+    const progresso = obter(nunota);
+    if (!progresso) return null;
+
+    const caixas = new Map();
+    (progresso.itens || []).forEach((item) => {
+      (item.leituras || []).forEach((leitura) => {
+        const caixaId = normalizarNumero(leitura.caixaId);
+        if (caixaId <= 0) return;
+        const caixa = caixas.get(caixaId) || { caixaId, fechada: true, leituras: 0 };
+        caixa.fechada = caixa.fechada && leitura.caixaFechada === true;
+        caixa.leituras += 1;
+        caixas.set(caixaId, caixa);
+      });
+    });
+
+    return {
+      nunota: progresso.nunota,
+      atualizadoEm: progresso.atualizadoEm,
+      maiorCaixaId: Math.max(0, ...caixas.keys()),
+      caixas: [...caixas.values()].sort((a, b) => a.caixaId - b.caixaId)
+    };
+  }
+
+  function encerrarCaixa({ nunota, caixaId }) {
+    const progresso = obter(nunota);
+    const numeroCaixa = normalizarNumero(caixaId);
+    if (!progresso || numeroCaixa <= 0) return { encontrado: false, alterado: false, progresso: null };
+
+    let encontrouLeitura = false;
+    let alterado = false;
+    (progresso.itens || []).forEach((item) => {
+      (item.leituras || []).forEach((leitura) => {
+        if (normalizarNumero(leitura.caixaId) !== numeroCaixa) return;
+        encontrouLeitura = true;
+        if (leitura.caixaFechada !== true) {
+          leitura.caixaFechada = true;
+          alterado = true;
+        }
+      });
+    });
+
+    if (alterado) {
+      progresso.atualizadoEm = new Date().toISOString();
+      persistir();
+    }
+
+    return { encontrado: encontrouLeitura, alterado, progresso };
   }
 
   function remover(nunota) {
@@ -87,6 +158,8 @@ function criarConferenciaProgressStore(options = {}) {
     state,
     obter,
     salvar,
+    resumoCaixas,
+    encerrarCaixa,
     remover
   };
 }

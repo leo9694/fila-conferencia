@@ -1272,6 +1272,78 @@
       grid-column: 1 / span 3;
     }
 
+    .entrada-caixa-trigger {
+      display: none;
+      grid-column: 1 / -1;
+      width: 100%;
+      min-height: 48px;
+      padding: 7px 11px;
+      border: 1px solid rgba(59, 91, 219, 0.24);
+      border-radius: 12px;
+      background: linear-gradient(135deg, #f7f9ff, #edf2ff);
+      color: #243b8f;
+      align-items: center;
+      gap: 10px;
+      text-align: left;
+      cursor: pointer;
+      box-shadow: 0 5px 14px rgba(59, 91, 219, 0.08);
+    }
+
+    .entrada-caixa-trigger[hidden] {
+      display: none !important;
+    }
+
+    .fila-screen.fila-modo-entrada .entrada-caixa-trigger {
+      display: flex;
+    }
+
+    .entrada-caixa-trigger:hover {
+      border-color: rgba(59, 91, 219, 0.48);
+      background: #e7edff;
+    }
+
+    .entrada-caixa-trigger-icon {
+      width: 32px;
+      height: 32px;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      color: #fff;
+      background: #3b5bdb;
+    }
+
+    .entrada-caixa-trigger-icon svg,
+    .entrada-caixa-trigger-arrow {
+      width: 18px;
+      height: 18px;
+    }
+
+    .entrada-caixa-trigger > span:nth-child(2) {
+      display: grid;
+      gap: 1px;
+      min-width: 0;
+    }
+
+    .entrada-caixa-trigger small {
+      color: #5d6f9f;
+      font-size: 0.62rem;
+      line-height: 1;
+      font-weight: 850;
+      text-transform: uppercase;
+    }
+
+    .entrada-caixa-trigger strong {
+      font-size: 0.86rem;
+      line-height: 1.2;
+      font-weight: 950;
+    }
+
+    .entrada-caixa-trigger-arrow {
+      margin-left: auto;
+      flex: 0 0 auto;
+    }
+
     .fila-screen.fila-modo-entrada .scan-panel #scan-controle-field {
       grid-column: 4 / span 3;
     }
@@ -1904,6 +1976,40 @@
     .consulta-foto-card strong,
     .consulta-card-title strong {
       font-weight: 900;
+    }
+
+    .consulta-foto-heading {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .consulta-foto-heading > div {
+      min-width: 0;
+    }
+
+    .btn-consulta-etiqueta {
+      flex: 0 0 auto;
+      min-height: 32px;
+      padding: 6px 10px;
+      border: 1px solid var(--primary, #008f76);
+      border-radius: 8px;
+      background: #fff;
+      color: var(--primary-dark, #006b5a);
+      font: inherit;
+      font-size: 0.72rem;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .btn-consulta-etiqueta:hover:not(:disabled) {
+      background: var(--primary-soft, #e8f7f3);
+    }
+
+    .btn-consulta-etiqueta:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
 
     .consulta-foto-frame {
@@ -4382,6 +4488,171 @@
       }
     }
 
+    .entrada-caixa-modal .pos-conferencia-dialog {
+      width: min(760px, calc(100vw - 28px));
+      max-height: min(86vh, 760px);
+      padding: 20px;
+      border-radius: 22px;
+    }
+
+    .entrada-caixa-modal-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid rgba(18, 66, 75, 0.1);
+    }
+
+    .entrada-caixa-modal-head h3 {
+      margin: 3px 0 4px;
+      color: #15213b;
+      font-size: 1.38rem;
+    }
+
+    .entrada-caixa-modal-head p {
+      margin: 0;
+      color: #607083;
+      font-size: 0.82rem;
+      font-weight: 750;
+    }
+
+    .entrada-caixa-kicker {
+      color: #3b5bdb;
+      font-size: 0.64rem;
+      font-weight: 950;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .entrada-caixa-lista {
+      display: grid;
+      gap: 8px;
+      max-height: min(52vh, 440px);
+      margin-top: 14px;
+      overflow-y: auto;
+    }
+
+    .entrada-caixa-item {
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr) auto;
+      gap: 11px;
+      align-items: center;
+      padding: 11px 12px;
+      border: 1px solid rgba(59, 91, 219, 0.14);
+      border-radius: 13px;
+      background: #f8faff;
+    }
+
+    .entrada-caixa-item-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 11px;
+      display: grid;
+      place-items: center;
+      color: #3b5bdb;
+      background: #e8edff;
+    }
+
+    .entrada-caixa-item-icon svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .entrada-caixa-item-info {
+      display: grid;
+      gap: 3px;
+      min-width: 0;
+    }
+
+    .entrada-caixa-item-info strong {
+      color: #172033;
+      font-size: 0.84rem;
+      line-height: 1.25;
+    }
+
+    .entrada-caixa-item-info span {
+      color: #627083;
+      font-size: 0.72rem;
+      font-weight: 800;
+    }
+
+    .entrada-caixa-item-qtd {
+      min-width: 82px;
+      padding: 7px 9px;
+      border-radius: 9px;
+      color: #263b8f;
+      background: #e8edff;
+      text-align: center;
+      font-size: 0.76rem;
+      font-weight: 950;
+    }
+
+    .entrada-caixa-actions {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 9px;
+      margin-top: 15px;
+    }
+
+    .entrada-caixa-actions button {
+      min-height: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .entrada-caixa-actions svg {
+      width: 17px;
+      height: 17px;
+    }
+
+    .entrada-caixa-print-mobile {
+      display: none !important;
+      border: 1px solid #cbd5e1;
+      border-radius: 12px;
+      background: #f8fafc;
+      color: #64748b;
+      font: inherit;
+      font-weight: 850;
+    }
+
+    @media (max-width: 900px), (pointer: coarse) and (max-width: 1280px) {
+      .entrada-caixa-modal .pos-conferencia-dialog {
+        width: calc(100vw - 18px);
+        padding: 14px;
+        border-radius: 18px;
+      }
+
+      .entrada-caixa-item {
+        grid-template-columns: 36px minmax(0, 1fr);
+        padding: 10px;
+      }
+
+      .entrada-caixa-item-icon {
+        width: 34px;
+        height: 34px;
+      }
+
+      .entrada-caixa-item-qtd {
+        grid-column: 2;
+        justify-self: start;
+      }
+
+      .entrada-caixa-actions {
+        grid-template-columns: 1fr;
+      }
+
+      .entrada-caixa-print-desktop {
+        display: none !important;
+      }
+
+      .entrada-caixa-print-mobile {
+        display: inline-flex !important;
+      }
+    }
+
     .pos-conferencia-actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -6431,6 +6702,40 @@
         </div>
       </section>
 
+      <section class="pos-conferencia-modal entrada-caixa-modal" id="entrada-caixa-modal" hidden>
+        <div class="pos-conferencia-dialog" role="dialog" aria-modal="true" aria-labelledby="entrada-caixa-titulo">
+          <div class="entrada-caixa-modal-head">
+            <div>
+              <span class="entrada-caixa-kicker">Conferencia de entrada</span>
+              <h3 id="entrada-caixa-titulo">Itens da caixa atual</h3>
+              <p id="entrada-caixa-resumo">Nenhum item bipado nesta caixa.</p>
+            </div>
+            <button class="produto-foto-modal-close" id="fechar-entrada-caixa" type="button" aria-label="Fechar itens da caixa">
+              <i data-lucide="x"></i>
+            </button>
+          </div>
+          <div class="entrada-caixa-lista" id="entrada-caixa-lista" aria-live="polite"></div>
+          <div class="entrada-caixa-actions">
+            <button class="btn-back" id="continuar-entrada-caixa" type="button">
+              <i data-lucide="scan-line"></i>
+              Continuar
+            </button>
+            <button class="btn-back entrada-caixa-reset" id="zerar-entrada-caixa" type="button">
+              <i data-lucide="rotate-ccw"></i>
+              Zerar
+            </button>
+            <button class="btn-start entrada-caixa-print-desktop" id="imprimir-entrada-caixa" type="button">
+              <i data-lucide="printer"></i>
+              Imprimir etiquetas
+            </button>
+            <button class="entrada-caixa-print-mobile" type="button" disabled>
+              <i data-lucide="monitor"></i>
+              Imprimir no computador
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section class="produto-foto-modal" id="produto-foto-modal" hidden>
         <div class="produto-foto-dialog" role="dialog" aria-modal="true" aria-labelledby="produto-foto-modal-titulo">
           <div class="produto-foto-modal-head">
@@ -6511,6 +6816,14 @@
           </div>
 
           <div class="scan-panel">
+            <button class="entrada-caixa-trigger" id="abrir-entrada-caixa" type="button" hidden>
+              <span class="entrada-caixa-trigger-icon"><i data-lucide="package-open"></i></span>
+              <span>
+                <small>Caixa atual</small>
+                <strong id="entrada-caixa-contador">0 itens</strong>
+              </span>
+              <i data-lucide="chevron-right" class="entrada-caixa-trigger-arrow"></i>
+            </button>
             <div class="scan-produto-preview" id="scan-produto-preview" hidden></div>
             <div class="fila-field scan-codigo-field">
               <label for="scan-codigo">Codigo de barras ou produto</label>
@@ -6579,9 +6892,14 @@
 
       <div class="consulta-grid">
         <section class="consulta-card consulta-foto-card">
-          <div>
-            <strong id="consulta-produto-titulo">Produto</strong>
-            <div class="consulta-status" id="consulta-produto-legenda">Informe um codigo para consultar.</div>
+          <div class="consulta-foto-heading">
+            <div>
+              <strong id="consulta-produto-titulo">Produto</strong>
+              <div class="consulta-status" id="consulta-produto-legenda">Informe um codigo para consultar.</div>
+            </div>
+            <button class="btn-consulta-etiqueta" id="consulta-produto-imprimir-etiqueta" type="button" disabled>
+              Imprimir etiqueta
+            </button>
           </div>
           <div class="consulta-foto-frame" id="consulta-produto-foto">
             <div class="consulta-empty">Sem produto selecionado.</div>
@@ -6605,6 +6923,21 @@
             <div class="consulta-empty">Nenhum detalhe carregado.</div>
           </div>
         </section>
+      </div>
+    </div>
+  </section>
+
+  <section class="pos-conferencia-modal consulta-etiqueta-modal" id="consulta-etiqueta-modal" hidden>
+    <div class="pos-conferencia-dialog" role="dialog" aria-modal="true" aria-labelledby="consulta-etiqueta-titulo">
+      <h3 id="consulta-etiqueta-titulo">Selecionar lote da etiqueta</h3>
+      <p>Escolha o lote e a validade que devem aparecer na etiqueta deste produto.</p>
+      <div class="fila-field">
+        <label for="consulta-etiqueta-lote">Lote / controle</label>
+        <select id="consulta-etiqueta-lote"></select>
+      </div>
+      <div class="pos-conferencia-actions">
+        <button class="btn-back" id="consulta-etiqueta-cancelar" type="button">Cancelar</button>
+        <button class="btn-start" id="consulta-etiqueta-confirmar" type="button">Imprimir etiqueta</button>
       </div>
     </div>
   </section>
