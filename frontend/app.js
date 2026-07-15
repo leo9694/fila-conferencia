@@ -612,7 +612,7 @@ function renderizarPedidosRomaneio() {
       <span><span class="romaneio-tipo ${pedido.TIPO_DOCUMENTO === 'BONIFICACAO' ? 'bonificacao' : 'venda'}">${pedido.TIPO_DOCUMENTO === 'BONIFICACAO' ? 'Bonificação' : 'Venda'}</span></span>
       <span>${Number(pedido.NUMNOTA) > 0 ? `Nro. ${Number(pedido.NUMNOTA)}` : 'Sem numero fiscal'}<small>Interna ${Number(pedido.NUNOTA)}</small></span>
       <span>${formatarData(pedido.DTNEG)}</span>
-      <span class="romaneio-cliente" title="${escaparAtributo(pedido.CLIENTE || '-')}">${escaparHtml(pedido.CLIENTE || '-')}</span>
+      <span class="romaneio-cliente" title="${escaparAtributo(`${pedido.CODPARC || '-'} - ${pedido.CLIENTE || '-'}`)}">${escaparHtml(`${pedido.CODPARC || '-'} - ${pedido.CLIENTE || '-'}`)}</span>
       <span>${formatarMoeda(pedido.VLRNOTA)}</span>
       <span>${formatarQuantidade(pedido.QTDVOL)} volume${Number(pedido.QTDVOL || 0) === 1 ? '' : 's'}</span>
     </div>
