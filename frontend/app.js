@@ -46,6 +46,16 @@ const filaEtapaConferencia = document.getElementById('fila-etapa-conferencia');
 const filaPedidosLista = document.getElementById('fila-pedidos-lista');
 const filaCountPedidos = document.getElementById('fila-count-pedidos');
 const filaBuscaPedido = document.getElementById('fila-busca-pedido');
+const botaoAbrirRomaneio = document.getElementById('abrir-romaneio-cargas');
+const romaneioModal = document.getElementById('romaneio-modal');
+const botaoFecharRomaneio = document.getElementById('fechar-romaneio-cargas');
+const botaoCancelarRomaneio = document.getElementById('cancelar-romaneio-cargas');
+const romaneioTransportadora = document.getElementById('romaneio-transportadora');
+const romaneioResumo = document.getElementById('romaneio-resumo');
+  const romaneioLista = document.getElementById('romaneio-lista');
+  const romaneioStatus = document.getElementById('romaneio-status');
+  const botaoGerarRomaneio = document.getElementById('gerar-romaneio-cargas');
+  const botaoImprimirRomaneio = document.getElementById('imprimir-romaneio-cargas');
 const pedidoPreview = document.getElementById('pedido-preview');
 const pedidoPreviewTitulo = document.getElementById('pedido-preview-titulo');
 const pedidoPreviewMeta = document.getElementById('pedido-preview-meta');
@@ -191,6 +201,8 @@ const botaoVoltarListaContatos = document.getElementById('voltar-lista-contatos'
 const botaoProximoClienteContatos = document.getElementById('proximo-cliente-contatos');
 let filaPedidos = [];
 let filaModoConferencia = 'saida';
+let romaneioPedidos = [];
+let romaneioGerando = false;
 let pedidoSelecionado = null;
 let consultaProdutoAtual = null;
 let sincronizacaoCaixaEntradaInterval = null;
@@ -550,6 +562,206 @@ function formatarMoeda(valor) {
     style: 'currency',
     currency: 'BRL'
   });
+}
+
+function parametrosRomaneio() {
+  const dataInicial = filaDataInicial.value || obterDataHoje();
+  const dataFinal = filaDataFinal.value || dataInicial;
+  return {
+    empresa: String(filaEmpresa.value || '').trim(),
+    dataInicial: dataInicial <= dataFinal ? dataInicial : dataFinal,
+    dataFinal: dataInicial <= dataFinal ? dataFinal : dataInicial
+  };
+}
+
+function definirStatusRomaneio(mensagem = '', tipo = '') {
+  romaneioStatus.textContent = mensagem;
+  romaneioStatus.className = `romaneio-status${tipo ? ` ${tipo}` : ''}`;
+}
+
+  function limparPedidosRomaneio(mensagem = 'Selecione uma transportadora para listar as notas faturadas.') {
+  romaneioPedidos = [];
+  romaneioResumo.hidden = true;
+  romaneioResumo.innerHTML = '';
+    romaneioLista.innerHTML = `<div class="romaneio-empty">${escaparHtml(mensagem)}</div>`;
+    botaoGerarRomaneio.disabled = true;
+    botaoImprimirRomaneio.hidden = true;
+    delete botaoImprimirRomaneio.dataset.ordemCarga;
+    delete botaoImprimirRomaneio.dataset.empresa;
+}
+
+function renderizarPedidosRomaneio() {
+  if (romaneioPedidos.length === 0) {
+    limparPedidosRomaneio('Nenhuma nota faturada pendente de carga para esta transportadora.');
+    return;
+  }
+
+  const pedidosSelecionados = romaneioPedidos.filter((pedido) => pedido.selecionada !== false);
+  const valorTotal = pedidosSelecionados.reduce((total, pedido) => total + Number(pedido.VLRNOTA || 0), 0);
+  const volumes = pedidosSelecionados.reduce((total, pedido) => total + Number(pedido.QTDVOL || 0), 0);
+  const todosSelecionados = pedidosSelecionados.length === romaneioPedidos.length;
+  romaneioResumo.hidden = false;
+  romaneioResumo.innerHTML = `
+    <span><strong>${pedidosSelecionados.length}</strong> de ${romaneioPedidos.length} nota(s) selecionada(s)</span>
+    <span>${formatarQuantidade(volumes)} volume(s) | <strong>${formatarMoeda(valorTotal)}</strong></span>
+  `;
+
+  const linhas = romaneioPedidos.map((pedido) => `
+    <div class="romaneio-row">
+      <span class="romaneio-selecao"><input type="checkbox" data-romaneio-nota="${Number(pedido.NUNOTA)}" ${pedido.selecionada !== false ? 'checked' : ''} aria-label="Selecionar nota ${Number(pedido.NUMNOTA || pedido.NUNOTA)}"></span>
+      <span><span class="romaneio-tipo ${pedido.TIPO_DOCUMENTO === 'BONIFICACAO' ? 'bonificacao' : 'venda'}">${pedido.TIPO_DOCUMENTO === 'BONIFICACAO' ? 'Bonificação' : 'Venda'}</span></span>
+      <span>${Number(pedido.NUMNOTA) > 0 ? `Nro. ${Number(pedido.NUMNOTA)}` : 'Sem numero fiscal'}<small>Interna ${Number(pedido.NUNOTA)}</small></span>
+      <span>${formatarData(pedido.DTNEG)}</span>
+      <span class="romaneio-cliente" title="${escaparAtributo(pedido.CLIENTE || '-')}">${escaparHtml(pedido.CLIENTE || '-')}</span>
+      <span>${formatarMoeda(pedido.VLRNOTA)}</span>
+      <span>${formatarQuantidade(pedido.QTDVOL)} volume${Number(pedido.QTDVOL || 0) === 1 ? '' : 's'}</span>
+    </div>
+  `).join('');
+
+  romaneioLista.innerHTML = `
+    <div class="romaneio-row romaneio-row-header">
+      <span class="romaneio-selecao"><input type="checkbox" data-romaneio-selecionar-todas ${todosSelecionados ? 'checked' : ''} aria-label="Selecionar todas as notas"></span>
+      <span>Tipo</span><span>Nota</span><span>Data</span><span>Cliente</span><span>Valor</span><span>Volumes</span>
+    </div>
+    ${linhas}
+  `;
+  botaoGerarRomaneio.disabled = pedidosSelecionados.length === 0;
+}
+
+async function carregarPedidosRomaneio() {
+  const transportadora = String(romaneioTransportadora.value || '').trim();
+  definirStatusRomaneio();
+  if (!transportadora) {
+    limparPedidosRomaneio();
+    return;
+  }
+
+  limparPedidosRomaneio('Buscando notas faturadas pendentes de carga...');
+  try {
+    const params = new URLSearchParams({ ...parametrosRomaneio(), transportadora });
+    const resposta = await fetch(`/api/fila-conferencia/romaneio/pedidos?${params.toString()}`);
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Erro ao buscar notas faturadas da transportadora.');
+    romaneioPedidos = (payload.itens || []).map((pedido) => ({ ...pedido, selecionada: true }));
+    renderizarPedidosRomaneio();
+  } catch (error) {
+    limparPedidosRomaneio('Nao foi possivel carregar as notas faturadas.');
+    definirStatusRomaneio(error.message, 'error');
+  }
+}
+
+async function carregarTransportadorasRomaneio() {
+  const parametros = parametrosRomaneio();
+  if (!parametros.empresa) {
+    throw new Error('Selecione a empresa antes de abrir o romaneio.');
+  }
+
+  romaneioTransportadora.disabled = true;
+  romaneioTransportadora.innerHTML = '<option value="">Buscando transportadoras...</option>';
+  limparPedidosRomaneio();
+  definirStatusRomaneio();
+
+  try {
+    const params = new URLSearchParams(parametros);
+    const resposta = await fetch(`/api/fila-conferencia/romaneio/transportadoras?${params.toString()}`);
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Erro ao buscar transportadoras.');
+
+    const transportadoras = payload.itens || [];
+    romaneioTransportadora.innerHTML = '<option value="">Selecione a transportadora</option>';
+    transportadoras.forEach((transportadora) => {
+      const opcao = document.createElement('option');
+      opcao.value = String(transportadora.codigo);
+      opcao.textContent = `${transportadora.codigo} - ${transportadora.nome} (${transportadora.notas} nota${transportadora.notas === 1 ? '' : 's'})`;
+      romaneioTransportadora.appendChild(opcao);
+    });
+    if (transportadoras.length === 0) {
+      limparPedidosRomaneio('Nenhuma transportadora possui notas faturadas pendentes de carga neste periodo.');
+    }
+  } finally {
+    romaneioTransportadora.disabled = false;
+  }
+}
+
+async function abrirRomaneioCargas() {
+  if (filaModoConferencia !== 'saida') return;
+  romaneioModal.hidden = false;
+  atualizarIcones();
+  try {
+    await carregarTransportadorasRomaneio();
+  } catch (error) {
+    romaneioTransportadora.innerHTML = '<option value="">Selecione a transportadora</option>';
+    limparPedidosRomaneio('Informe os filtros da fila para consultar as cargas.');
+    definirStatusRomaneio(error.message, 'error');
+  }
+}
+
+function fecharRomaneioCargas() {
+  if (romaneioGerando) return;
+  romaneioModal.hidden = true;
+  romaneioTransportadora.value = '';
+  limparPedidosRomaneio();
+  definirStatusRomaneio();
+}
+
+async function gerarRomaneioCargas() {
+  const transportadora = Number(romaneioTransportadora.value || 0);
+  const notasSelecionadas = romaneioPedidos.filter((pedido) => pedido.selecionada !== false);
+  if (!transportadora || notasSelecionadas.length === 0 || romaneioGerando) {
+    if (!romaneioGerando && romaneioPedidos.length > 0 && notasSelecionadas.length === 0) {
+      definirStatusRomaneio('Selecione ao menos uma nota para gerar o romaneio.', 'error');
+    }
+    return;
+  }
+
+  romaneioGerando = true;
+  botaoGerarRomaneio.disabled = true;
+  romaneioTransportadora.disabled = true;
+  botaoGerarRomaneio.innerHTML = '<span class="pos-conferencia-spinner" aria-hidden="true"></span> Gerando carga...';
+  definirStatusRomaneio('Criando a Ordem de Carga e vinculando as notas faturadas no Sankhya...');
+
+  try {
+    const resposta = await fetch('/api/fila-conferencia/romaneio', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        ...parametrosRomaneio(),
+        transportadora,
+        notas: notasSelecionadas.map((pedido) => Number(pedido.NUNOTA))
+      })
+    });
+    const payload = await resposta.json();
+    if (!resposta.ok && resposta.status !== 207) {
+      throw new Error(payload.erro || 'Erro ao gerar o romaneio de cargas.');
+    }
+
+    const quantidade = payload.notasVinculadas?.length || 0;
+    const textoFalhas = payload.falhas?.length
+      ? ` ${payload.falhas.length} nota(s) nao puderam ser vinculadas.`
+      : '';
+    definirStatusRomaneio(
+      `Ordem de Carga ${payload.codigoOrdemCarga} gerada com ${quantidade} nota(s) faturada(s).${textoFalhas}`,
+      payload.falhas?.length ? 'error' : 'success'
+    );
+    romaneioPedidos = [];
+    romaneioResumo.hidden = false;
+    romaneioResumo.innerHTML = `<span>Ordem de Carga</span><strong>${payload.codigoOrdemCarga}</strong>`;
+      romaneioLista.innerHTML = `
+        <div class="romaneio-empty">
+          Romaneio gerado no Sankhya. Codigo da Ordem de Carga: <strong>${payload.codigoOrdemCarga}</strong>.
+        </div>
+      `;
+      botaoImprimirRomaneio.hidden = false;
+      botaoImprimirRomaneio.dataset.ordemCarga = String(payload.codigoOrdemCarga);
+      botaoImprimirRomaneio.dataset.empresa = String(parametrosRomaneio().empresa || '');
+  } catch (error) {
+    definirStatusRomaneio(error.message, 'error');
+    botaoGerarRomaneio.disabled = false;
+  } finally {
+    romaneioGerando = false;
+    romaneioTransportadora.disabled = false;
+    botaoGerarRomaneio.textContent = 'Gerar romaneio';
+  }
 }
 
 function formatarPeriodo(dataInicial, dataFinal) {
@@ -3789,6 +4001,13 @@ function renderizarPainelDocumentosFiscais(container, situacao = {}, fallback = 
     : tipoDocumentoCombinado === 'boleto'
       ? 'Abrir boleto'
       : 'Abrir DANFE + boleto';
+  const ordemCarga = Number(nota?.ORDEMCARGA || 0);
+  const empresaOrdemCarga = Number(nota?.CODEMP || 0);
+  const botaoRomaneio = ordemCarga > 0 && empresaOrdemCarga > 0
+    ? `<button class="documento-fiscal-button documento-romaneio-button" type="button" data-romaneio-ordem="${ordemCarga}" data-romaneio-empresa="${empresaOrdemCarga}" title="Imprimir romaneio da Ordem de Carga ${ordemCarga}">
+        <i data-lucide="truck" aria-hidden="true"></i>OC ${ordemCarga} - Imprimir romaneio
+      </button>`
+    : '';
 
   container.hidden = false;
   const botoesDocumentos = documentosCombinados
@@ -3808,6 +4027,7 @@ function renderizarPainelDocumentosFiscais(container, situacao = {}, fallback = 
       <span class="documentos-fiscais-feedback">${escaparHtml(mensagens || 'DANFE e boleto podem ser abertos nas guias abaixo.')}</span>
     </div>
     <div class="documentos-fiscais-actions">
+      ${botaoRomaneio}
       ${botoesDocumentos}
     </div>
   `;
@@ -3875,6 +4095,49 @@ async function abrirDocumentoFiscal(botao) {
     }
   } finally {
     botao.disabled = false;
+  }
+}
+
+async function abrirPdfRomaneio(ordemCarga, empresa, botao = null) {
+  const codigo = Number(ordemCarga || 0);
+  const codigoEmpresa = Number(empresa || 0);
+  if (!codigo || !codigoEmpresa) return;
+
+  const painel = botao?.closest('.documentos-fiscais-panel');
+  const feedback = painel?.querySelector('.documentos-fiscais-feedback') || romaneioStatus;
+  const novaAba = window.open('', '_blank');
+  if (!novaAba) {
+    if (feedback) feedback.textContent = 'O navegador bloqueou a nova guia do romaneio.';
+    return;
+  }
+
+  novaAba.document.write('<p style="font-family:Arial;padding:20px">Gerando romaneio de carga...</p>');
+  novaAba.document.close();
+  if (botao) botao.disabled = true;
+  if (feedback) feedback.textContent = `Gerando romaneio da Ordem de Carga ${codigo}...`;
+
+  try {
+    const params = new URLSearchParams({ empresa: String(codigoEmpresa) });
+    const res = await fetch(`/api/fila-conferencia/romaneio/${codigo}/pdf?${params.toString()}`);
+    const contentType = res.headers.get('content-type') || '';
+    if (!res.ok || !contentType.includes('application/pdf')) {
+      const payload = await res.json().catch(() => ({}));
+      throw new Error(payload.erro || 'Romaneio indisponivel');
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    novaAba.location.replace(url);
+    if (feedback) feedback.textContent = `Romaneio da Ordem de Carga ${codigo} aberto em nova guia.`;
+    setTimeout(() => URL.revokeObjectURL(url), 120000);
+  } catch (error) {
+    novaAba.close();
+    if (feedback) {
+      feedback.textContent = error.message;
+      feedback.classList.add('danger-text');
+    }
+  } finally {
+    if (botao) botao.disabled = false;
   }
 }
 
@@ -4614,7 +4877,7 @@ async function buscarFilaConferencia() {
 
     filaPedidos = payload.itens || [];
     scanStatus.textContent = pedidoBusca
-      ? `${filaModoConferencia === 'entrada' ? 'Nota de entrada localizada' : 'Pedido localizado'}. Selecione para visualizar os itens.`
+      ? `${filaModoConferencia === 'entrada' ? 'Nota de entrada localizada' : 'Pedido ou nota localizado'}. Selecione para visualizar os itens.`
       : `Selecione ${filaModoConferencia === 'entrada' ? 'uma nota de entrada' : 'um pedido'} para conferir.`;
     renderizarPedidosFila();
     salvarNavegacaoFila({ etapa: 'pedidos', pedido: null });
@@ -5389,8 +5652,10 @@ function atualizarModoFilaConferencia() {
   filaModoIcone.setAttribute('data-lucide', entrada ? 'package-plus' : 'package-check');
   filaTituloOperacao.textContent = entrada ? 'Conferencia de Entrada' : 'Fila de Conferencia';
   botaoBuscarFilaConferencia.textContent = entrada ? 'Buscar entradas' : 'Buscar pedidos';
-  filaBuscaPedido.placeholder = entrada ? 'Numero da nota de entrada' : 'Numero do pedido';
+  filaBuscaPedido.placeholder = entrada ? 'Numero da nota de entrada' : 'Numero do pedido ou nota fiscal';
   filaSidebarTitle.textContent = entrada ? 'Entrada em conferencia' : 'Pedido em conferencia';
+  botaoAbrirRomaneio.hidden = entrada;
+  if (entrada && !romaneioModal.hidden) fecharRomaneioCargas();
   scanControleField.hidden = !entrada;
   if (scanValidadeField) scanValidadeField.hidden = !entrada;
   if (scanFabricacaoField) scanFabricacaoField.hidden = !entrada;
@@ -5628,6 +5893,33 @@ produtoFotoModal.addEventListener('click', (event) => {
 });
 botaoBuscarFilaConferencia.addEventListener('click', buscarFilaConferencia);
 botaoModoEntrada.addEventListener('click', alternarModoFilaConferencia);
+botaoAbrirRomaneio.addEventListener('click', abrirRomaneioCargas);
+botaoFecharRomaneio.addEventListener('click', fecharRomaneioCargas);
+botaoCancelarRomaneio.addEventListener('click', fecharRomaneioCargas);
+romaneioTransportadora.addEventListener('change', carregarPedidosRomaneio);
+botaoGerarRomaneio.addEventListener('click', gerarRomaneioCargas);
+botaoImprimirRomaneio.addEventListener('click', () => {
+  abrirPdfRomaneio(botaoImprimirRomaneio.dataset.ordemCarga, botaoImprimirRomaneio.dataset.empresa, botaoImprimirRomaneio);
+});
+romaneioLista.addEventListener('change', (event) => {
+  const campo = event.target;
+  if (!(campo instanceof HTMLInputElement) || campo.type !== 'checkbox') return;
+
+  if (campo.dataset.romaneioSelecionarTodas !== undefined) {
+    romaneioPedidos.forEach((pedido) => {
+      pedido.selecionada = campo.checked;
+    });
+  } else if (campo.dataset.romaneioNota) {
+    const nunota = Number(campo.dataset.romaneioNota);
+    const pedido = romaneioPedidos.find((item) => Number(item.NUNOTA) === nunota);
+    if (pedido) pedido.selecionada = campo.checked;
+  }
+
+  renderizarPedidosRomaneio();
+});
+romaneioModal.addEventListener('click', (event) => {
+  if (event.target === romaneioModal) fecharRomaneioCargas();
+});
 filaBuscaPedido.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
@@ -5656,6 +5948,11 @@ pedidoPreview.addEventListener('click', (event) => {
 });
 [pedidoPreviewDocumentos, posConferenciaDocumentos].forEach((container) => {
   container?.addEventListener('click', (event) => {
+    const botaoRomaneio = event.target.closest('[data-romaneio-ordem]');
+    if (botaoRomaneio) {
+      abrirPdfRomaneio(botaoRomaneio.dataset.romaneioOrdem, botaoRomaneio.dataset.romaneioEmpresa, botaoRomaneio);
+      return;
+    }
     const botao = event.target.closest('.documento-fiscal-button');
     if (botao) abrirDocumentoFiscal(botao);
   });

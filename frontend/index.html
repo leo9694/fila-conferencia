@@ -825,9 +825,339 @@
     .fila-pedidos-top {
       display: flex;
       justify-content: space-between;
-      align-items: end;
+      align-items: center;
       gap: 12px;
       margin-bottom: 10px;
+    }
+
+    .btn-romaneio-cargas {
+      min-height: 38px;
+      padding: 0 14px;
+      border: 1px solid rgba(0, 143, 118, 0.28);
+      border-radius: 9px;
+      background: #e8f7f3;
+      color: #006b5a;
+      font: inherit;
+      font-weight: 900;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      cursor: pointer;
+      transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+    }
+
+    .btn-romaneio-cargas:hover {
+      background: #d9f2eb;
+      border-color: #008f76;
+      transform: translateY(-1px);
+    }
+
+    .btn-romaneio-cargas svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .romaneio-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 1200;
+      display: grid;
+      place-items: center;
+      padding: 18px;
+      background: rgba(7, 48, 71, 0.48);
+      backdrop-filter: blur(4px);
+    }
+
+    .romaneio-modal[hidden] {
+      display: none;
+    }
+
+    .romaneio-dialog {
+      width: min(920px, 96vw);
+      max-height: min(760px, 92vh);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid #d7e8e4;
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: 0 24px 70px rgba(7, 48, 71, 0.24);
+    }
+
+    .romaneio-head,
+    .romaneio-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 16px 18px;
+    }
+
+    .romaneio-head {
+      border-bottom: 1px solid #e4efed;
+    }
+
+    .romaneio-head-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .romaneio-head-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 9px;
+      display: grid;
+      place-items: center;
+      color: #008f76;
+      background: #e8f7f3;
+    }
+
+    .romaneio-head-icon svg {
+      width: 22px;
+      height: 22px;
+    }
+
+    .romaneio-head h3,
+    .romaneio-head p {
+      margin: 0;
+    }
+
+    .romaneio-head h3 {
+      color: #073047;
+      font-size: 1.2rem;
+    }
+
+    .romaneio-head p {
+      margin-top: 3px;
+      color: #64748b;
+      font-size: 0.82rem;
+      font-weight: 700;
+    }
+
+    .romaneio-close {
+      width: 38px;
+      height: 38px;
+      border: 1px solid #d7e8e4;
+      border-radius: 9px;
+      background: #fff;
+      color: #31546a;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+    }
+
+    .romaneio-body {
+      min-height: 0;
+      overflow: auto;
+      padding: 16px 18px;
+    }
+
+    .romaneio-filter label {
+      display: block;
+      margin-bottom: 6px;
+      color: #3f6871;
+      font-size: 0.7rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .romaneio-filter select {
+      width: 100%;
+      height: 44px;
+      border: 1px solid #bcd9d3;
+      border-radius: 9px;
+      padding: 0 12px;
+      background: #fff;
+      color: #073047;
+      font: inherit;
+      font-weight: 800;
+    }
+
+    .romaneio-summary {
+      margin: 14px 0 10px;
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      color: #476676;
+      font-size: 0.82rem;
+      font-weight: 800;
+    }
+
+    .romaneio-summary strong {
+      color: #008f76;
+    }
+
+    .romaneio-lista {
+      border: 1px solid #d7e8e4;
+      border-radius: 9px;
+      overflow: hidden;
+    }
+
+    .romaneio-row {
+      display: grid;
+      grid-template-columns: 42px 104px 108px 92px minmax(180px, 1fr) 110px 98px;
+      align-items: center;
+      min-height: 42px;
+      border-bottom: 1px solid #e4efed;
+      color: #153c50;
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .romaneio-row:last-child {
+      border-bottom: 0;
+    }
+
+    .romaneio-row > span {
+      min-width: 0;
+      padding: 8px 10px;
+    }
+
+    .romaneio-selecao {
+      display: grid;
+      place-items: center;
+      padding: 6px !important;
+    }
+
+    .romaneio-selecao input {
+      width: 17px;
+      height: 17px;
+      margin: 0;
+      accent-color: #008f76;
+      cursor: pointer;
+    }
+
+    .romaneio-tipo {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 8px;
+      border-radius: 999px;
+      font-size: 0.66rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .romaneio-tipo.venda {
+      color: #06745f;
+      background: #e6f7f1;
+    }
+
+    .romaneio-tipo.bonificacao {
+      color: #9a5c00;
+      background: #fff2ce;
+    }
+
+    .romaneio-row > span small {
+      display: block;
+      margin-top: 2px;
+      color: #64748b;
+      font-size: 0.64rem;
+      line-height: 1.15;
+    }
+
+    .romaneio-row-header {
+      min-height: 36px;
+      background: #f4faf9;
+      color: #52717b;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+    }
+
+    .romaneio-cliente {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .romaneio-empty,
+    .romaneio-status {
+      padding: 28px 14px;
+      color: #64748b;
+      text-align: center;
+      font-weight: 800;
+    }
+
+    .romaneio-status {
+      padding: 10px 0 0;
+      text-align: left;
+    }
+
+    .romaneio-status.error {
+      color: #bd2518;
+    }
+
+    .romaneio-status.success {
+      color: #008f76;
+    }
+
+    .romaneio-footer {
+      border-top: 1px solid #e4efed;
+      justify-content: flex-end;
+    }
+
+    .romaneio-footer button {
+      min-width: 150px;
+    }
+
+    .btn-romaneio-imprimir,
+    .documento-romaneio-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 40px;
+      border: 1px solid #008f76;
+      border-radius: 10px;
+      padding: 0 14px;
+      color: #fff;
+      background: #008f76;
+      font-weight: 850;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0, 143, 118, 0.16);
+    }
+
+    .btn-romaneio-imprimir:hover,
+    .documento-romaneio-button:hover {
+      background: #006b5a;
+      border-color: #006b5a;
+    }
+
+    .btn-romaneio-imprimir svg,
+    .documento-romaneio-button svg {
+      width: 17px;
+      height: 17px;
+    }
+
+    @media (max-width: 720px) {
+      .btn-romaneio-cargas span {
+        display: none;
+      }
+
+      .btn-romaneio-cargas {
+        width: 40px;
+        padding: 0;
+      }
+
+      .romaneio-modal {
+        padding: 8px;
+      }
+
+      .romaneio-row {
+        grid-template-columns: 38px 96px 96px 82px minmax(150px, 1fr) 90px 90px;
+        min-width: 640px;
+      }
+
+      .romaneio-lista {
+        overflow-x: auto;
+      }
+
+      .romaneio-footer button {
+        min-width: 0;
+        flex: 1;
+      }
     }
 
     .fila-pedidos-grid {
@@ -4742,6 +5072,19 @@
       cursor: not-allowed;
     }
 
+    .documento-fiscal-button.documento-romaneio-button {
+      min-height: 36px;
+      border-color: #008f76;
+      background: #008f76;
+      color: #fff;
+      box-shadow: 0 4px 10px rgba(0, 143, 118, 0.16);
+    }
+
+    .documento-fiscal-button.documento-romaneio-button:hover:not(:disabled) {
+      background: #006b5a;
+      border-color: #006b5a;
+    }
+
     .documento-fiscal-button svg {
       width: 15px;
       height: 15px;
@@ -6530,7 +6873,7 @@
 
               <div class="fila-field fila-pedido-search-panel">
                 <label for="fila-busca-pedido">Buscar pedido</label>
-                <input id="fila-busca-pedido" inputmode="numeric" autocomplete="off" placeholder="Numero do pedido">
+                <input id="fila-busca-pedido" inputmode="numeric" autocomplete="off" placeholder="Numero do pedido ou nota fiscal">
               </div>
 
               <div class="fila-field">
@@ -6566,11 +6909,51 @@
                 <span>Pedidos</span>
                 <span id="fila-count-pedidos">0</span>
               </div>
+              <button class="btn-romaneio-cargas" id="abrir-romaneio-cargas" type="button">
+                <i data-lucide="truck" aria-hidden="true"></i>
+                <span>Romaneio de Cargas</span>
+              </button>
             </div>
             <div class="fila-pedidos-grid" id="fila-pedidos-lista">
               <div class="empty-state">Informe filtros e busque os pedidos.</div>
             </div>
           </div>
+          <section class="romaneio-modal" id="romaneio-modal" hidden>
+            <div class="romaneio-dialog" role="dialog" aria-modal="true" aria-labelledby="romaneio-titulo">
+              <div class="romaneio-head">
+                <div class="romaneio-head-title">
+                  <span class="romaneio-head-icon"><i data-lucide="truck"></i></span>
+                  <div>
+                    <h3 id="romaneio-titulo">Romaneio de Cargas</h3>
+                    <p>Selecione a transportadora e revise as notas faturadas antes de gerar a carga.</p>
+                  </div>
+                </div>
+                <button class="romaneio-close" id="fechar-romaneio-cargas" type="button" aria-label="Fechar romaneio">
+                  <i data-lucide="x"></i>
+                </button>
+              </div>
+              <div class="romaneio-body">
+                <div class="romaneio-filter">
+                  <label for="romaneio-transportadora">Transportadora com notas faturadas pendentes</label>
+                  <select id="romaneio-transportadora">
+                    <option value="">Selecione a transportadora</option>
+                  </select>
+                </div>
+                <div class="romaneio-summary" id="romaneio-resumo" hidden></div>
+                <div class="romaneio-lista" id="romaneio-lista">
+                  <div class="romaneio-empty">Selecione uma transportadora para listar as notas faturadas.</div>
+                </div>
+                <div class="romaneio-status" id="romaneio-status" aria-live="polite"></div>
+              </div>
+              <div class="romaneio-footer">
+                <button class="btn-back" id="cancelar-romaneio-cargas" type="button">Cancelar</button>
+                <button class="btn-romaneio-imprimir" id="imprimir-romaneio-cargas" type="button" hidden>
+                  <i data-lucide="printer" aria-hidden="true"></i>Imprimir romaneio
+                </button>
+                <button class="btn-start" id="gerar-romaneio-cargas" type="button" disabled>Gerar romaneio</button>
+              </div>
+            </div>
+          </section>
           <section class="pedido-preview" id="pedido-preview" hidden>
             <div class="pedido-preview-dialog" role="dialog" aria-modal="true" aria-labelledby="pedido-preview-titulo">
               <div class="pedido-preview-head">

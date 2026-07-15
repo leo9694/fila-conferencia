@@ -7,6 +7,7 @@ const {
   downloadGatewayFile,
   executeDirectService,
   executeQuery,
+  executeRest,
   executeService
 } = require('./api/sankhyaApi');
 const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
@@ -21,6 +22,7 @@ const {
 } = require('./api/conferenciaEntrada');
 const { criarContatoStatusStore } = require('./api/contatoStatusStore');
 const { gerarPedidoVendaPdf } = require('./api/pedidoVendaPdf');
+const { gerarRomaneioCargaPdf } = require('./api/romaneioPdf');
 const { criarPedidoPrintStore } = require('./api/pedidoPrintStore');
 const bitrixService = require('./api/bitrixService');
 
@@ -37,6 +39,7 @@ const TOPS_CONFERENCIA = Object.freeze({
   saida: [5, 6, 237],
   entrada: [13, 21]
 });
+const TOPS_ROMANEIO = Object.freeze([10, 35]);
 
 function obterModoConferencia(valor) {
   return String(valor || '').trim().toLowerCase() === 'entrada' ? 'entrada' : 'saida';
@@ -100,6 +103,124 @@ function sqlFiltroEmpresa(empresa) {
 function obterNumeroInteiro(valor) {
   const numero = Number(valor);
   return Number.isInteger(numero) && numero > 0 ? numero : null;
+}
+
+function formatarDataOrdemCarga(dataIso) {
+  const match = String(dataIso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  return `${match[3]}/${match[2]}/${match[1]}`;
+}
+
+async function obterProximoCodigoOrdemCarga() {
+  const [registro] = await executeQuery(`
+    SELECT NVL(MAX(ORDEMCARGA), 0) + 1 AS PROXIMO_CODIGO
+    FROM TGFORD
+  `);
+  const codigo = obterNumeroInteiro(registro?.PROXIMO_CODIGO);
+
+  if (!codigo) {
+    throw new Error('Nao foi possivel determinar o proximo codigo da Ordem de Carga.');
+  }
+
+  return codigo;
+}
+
+function erroCodigoOrdemCargaEmUso(error) {
+  const mensagem = String(error?.message || '').toUpperCase();
+  return error?.status === 409
+    || mensagem.includes('ORA-00001')
+    || mensagem.includes('UNIQUE')
+    || mensagem.includes('JA EXISTE')
+    || mensagem.includes('JÁ EXISTE');
+}
+
+async function criarOrdemCargaSankhya({ empresa, transportadora }) {
+  const maxTentativas = 3;
+  let ultimoErro = null;
+
+  for (let tentativa = 1; tentativa <= maxTentativas; tentativa += 1) {
+    const codigoSolicitado = await obterProximoCodigoOrdemCarga();
+
+    try {
+      const ordem = await executeRest('POST', 'v1/logistica/ordens-carga', {
+        body: {
+          codigoOrdemCarga: codigoSolicitado,
+          codigoEmpresa: Number(empresa),
+          dataInicio: formatarDataOrdemCarga(obterDataHoje()),
+          codigoTransportadora: transportadora,
+          tipo: 3,
+          situacao: 1,
+          observacoes: 'Gerado pela Fila de Conferencia'
+        }
+      });
+      const codigoRetornado = obterNumeroInteiro(
+        ordem?.codigoOrdemCarga || ordem?.ordemCarga?.codigoOrdemCarga || ordem?.id
+      );
+
+      if (codigoRetornado !== codigoSolicitado) {
+        throw new Error(
+          `O Sankhya retornou a Ordem de Carga ${codigoRetornado || 'sem codigo'}, `
+          + `mas o codigo solicitado foi ${codigoSolicitado}.`
+        );
+      }
+
+      return codigoRetornado;
+    } catch (error) {
+      ultimoErro = error;
+      if (!erroCodigoOrdemCargaEmUso(error) || tentativa === maxTentativas) {
+        throw error;
+      }
+    }
+  }
+
+  throw ultimoErro || new Error('Nao foi possivel criar a Ordem de Carga.');
+}
+
+async function buscarNotasPendentesCarga({ empresa, transportadora, intervalo }) {
+  const filtroTransportadora = transportadora
+    ? `AND CAB.CODPARCTRANSP = ${transportadora}`
+    : '';
+
+  return executeQuery(`
+    SELECT
+      CAB.NUNOTA,
+      CAB.NUMNOTA,
+      CAB.DTNEG,
+      CAB.CODEMP,
+      CAB.CODTIPOPER,
+      CASE
+        WHEN CAB.CODTIPOPER = 10 THEN 'BONIFICACAO'
+        ELSE 'VENDA'
+      END AS TIPO_DOCUMENTO,
+      CAB.CODPARC,
+      PAR.RAZAOSOCIAL AS CLIENTE,
+      CAB.CODPARCTRANSP,
+      TRP.NOMEPARC AS TRANSPORTADORA,
+      CAST(NVL(CAB.VLRNOTA, 0) AS NUMBER(15,2)) AS VLRNOTA,
+      CAST(NVL(CAB.QTDVOL, 0) AS NUMBER(15,0)) AS QTDVOL,
+      COUNT(ITE.SEQUENCIA) AS QTD_ITENS,
+      SUM(NVL(ITE.QTDNEG, 0)) AS QTD_UNIDADES
+    FROM TGFCAB CAB
+    JOIN TGFPAR PAR
+      ON PAR.CODPARC = CAB.CODPARC
+    JOIN TGFPAR TRP
+      ON TRP.CODPARC = CAB.CODPARCTRANSP
+    LEFT JOIN TGFITE ITE
+      ON ITE.NUNOTA = CAB.NUNOTA
+    WHERE CAB.CODEMP = ${empresa}
+      AND CAB.DTNEG >= TO_DATE('${intervalo.inicio}', 'YYYY-MM-DD')
+      AND CAB.DTNEG < TO_DATE('${intervalo.fim}', 'YYYY-MM-DD') + 1
+      AND CAB.CODTIPOPER IN (${TOPS_ROMANEIO.join(', ')})
+      AND CAB.TIPMOV = 'V'
+      AND CAB.STATUSNOTA = 'L'
+      AND CAB.PENDENTE = 'N'
+      AND NVL(CAB.ORDEMCARGA, 0) = 0
+      AND NVL(CAB.CODPARCTRANSP, 0) > 0
+      ${filtroTransportadora}
+    GROUP BY CAB.NUNOTA, CAB.NUMNOTA, CAB.DTNEG, CAB.CODEMP, CAB.CODTIPOPER, CAB.CODPARC,
+      PAR.RAZAOSOCIAL, CAB.CODPARCTRANSP, TRP.NOMEPARC, CAB.VLRNOTA, CAB.QTDVOL
+    ORDER BY CAB.DTNEG, CAB.NUNOTA
+  `);
 }
 
 function sqlFiltroPerfilContato(perfil) {
@@ -515,6 +636,8 @@ async function consultarFaturamentoExistente(nunotaOrigem) {
           DEST.CODTIPOPER,
           DEST.STATUSNOTA,
           DEST.VLRNOTA,
+          DEST.CODEMP,
+          NVL(DEST.ORDEMCARGA, 0) AS ORDEMCARGA,
           1 AS PRIORIDADE
         FROM TGFVAR VAR
         JOIN TGFCAB DEST
@@ -530,6 +653,8 @@ async function consultarFaturamentoExistente(nunotaOrigem) {
           CAB.CODTIPOPER,
           CAB.STATUSNOTA,
           CAB.VLRNOTA,
+          CAB.CODEMP,
+          NVL(CAB.ORDEMCARGA, 0) AS ORDEMCARGA,
           2 AS PRIORIDADE
         FROM TGFCAB CAB
         WHERE CAB.NUNOTA = ${nunotaOrigem}
@@ -584,6 +709,8 @@ async function obterSituacaoDocumentosPedido(nunotaPedido) {
     SELECT
       CAB.NUNOTA,
       CAB.NUMNOTA,
+      CAB.CODEMP,
+      NVL(CAB.ORDEMCARGA, 0) AS ORDEMCARGA,
       CASE
         WHEN NFE.CHAVENFE IS NOT NULL AND NFE.XMLPROTAUTNOT IS NOT NULL THEN 'S'
         ELSE 'N'
@@ -602,7 +729,9 @@ async function obterSituacaoDocumentosPedido(nunotaPedido) {
     pedido: nunotaPedido,
     nota: {
       ...nota,
-      NUMNOTA: situacao?.NUMNOTA ?? nota.NUMNOTA
+      NUMNOTA: situacao?.NUMNOTA ?? nota.NUMNOTA,
+      CODEMP: situacao?.CODEMP ?? nota.CODEMP,
+      ORDEMCARGA: normalizarNumero(situacao?.ORDEMCARGA ?? nota.ORDEMCARGA)
     },
     danfe: {
       disponivel: nfeAutorizada,
@@ -1487,7 +1616,16 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
     const filtroBusca = pedidoBusca
       ? (modo === 'entrada'
         ? `(CAB.NUNOTA = ${pedidoBusca} OR CAB.NUMNOTA = ${pedidoBusca})`
-        : `CAB.NUNOTA = ${pedidoBusca}`)
+        : `(CAB.NUNOTA = ${pedidoBusca}
+          OR EXISTS (
+            SELECT 1
+            FROM TGFVAR VAR_BUSCA
+            JOIN TGFCAB NOTA_BUSCA
+              ON NOTA_BUSCA.NUNOTA = VAR_BUSCA.NUNOTA
+            WHERE VAR_BUSCA.NUNOTAORIG = CAB.NUNOTA
+              AND NOTA_BUSCA.NUMNOTA = ${pedidoBusca}
+              AND NOTA_BUSCA.TIPMOV <> 'P'
+          ))`)
       : `CAB.DTNEG >= TO_DATE('${intervalo.inicio}', 'YYYY-MM-DD')
         AND CAB.DTNEG < TO_DATE('${intervalo.fim}', 'YYYY-MM-DD') + 1
         AND (CAB.NUCONFATUAL IS NULL OR CONF.STATUS IN ('A', 'F'))
@@ -1577,6 +1715,223 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: 'Erro ao buscar fila de conferencia' });
+  }
+});
+
+router.get('/fila-conferencia/romaneio/transportadoras', async (req, res) => {
+  try {
+    const empresa = obterFiltroEmpresa(req.query.empresa);
+    if (!empresa) {
+      res.status(400).json({ erro: 'Selecione a empresa para consultar as cargas.' });
+      return;
+    }
+
+    const intervalo = obterIntervaloDatas(req.query.dataInicial, req.query.dataFinal);
+    const notas = await buscarNotasPendentesCarga({ empresa, intervalo });
+    const transportadoras = new Map();
+
+    notas.forEach((nota) => {
+      const codigo = Number(nota.CODPARCTRANSP);
+      const atual = transportadoras.get(codigo) || {
+        codigo,
+        nome: nota.TRANSPORTADORA || `Transportadora ${codigo}`,
+        notas: 0,
+        valorTotal: 0
+      };
+      atual.notas += 1;
+      atual.valorTotal += Number(nota.VLRNOTA || 0);
+      transportadoras.set(codigo, atual);
+    });
+
+    res.json({
+      dataInicial: intervalo.inicio,
+      dataFinal: intervalo.fim,
+      itens: [...transportadoras.values()].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar transportadoras com notas faturadas pendentes de carga.' });
+  }
+});
+
+router.get('/fila-conferencia/romaneio/pedidos', async (req, res) => {
+  try {
+    const empresa = obterFiltroEmpresa(req.query.empresa);
+    const transportadora = obterNumeroInteiro(req.query.transportadora);
+    if (!empresa || !transportadora) {
+      res.status(400).json({ erro: 'Empresa e transportadora sao obrigatorias.' });
+      return;
+    }
+
+    const intervalo = obterIntervaloDatas(req.query.dataInicial, req.query.dataFinal);
+    const rows = await buscarNotasPendentesCarga({ empresa, transportadora, intervalo });
+    res.json({
+      transportadora: rows[0]?.TRANSPORTADORA || null,
+      itens: rows.map((row) => ({
+        ...row,
+        NUNOTA: Number(row.NUNOTA),
+        NUMNOTA: Number(row.NUMNOTA || 0),
+        DTNEG: normalizarDataSankhya(row.DTNEG),
+        VLRNOTA: Number(row.VLRNOTA || 0),
+        QTDVOL: Number(row.QTDVOL || 0),
+        QTD_ITENS: Number(row.QTD_ITENS || 0),
+        QTD_UNIDADES: Number(row.QTD_UNIDADES || 0)
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao buscar notas faturadas pendentes de carga.' });
+  }
+});
+
+router.post('/fila-conferencia/romaneio', async (req, res) => {
+  try {
+    const empresa = obterFiltroEmpresa(req.body?.empresa);
+    const transportadora = obterNumeroInteiro(req.body?.transportadora);
+    const listaSolicitada = Array.isArray(req.body?.notas) ? req.body.notas : req.body?.pedidos;
+    const notasSolicitadas = Array.isArray(listaSolicitada)
+      ? [...new Set(listaSolicitada.map(obterNumeroInteiro).filter(Boolean))]
+      : [];
+
+    if (!empresa || !transportadora || notasSolicitadas.length === 0) {
+      res.status(400).json({ erro: 'Empresa, transportadora e notas faturadas sao obrigatorios.' });
+      return;
+    }
+
+    const intervalo = obterIntervaloDatas(req.body?.dataInicial, req.body?.dataFinal);
+    const elegiveis = await buscarNotasPendentesCarga({ empresa, transportadora, intervalo });
+    const elegiveisPorNumero = new Map(elegiveis.map((nota) => [Number(nota.NUNOTA), nota]));
+    const indisponiveis = notasSolicitadas.filter((nunota) => !elegiveisPorNumero.has(nunota));
+
+    if (indisponiveis.length > 0) {
+      res.status(409).json({
+        erro: 'A lista mudou antes da geracao. Atualize o romaneio e tente novamente.',
+        notasIndisponiveis: indisponiveis
+      });
+      return;
+    }
+
+    const codigoOrdemCarga = await criarOrdemCargaSankhya({ empresa, transportadora });
+
+    if (!codigoOrdemCarga) {
+      throw new Error('O Sankhya criou a carga, mas nao retornou o codigo da Ordem de Carga.');
+    }
+
+    await executeDirectService('FormacaoCargaSP.confirmaAlteracoesNotasOC', {
+      notas: {
+        nota: notasSolicitadas.map((nunota) => ({
+          NUNOTA: { $: String(nunota) },
+          ORDEMCARGA: { $: String(codigoOrdemCarga) }
+        }))
+      },
+      clientEventList: {
+        clientEvent: [
+          { $: 'br.com.sankhya.mgewms.expedicao.validarPedidos' },
+          { $: 'br.com.sankhya.mgewms.expedicao.cortePedidos' },
+          { $: 'br.com.sankhya.mgewms.expedicao.selecaoDocas' },
+          { $: 'br.com.sankhya.mgewms.expedicao.encerrarOC' },
+          { $: 'br.com.sankhya.actionbutton.clientconfirm' }
+        ]
+      }
+    }, { modulePath: 'mgecom' });
+
+    const verificacao = await executeQuery(`
+      SELECT NUNOTA, NVL(ORDEMCARGA, 0) AS ORDEMCARGA
+      FROM TGFCAB
+      WHERE NUNOTA IN (${notasSolicitadas.join(', ')})
+    `);
+    const vinculados = verificacao
+      .filter((nota) => Number(nota.ORDEMCARGA) === codigoOrdemCarga)
+      .map((nota) => Number(nota.NUNOTA));
+    const vinculadosSet = new Set(vinculados);
+    const falhas = notasSolicitadas
+      .filter((nunota) => !vinculadosSet.has(nunota))
+      .map((nunota) => ({ nunota, erro: 'A nota nao ficou vinculada a Ordem de Carga.' }));
+
+    const resultado = {
+      codigoOrdemCarga,
+      transportadora: elegiveis[0]?.TRANSPORTADORA || String(transportadora),
+      notasVinculadas: vinculados,
+      falhas,
+      parcial: falhas.length > 0
+    };
+
+    if (vinculados.length === 0) {
+      res.status(422).json({
+        ...resultado,
+        erro: `A Ordem de Carga ${codigoOrdemCarga} foi criada, mas nenhuma nota faturada foi vinculada.`
+      });
+      return;
+    }
+
+    res.status(falhas.length > 0 ? 207 : 201).json(resultado);
+  } catch (err) {
+    console.error(err);
+    res.status(err.status && err.status < 500 ? err.status : 500).json({
+      erro: err.message || 'Erro ao gerar o romaneio de cargas.'
+    });
+  }
+});
+
+router.get('/fila-conferencia/romaneio/:ordemCarga/pdf', async (req, res) => {
+  try {
+    const empresa = obterFiltroEmpresa(req.query.empresa);
+    const ordemCarga = obterNumeroInteiro(req.params.ordemCarga);
+    if (!empresa || !ordemCarga) {
+      res.status(400).json({ erro: 'Empresa e Ordem de Carga sao obrigatorias para imprimir o romaneio.' });
+      return;
+    }
+
+    const notas = await executeQuery(`
+      SELECT
+        CAB.NUNOTA,
+        CAB.NUMNOTA,
+        CAB.DTNEG,
+        CAB.QTDVOL,
+        CAB.VLRNOTA,
+        NVL(CAB.PESO, 0) AS PESO,
+        CASE WHEN CAB.CODTIPOPER = 10 THEN 'BONIFICACAO' ELSE 'VENDA' END AS TIPO_DOCUMENTO,
+        PAR.RAZAOSOCIAL AS CLIENTE,
+        CID.NOMECID AS CIDADE,
+        UFS.UF AS UF,
+        CAB.CODPARCTRANSP,
+        TRP.NOMEPARC AS TRANSPORTADORA,
+        EMP.RAZAOSOCIAL AS EMPRESA
+      FROM TGFCAB CAB
+      LEFT JOIN TGFPAR PAR
+        ON PAR.CODPARC = CAB.CODPARC
+      LEFT JOIN TGFPAR TRP
+        ON TRP.CODPARC = CAB.CODPARCTRANSP
+      LEFT JOIN TSICID CID
+        ON CID.CODCID = PAR.CODCID
+      LEFT JOIN TSIUFS UFS
+        ON UFS.CODUF = CID.UF
+      LEFT JOIN TSIEMP EMP
+        ON EMP.CODEMP = CAB.CODEMP
+      WHERE CAB.CODEMP = ${empresa}
+        AND CAB.ORDEMCARGA = ${ordemCarga}
+        AND CAB.TIPMOV = 'V'
+      ORDER BY CAB.DTNEG, CAB.NUMNOTA, CAB.NUNOTA
+    `);
+
+    if (notas.length === 0) {
+      res.status(404).json({ erro: `Nenhuma nota foi encontrada na Ordem de Carga ${ordemCarga}.` });
+      return;
+    }
+
+    const pdf = await gerarRomaneioCargaPdf({
+      ordemCarga,
+      transportadora: `${notas[0].CODPARCTRANSP || '-'} - ${notas[0].TRANSPORTADORA || '-'}`,
+      empresa: notas[0].EMPRESA,
+      notas
+    });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="romaneio-carga-${ordemCarga}.pdf"`);
+    res.setHeader('Content-Length', pdf.length);
+    res.send(pdf);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: err.message || 'Erro ao gerar o romaneio de carga.' });
   }
 });
 

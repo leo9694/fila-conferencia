@@ -293,6 +293,56 @@ async function authenticate(options = {}) {
   return accessToken;
 }
 
+function mensagemErroRest(payload, fallback) {
+  return payload?.error?.details
+    || payload?.error?.message
+    || payload?.message
+    || payload?.mensagem
+    || fallback;
+}
+
+async function executeRest(method, resourcePath, options = {}) {
+  const config = getConfig();
+  const accessToken = await authenticate({ forceNew: Boolean(options.__retryAuth) });
+  const path = String(resourcePath || '').replace(/^\/+/, '');
+  const url = `${config.baseUrl}/${path}`;
+  const headers = {
+    Authorization: `Bearer ${accessToken}`,
+    ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' })
+  };
+  const response = await fetch(url, {
+    method: String(method || 'GET').toUpperCase(),
+    headers,
+    body: options.body === undefined ? undefined : JSON.stringify(options.body)
+  });
+  const raw = await response.text();
+  let payload = null;
+
+  if (raw) {
+    try {
+      payload = JSON.parse(raw);
+    } catch {
+      payload = { mensagem: raw.slice(0, 1000) };
+    }
+  }
+
+  if (!response.ok) {
+    if (!options.__retryAuth && (response.status === 401 || response.status === 403)) {
+      cachedAccessToken = null;
+      cachedAccessTokenExpiresAt = 0;
+      return executeRest(method, resourcePath, { ...options, __retryAuth: true });
+    }
+
+    const message = mensagemErroRest(payload, `HTTP ${response.status}`);
+    const error = new Error(`Falha na API REST Sankhya: ${message}`);
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+
+  return payload;
+}
+
 function campoApi(valor) {
   return { $: valor === null || valor === undefined ? '' : String(valor) };
 }
@@ -522,6 +572,7 @@ module.exports = {
   downloadDirectFile,
   downloadGatewayFile,
   executeDirectService,
+  executeRest,
   executeService,
   executeQuery,
   normalizeQueryRows,
