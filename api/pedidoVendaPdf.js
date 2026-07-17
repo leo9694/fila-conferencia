@@ -15,6 +15,15 @@ function quantidade(valor) {
     : numero.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 });
 }
 
+function quantidadeSeparadaExibida(item) {
+  if (!item.SEPARACAO_CONCLUIDA) return quantidade(item.QTDNEG);
+  const esperada = Number(item.QTDNEG || 0);
+  const separada = Number(item.QTD_SEPARADA || 0);
+  if (separada === 0) return 'X';
+  if (separada !== esperada) return `${quantidade(separada)}/${quantidade(esperada)}`;
+  return quantidade(esperada);
+}
+
 function dataHora(valor) {
   if (!valor) return '-';
   const sankhya = String(valor).match(/^(\d{2})(\d{2})(\d{4})(?:\s+(\d{2}):(\d{2}))?/);
@@ -144,7 +153,7 @@ function desenharCabecalhoTabela(doc, grupo) {
 function desenharItem(doc, item) {
   const x = PAGE.margin;
   const colunas = [66, 300, 30, 42, 85, 36];
-  const valores = [item.CODPROD, item.DESCRPROD, item.CODVOL, quantidade(item.QTDNEG), item.CONTROLE, item.LOCAL];
+  const valores = [item.CODPROD, item.DESCRPROD, item.CODVOL, quantidadeSeparadaExibida(item), item.CONTROLE, item.LOCAL];
   const altura = 14;
   const y = doc.y;
   let atual = x;
@@ -221,4 +230,4 @@ async function gerarPedidoVendaPdf({ pedido, itens, logoPath }) {
   });
 }
 
-module.exports = { gerarPedidoVendaPdf };
+module.exports = { gerarPedidoVendaPdf, quantidadeSeparadaExibida };

@@ -390,7 +390,8 @@
 
     .btn-start,
     .btn-back,
-    .btn-print-order {
+    .btn-print-order,
+    .btn-separation {
       border: none;
       border-radius: 14px;
       min-height: 48px;
@@ -421,6 +422,21 @@
     }
 
     .btn-print-order svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .btn-separation {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      background: #fff8dc;
+      color: #8a5b00;
+      border: 1px solid #f4cc5c;
+    }
+
+    .btn-separation svg {
       width: 18px;
       height: 18px;
     }
@@ -830,6 +846,40 @@
       margin-bottom: 10px;
     }
 
+    .fila-pedidos-actions {
+      display: flex;
+      align-items: flex-end;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .fila-status-filter {
+      display: grid;
+      gap: 3px;
+      min-width: 168px;
+    }
+
+    .fila-status-filter label {
+      color: var(--text-soft);
+      font-size: 0.58rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .fila-status-filter select {
+      width: 100%;
+      min-height: 38px;
+      padding: 0 32px 0 10px;
+      border: 1px solid rgba(0, 143, 118, 0.28);
+      border-radius: 9px;
+      background-color: #fff;
+      color: var(--text-main);
+      font: inherit;
+      font-size: 0.76rem;
+      font-weight: 900;
+    }
+
     .btn-romaneio-cargas {
       min-height: 38px;
       padding: 0 14px;
@@ -963,7 +1013,7 @@
       text-transform: uppercase;
     }
 
-    .romaneio-filter select {
+    .romaneio-multiselect-trigger {
       width: 100%;
       height: 44px;
       border: 1px solid #bcd9d3;
@@ -973,6 +1023,82 @@
       color: #073047;
       font: inherit;
       font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      cursor: pointer;
+    }
+
+    .romaneio-multiselect-trigger svg {
+      width: 18px;
+      height: 18px;
+      flex: 0 0 auto;
+      transition: transform 160ms ease;
+    }
+
+    .romaneio-multiselect.is-open .romaneio-multiselect-trigger svg {
+      transform: rotate(180deg);
+    }
+
+    .romaneio-multiselect-trigger:disabled {
+      cursor: wait;
+      opacity: 0.68;
+    }
+
+    .romaneio-multiselect {
+      position: relative;
+    }
+
+    .romaneio-multiselect-menu {
+      position: absolute;
+      z-index: 4;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      max-height: 230px;
+      overflow-y: auto;
+      padding: 6px;
+      border: 1px solid #bcd9d3;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0 14px 32px rgba(7, 48, 71, 0.16);
+    }
+
+    .romaneio-multiselect-menu[hidden] {
+      display: none;
+    }
+
+    .romaneio-transportadora-option {
+      min-height: 40px;
+      padding: 7px 9px;
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #153c50;
+      font-size: 0.82rem;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .romaneio-transportadora-option:hover {
+      background: #f0f8f6;
+    }
+
+    .romaneio-transportadora-option input {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      accent-color: #008f76;
+      flex: 0 0 auto;
+    }
+
+    .romaneio-transportadora-option span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .romaneio-summary {
@@ -1321,15 +1447,36 @@
       min-height: 48px;
     }
 
+    .pedido-operacao-card.novo {
+      border-left-color: #06b6d4;
+      background: #e6f7fc;
+    }
+
     .pedido-operacao-card.active {
       border-left-color: var(--accent);
       background: rgba(214, 242, 232, 0.96);
       box-shadow: 0 10px 18px rgba(16, 57, 66, 0.10);
     }
 
-    .pedido-operacao-card.andamento {
-      border-left-color: #f4b400;
-      background: rgba(255, 246, 201, 0.92);
+    .pedido-operacao-card.andamento,
+    .pedido-operacao-card.em-conferencia {
+      border-left-color: #f59e0b;
+      background: #fff3c4;
+    }
+
+    .pedido-operacao-card.em-separacao {
+      border-left-color: #8b5cf6;
+      background: #f1e8ff;
+    }
+
+    .pedido-operacao-card.separado {
+      border-left-color: #0284c7;
+      background: #dff3ff;
+    }
+
+    .pedido-operacao-card.conferido {
+      border-left-color: #059669;
+      background: #d8f5e5;
     }
 
     .fila-screen.fila-modo-entrada .pedido-operacao-card.conferido {
@@ -1509,12 +1656,33 @@
     }
 
     .pedido-status-mini.novo {
-      background: #0dcaf0;
+      background: #06b6d4;
+      color: #073047;
+      border: 1px solid #0891b2;
     }
 
     .pedido-status-mini.conferido {
-      background: var(--accent);
+      background: #059669;
       color: #fff;
+      border: 1px solid #047857;
+    }
+
+    .pedido-status-mini.em-conferencia {
+      background: #f59e0b;
+      color: #422006;
+      border: 1px solid #d97706;
+    }
+
+    .pedido-status-mini.em-separacao {
+      background: #e4d7ff;
+      color: #5b21b6;
+      border: 1px solid #8b5cf6;
+    }
+
+    .pedido-status-mini.separado {
+      background: #c9edff;
+      color: #075985;
+      border: 1px solid #0284c7;
     }
 
     .pedido-label-button {
@@ -5886,6 +6054,7 @@
 
     .pedido-preview-actions .btn-back,
     .pedido-preview-actions .btn-print-order,
+    .pedido-preview-actions .btn-separation,
     .pedido-preview-actions .btn-start {
       min-width: 0;
       padding-inline: 18px;
@@ -5908,6 +6077,456 @@
       flex: 1;
       min-height: 220px;
       overflow: auto;
+    }
+
+    .separacao-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 65;
+      overflow: auto;
+      background: #f4faf9;
+    }
+
+    .separacao-screen[hidden],
+    .separacao-confirm-modal[hidden],
+    .separacao-final-modal[hidden],
+    .separacao-adjust-panel[hidden] {
+      display: none;
+    }
+
+    .separacao-dialog {
+      width: min(1320px, calc(100% - 36px));
+      min-height: calc(100dvh - 36px);
+      margin: 18px auto;
+      display: flex;
+      flex-direction: column;
+      overflow: visible;
+      border: 1px solid #d7e8e4;
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 12px 34px rgba(7, 48, 71, 0.11);
+    }
+
+    .separacao-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 14px 18px;
+      border-bottom: 1px solid #d7e8e4;
+    }
+
+    .separacao-head-actions {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+    }
+
+    .separacao-finish-button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 44px;
+      padding: 0 16px;
+      border: 1px solid #008f76;
+      border-radius: 10px;
+      color: #fff;
+      background: #008f76;
+      font-weight: 900;
+      cursor: pointer;
+      box-shadow: 0 7px 18px rgba(0, 143, 118, 0.18);
+    }
+
+    .separacao-finish-button svg { width: 18px; height: 18px; }
+
+    .separacao-title {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #073047;
+      font-size: 1.12rem;
+      font-weight: 900;
+    }
+
+    .separacao-title svg {
+      width: 21px;
+      color: #008f76;
+    }
+
+    .separacao-meta {
+      margin-top: 3px;
+      color: #64748b;
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .separacao-toolbar {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+      gap: 12px;
+      padding: 12px 18px;
+      background: #f4faf9;
+      border-bottom: 1px solid #d7e8e4;
+    }
+
+    .separacao-field label {
+      display: block;
+      margin-bottom: 5px;
+      color: #387064;
+      font-size: 0.68rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .separacao-field input {
+      width: 100%;
+      min-height: 44px;
+      padding: 0 13px;
+      border: 1px solid #b9d6d0;
+      border-radius: 10px;
+      color: #073047;
+      font-size: 1rem;
+      font-weight: 800;
+      background: #fff;
+    }
+
+    .separacao-code-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 7px;
+    }
+
+    .separacao-clear-code {
+      display: none;
+      width: 44px;
+      min-width: 44px;
+      height: 44px;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #efb7b7;
+      border-radius: 10px;
+      color: #b42318;
+      background: #fff5f5;
+      cursor: pointer;
+    }
+
+    .separacao-clear-code svg { width: 19px; height: 19px; }
+
+    .separacao-progress {
+      min-width: 170px;
+      padding: 8px 12px;
+      border: 1px solid #bfe6da;
+      border-radius: 10px;
+      color: #006b5a;
+      background: #e8f7f3;
+      text-align: center;
+      font-weight: 900;
+    }
+
+    .separacao-status {
+      min-height: 28px;
+      padding: 7px 18px 0;
+      color: #64748b;
+      font-size: 0.8rem;
+      font-weight: 800;
+    }
+
+    .separacao-status.is-success { color: #008050; }
+    .separacao-status.is-warning { color: #a45b00; }
+
+    .separacao-table-wrap {
+      flex: 1;
+      min-height: calc(100dvh - 270px);
+      margin: 10px 18px 18px;
+      overflow: auto;
+      border: 1px solid #d7e8e4;
+      border-radius: 10px;
+    }
+
+    .separacao-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      color: #073047;
+      font-size: 0.8rem;
+    }
+
+    .separacao-table th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      padding: 10px 12px;
+      color: #456778;
+      background: #f4faf9;
+      border-bottom: 2px solid #46cc86;
+      text-align: left;
+      font-size: 0.68rem;
+      text-transform: uppercase;
+    }
+
+    .separacao-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e2eeeb;
+      font-weight: 800;
+      vertical-align: middle;
+    }
+
+    .separacao-group-row td {
+      padding: 8px 12px;
+      color: #075985;
+      background: #eaf5fb;
+      border-top: 1px solid #b9dceb;
+      border-bottom: 1px solid #b9dceb;
+      font-size: 0.72rem;
+      font-weight: 1000;
+      text-transform: uppercase;
+    }
+
+    .separacao-row {
+      cursor: pointer;
+      transition: background 150ms ease;
+    }
+
+    .separacao-row:hover { background: #f2fbf8; }
+    .separacao-row.is-partial { background: #fff8dc; }
+    .separacao-row.is-complete { background: #d8f6e6; }
+    .separacao-row.is-complete:hover { background: #c9efd9; }
+    .separacao-row.is-zero { background: #ffe3e3; }
+    .separacao-row.is-zero:hover { background: #ffd6d6; }
+
+    .separacao-product-code {
+      color: #006b5a;
+      font-size: 0.94rem;
+      font-weight: 1000;
+    }
+
+    .separacao-description {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .separacao-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 24px;
+      padding: 0 9px;
+      border-radius: 999px;
+      color: #087f5b;
+      background: #d3f9d8;
+      font-size: 0.66rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .separacao-badge.pending {
+      color: #8a5b00;
+      background: #fff3bf;
+    }
+
+    .separacao-badge.zero {
+      color: #b42318;
+      background: #ffc9c9;
+    }
+
+    .separacao-confirm-modal,
+    .separacao-final-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 75;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      background: rgba(9, 34, 41, 0.48);
+    }
+
+    .separacao-confirm-card {
+      width: min(470px, 100%);
+      padding: 20px;
+      border: 1px solid #d7e8e4;
+      border-radius: 14px;
+      background: #fff;
+      box-shadow: 0 24px 65px rgba(7, 48, 71, 0.3);
+    }
+
+    .separacao-confirm-card h3 {
+      margin: 0 0 5px;
+      color: #073047;
+      font-size: 1.14rem;
+    }
+
+    .separacao-confirm-product {
+      margin: 12px 0;
+      padding: 12px;
+      border-left: 4px solid #008f76;
+      border-radius: 8px;
+      color: #073047;
+      background: #f4faf9;
+      font-weight: 900;
+    }
+
+    .separacao-confirm-meta {
+      margin-top: 5px;
+      color: #64748b;
+      font-size: 0.78rem;
+    }
+
+    .separacao-confirm-field label {
+      display: block;
+      margin-bottom: 5px;
+      color: #387064;
+      font-size: 0.7rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .separacao-confirm-quantity {
+      display: flex;
+      align-items: center;
+      width: 100%;
+      min-height: 44px;
+      padding: 0 12px;
+      border: 1px solid #b9d6d0;
+      border-radius: 10px;
+      color: #073047;
+      background: #f4faf9;
+      font-size: 1rem;
+      font-weight: 900;
+    }
+
+    .separacao-confirm-quantity-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .separacao-adjust-button {
+      min-height: 44px;
+      padding: 0 13px;
+      border: 1px solid #b9d6d0;
+      border-radius: 10px;
+      color: #006b5a;
+      background: #fff;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .separacao-adjust-panel {
+      margin-top: 9px;
+      padding: 11px;
+      border: 1px solid #f1d18f;
+      border-radius: 10px;
+      background: #fffaf0;
+    }
+
+    .separacao-adjust-panel label {
+      display: block;
+      margin-bottom: 5px;
+      color: #7a4b00;
+      font-size: 0.7rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .separacao-adjust-panel input {
+      width: 100%;
+      min-height: 42px;
+      padding: 0 11px;
+      border: 1px solid #ddb76d;
+      border-radius: 9px;
+      color: #073047;
+      background: #fff;
+      font-size: 1rem;
+      font-weight: 900;
+    }
+
+    .separacao-adjust-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .separacao-adjust-actions button {
+      min-height: 38px;
+      border-radius: 9px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .separacao-final-card {
+      width: min(760px, 100%);
+      max-height: calc(100dvh - 32px);
+      display: flex;
+      flex-direction: column;
+      padding: 20px;
+      border: 1px solid #d7e8e4;
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 24px 65px rgba(7, 48, 71, 0.3);
+    }
+
+    .separacao-final-card h3 { margin: 0; color: #073047; font-size: 1.25rem; }
+    .separacao-final-subtitle { margin: 5px 0 13px; color: #64748b; font-size: 0.84rem; font-weight: 700; }
+    .separacao-final-summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .separacao-final-metric {
+      padding: 10px 12px;
+      border: 1px solid #d7e8e4;
+      border-radius: 10px;
+      background: #f4faf9;
+    }
+    .separacao-final-metric span { display: block; color: #64748b; font-size: 0.65rem; font-weight: 900; text-transform: uppercase; }
+    .separacao-final-metric strong { display: block; margin-top: 3px; color: #073047; font-size: 1.05rem; }
+    .separacao-final-list { overflow: auto; border: 1px solid #d7e8e4; border-radius: 10px; }
+    .separacao-final-item {
+      display: grid;
+      grid-template-columns: 90px minmax(0, 1fr) 145px 100px;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border-bottom: 1px solid #e2eeeb;
+      color: #073047;
+      font-size: 0.77rem;
+      font-weight: 800;
+    }
+    .separacao-final-item:last-child { border-bottom: 0; }
+    .separacao-final-item.is-different { background: #fff8dc; }
+    .separacao-final-item.is-zero { background: #ffe3e3; }
+    .separacao-final-item small { display: block; margin-top: 2px; color: #64748b; }
+    .separacao-final-actions { display: grid; grid-template-columns: 1fr 1.2fr; gap: 10px; margin-top: 13px; }
+
+    .separacao-confirm-message {
+      min-height: 22px;
+      margin-top: 7px;
+      color: #b42318;
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .separacao-confirm-actions {
+      display: grid;
+      grid-template-columns: 1fr 1.25fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .separacao-confirm-actions .btn-start { min-width: 0; }
+
+    .separacao-confirm-actions .btn-start.is-revert {
+      color: #b42318;
+      background: #fff5f4;
+      border: 1px solid #f7b9b2;
+      box-shadow: none;
     }
 
     @media (max-width: 900px) {
@@ -6126,6 +6745,27 @@
         border-radius: 14px;
       }
 
+      .fila-pedidos-top {
+        align-items: flex-end;
+        flex-wrap: wrap;
+      }
+
+      .fila-pedidos-actions {
+        width: 100%;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: end;
+      }
+
+      .fila-status-filter {
+        min-width: 0;
+      }
+
+      .fila-status-filter select {
+        min-height: 42px;
+        font-size: 0.82rem;
+      }
+
       .fila-pedidos-grid {
         min-height: 220px;
         max-height: none;
@@ -6272,10 +6912,86 @@
 
       .pedido-preview-actions .btn-back,
       .pedido-preview-actions .btn-print-order,
+      .pedido-preview-actions .btn-separation,
       .pedido-preview-actions .btn-start {
         flex: 1 1 140px;
         min-width: 0;
       }
+
+      .separacao-dialog {
+        width: calc(100% - 14px);
+        min-height: calc(100dvh - 14px);
+        margin: 7px auto;
+        border-radius: 12px;
+      }
+      .separacao-head { align-items: flex-start; padding: 11px; }
+      .separacao-head-actions { width: 100%; flex-direction: column; align-items: stretch; }
+      .separacao-head-actions > * { width: 100%; }
+      .separacao-toolbar {
+        grid-template-columns: 1fr;
+        gap: 8px;
+        padding: 10px 11px;
+      }
+      .separacao-code-row { grid-template-columns: minmax(0, 1fr) 44px; }
+      .separacao-clear-code { display: inline-flex; }
+      .separacao-progress { min-width: 0; }
+      .separacao-table-wrap {
+        min-height: calc(100dvh - 290px);
+        margin: 8px 10px 10px;
+        border: 0;
+        overflow: auto;
+      }
+      .separacao-table, .separacao-table tbody { display: block; }
+      .separacao-table thead { display: none; }
+      .separacao-row,
+      .separacao-row * {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-touch-callout: none;
+      }
+      .separacao-row { touch-action: pan-y; }
+      .separacao-table tr {
+        display: grid;
+        grid-template-columns: 74px minmax(0, 1fr) auto;
+        gap: 5px 8px;
+        margin-bottom: 7px;
+        padding: 10px;
+        border: 1px solid #d7e8e4;
+        border-left: 4px solid #3bbf92;
+        border-radius: 10px;
+      }
+      .separacao-table td { padding: 0; border: 0; }
+      .separacao-table tr.separacao-group-row {
+        display: block;
+        margin: 12px 0 6px;
+        padding: 0;
+        border: 0;
+        border-radius: 8px;
+        background: #eaf5fb;
+      }
+      .separacao-table tr.separacao-group-row:first-child { margin-top: 0; }
+      .separacao-table .separacao-group-row td {
+        display: block;
+        width: 100%;
+        padding: 8px 10px;
+        border: 1px solid #b9dceb;
+        border-radius: 8px;
+      }
+      .separacao-table td:nth-child(1) { grid-column: 1; grid-row: 1; }
+      .separacao-table td:nth-child(2) { grid-column: 2 / 4; grid-row: 1; }
+      .separacao-table td:nth-child(3) { grid-column: 1; grid-row: 2; }
+      .separacao-table td:nth-child(4) { grid-column: 2; grid-row: 2; }
+      .separacao-table td:nth-child(5) { grid-column: 2; grid-row: 3; }
+      .separacao-table td:nth-child(6) { grid-column: 3; grid-row: 3; }
+      .separacao-description { white-space: normal; }
+      .separacao-confirm-actions { grid-template-columns: 1fr; }
+      .separacao-confirm-quantity-row { grid-template-columns: 1fr; }
+      .separacao-final-card { padding: 15px; }
+      .separacao-final-summary { grid-template-columns: 1fr; }
+      .separacao-final-item { grid-template-columns: 72px minmax(0, 1fr); }
+      .separacao-final-item > :nth-child(3),
+      .separacao-final-item > :nth-child(4) { grid-column: 2; }
+      .separacao-final-actions { grid-template-columns: 1fr; }
 
       .pedido-preview-summary,
       .corte-info {
@@ -6909,10 +7625,23 @@
                 <span>Pedidos</span>
                 <span id="fila-count-pedidos">0</span>
               </div>
-              <button class="btn-romaneio-cargas" id="abrir-romaneio-cargas" type="button">
-                <i data-lucide="truck" aria-hidden="true"></i>
-                <span>Romaneio de Cargas</span>
-              </button>
+              <div class="fila-pedidos-actions">
+                <div class="fila-status-filter">
+                  <label for="fila-filtro-status">Filtrar por status</label>
+                  <select id="fila-filtro-status">
+                    <option value="todos">Todos os status</option>
+                    <option value="em-conferencia">Em conferência</option>
+                    <option value="separado">Separados</option>
+                    <option value="em-separacao">Em separação</option>
+                    <option value="novo">Novos</option>
+                    <option value="conferido">Conferidos</option>
+                  </select>
+                </div>
+                <button class="btn-romaneio-cargas" id="abrir-romaneio-cargas" type="button">
+                  <i data-lucide="truck" aria-hidden="true"></i>
+                  <span>Romaneio de Cargas</span>
+                </button>
+              </div>
             </div>
             <div class="fila-pedidos-grid" id="fila-pedidos-lista">
               <div class="empty-state">Informe filtros e busque os pedidos.</div>
@@ -6925,7 +7654,7 @@
                   <span class="romaneio-head-icon"><i data-lucide="truck"></i></span>
                   <div>
                     <h3 id="romaneio-titulo">Romaneio de Cargas</h3>
-                    <p>Selecione a transportadora e revise as notas faturadas antes de gerar a carga.</p>
+                    <p>Selecione uma ou mais transportadoras e revise as notas faturadas antes de gerar a carga.</p>
                   </div>
                 </div>
                 <button class="romaneio-close" id="fechar-romaneio-cargas" type="button" aria-label="Fechar romaneio">
@@ -6934,14 +7663,19 @@
               </div>
               <div class="romaneio-body">
                 <div class="romaneio-filter">
-                  <label for="romaneio-transportadora">Transportadora com notas faturadas pendentes</label>
-                  <select id="romaneio-transportadora">
-                    <option value="">Selecione a transportadora</option>
-                  </select>
+                  <label id="romaneio-transportadora-label">Transportadoras com notas faturadas pendentes</label>
+                  <div class="romaneio-multiselect" id="romaneio-transportadora">
+                    <button class="romaneio-multiselect-trigger" id="romaneio-transportadora-trigger" type="button"
+                      aria-haspopup="listbox" aria-expanded="false" aria-labelledby="romaneio-transportadora-label romaneio-transportadora-texto">
+                      <span id="romaneio-transportadora-texto">Selecione uma ou mais transportadoras</span>
+                      <i data-lucide="chevron-down" aria-hidden="true"></i>
+                    </button>
+                    <div class="romaneio-multiselect-menu" id="romaneio-transportadora-opcoes" role="listbox" aria-multiselectable="true" hidden></div>
+                  </div>
                 </div>
                 <div class="romaneio-summary" id="romaneio-resumo" hidden></div>
                 <div class="romaneio-lista" id="romaneio-lista">
-                  <div class="romaneio-empty">Selecione uma transportadora para listar as notas faturadas.</div>
+                  <div class="romaneio-empty">Selecione uma ou mais transportadoras para listar as notas faturadas.</div>
                 </div>
                 <div class="romaneio-status" id="romaneio-status" aria-live="polite"></div>
               </div>
@@ -6966,6 +7700,10 @@
                   <button class="btn-print-order" id="imprimir-preview-pedido" type="button">
                     <i data-lucide="printer" aria-hidden="true"></i>
                     Imprimir pedido
+                  </button>
+                  <button class="btn-separation" id="abrir-separacao-pedido" type="button">
+                    <i data-lucide="list-checks" aria-hidden="true"></i>
+                    Separação
                   </button>
                   <button class="btn-start" id="confirmar-preview-pedido" type="button">Iniciar conferencia</button>
                 </div>
@@ -6997,6 +7735,92 @@
               <div class="documentos-fiscais-panel" id="pedido-preview-documentos" hidden></div>
 
               <div class="pedido-preview-items" id="pedido-preview-itens-lista"></div>
+            </div>
+          </section>
+          <section class="separacao-screen" id="separacao-screen" hidden>
+            <main class="separacao-dialog" aria-labelledby="separacao-titulo">
+              <div class="separacao-head">
+                <div>
+                  <div class="separacao-title" id="separacao-titulo">
+                    <i data-lucide="list-checks" aria-hidden="true"></i>
+                    Separação do pedido
+                  </div>
+                  <div class="separacao-meta" id="separacao-meta">-</div>
+                </div>
+                <div class="separacao-head-actions">
+                  <button class="separacao-finish-button" id="finalizar-separacao" type="button" hidden>
+                    <i data-lucide="circle-check-big"></i>
+                    Finalizar separação
+                  </button>
+                  <button class="btn-back" id="fechar-separacao-pedido" type="button">Voltar ao pedido</button>
+                </div>
+              </div>
+              <div class="separacao-toolbar">
+                <div class="separacao-field">
+                  <label for="separacao-codigo">Código de barras ou produto</label>
+                  <div class="separacao-code-row">
+                    <input id="separacao-codigo" type="text" inputmode="numeric" autocomplete="off" placeholder="Bipe ou digite o código">
+                    <button class="separacao-clear-code" id="separacao-limpar-codigo" type="button" title="Limpar código" aria-label="Limpar código">
+                      <i data-lucide="delete"></i>
+                    </button>
+                  </div>
+                </div>
+                <div class="separacao-progress" id="separacao-progresso">0/0 itens separados</div>
+              </div>
+              <div class="separacao-status" id="separacao-status" aria-live="polite">Bipe um código ou clique em um produto da lista.</div>
+              <div class="separacao-table-wrap">
+                <table class="separacao-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 105px">Produto</th>
+                      <th>Descrição</th>
+                      <th style="width: 130px">Quantidade</th>
+                      <th style="width: 160px">Lote</th>
+                      <th style="width: 120px">Validade</th>
+                      <th style="width: 105px">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="separacao-itens-lista"></tbody>
+                </table>
+              </div>
+            </main>
+          </section>
+          <section class="separacao-confirm-modal" id="separacao-confirm-modal" hidden>
+            <div class="separacao-confirm-card" role="dialog" aria-modal="true" aria-labelledby="separacao-confirm-titulo">
+              <h3 id="separacao-confirm-titulo">Confirmar separação</h3>
+              <div class="separacao-confirm-product" id="separacao-confirm-produto">-</div>
+              <div class="separacao-confirm-field" id="separacao-confirm-field">
+                <label for="separacao-confirm-qtd">Quantidade separada</label>
+                <div class="separacao-confirm-quantity-row">
+                  <output class="separacao-confirm-quantity" id="separacao-confirm-qtd">-</output>
+                  <button class="separacao-adjust-button" id="separacao-ajustar-qtd" type="button">Ajustar quantidade</button>
+                </div>
+                <div class="separacao-adjust-panel" id="separacao-ajuste-painel" hidden>
+                  <label for="separacao-ajuste-qtd">Quantidade realmente separada</label>
+                  <input id="separacao-ajuste-qtd" type="number" min="0" step="any" inputmode="decimal">
+                  <div class="separacao-adjust-actions">
+                    <button class="btn-back" id="separacao-ajuste-cancelar" type="button">Cancelar</button>
+                    <button class="btn-start" id="separacao-ajuste-aplicar" type="button">Aplicar ajuste</button>
+                  </div>
+                </div>
+              </div>
+              <div class="separacao-confirm-message" id="separacao-confirm-status" aria-live="polite"></div>
+              <div class="separacao-confirm-actions">
+                <button class="btn-back" id="separacao-confirm-cancelar" type="button">Cancelar</button>
+                <button class="btn-start" id="separacao-confirmar" type="button">Confirmar item</button>
+              </div>
+            </div>
+          </section>
+          <section class="separacao-final-modal" id="separacao-final-modal" hidden>
+            <div class="separacao-final-card" role="dialog" aria-modal="true" aria-labelledby="separacao-final-titulo">
+              <h3 id="separacao-final-titulo">Finalizar separação</h3>
+              <p class="separacao-final-subtitle">Revise as quantidades antes de concluir. Itens divergentes e zerados continuarão registrados como separados.</p>
+              <div class="separacao-final-summary" id="separacao-final-resumo"></div>
+              <div class="separacao-final-list" id="separacao-final-lista" hidden></div>
+              <div class="separacao-final-actions">
+                <button class="btn-back" id="separacao-final-cancelar" type="button">Voltar e revisar</button>
+                <button class="btn-start" id="separacao-final-confirmar" type="button">Confirmar separação</button>
+              </div>
             </div>
           </section>
         </div>

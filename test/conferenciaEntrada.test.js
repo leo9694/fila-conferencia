@@ -100,11 +100,12 @@ test('reproduz o detalhe consolidado da conferencia nativa 67203', () => {
 });
 
 test('preserva embalagem e quantidade padrao na unidade alternativa', () => {
-  const detalhes = consolidarLeiturasEntrada([{ ...itemNota, QTDNEG: 40 }], [{
+  const detalhes = consolidarLeiturasEntrada([{ ...itemNota, QTDNEG: 40, CODVOLPADRAO: 'UN' }], [{
     sequencia: 1,
     qtdConferida: 40,
     leituras: [{
       codigo: '17896061733755',
+      tipo: 'UNIDADE_ALTERNATIVA',
       codVol: 'CX',
       quantidade: 4,
       quantidadeConvertida: 40
@@ -114,6 +115,38 @@ test('preserva embalagem e quantidade padrao na unidade alternativa', () => {
   assert.equal(detalhes[0].CODVOL, 'CX');
   assert.equal(detalhes[0].QTDCONF, 4);
   assert.equal(detalhes[0].QTDCONFVOLPAD, 40);
+});
+
+test('normaliza leitura comum para a unidade padrao do produto', () => {
+  const detalhes = consolidarLeiturasEntrada([{
+    SEQUENCIA: 1,
+    CODPROD: 7667,
+    CODVOL: 'KG',
+    CODVOLPADRAO: 'DP',
+    CONTROLE: '00162500800',
+    QTDNEG: 18,
+    CODBARRA: '7896500410462'
+  }], [{
+    sequencia: 1,
+    qtdConferida: 18,
+    leituras: [{
+      codigo: '7667',
+      tipo: 'CODIGO_PRODUTO',
+      codVol: 'KG',
+      controle: '00162500800',
+      quantidade: 18,
+      quantidadeConvertida: 18
+    }]
+  }]);
+
+  assert.deepEqual(detalhes, [{
+    CODBARRA: '7667',
+    CODPROD: 7667,
+    CODVOL: 'DP',
+    CONTROLE: '00162500800',
+    QTDCONF: 18,
+    QTDCONFVOLPAD: 18
+  }]);
 });
 
 test('preserva o controle informado na leitura da entrada', () => {

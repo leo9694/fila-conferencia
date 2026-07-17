@@ -46,11 +46,15 @@ const filaEtapaConferencia = document.getElementById('fila-etapa-conferencia');
 const filaPedidosLista = document.getElementById('fila-pedidos-lista');
 const filaCountPedidos = document.getElementById('fila-count-pedidos');
 const filaBuscaPedido = document.getElementById('fila-busca-pedido');
+const filaFiltroStatus = document.getElementById('fila-filtro-status');
 const botaoAbrirRomaneio = document.getElementById('abrir-romaneio-cargas');
 const romaneioModal = document.getElementById('romaneio-modal');
 const botaoFecharRomaneio = document.getElementById('fechar-romaneio-cargas');
 const botaoCancelarRomaneio = document.getElementById('cancelar-romaneio-cargas');
 const romaneioTransportadora = document.getElementById('romaneio-transportadora');
+const romaneioTransportadoraTrigger = document.getElementById('romaneio-transportadora-trigger');
+const romaneioTransportadoraTexto = document.getElementById('romaneio-transportadora-texto');
+const romaneioTransportadoraOpcoes = document.getElementById('romaneio-transportadora-opcoes');
 const romaneioResumo = document.getElementById('romaneio-resumo');
   const romaneioLista = document.getElementById('romaneio-lista');
   const romaneioStatus = document.getElementById('romaneio-status');
@@ -69,7 +73,35 @@ const pedidoPreviewItensLista = document.getElementById('pedido-preview-itens-li
 const pedidoPreviewDocumentos = document.getElementById('pedido-preview-documentos');
 const botaoCancelarPreviewPedido = document.getElementById('cancelar-preview-pedido');
 const botaoImprimirPreviewPedido = document.getElementById('imprimir-preview-pedido');
+const botaoAbrirSeparacaoPedido = document.getElementById('abrir-separacao-pedido');
 const botaoConfirmarPreviewPedido = document.getElementById('confirmar-preview-pedido');
+const separacaoScreen = document.getElementById('separacao-screen');
+const separacaoMeta = document.getElementById('separacao-meta');
+const separacaoCodigo = document.getElementById('separacao-codigo');
+const botaoLimparCodigoSeparacao = document.getElementById('separacao-limpar-codigo');
+const separacaoProgresso = document.getElementById('separacao-progresso');
+const separacaoStatus = document.getElementById('separacao-status');
+const separacaoItensLista = document.getElementById('separacao-itens-lista');
+const botaoFecharSeparacaoPedido = document.getElementById('fechar-separacao-pedido');
+const botaoFinalizarSeparacao = document.getElementById('finalizar-separacao');
+const separacaoConfirmModal = document.getElementById('separacao-confirm-modal');
+const separacaoConfirmTitulo = document.getElementById('separacao-confirm-titulo');
+const separacaoConfirmProduto = document.getElementById('separacao-confirm-produto');
+const separacaoConfirmField = document.getElementById('separacao-confirm-field');
+const separacaoConfirmQtd = document.getElementById('separacao-confirm-qtd');
+const separacaoConfirmStatus = document.getElementById('separacao-confirm-status');
+const botaoCancelarConfirmacaoSeparacao = document.getElementById('separacao-confirm-cancelar');
+const botaoConfirmarSeparacao = document.getElementById('separacao-confirmar');
+const botaoAjustarQuantidadeSeparacao = document.getElementById('separacao-ajustar-qtd');
+const separacaoAjustePainel = document.getElementById('separacao-ajuste-painel');
+const separacaoAjusteQtd = document.getElementById('separacao-ajuste-qtd');
+const botaoCancelarAjusteSeparacao = document.getElementById('separacao-ajuste-cancelar');
+const botaoAplicarAjusteSeparacao = document.getElementById('separacao-ajuste-aplicar');
+const separacaoFinalModal = document.getElementById('separacao-final-modal');
+const separacaoFinalResumo = document.getElementById('separacao-final-resumo');
+const separacaoFinalLista = document.getElementById('separacao-final-lista');
+const botaoCancelarFinalSeparacao = document.getElementById('separacao-final-cancelar');
+const botaoConfirmarFinalSeparacao = document.getElementById('separacao-final-confirmar');
 const pedidoEmConferenciaCard = document.getElementById('pedido-em-conferencia-card');
 const mobileSidebarToggle = document.getElementById('mobile-sidebar-toggle');
 const mobileSidebarBackdrop = document.getElementById('mobile-sidebar-backdrop');
@@ -203,6 +235,9 @@ let filaPedidos = [];
 let filaModoConferencia = 'saida';
 let romaneioPedidos = [];
 let romaneioGerando = false;
+let romaneioTransportadoras = [];
+let romaneioTransportadorasSelecionadas = new Set();
+let romaneioBuscaPedidosId = 0;
 let pedidoSelecionado = null;
 let consultaProdutoAtual = null;
 let sincronizacaoCaixaEntradaInterval = null;
@@ -213,6 +248,12 @@ let salvamentoProgressoPendente = Promise.resolve();
 let maiorCaixaEntradaRemota = 0;
 let pedidoPreviewSelecionado = null;
 let itensPedidoPreview = [];
+let itensSeparacao = [];
+let itemSeparacaoPendente = null;
+let separacaoConcluida = false;
+let separacaoVersao = 0;
+let separacaoSyncTimer = null;
+let separacaoSyncEmAndamento = false;
 let itensPedidoSelecionado = [];
 let itemCorteSelecionado = null;
 let pedidoConcluido = null;
@@ -230,6 +271,34 @@ let ordenacaoItens = { coluna: '', direcao: '' };
 const itensGridMinimos = [34, 78, 210, 122, 148, 118];
 const itensGridLarguras = [34, 92, 240, 142, 170, 132];
 const STORAGE_NAVEGACAO_FILA = 'filaConferencia:navegacaoAtual';
+const STORAGE_SEPARACAO_PREFIX = 'filaConferencia:separacao:';
+const TEMPO_TOQUE_LONGO_SEPARACAO_MS = 550;
+let toqueLongoSeparacao = null;
+let leituraSeparacaoMobile = '';
+
+function separacaoEmMobile() {
+  return window.matchMedia('(max-width: 760px), (pointer: coarse)').matches;
+}
+
+function configurarLeitorSeparacao() {
+  if (!separacaoCodigo) return;
+  const mobile = separacaoEmMobile();
+  // O leitor fisico funciona como teclado: o campo precisa continuar gravavel.
+  // inputMode=none impede apenas a abertura do teclado virtual no mobile.
+  separacaoCodigo.readOnly = false;
+  separacaoCodigo.inputMode = mobile ? 'none' : 'numeric';
+  separacaoCodigo.setAttribute('virtualkeyboardpolicy', mobile ? 'manual' : 'auto');
+  separacaoCodigo.setAttribute(
+    'aria-label',
+    mobile ? 'Leitor de codigo de barras. Use o scanner ou mantenha um produto pressionado.' : 'Codigo de barras ou produto'
+  );
+}
+
+function limparCodigoSeparacao({ focar = false } = {}) {
+  separacaoCodigo.value = '';
+  leituraSeparacaoMobile = '';
+  if (focar) setTimeout(() => separacaoCodigo.focus({ preventScroll: true }), 0);
+}
 
 function aplicarLargurasGridItens() {
   document.documentElement.style.setProperty(
@@ -579,20 +648,20 @@ function definirStatusRomaneio(mensagem = '', tipo = '') {
   romaneioStatus.className = `romaneio-status${tipo ? ` ${tipo}` : ''}`;
 }
 
-  function limparPedidosRomaneio(mensagem = 'Selecione uma transportadora para listar as notas faturadas.') {
+function limparPedidosRomaneio(mensagem = 'Selecione uma ou mais transportadoras para listar as notas faturadas.') {
   romaneioPedidos = [];
   romaneioResumo.hidden = true;
   romaneioResumo.innerHTML = '';
-    romaneioLista.innerHTML = `<div class="romaneio-empty">${escaparHtml(mensagem)}</div>`;
-    botaoGerarRomaneio.disabled = true;
-    botaoImprimirRomaneio.hidden = true;
-    delete botaoImprimirRomaneio.dataset.ordemCarga;
-    delete botaoImprimirRomaneio.dataset.empresa;
+  romaneioLista.innerHTML = `<div class="romaneio-empty">${escaparHtml(mensagem)}</div>`;
+  botaoGerarRomaneio.disabled = true;
+  botaoImprimirRomaneio.hidden = true;
+  delete botaoImprimirRomaneio.dataset.ordemCarga;
+  delete botaoImprimirRomaneio.dataset.empresa;
 }
 
 function renderizarPedidosRomaneio() {
   if (romaneioPedidos.length === 0) {
-    limparPedidosRomaneio('Nenhuma nota faturada pendente de carga para esta transportadora.');
+    limparPedidosRomaneio('Nenhuma nota faturada pendente de carga para as transportadoras selecionadas.');
     return;
   }
 
@@ -628,23 +697,67 @@ function renderizarPedidosRomaneio() {
   botaoGerarRomaneio.disabled = pedidosSelecionados.length === 0;
 }
 
+function codigosTransportadorasRomaneio() {
+  return [...romaneioTransportadorasSelecionadas].map(Number).filter(Boolean);
+}
+
+function atualizarResumoTransportadorasRomaneio() {
+  const selecionadas = romaneioTransportadoras.filter((item) => (
+    romaneioTransportadorasSelecionadas.has(String(item.codigo))
+  ));
+
+  if (selecionadas.length === 0) {
+    romaneioTransportadoraTexto.textContent = 'Selecione uma ou mais transportadoras';
+  } else if (selecionadas.length === 1) {
+    const item = selecionadas[0];
+    romaneioTransportadoraTexto.textContent = `${item.codigo} - ${item.nome} (${item.notas} nota${item.notas === 1 ? '' : 's'})`;
+  } else {
+    const totalNotas = selecionadas.reduce((total, item) => total + Number(item.notas || 0), 0);
+    romaneioTransportadoraTexto.textContent = `${selecionadas.length} transportadoras selecionadas (${totalNotas} notas)`;
+  }
+
+  romaneioTransportadoraOpcoes.querySelectorAll('[data-romaneio-transportadora]').forEach((campo) => {
+    campo.checked = romaneioTransportadorasSelecionadas.has(String(campo.value));
+    campo.closest('[role="option"]')?.setAttribute('aria-selected', String(campo.checked));
+  });
+}
+
+function definirSeletorTransportadorasAberto(aberto) {
+  const podeAbrir = aberto && !romaneioTransportadoraTrigger.disabled;
+  romaneioTransportadora.classList.toggle('is-open', podeAbrir);
+  romaneioTransportadoraOpcoes.hidden = !podeAbrir;
+  romaneioTransportadoraTrigger.setAttribute('aria-expanded', String(podeAbrir));
+}
+
+function limparSelecaoTransportadorasRomaneio() {
+  romaneioTransportadorasSelecionadas.clear();
+  atualizarResumoTransportadorasRomaneio();
+  definirSeletorTransportadorasAberto(false);
+}
+
 async function carregarPedidosRomaneio() {
-  const transportadora = String(romaneioTransportadora.value || '').trim();
+  const transportadoras = codigosTransportadorasRomaneio();
+  const buscaId = ++romaneioBuscaPedidosId;
   definirStatusRomaneio();
-  if (!transportadora) {
+  if (transportadoras.length === 0) {
     limparPedidosRomaneio();
     return;
   }
 
   limparPedidosRomaneio('Buscando notas faturadas pendentes de carga...');
   try {
-    const params = new URLSearchParams({ ...parametrosRomaneio(), transportadora });
+    const params = new URLSearchParams({
+      ...parametrosRomaneio(),
+      transportadoras: transportadoras.join(',')
+    });
     const resposta = await fetch(`/api/fila-conferencia/romaneio/pedidos?${params.toString()}`);
     const payload = await resposta.json();
+    if (buscaId !== romaneioBuscaPedidosId) return;
     if (!resposta.ok) throw new Error(payload.erro || 'Erro ao buscar notas faturadas da transportadora.');
     romaneioPedidos = (payload.itens || []).map((pedido) => ({ ...pedido, selecionada: true }));
     renderizarPedidosRomaneio();
   } catch (error) {
+    if (buscaId !== romaneioBuscaPedidosId) return;
     limparPedidosRomaneio('Nao foi possivel carregar as notas faturadas.');
     definirStatusRomaneio(error.message, 'error');
   }
@@ -656,8 +769,11 @@ async function carregarTransportadorasRomaneio() {
     throw new Error('Selecione a empresa antes de abrir o romaneio.');
   }
 
-  romaneioTransportadora.disabled = true;
-  romaneioTransportadora.innerHTML = '<option value="">Buscando transportadoras...</option>';
+  romaneioTransportadoraTrigger.disabled = true;
+  romaneioTransportadoraTexto.textContent = 'Buscando transportadoras...';
+  romaneioTransportadoraOpcoes.innerHTML = '';
+  romaneioTransportadoras = [];
+  romaneioTransportadorasSelecionadas.clear();
   limparPedidosRomaneio();
   definirStatusRomaneio();
 
@@ -667,19 +783,19 @@ async function carregarTransportadorasRomaneio() {
     const payload = await resposta.json();
     if (!resposta.ok) throw new Error(payload.erro || 'Erro ao buscar transportadoras.');
 
-    const transportadoras = payload.itens || [];
-    romaneioTransportadora.innerHTML = '<option value="">Selecione a transportadora</option>';
-    transportadoras.forEach((transportadora) => {
-      const opcao = document.createElement('option');
-      opcao.value = String(transportadora.codigo);
-      opcao.textContent = `${transportadora.codigo} - ${transportadora.nome} (${transportadora.notas} nota${transportadora.notas === 1 ? '' : 's'})`;
-      romaneioTransportadora.appendChild(opcao);
-    });
-    if (transportadoras.length === 0) {
+    romaneioTransportadoras = payload.itens || [];
+    romaneioTransportadoraOpcoes.innerHTML = romaneioTransportadoras.map((transportadora) => `
+      <label class="romaneio-transportadora-option" role="option" aria-selected="false">
+        <input type="checkbox" value="${Number(transportadora.codigo)}" data-romaneio-transportadora>
+        <span>${escaparHtml(`${transportadora.codigo} - ${transportadora.nome} (${transportadora.notas} nota${transportadora.notas === 1 ? '' : 's'})`)}</span>
+      </label>
+    `).join('');
+    atualizarResumoTransportadorasRomaneio();
+    if (romaneioTransportadoras.length === 0) {
       limparPedidosRomaneio('Nenhuma transportadora possui notas faturadas pendentes de carga neste periodo.');
     }
   } finally {
-    romaneioTransportadora.disabled = false;
+    romaneioTransportadoraTrigger.disabled = false;
   }
 }
 
@@ -690,7 +806,9 @@ async function abrirRomaneioCargas() {
   try {
     await carregarTransportadorasRomaneio();
   } catch (error) {
-    romaneioTransportadora.innerHTML = '<option value="">Selecione a transportadora</option>';
+    romaneioTransportadoras = [];
+    romaneioTransportadoraOpcoes.innerHTML = '';
+    limparSelecaoTransportadorasRomaneio();
     limparPedidosRomaneio('Informe os filtros da fila para consultar as cargas.');
     definirStatusRomaneio(error.message, 'error');
   }
@@ -698,16 +816,17 @@ async function abrirRomaneioCargas() {
 
 function fecharRomaneioCargas() {
   if (romaneioGerando) return;
+  romaneioBuscaPedidosId += 1;
   romaneioModal.hidden = true;
-  romaneioTransportadora.value = '';
+  limparSelecaoTransportadorasRomaneio();
   limparPedidosRomaneio();
   definirStatusRomaneio();
 }
 
 async function gerarRomaneioCargas() {
-  const transportadora = Number(romaneioTransportadora.value || 0);
+  const transportadoras = codigosTransportadorasRomaneio();
   const notasSelecionadas = romaneioPedidos.filter((pedido) => pedido.selecionada !== false);
-  if (!transportadora || notasSelecionadas.length === 0 || romaneioGerando) {
+  if (transportadoras.length === 0 || notasSelecionadas.length === 0 || romaneioGerando) {
     if (!romaneioGerando && romaneioPedidos.length > 0 && notasSelecionadas.length === 0) {
       definirStatusRomaneio('Selecione ao menos uma nota para gerar o romaneio.', 'error');
     }
@@ -716,7 +835,7 @@ async function gerarRomaneioCargas() {
 
   romaneioGerando = true;
   botaoGerarRomaneio.disabled = true;
-  romaneioTransportadora.disabled = true;
+  romaneioTransportadoraTrigger.disabled = true;
   botaoGerarRomaneio.innerHTML = '<span class="pos-conferencia-spinner" aria-hidden="true"></span> Gerando carga...';
   definirStatusRomaneio('Criando a Ordem de Carga e vinculando as notas faturadas no Sankhya...');
 
@@ -726,7 +845,7 @@ async function gerarRomaneioCargas() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         ...parametrosRomaneio(),
-        transportadora,
+        transportadoras,
         notas: notasSelecionadas.map((pedido) => Number(pedido.NUNOTA))
       })
     });
@@ -746,20 +865,20 @@ async function gerarRomaneioCargas() {
     romaneioPedidos = [];
     romaneioResumo.hidden = false;
     romaneioResumo.innerHTML = `<span>Ordem de Carga</span><strong>${payload.codigoOrdemCarga}</strong>`;
-      romaneioLista.innerHTML = `
-        <div class="romaneio-empty">
-          Romaneio gerado no Sankhya. Codigo da Ordem de Carga: <strong>${payload.codigoOrdemCarga}</strong>.
-        </div>
-      `;
-      botaoImprimirRomaneio.hidden = false;
-      botaoImprimirRomaneio.dataset.ordemCarga = String(payload.codigoOrdemCarga);
-      botaoImprimirRomaneio.dataset.empresa = String(parametrosRomaneio().empresa || '');
+    romaneioLista.innerHTML = `
+      <div class="romaneio-empty">
+        Romaneio gerado no Sankhya. Codigo da Ordem de Carga: <strong>${payload.codigoOrdemCarga}</strong>.
+      </div>
+    `;
+    botaoImprimirRomaneio.hidden = false;
+    botaoImprimirRomaneio.dataset.ordemCarga = String(payload.codigoOrdemCarga);
+    botaoImprimirRomaneio.dataset.empresa = String(parametrosRomaneio().empresa || '');
   } catch (error) {
     definirStatusRomaneio(error.message, 'error');
     botaoGerarRomaneio.disabled = false;
   } finally {
     romaneioGerando = false;
-    romaneioTransportadora.disabled = false;
+    romaneioTransportadoraTrigger.disabled = false;
     botaoGerarRomaneio.textContent = 'Gerar romaneio';
   }
 }
@@ -1136,6 +1255,10 @@ function calcularDiasAte(dataValor) {
 function normalizarQuantidade(valor) {
   const numero = Number(valor);
   return Number.isFinite(numero) ? numero : 0;
+}
+
+function obterUnidadeExibicaoItem(item) {
+  return String(item?.codVolPadrao || item?.codVol || 'UN').trim() || 'UN';
 }
 
 function normalizarCodigo(valor) {
@@ -3403,7 +3526,7 @@ function agruparItensCaixaEntrada(caixa = obterCaixaEntradaAtual()) {
       controle,
       validade,
       fabricacao,
-      codVol: leitura.codVol || item.codVol || 'UN',
+      codVol: obterUnidadeExibicaoItem(item),
       quantidade: 0
     };
     atual.quantidade += normalizarQuantidade(leitura.quantidadeConvertida);
@@ -3662,14 +3785,14 @@ function criarLinhaItemConferencia(item, quantidade, classe, rotuloQuantidade, o
   const descricao = escaparAtributo(item.descrProd);
   const codigoProduto = escaparAtributo(item.codProd);
   const codigoBarras = escaparAtributo(item.codigoBarras || '-');
-  const unidade = escaparAtributo(item.codVol);
+  const unidadeExibicao = obterUnidadeExibicaoItem(item);
   const controlesLidos = [...new Set((item.leituras || [])
     .map((leitura) => String(leitura.controle || '').trim())
     .filter(Boolean))];
   const controleExibido = controlesLidos.length > 0 ? controlesLidos.join(', ') : (item.controle || '-');
   const controle = escaparAtributo(controleExibido);
   const quantidadeTexto = rotuloQuantidade || formatarQuantidade(quantidade);
-  const quantidadeComUnidade = `${quantidadeTexto} - ${item.codVol || '-'}`;
+  const quantidadeComUnidade = `${quantidadeTexto} - ${unidadeExibicao}`;
   const datasLidas = Array.isArray(item.leituras) ? item.leituras : [];
   const dataValidadeExibida = datasLidas.find((leitura) => leitura.dtValidade)?.dtValidade || item.dtValidade || '';
   const dataFabricacaoExibida = datasLidas.find((leitura) => leitura.dtFabricacao)?.dtFabricacao || item.dtFabricacao || '';
@@ -4692,16 +4815,53 @@ function formatarTituloPedidoConferencia(pedido) {
   return `Nro. Nota ${numeroNota} | ${base}`;
 }
 
+function obterEstadoOperacionalPedido(pedido) {
+  const statusConferencia = String(pedido?.STATUS_CONFERENCIA || '').trim().toUpperCase();
+  const statusSeparacao = String(pedido?.STATUS_SEPARACAO || '').trim().toUpperCase();
+
+  if (statusConferencia === 'EM ANDAMENTO' || statusConferencia === 'EM CONFERENCIA') {
+    return 'em-conferencia';
+  }
+  if (statusSeparacao === 'EM_SEPARACAO') return 'em-separacao';
+  if (statusSeparacao === 'SEPARADO') return 'separado';
+  if (statusConferencia === 'CONFERIDO') return 'conferido';
+  return 'novo';
+}
+
 function renderizarPedidosFila() {
   filaPedidosLista.innerHTML = '';
-  const pedidosFiltrados = filaPedidos;
+  const prioridadeStatus = {
+    'em-conferencia': 0,
+    separado: 1,
+    'em-separacao': 2,
+    novo: 3,
+    conferido: 4
+  };
+  const statusSelecionado = filaFiltroStatus?.value || 'todos';
+  const pedidosFiltrados = filaPedidos
+    .map((pedido, indiceOriginal) => ({
+      pedido,
+      indiceOriginal,
+      estadoOperacional: obterEstadoOperacionalPedido(pedido)
+    }))
+    .filter(({ estadoOperacional }) => (
+      statusSelecionado === 'todos' || estadoOperacional === statusSelecionado
+    ))
+    .sort((a, b) => (
+      (prioridadeStatus[a.estadoOperacional] ?? 99)
+      - (prioridadeStatus[b.estadoOperacional] ?? 99)
+      || a.indiceOriginal - b.indiceOriginal
+    ))
+    .map(({ pedido }) => pedido);
   filaCountPedidos.textContent = pedidosFiltrados.length;
 
   if (pedidosFiltrados.length === 0) {
     const temBuscaPedido = Boolean(String(filaBuscaPedido?.value || '').trim());
     renderizarEstadoVazio(
       filaPedidosLista,
-      filaPedidos.length === 0 && !temBuscaPedido
+      filaPedidos.length > 0 && statusSelecionado !== 'todos'
+        ? 'Nenhum pedido encontrado com o status selecionado.'
+        : filaPedidos.length === 0 && !temBuscaPedido
         ? `Nenhum ${filaModoConferencia === 'entrada' ? 'documento de entrada' : 'pedido'} encontrado para os filtros.`
         : `Nenhum ${filaModoConferencia === 'entrada' ? 'documento de entrada' : 'pedido'} encontrado com esse numero.`
     );
@@ -4723,9 +4883,12 @@ function renderizarPedidosFila() {
 
   pedidosFiltrados.forEach((pedido) => {
     const card = document.createElement('div');
-    const emAndamento = pedido.STATUS_CONFERENCIA === 'EM ANDAMENTO';
+    const estadoOperacional = obterEstadoOperacionalPedido(pedido);
+    const emAndamento = estadoOperacional === 'em-conferencia';
     const entrada = filaModoConferencia === 'entrada';
-    const conferido = pedido.STATUS_CONFERENCIA === 'CONFERIDO';
+    const conferido = estadoOperacional === 'conferido';
+    const separacaoFinalizada = !entrada && estadoOperacional === 'separado';
+    const separacaoIniciada = !entrada && estadoOperacional === 'em-separacao';
     const bonificacao = Number(pedido.CODTIPOPER) === (entrada ? 21 : 6);
     const iconeTipoPedido = bonificacao
       ? '<span class="pedido-status-type-icon bonificacao"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M7.5 8C5 8 4 6.7 4 5.5S5 3 6.5 3C9 3 12 8 12 8M16.5 8C19 8 20 6.7 20 5.5S19 3 17.5 3C15 3 12 8 12 8"/></svg></span>'
@@ -4736,7 +4899,7 @@ function renderizarPedidosFila() {
       ? (entrada ? 'Bonificacao de entrada' : 'Pedido de bonificacao')
       : (entrada ? 'Compra de produtos' : 'Pedido de venda');
     const numeroNotaFiscal = Number(pedido.NUMNOTA || 0) > 0 ? String(pedido.NUMNOTA) : '-';
-    card.className = `pedido-operacao-card ${emAndamento ? 'andamento' : ''} ${conferido ? 'conferido' : ''} ${pedidoSelecionado?.NUNOTA === pedido.NUNOTA ? 'active' : ''}`;
+    card.className = `pedido-operacao-card ${estadoOperacional} ${pedidoSelecionado?.NUNOTA === pedido.NUNOTA ? 'active' : ''}`;
     card.innerHTML = `
       <div class="pedido-list-action">
         ${pedido.PEDIDO_IMPRESSO
@@ -4749,10 +4912,14 @@ function renderizarPedidosFila() {
       <div class="pedido-list-status" title="${tituloTipoPedido}">
         ${iconeTipoPedido}
         ${emAndamento
-        ? `<span class="pedido-status-mini">${pedido.NOME_CONFERENTE || 'Em andamento'}</span>`
-          : pedido.STATUS_CONFERENCIA === 'CONFERIDO'
-            ? '<span class="pedido-status-mini conferido">Conferido</span>'
-          : '<span class="pedido-status-mini novo">Novo</span>'}
+          ? `<span class="pedido-status-mini em-conferencia" title="Em conferencia">${pedido.NOME_CONFERENTE || 'Em andamento'}</span>`
+          : separacaoFinalizada
+            ? '<span class="pedido-status-mini separado">Separado</span>'
+            : separacaoIniciada
+              ? '<span class="pedido-status-mini em-separacao">Em separação</span>'
+              : conferido
+                ? '<span class="pedido-status-mini conferido">Conferido</span>'
+                : '<span class="pedido-status-mini novo">Novo</span>'}
       </div>
       ${entrada ? `<div class="pedido-num-nota">${escaparHtml(numeroNotaFiscal)}</div>` : ''}
       <strong>${entrada ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}</strong>
@@ -4798,9 +4965,589 @@ function renderizarPedidoEmConferencia() {
   atualizarIcones();
 }
 
+function obterChaveStorageSeparacao() {
+  return `${STORAGE_SEPARACAO_PREFIX}${pedidoPreviewSelecionado?.NUNOTA || ''}`;
+}
+
+function obterChaveItemSeparacao(item, indice) {
+  const sequencia = Number(item.sequencia);
+  if (Number.isFinite(sequencia) && sequencia > 0) return `seq:${sequencia}`;
+  return [
+    `prod:${item.codProd || ''}`,
+    `controle:${normalizarCodigo(item.controle)}`,
+    `un:${normalizarCodigo(item.codVol)}`,
+    `idx:${indice}`
+  ].join('|');
+}
+
+function carregarProgressoSeparacaoLocal() {
+  try {
+    const salvo = JSON.parse(localStorage.getItem(obterChaveStorageSeparacao()) || '{}');
+    return salvo && typeof salvo === 'object' ? salvo : {};
+  } catch (error) {
+    console.warn('Nao foi possivel carregar o progresso da separacao:', error);
+    return {};
+  }
+}
+
+function aplicarEstadoSeparacao(separacao) {
+  if (!separacao) return;
+  const registros = new Map((separacao.itens || []).map((item) => [item.chave, item]));
+  itensSeparacao = itensSeparacao.map((item) => {
+    const registro = registros.get(item.chaveSeparacao);
+    if (!registro) return item;
+    return {
+      ...item,
+      qtdSeparada: Math.max(0, normalizarQuantidade(registro.qtdSeparada)),
+      separacaoProcessada: Boolean(registro.processado),
+      separacaoAjustada: Boolean(registro.ajustado)
+    };
+  });
+  separacaoConcluida = separacao.status === 'SEPARADO';
+  separacaoVersao = Number(separacao.versao || 0);
+}
+
+function refletirSeparacaoConcluidaNaInterface() {
+  if (!separacaoConcluida) return;
+  if (pedidoPreviewSelecionado) pedidoPreviewSelecionado.STATUS_SEPARACAO = 'SEPARADO';
+  const pedidoFila = filaPedidos.find((pedido) => (
+    Number(pedido.NUNOTA) === Number(pedidoPreviewSelecionado?.NUNOTA)
+  ));
+  if (pedidoFila) pedidoFila.STATUS_SEPARACAO = 'SEPARADO';
+  botaoAbrirSeparacaoPedido.disabled = true;
+  botaoAbrirSeparacaoPedido.textContent = 'Separacao concluida';
+  renderizarPedidosFila();
+}
+
+async function requisitarSeparacao(caminho = '', options = {}) {
+  const nunota = Number(pedidoPreviewSelecionado?.NUNOTA || 0);
+  if (!nunota) throw new Error('Pedido de separacao invalido.');
+  const resposta = await fetch(`/api/fila-conferencia/separacao/${nunota}${caminho}`, options);
+  const payload = await resposta.json();
+  if (!resposta.ok) throw new Error(payload.erro || 'Nao foi possivel salvar a separacao.');
+  return payload.separacao || null;
+}
+
+async function salvarProgressoSeparacao(item) {
+  if (!item) return null;
+  const separacao = await requisitarSeparacao('/item', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      item: {
+        chave: item.chaveSeparacao,
+        qtdSeparada: normalizarQuantidade(item.qtdSeparada),
+        processado: Boolean(item.separacaoProcessada),
+        ajustado: Boolean(item.separacaoAjustada)
+      }
+    })
+  });
+  aplicarEstadoSeparacao(separacao);
+  return separacao;
+}
+
+function quantidadeEsperadaSeparacao(item) {
+  return Math.max(0, normalizarQuantidade(item.qtdNeg));
+}
+
+function itemSeparacaoProcessado(item) {
+  return Boolean(item.separacaoProcessada);
+}
+
+function itemSeparacaoCompleto(item) {
+  const esperado = quantidadeEsperadaSeparacao(item);
+  return itemSeparacaoProcessado(item)
+    && normalizarQuantidade(item.qtdSeparada) === esperado;
+}
+
+function itemSeparacaoZerado(item) {
+  return itemSeparacaoProcessado(item) && normalizarQuantidade(item.qtdSeparada) === 0;
+}
+
+function itemSeparacaoDivergente(item) {
+  return itemSeparacaoProcessado(item) && !itemSeparacaoCompleto(item);
+}
+
+function obterLoteSeparacao(item) {
+  const controle = String(item.controle || item.CONTROLE || '').trim();
+  return controle || 'Sem lote';
+}
+
+function obterValidadeSeparacao(item) {
+  const validade = item.dtValidade || item.DTVALID || item.validade || item.dataValidade || '';
+  return formatarData(validade) || 'Sem validade';
+}
+
+async function prepararItensSeparacao() {
+  const progresso = carregarProgressoSeparacaoLocal();
+  separacaoConcluida = Boolean(progresso.__meta?.concluida);
+  itensSeparacao = itensPedidoPreview.map((item, indice) => {
+    const chaveSeparacao = obterChaveItemSeparacao(item, indice);
+    const esperado = quantidadeEsperadaSeparacao(item);
+    const registro = progresso[chaveSeparacao];
+    const registroEstruturado = registro && typeof registro === 'object';
+    const separado = Math.max(0, normalizarQuantidade(
+      registroEstruturado ? registro.qtdSeparada : registro
+    ));
+    const processado = registroEstruturado
+      ? Boolean(registro.processado)
+      : (esperado > 0 && separado >= esperado);
+    return {
+      ...item,
+      chaveSeparacao,
+      qtdSeparada: separado,
+      separacaoProcessada: processado,
+      separacaoAjustada: registroEstruturado ? Boolean(registro.ajustado) : false
+    };
+  });
+
+  const separacao = await requisitarSeparacao('/iniciar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      itens: itensSeparacao.map((item) => ({
+        chave: item.chaveSeparacao,
+        sequencia: item.sequencia,
+        codProd: item.codProd,
+        qtdEsperada: quantidadeEsperadaSeparacao(item),
+        qtdSeparada: normalizarQuantidade(item.qtdSeparada),
+        processado: Boolean(item.separacaoProcessada),
+        ajustado: Boolean(item.separacaoAjustada)
+      }))
+    })
+  });
+  aplicarEstadoSeparacao(separacao);
+  localStorage.removeItem(obterChaveStorageSeparacao());
+  return separacao;
+}
+
+async function sincronizarSeparacaoAberta() {
+  if (separacaoSyncEmAndamento || separacaoScreen.hidden || !pedidoPreviewSelecionado?.NUNOTA) return;
+  separacaoSyncEmAndamento = true;
+  try {
+    const separacao = await requisitarSeparacao();
+    if (separacao && Number(separacao.versao || 0) !== separacaoVersao) {
+      aplicarEstadoSeparacao(separacao);
+      refletirSeparacaoConcluidaNaInterface();
+      fecharConfirmacaoSeparacao();
+      fecharResumoFinalSeparacao();
+      renderizarItensSeparacao();
+      atualizarStatusSeparacao(
+        separacaoConcluida
+          ? 'Separacao concluida em outro dispositivo.'
+          : 'Separacao atualizada por outro dispositivo.',
+        'success'
+      );
+    }
+  } catch (error) {
+    console.warn('Nao foi possivel sincronizar a separacao:', error);
+  } finally {
+    separacaoSyncEmAndamento = false;
+  }
+}
+
+function iniciarSincronizacaoSeparacao() {
+  pararSincronizacaoSeparacao();
+  separacaoSyncTimer = setInterval(sincronizarSeparacaoAberta, 2000);
+}
+
+function pararSincronizacaoSeparacao() {
+  if (separacaoSyncTimer) clearInterval(separacaoSyncTimer);
+  separacaoSyncTimer = null;
+  separacaoSyncEmAndamento = false;
+}
+
+function atualizarStatusSeparacao(mensagem, tipo = '') {
+  separacaoStatus.textContent = mensagem;
+  separacaoStatus.className = `separacao-status${tipo ? ` is-${tipo}` : ''}`;
+}
+
+function compararItensSeparacao(a, b) {
+  const processadoA = itemSeparacaoProcessado(a) ? 1 : 0;
+  const processadoB = itemSeparacaoProcessado(b) ? 1 : 0;
+  if (processadoA !== processadoB) return processadoA - processadoB;
+  return String(a.descrProd || '').localeCompare(String(b.descrProd || ''), 'pt-BR', {
+    sensitivity: 'base',
+    numeric: true
+  });
+}
+
+function agruparItensSeparacao() {
+  const grupos = new Map();
+
+  itensSeparacao.forEach((item) => {
+    const codigo = String(item.codGrupoProd || '').trim();
+    const descricao = String(item.descrGrupoProd || '').trim() || 'Sem grupo';
+    const chave = codigo || `SEM_GRUPO:${descricao}`;
+    if (!grupos.has(chave)) {
+      grupos.set(chave, { codigo, descricao, itens: [] });
+    }
+    grupos.get(chave).itens.push(item);
+  });
+
+  return [...grupos.values()]
+    .sort((a, b) => {
+      if (!a.codigo && b.codigo) return 1;
+      if (a.codigo && !b.codigo) return -1;
+      const numeroA = Number(a.codigo);
+      const numeroB = Number(b.codigo);
+      if (Number.isFinite(numeroA) && Number.isFinite(numeroB) && numeroA !== numeroB) {
+        return numeroA - numeroB;
+      }
+      return a.descricao.localeCompare(b.descricao, 'pt-BR', { sensitivity: 'base', numeric: true });
+    })
+    .map((grupo) => ({ ...grupo, itens: [...grupo.itens].sort(compararItensSeparacao) }));
+}
+
+function renderizarItensSeparacao() {
+  const processados = itensSeparacao.filter(itemSeparacaoProcessado).length;
+  separacaoProgresso.textContent = separacaoConcluida
+    ? 'Separacao concluida'
+    : `${processados}/${itensSeparacao.length} itens separados`;
+  const todosProcessados = itensSeparacao.length > 0 && processados === itensSeparacao.length;
+  botaoFinalizarSeparacao.hidden = separacaoConcluida || !todosProcessados;
+  separacaoCodigo.disabled = separacaoConcluida;
+  botaoLimparCodigoSeparacao.disabled = separacaoConcluida;
+
+  if (itensSeparacao.length === 0) {
+    separacaoItensLista.innerHTML = '<tr><td colspan="6" class="empty-state">Nenhum item encontrado para separar.</td></tr>';
+    return;
+  }
+
+  separacaoItensLista.innerHTML = agruparItensSeparacao().map((grupo) => {
+    const identificacaoGrupo = grupo.codigo
+      ? `Grupo ${grupo.codigo} - ${grupo.descricao}`
+      : grupo.descricao;
+    const cabecalho = `
+      <tr class="separacao-group-row">
+        <td colspan="6">${escaparHtml(identificacaoGrupo)}</td>
+      </tr>
+    `;
+    const linhas = grupo.itens.map((item) => {
+      const esperado = quantidadeEsperadaSeparacao(item);
+      const separado = normalizarQuantidade(item.qtdSeparada);
+      const processado = itemSeparacaoProcessado(item);
+      const completo = itemSeparacaoCompleto(item);
+      const zerado = itemSeparacaoZerado(item);
+      const parcial = !processado && separado > 0;
+      const divergente = itemSeparacaoDivergente(item);
+      const classe = zerado
+        ? ' is-zero'
+        : completo
+          ? ' is-complete'
+          : (divergente || parcial) ? ' is-partial' : '';
+      const status = zerado
+        ? 'Zerado'
+        : completo
+          ? 'Separado'
+          : divergente
+            ? 'Divergente'
+            : parcial ? 'Parcial' : 'Pendente';
+      const badgeClasse = zerado ? ' zero' : completo ? '' : ' pending';
+      return `
+        <tr class="separacao-row${classe}" data-separacao-item="${escaparHtml(item.chaveSeparacao)}" tabindex="0">
+          <td><strong class="separacao-product-code">${escaparHtml(item.codProd)}</strong></td>
+          <td class="separacao-description" title="${escaparHtml(item.descrProd)}">${escaparHtml(item.descrProd || '-')}</td>
+          <td>${formatarQuantidade(separado)} / ${formatarQuantidade(esperado)} ${escaparHtml(obterUnidadeExibicaoItem(item))}</td>
+          <td title="${escaparAtributo(obterLoteSeparacao(item))}">${escaparHtml(obterLoteSeparacao(item))}</td>
+          <td>${escaparHtml(obterValidadeSeparacao(item))}</td>
+          <td><span class="separacao-badge${badgeClasse}">${status}</span></td>
+        </tr>
+      `;
+    }).join('');
+    return cabecalho + linhas;
+  }).join('');
+
+  atualizarIcones();
+}
+
+function fecharConfirmacaoSeparacao() {
+  itemSeparacaoPendente = null;
+  separacaoConfirmModal.hidden = true;
+  separacaoAjustePainel.hidden = true;
+  separacaoConfirmStatus.textContent = '';
+}
+
+function abrirConfirmacaoSeparacao(item, entradaCodigo = null) {
+  if (!item) return;
+  if (separacaoConcluida) {
+    atualizarStatusSeparacao('Esta separacao ja foi concluida.', 'warning');
+    return;
+  }
+  limparCodigoSeparacao();
+  const esperado = quantidadeEsperadaSeparacao(item);
+  const separado = normalizarQuantidade(item.qtdSeparada);
+  const restante = Math.max(0, esperado - separado);
+  const processado = itemSeparacaoProcessado(item);
+  const multiplicador = Math.max(0, Number(entradaCodigo?.multiplicador) || 1);
+  const quantidade = processado
+    ? 0
+    : (entradaCodigo ? multiplicador : restante);
+
+  itemSeparacaoPendente = { item, quantidade, entradaCodigo };
+
+  const unidadeExibicao = obterUnidadeExibicaoItem(item);
+  separacaoConfirmProduto.innerHTML = `
+    ${escaparHtml(item.codProd)} - ${escaparHtml(item.descrProd || '-')}
+    <div class="separacao-confirm-meta">Lote: ${escaparHtml(obterLoteSeparacao(item))} | Validade: ${escaparHtml(obterValidadeSeparacao(item))}</div>
+    <div class="separacao-confirm-meta">Pedido: ${formatarQuantidade(esperado)} ${escaparHtml(unidadeExibicao)} | Separado: ${formatarQuantidade(separado)} ${escaparHtml(unidadeExibicao)}</div>
+  `;
+  separacaoConfirmTitulo.textContent = processado ? 'Item processado' : 'Confirmar separacao';
+  separacaoConfirmField.hidden = false;
+  separacaoAjustePainel.hidden = true;
+  separacaoAjusteQtd.value = String(separado);
+  botaoConfirmarSeparacao.hidden = false;
+  botaoConfirmarSeparacao.textContent = processado ? 'Voltar para pendente' : 'Confirmar item';
+  botaoConfirmarSeparacao.classList.toggle('is-revert', processado);
+  separacaoConfirmQtd.textContent = processado
+    ? `${formatarQuantidade(separado)} ${unidadeExibicao}`
+    : `${formatarQuantidade(quantidade)} ${unidadeExibicao}`;
+  separacaoConfirmStatus.textContent = processado
+    ? 'O item ja foi processado. Voce pode ajustar a quantidade ou devolve-lo para pendente.'
+    : entradaCodigo?.tipo === 'UNIDADE_ALTERNATIVA'
+      ? `${obterDescricaoEntradaCodigo(entradaCodigo)}: 1 leitura equivale a ${formatarQuantidade(quantidade)} ${unidadeExibicao}.`
+      : 'Confirme a quantidade separada.';
+  separacaoConfirmModal.hidden = false;
+  setTimeout(() => botaoConfirmarSeparacao.focus(), 0);
+}
+
+async function confirmarItemSeparacao() {
+  if (!itemSeparacaoPendente) return;
+  const { item, quantidade } = itemSeparacaoPendente;
+  const estadoAnterior = {
+    qtdSeparada: item.qtdSeparada,
+    separacaoProcessada: item.separacaoProcessada,
+    separacaoAjustada: item.separacaoAjustada
+  };
+  if (itemSeparacaoProcessado(item)) {
+    const descricao = item.descrProd || `Produto ${item.codProd}`;
+    item.qtdSeparada = 0;
+    item.separacaoProcessada = false;
+    item.separacaoAjustada = false;
+    try {
+      await salvarProgressoSeparacao(item);
+      fecharConfirmacaoSeparacao();
+      renderizarItensSeparacao();
+      atualizarStatusSeparacao(`${descricao} voltou para pendente.`, 'warning');
+      limparCodigoSeparacao({ focar: true });
+    } catch (error) {
+      Object.assign(item, estadoAnterior);
+      renderizarItensSeparacao();
+      separacaoConfirmStatus.textContent = error.message;
+    }
+    return;
+  }
+  const esperado = quantidadeEsperadaSeparacao(item);
+  const separado = normalizarQuantidade(item.qtdSeparada);
+  const restante = Math.max(0, esperado - separado);
+
+  if (quantidade <= 0) {
+    separacaoConfirmStatus.textContent = 'Nao foi possivel calcular a quantidade para esta leitura.';
+    return;
+  }
+  if (quantidade > restante) {
+    separacaoConfirmStatus.textContent = `A quantidade excede o restante do item (${formatarQuantidade(restante)}).`;
+    return;
+  }
+
+  const descricao = item.descrProd || `Produto ${item.codProd}`;
+  item.qtdSeparada = separado + quantidade;
+  item.separacaoProcessada = item.qtdSeparada >= esperado;
+  item.separacaoAjustada = false;
+  const completo = itemSeparacaoCompleto(item);
+  try {
+    await salvarProgressoSeparacao(item);
+    fecharConfirmacaoSeparacao();
+    renderizarItensSeparacao();
+    atualizarStatusSeparacao(
+      completo
+        ? `${descricao} separado com sucesso.`
+        : `${descricao}: separacao parcial registrada.`,
+      completo ? 'success' : 'warning'
+    );
+    limparCodigoSeparacao({ focar: true });
+  } catch (error) {
+    Object.assign(item, estadoAnterior);
+    renderizarItensSeparacao();
+    separacaoConfirmStatus.textContent = error.message;
+  }
+}
+
+function abrirAjusteQuantidadeSeparacao() {
+  if (!itemSeparacaoPendente) return;
+  separacaoAjusteQtd.value = String(normalizarQuantidade(itemSeparacaoPendente.item.qtdSeparada));
+  separacaoAjustePainel.hidden = false;
+  separacaoConfirmStatus.textContent = 'Informe a quantidade realmente separada. Zero sera registrado como item zerado.';
+  setTimeout(() => {
+    separacaoAjusteQtd.focus();
+    separacaoAjusteQtd.select();
+  }, 0);
+}
+
+async function aplicarAjusteQuantidadeSeparacao() {
+  if (!itemSeparacaoPendente) return;
+  const valor = Number(String(separacaoAjusteQtd.value || '').replace(',', '.'));
+  if (!Number.isFinite(valor) || valor < 0) {
+    separacaoConfirmStatus.textContent = 'Informe uma quantidade valida, igual ou maior que zero.';
+    return;
+  }
+
+  const item = itemSeparacaoPendente.item;
+  const estadoAnterior = {
+    qtdSeparada: item.qtdSeparada,
+    separacaoProcessada: item.separacaoProcessada,
+    separacaoAjustada: item.separacaoAjustada
+  };
+  const esperado = quantidadeEsperadaSeparacao(item);
+  const descricao = item.descrProd || `Produto ${item.codProd}`;
+  item.qtdSeparada = valor;
+  item.separacaoProcessada = true;
+  item.separacaoAjustada = true;
+  try {
+    await salvarProgressoSeparacao(item);
+    fecharConfirmacaoSeparacao();
+    renderizarItensSeparacao();
+    atualizarStatusSeparacao(
+      valor === esperado
+        ? `${descricao} ajustado e separado.`
+        : valor === 0
+          ? `${descricao} registrado com quantidade zero.`
+          : `${descricao} registrado com quantidade divergente (${formatarQuantidade(valor)} de ${formatarQuantidade(esperado)}).`,
+      valor === esperado ? 'success' : 'warning'
+    );
+    limparCodigoSeparacao({ focar: true });
+  } catch (error) {
+    Object.assign(item, estadoAnterior);
+    renderizarItensSeparacao();
+    separacaoConfirmStatus.textContent = error.message;
+  }
+}
+
+function localizarItemSeparacaoPorCodigo(codigo) {
+  const normalizado = normalizarCodigo(codigo);
+  if (!normalizado) return null;
+  const compativeis = itensSeparacao
+    .map((item) => ({ item, entrada: obterEntradaCodigoItem(item, normalizado) }))
+    .filter((item) => item.entrada);
+  return compativeis.find(({ item }) => !itemSeparacaoProcessado(item)) || compativeis[0] || null;
+}
+
+function processarCodigoSeparacao() {
+  const codigo = normalizarCodigo(separacaoCodigo.value);
+  if (!codigo) {
+    atualizarStatusSeparacao('Bipe ou digite um codigo para localizar o produto.', 'warning');
+    return;
+  }
+  const correspondencia = localizarItemSeparacaoPorCodigo(codigo);
+  if (!correspondencia) {
+    atualizarStatusSeparacao(`Codigo ${codigo} nao encontrado neste pedido.`, 'warning');
+    separacaoCodigo.select();
+    return;
+  }
+  leituraSeparacaoMobile = '';
+  abrirConfirmacaoSeparacao(correspondencia.item, correspondencia.entrada);
+}
+
+function fecharResumoFinalSeparacao() {
+  separacaoFinalModal.hidden = true;
+}
+
+function abrirResumoFinalSeparacao() {
+  const processados = itensSeparacao.filter(itemSeparacaoProcessado);
+  if (itensSeparacao.length === 0 || processados.length !== itensSeparacao.length) {
+    atualizarStatusSeparacao('Separe ou ajuste todos os itens antes de finalizar a separacao.', 'warning');
+    return;
+  }
+
+  const conformes = itensSeparacao.filter(itemSeparacaoCompleto).length;
+  const divergentes = itensSeparacao.filter(itemSeparacaoDivergente).length;
+  const zerados = itensSeparacao.filter(itemSeparacaoZerado).length;
+  separacaoFinalResumo.innerHTML = `
+    <div class="separacao-final-metric"><span>Conformes</span><strong>${conformes}</strong></div>
+    <div class="separacao-final-metric"><span>Divergentes</span><strong>${divergentes}</strong></div>
+    <div class="separacao-final-metric"><span>Zerados</span><strong>${zerados}</strong></div>
+  `;
+  separacaoFinalLista.innerHTML = '';
+  separacaoFinalModal.hidden = false;
+  setTimeout(() => botaoConfirmarFinalSeparacao.focus(), 0);
+}
+
+async function concluirSeparacao() {
+  if (itensSeparacao.length === 0 || !itensSeparacao.every(itemSeparacaoProcessado)) return;
+  botaoConfirmarFinalSeparacao.disabled = true;
+  try {
+    const separacao = await requisitarSeparacao('/finalizar', { method: 'POST' });
+    aplicarEstadoSeparacao(separacao);
+    refletirSeparacaoConcluidaNaInterface();
+    pararSincronizacaoSeparacao();
+    fecharResumoFinalSeparacao();
+    renderizarItensSeparacao();
+    atualizarStatusSeparacao('Separacao concluida e quantidades registradas.', 'success');
+  } catch (error) {
+    atualizarStatusSeparacao(error.message, 'warning');
+  } finally {
+    botaoConfirmarFinalSeparacao.disabled = false;
+  }
+}
+
+async function abrirSeparacaoPedido() {
+  if (!pedidoPreviewSelecionado || filaModoConferencia !== 'saida') return;
+  if (pedidoPreviewSelecionado.STATUS_CONFERENCIA === 'CONFERIDO') return;
+  if (pedidoPreviewSelecionado.STATUS_SEPARACAO === 'SEPARADO') return;
+  if (itensPedidoPreview.length === 0) {
+    atualizarStatusSeparacao('Aguarde o carregamento dos itens do pedido.', 'warning');
+    return;
+  }
+
+  try {
+    await prepararItensSeparacao();
+  } catch (error) {
+    scanStatus.textContent = error.message;
+    return;
+  }
+  if (separacaoConcluida) {
+    refletirSeparacaoConcluidaNaInterface();
+    return;
+  }
+  pedidoPreview.hidden = true;
+  separacaoScreen.hidden = false;
+  separacaoMeta.textContent = `${formatarTituloPedidoConferencia(pedidoPreviewSelecionado)} | ${pedidoPreviewSelecionado.EMPRESA || '-'}`;
+  separacaoCodigo.value = '';
+  leituraSeparacaoMobile = '';
+  configurarLeitorSeparacao();
+  atualizarStatusSeparacao(separacaoConcluida
+    ? 'Esta separacao ja foi concluida.'
+    : separacaoEmMobile()
+      ? 'Bipe um codigo ou mantenha um produto pressionado para confirmar a separacao.'
+      : 'Bipe um codigo ou clique em um produto da lista.'
+  );
+  renderizarItensSeparacao();
+  iniciarSincronizacaoSeparacao();
+  atualizarIcones();
+  setTimeout(() => separacaoCodigo.focus(), 0);
+}
+
+function fecharSeparacaoPedido() {
+  pararSincronizacaoSeparacao();
+  if (toqueLongoSeparacao) {
+    clearTimeout(toqueLongoSeparacao.timeout);
+    toqueLongoSeparacao = null;
+  }
+  fecharConfirmacaoSeparacao();
+  fecharResumoFinalSeparacao();
+  separacaoScreen.hidden = true;
+  if (pedidoPreviewSelecionado) pedidoPreview.hidden = false;
+}
+
 function fecharPreviewPedido() {
+  pararSincronizacaoSeparacao();
+  if (separacaoScreen) separacaoScreen.hidden = true;
+  fecharConfirmacaoSeparacao();
+  fecharResumoFinalSeparacao();
   pedidoPreviewSelecionado = null;
   itensPedidoPreview = [];
+  itensSeparacao = [];
+  separacaoConcluida = false;
   pedidoPreview.hidden = true;
   pedidoPreviewItensLista.innerHTML = '';
   pedidoPreviewDocumentos.hidden = true;
@@ -4995,6 +5742,9 @@ async function abrirPreviewPedido(pedido) {
     pedidoPreviewVolumes.textContent = formatarQuantidade(pedido.QTDVOL || 0);
   }
   botaoImprimirPreviewPedido.innerHTML = `<i data-lucide="printer" aria-hidden="true"></i>Imprimir ${filaModoConferencia === 'entrada' ? 'nota' : 'pedido'}`;
+  botaoAbrirSeparacaoPedido.hidden = filaModoConferencia !== 'saida'
+    || pedido.STATUS_CONFERENCIA === 'CONFERIDO';
+  botaoAbrirSeparacaoPedido.disabled = true;
   pedidoPreviewStatus.textContent = pedido.STATUS_CONFERENCIA === 'EM ANDAMENTO' ? 'Continuar' : 'Novo';
   pedidoPreviewStatus.textContent = pedido.STATUS_CONFERENCIA === 'CONFERIDO'
     ? 'Conferido'
@@ -5023,6 +5773,17 @@ async function abrirPreviewPedido(pedido) {
 
     itensPedidoPreview = payload.itens || [];
     renderizarItensPlanilha(pedidoPreviewItensLista, itensPedidoPreview);
+    botaoAbrirSeparacaoPedido.disabled = filaModoConferencia !== 'saida'
+      || itensPedidoPreview.length === 0
+      || pedido.STATUS_CONFERENCIA === 'CONFERIDO'
+      || pedido.STATUS_SEPARACAO === 'SEPARADO';
+    if (pedido.STATUS_SEPARACAO === 'SEPARADO') {
+      botaoAbrirSeparacaoPedido.textContent = 'Separação concluída';
+    } else if (pedido.STATUS_SEPARACAO === 'EM_SEPARACAO') {
+      botaoAbrirSeparacaoPedido.textContent = 'Continuar separação';
+    } else {
+      botaoAbrirSeparacaoPedido.textContent = 'Separação';
+    }
   } catch (error) {
     console.error('Erro ao abrir preview do pedido:', error);
     renderizarEstadoVazio(pedidoPreviewItensLista, error.message);
@@ -5324,10 +6085,11 @@ function abrirModalAlteracoesEntrada(alteracoes) {
   const itensHtml = alteracoes
     .map(({ item, detalhes }) => {
       const qtdCortada = quantidadeCortadaItem(item);
+      const unidadeExibicao = obterUnidadeExibicaoItem(item);
       const resumoItem = [
-        `Negociado: ${formatarQuantidade(item.qtdNeg)} ${item.codVol || ''}`.trim(),
-        `Conferido: ${formatarQuantidade(item.qtdConferida)} ${item.codVol || ''}`.trim(),
-        qtdCortada > 0 ? `Corte: ${formatarQuantidade(qtdCortada)} ${item.codVol || ''}`.trim() : null,
+        `Negociado: ${formatarQuantidade(item.qtdNeg)} ${unidadeExibicao}`.trim(),
+        `Conferido: ${formatarQuantidade(item.qtdConferida)} ${unidadeExibicao}`.trim(),
+        qtdCortada > 0 ? `Corte: ${formatarQuantidade(qtdCortada)} ${unidadeExibicao}`.trim() : null,
         item.controle ? `Lote da nota: ${item.controle}` : null
       ].filter(Boolean);
 
@@ -5858,6 +6620,7 @@ contatoCompraFinal.addEventListener('change', () => {
 botaoExibirContatosAtualizados.addEventListener('click', carregarClientesAtualizadosContato);
 contatoBusca.addEventListener('input', agendarBuscaContato);
 contatoSomenteAtivos.addEventListener('change', alternarFiltroAtivosContato);
+filaFiltroStatus?.addEventListener('change', renderizarPedidosFila);
 contatoPaginaPrimeira.addEventListener('click', () => irParaPaginaContato(1));
 contatoPaginaAnterior.addEventListener('click', () => irParaPaginaContato(contatoPaginacao.pagina - 1));
 contatoPaginaProxima.addEventListener('click', () => irParaPaginaContato(contatoPaginacao.pagina + 1));
@@ -5896,7 +6659,17 @@ botaoModoEntrada.addEventListener('click', alternarModoFilaConferencia);
 botaoAbrirRomaneio.addEventListener('click', abrirRomaneioCargas);
 botaoFecharRomaneio.addEventListener('click', fecharRomaneioCargas);
 botaoCancelarRomaneio.addEventListener('click', fecharRomaneioCargas);
-romaneioTransportadora.addEventListener('change', carregarPedidosRomaneio);
+romaneioTransportadoraTrigger.addEventListener('click', () => {
+  definirSeletorTransportadorasAberto(romaneioTransportadoraOpcoes.hidden);
+});
+romaneioTransportadoraOpcoes.addEventListener('change', (event) => {
+  const campo = event.target.closest('[data-romaneio-transportadora]');
+  if (!campo) return;
+  if (campo.checked) romaneioTransportadorasSelecionadas.add(String(campo.value));
+  else romaneioTransportadorasSelecionadas.delete(String(campo.value));
+  atualizarResumoTransportadorasRomaneio();
+  carregarPedidosRomaneio();
+});
 botaoGerarRomaneio.addEventListener('click', gerarRomaneioCargas);
 botaoImprimirRomaneio.addEventListener('click', () => {
   abrirPdfRomaneio(botaoImprimirRomaneio.dataset.ordemCarga, botaoImprimirRomaneio.dataset.empresa, botaoImprimirRomaneio);
@@ -5919,6 +6692,7 @@ romaneioLista.addEventListener('change', (event) => {
 });
 romaneioModal.addEventListener('click', (event) => {
   if (event.target === romaneioModal) fecharRomaneioCargas();
+  else if (!event.target.closest('#romaneio-transportadora')) definirSeletorTransportadorasAberto(false);
 });
 filaBuscaPedido.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
@@ -5928,6 +6702,104 @@ filaBuscaPedido.addEventListener('keydown', (event) => {
 });
 botaoCancelarPreviewPedido.addEventListener('click', fecharPreviewPedido);
 botaoImprimirPreviewPedido.addEventListener('click', abrirPdfPedido);
+botaoAbrirSeparacaoPedido.addEventListener('click', abrirSeparacaoPedido);
+botaoFecharSeparacaoPedido.addEventListener('click', fecharSeparacaoPedido);
+botaoFinalizarSeparacao.addEventListener('click', abrirResumoFinalSeparacao);
+botaoCancelarConfirmacaoSeparacao.addEventListener('click', fecharConfirmacaoSeparacao);
+botaoConfirmarSeparacao.addEventListener('click', confirmarItemSeparacao);
+botaoAjustarQuantidadeSeparacao.addEventListener('click', abrirAjusteQuantidadeSeparacao);
+botaoCancelarAjusteSeparacao.addEventListener('click', () => {
+  separacaoAjustePainel.hidden = true;
+  separacaoConfirmStatus.textContent = '';
+});
+botaoAplicarAjusteSeparacao.addEventListener('click', aplicarAjusteQuantidadeSeparacao);
+separacaoAjusteQtd.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    aplicarAjusteQuantidadeSeparacao();
+  }
+});
+botaoCancelarFinalSeparacao.addEventListener('click', fecharResumoFinalSeparacao);
+botaoConfirmarFinalSeparacao.addEventListener('click', concluirSeparacao);
+botaoLimparCodigoSeparacao.addEventListener('click', () => {
+  limparCodigoSeparacao({ focar: true });
+  atualizarStatusSeparacao('Campo limpo. Bipe o proximo codigo.');
+});
+separacaoCodigo.addEventListener('input', () => {
+  const somenteDigitos = separacaoCodigo.value.replace(/\D/g, '');
+  separacaoCodigo.value = somenteDigitos;
+  if (separacaoEmMobile()) leituraSeparacaoMobile = somenteDigitos;
+});
+separacaoCodigo.addEventListener('keydown', (event) => {
+  if (separacaoEmMobile()) {
+    if (!separacaoScreen.hidden && /^[0-9]$/.test(event.key)) {
+      event.preventDefault();
+      leituraSeparacaoMobile += event.key;
+      separacaoCodigo.value = leituraSeparacaoMobile;
+      return;
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      leituraSeparacaoMobile = '';
+      processarCodigoSeparacao();
+    }
+    return;
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    processarCodigoSeparacao();
+  }
+});
+separacaoItensLista.addEventListener('click', (event) => {
+  if (separacaoEmMobile()) return;
+  const linha = event.target.closest('[data-separacao-item]');
+  if (!linha) return;
+  abrirConfirmacaoSeparacao(itensSeparacao.find((item) => item.chaveSeparacao === linha.dataset.separacaoItem));
+});
+separacaoItensLista.addEventListener('pointerdown', (event) => {
+  if (!separacaoEmMobile()) return;
+  const linha = event.target.closest('[data-separacao-item]');
+  if (!linha) return;
+  event.preventDefault();
+
+  const item = itensSeparacao.find((entrada) => entrada.chaveSeparacao === linha.dataset.separacaoItem);
+  if (!item) return;
+  const pointerId = event.pointerId;
+  const timeout = setTimeout(() => {
+    toqueLongoSeparacao = null;
+    if (navigator.vibrate) navigator.vibrate(20);
+    abrirConfirmacaoSeparacao(item);
+  }, TEMPO_TOQUE_LONGO_SEPARACAO_MS);
+  toqueLongoSeparacao = { pointerId, timeout };
+});
+function cancelarToqueLongoSeparacao(event) {
+  if (!toqueLongoSeparacao) return;
+  if (event?.pointerId !== undefined && event.pointerId !== toqueLongoSeparacao.pointerId) return;
+  clearTimeout(toqueLongoSeparacao.timeout);
+  toqueLongoSeparacao = null;
+}
+separacaoItensLista.addEventListener('pointerup', cancelarToqueLongoSeparacao);
+separacaoItensLista.addEventListener('pointercancel', cancelarToqueLongoSeparacao);
+separacaoItensLista.addEventListener('pointerleave', cancelarToqueLongoSeparacao);
+separacaoItensLista.addEventListener('contextmenu', (event) => {
+  if (separacaoEmMobile()) event.preventDefault();
+});
+separacaoItensLista.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  const linha = event.target.closest('[data-separacao-item]');
+  if (!linha) return;
+  event.preventDefault();
+  abrirConfirmacaoSeparacao(itensSeparacao.find((item) => item.chaveSeparacao === linha.dataset.separacaoItem));
+});
+separacaoScreen.addEventListener('click', (event) => {
+  if (event.target === separacaoScreen) fecharSeparacaoPedido();
+});
+separacaoConfirmModal.addEventListener('click', (event) => {
+  if (event.target === separacaoConfirmModal) fecharConfirmacaoSeparacao();
+});
+separacaoFinalModal.addEventListener('click', (event) => {
+  if (event.target === separacaoFinalModal) fecharResumoFinalSeparacao();
+});
 botaoAbrirEntradaCaixa.addEventListener('click', abrirModalCaixaEntrada);
 botaoFecharEntradaCaixa.addEventListener('click', fecharModalCaixaEntrada);
 botaoContinuarEntradaCaixa.addEventListener('click', fecharModalCaixaEntrada);

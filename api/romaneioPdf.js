@@ -99,16 +99,21 @@ function desenharCabecalho(doc, romaneio) {
       lineBreak: false
     });
   doc.moveTo(PAGE.margin, 82).lineTo(PAGE.width - PAGE.margin, 82).lineWidth(0.65).strokeColor('#a0a0a0').stroke();
+  doc.y = 94;
+}
+
+function desenharTituloTransportadora(doc, transportadora) {
+  const y = doc.y;
   doc.fillColor('#000000').font('Helvetica-Bold');
   textoAjustado(
     doc,
-    `Transportadora : ${texto(romaneio.transportadora)}`,
+    `Transportadora : ${texto(transportadora)}`,
     PAGE.margin + 2,
-    96,
+    y,
     CONTENT_WIDTH - 4,
     9.5
   );
-  doc.y = 113;
+  doc.y = y + 17;
 }
 
 function desenharCabecalhoTabela(doc) {
@@ -172,25 +177,54 @@ function desenharAssinaturas(doc, transportadora, linhaInicio) {
     });
 }
 
+function agruparNotasPorTransportadora(notas) {
+  const grupos = new Map();
+  notas.forEach((nota) => {
+    const codigo = texto(nota.CODPARCTRANSP);
+    const nome = texto(nota.TRANSPORTADORA);
+    const chave = `${codigo}|${nome}`;
+    if (!grupos.has(chave)) grupos.set(chave, { codigo, nome, notas: [] });
+    grupos.get(chave).notas.push(nota);
+  });
+  return [...grupos.values()];
+}
+
 async function gerarRomaneioCargaPdf({ ordemCarga, transportadora, empresa, notas }) {
   const lista = Array.isArray(notas) ? notas : [];
+  const grupos = agruparNotasPorTransportadora(lista);
   const totalVolumes = lista.reduce((total, nota) => total + Number(nota.QTDVOL || 0), 0);
   const totalPeso = lista.reduce((total, nota) => total + Number(nota.PESO || 0), 0);
   const totalValor = lista.reduce((total, nota) => total + Number(nota.VLRNOTA || 0), 0);
+  const identificacoesTransportadoras = [...new Set(
+    grupos
+      .map((grupo) => [grupo.codigo, grupo.nome].filter((valor) => valor && valor !== '-').join(' - '))
+      .filter(Boolean)
+  )];
+  const assinaturaTransportadora = identificacoesTransportadoras.join(' / ') || transportadora;
 
   return criarBufferPdf((doc) => {
-    desenharCabecalho(doc, { ordemCarga, transportadora, empresa });
-    desenharCabecalhoTabela(doc);
+    desenharCabecalho(doc, { ordemCarga, empresa });
 
-    lista.forEach((nota) => {
-      // Use the page area for rows until close to the footer. This avoids a large
-      // empty gap before a new page when the totals need to start separately.
-      if (doc.y + 18 > PAGE.height - 200) {
+    grupos.forEach((grupo, indiceGrupo) => {
+      if (indiceGrupo > 0) doc.y += 8;
+      if (doc.y + 53 > PAGE.height - 200) {
         doc.addPage();
-        desenharCabecalho(doc, { ordemCarga, transportadora, empresa });
-        desenharCabecalhoTabela(doc);
+        desenharCabecalho(doc, { ordemCarga, empresa });
       }
-      desenharLinha(doc, nota);
+
+      const identificacao = `${grupo.codigo} - ${grupo.nome}`;
+      desenharTituloTransportadora(doc, identificacao);
+      desenharCabecalhoTabela(doc);
+
+      grupo.notas.forEach((nota) => {
+        if (doc.y + 18 > PAGE.height - 200) {
+          doc.addPage();
+          desenharCabecalho(doc, { ordemCarga, empresa });
+          desenharTituloTransportadora(doc, identificacao);
+          desenharCabecalhoTabela(doc);
+        }
+        desenharLinha(doc, nota);
+      });
     });
 
     // Reserve only the space actually needed by the totals block before the
@@ -199,7 +233,7 @@ async function gerarRomaneioCargaPdf({ ordemCarga, transportadora, empresa, nota
     const yTotais = Math.max(doc.y + 12, 270);
     if (yTotais + 155 > PAGE.height - 30) {
       doc.addPage();
-      desenharCabecalho(doc, { ordemCarga, transportadora, empresa });
+      desenharCabecalho(doc, { ordemCarga, empresa });
     }
     const y = Math.max(doc.y + 12, 270);
     doc.fillColor('#000000').font('Helvetica-Bold').fontSize(12)
@@ -213,7 +247,7 @@ async function gerarRomaneioCargaPdf({ ordemCarga, transportadora, empresa, nota
       .font('Helvetica').text(` ${formatarPeso(totalPeso)}`);
 
     const linhaAssinatura = y + 82;
-    desenharAssinaturas(doc, transportadora, linhaAssinatura);
+    desenharAssinaturas(doc, assinaturaTransportadora, linhaAssinatura);
   });
 }
 

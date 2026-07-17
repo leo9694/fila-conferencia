@@ -24,6 +24,7 @@ const { criarContatoStatusStore } = require('./api/contatoStatusStore');
 const { gerarPedidoVendaPdf } = require('./api/pedidoVendaPdf');
 const { gerarRomaneioCargaPdf } = require('./api/romaneioPdf');
 const { criarPedidoPrintStore } = require('./api/pedidoPrintStore');
+const { criarSeparacaoStore } = require('./api/separacaoStore');
 const bitrixService = require('./api/bitrixService');
 
 const conferenciaTimerStore = criarConferenciaTimerStore();
@@ -32,6 +33,9 @@ const contatoStatusStore = criarContatoStatusStore({
   namespace: process.env.SANKHYA_API_BASE_URL || 'padrao'
 });
 const pedidoPrintStore = criarPedidoPrintStore({
+  namespace: process.env.SANKHYA_API_BASE_URL || 'padrao'
+});
+const separacaoStore = criarSeparacaoStore({
   namespace: process.env.SANKHYA_API_BASE_URL || 'padrao'
 });
 const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Cuiaba';
@@ -176,9 +180,17 @@ async function criarOrdemCargaSankhya({ empresa, transportadora }) {
   throw ultimoErro || new Error('Nao foi possivel criar a Ordem de Carga.');
 }
 
-async function buscarNotasPendentesCarga({ empresa, transportadora, intervalo }) {
-  const filtroTransportadora = transportadora
-    ? `AND CAB.CODPARCTRANSP = ${transportadora}`
+function obterTransportadorasRomaneio(valor, legado = null) {
+  const origem = Array.isArray(valor)
+    ? valor
+    : String(valor ?? legado ?? '').split(',');
+  return [...new Set(origem.map(obterNumeroInteiro).filter(Boolean))];
+}
+
+async function buscarNotasPendentesCarga({ empresa, transportadora, transportadoras, intervalo }) {
+  const codigosTransportadoras = obterTransportadorasRomaneio(transportadoras, transportadora);
+  const filtroTransportadora = codigosTransportadoras.length > 0
+    ? `AND CAB.CODPARCTRANSP IN (${codigosTransportadoras.join(', ')})`
     : '';
 
   return executeQuery(`
@@ -1285,15 +1297,17 @@ function criarConferenciaEntradaNativa({ nunota, codUsu, qtdVol }) {
 async function sincronizarDetalhesConferenciaEntrada({ nuconf, nunota, itens }) {
   const itensNota = await executeQuery(`
     SELECT
-      SEQUENCIA,
-      CODPROD,
-      CODVOL,
-      NVL(TRIM(CONTROLE), ' ') AS CONTROLE,
-      NVL(QTDNEG, 0) AS QTDNEG,
-      NVL(GTINNFE, PRODUTONFE) AS CODBARRA
-    FROM TGFITE
-    WHERE NUNOTA = ${nunota}
-    ORDER BY SEQUENCIA
+      ITE.SEQUENCIA,
+      ITE.CODPROD,
+      ITE.CODVOL,
+      NVL(PRO.CODVOL, ITE.CODVOL) AS CODVOLPADRAO,
+      NVL(TRIM(ITE.CONTROLE), ' ') AS CONTROLE,
+      NVL(ITE.QTDNEG, 0) AS QTDNEG,
+      NVL(ITE.GTINNFE, ITE.PRODUTONFE) AS CODBARRA
+    FROM TGFITE ITE
+    LEFT JOIN TGFPRO PRO ON PRO.CODPROD = ITE.CODPROD
+    WHERE ITE.NUNOTA = ${nunota}
+    ORDER BY ITE.SEQUENCIA
   `);
   const detalhesDesejados = consolidarLeiturasEntrada(itensNota, itens);
   const detalhesExistentes = await executeQuery(`
@@ -1605,6 +1619,88 @@ router.get('/fila-conferencia/conferentes', async (req, res) => {
   }
 });
 
+router.get('/fila-conferencia/separacao/:nunota', (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+  if (!nunota) {
+    res.status(400).json({ erro: 'Informe um pedido valido.' });
+    return;
+  }
+  res.json({ separacao: separacaoStore.obter(nunota) });
+});
+
+async function garantirPedidoNaoConferidoParaSeparacao(nunota) {
+  const rows = await executeQuery(`
+    SELECT CONF.STATUS
+      FROM TGFCAB CAB
+      LEFT JOIN TGFCON2 CONF
+        ON CONF.NUCONF = CAB.NUCONFATUAL
+     WHERE CAB.NUNOTA = ${nunota}
+  `);
+  if (rows.length === 0) {
+    const erro = new Error('Pedido nao encontrado.');
+    erro.statusCode = 404;
+    throw erro;
+  }
+  if (String(rows[0].STATUS || '').trim().toUpperCase() === 'F') {
+    const erro = new Error('Pedido ja conferido nao pode ser enviado para separacao.');
+    erro.statusCode = 409;
+    throw erro;
+  }
+}
+
+router.post('/fila-conferencia/separacao/:nunota/iniciar', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+  if (!nunota) {
+    res.status(400).json({ erro: 'Informe um pedido valido.' });
+    return;
+  }
+  try {
+    await garantirPedidoNaoConferidoParaSeparacao(nunota);
+    const separacao = separacaoStore.iniciar({
+      nunota,
+      codUsu: req.usuario?.codUsu,
+      itens: Array.isArray(req.body?.itens) ? req.body.itens : []
+    });
+    res.json({ separacao });
+  } catch (err) {
+    res.status(err.statusCode || 400).json({ erro: err.message });
+  }
+});
+
+router.patch('/fila-conferencia/separacao/:nunota/item', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+  if (!nunota) {
+    res.status(400).json({ erro: 'Informe um pedido valido.' });
+    return;
+  }
+  try {
+    await garantirPedidoNaoConferidoParaSeparacao(nunota);
+    const separacao = separacaoStore.atualizarItem({
+      nunota,
+      codUsu: req.usuario?.codUsu,
+      item: req.body?.item
+    });
+    res.json({ separacao });
+  } catch (err) {
+    res.status(err.statusCode || (/ja foi concluida/i.test(err.message) ? 409 : 400)).json({ erro: err.message });
+  }
+});
+
+router.post('/fila-conferencia/separacao/:nunota/finalizar', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+  if (!nunota) {
+    res.status(400).json({ erro: 'Informe um pedido valido.' });
+    return;
+  }
+  try {
+    await garantirPedidoNaoConferidoParaSeparacao(nunota);
+    const separacao = separacaoStore.concluir({ nunota, codUsu: req.usuario?.codUsu });
+    res.json({ separacao });
+  } catch (err) {
+    res.status(err.statusCode || 400).json({ erro: err.message });
+  }
+});
+
 router.get('/fila-conferencia/pedidos', async (req, res) => {
   try {
     const modo = obterModoConferencia(req.query.modo);
@@ -1697,20 +1793,25 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
       empresa,
       pedido: pedidoBusca,
       modo,
-      itens: rows.map((row) => ({
-        ...row,
-        DTNEG: normalizarDataSankhya(row.DTNEG),
-        NUMNOTA: normalizarNumero(row.NUMNOTA),
-        NUCONFATUAL: row.NUCONFATUAL ? Number(row.NUCONFATUAL) : null,
-        STATUS_CONF: row.STATUS_CONF || null,
-        STATUS_CONFERENCIA: row.STATUS_CONFERENCIA,
-        NOME_CONFERENTE: row.NOME_CONFERENTE || null,
-        QTDVOL: normalizarNumero(row.QTDVOL),
-        QTD_ITENS: normalizarNumero(row.QTD_ITENS),
-        QTD_TOTAL: normalizarNumero(row.QTD_TOTAL),
-        PEDIDO_IMPRESSO: Boolean(pedidoPrintStore.obter(row.NUNOTA)),
-        IMPRESSAO_PEDIDO: pedidoPrintStore.obter(row.NUNOTA)
-      }))
+      itens: rows.map((row) => {
+        const separacao = modo === 'saida' ? separacaoStore.obter(row.NUNOTA) : null;
+        return {
+          ...row,
+          DTNEG: normalizarDataSankhya(row.DTNEG),
+          NUMNOTA: normalizarNumero(row.NUMNOTA),
+          NUCONFATUAL: row.NUCONFATUAL ? Number(row.NUCONFATUAL) : null,
+          STATUS_CONF: row.STATUS_CONF || null,
+          STATUS_CONFERENCIA: row.STATUS_CONFERENCIA,
+          STATUS_SEPARACAO: separacao?.status || null,
+          SEPARACAO_ATUALIZADA_EM: separacao?.atualizadoEm || null,
+          NOME_CONFERENTE: row.NOME_CONFERENTE || null,
+          QTDVOL: normalizarNumero(row.QTDVOL),
+          QTD_ITENS: normalizarNumero(row.QTD_ITENS),
+          QTD_TOTAL: normalizarNumero(row.QTD_TOTAL),
+          PEDIDO_IMPRESSO: Boolean(pedidoPrintStore.obter(row.NUNOTA)),
+          IMPRESSAO_PEDIDO: pedidoPrintStore.obter(row.NUNOTA)
+        };
+      })
     });
   } catch (err) {
     console.error(err);
@@ -1757,16 +1858,16 @@ router.get('/fila-conferencia/romaneio/transportadoras', async (req, res) => {
 router.get('/fila-conferencia/romaneio/pedidos', async (req, res) => {
   try {
     const empresa = obterFiltroEmpresa(req.query.empresa);
-    const transportadora = obterNumeroInteiro(req.query.transportadora);
-    if (!empresa || !transportadora) {
-      res.status(400).json({ erro: 'Empresa e transportadora sao obrigatorias.' });
+    const transportadoras = obterTransportadorasRomaneio(req.query.transportadoras, req.query.transportadora);
+    if (!empresa || transportadoras.length === 0) {
+      res.status(400).json({ erro: 'Empresa e ao menos uma transportadora sao obrigatorias.' });
       return;
     }
 
     const intervalo = obterIntervaloDatas(req.query.dataInicial, req.query.dataFinal);
-    const rows = await buscarNotasPendentesCarga({ empresa, transportadora, intervalo });
+    const rows = await buscarNotasPendentesCarga({ empresa, transportadoras, intervalo });
     res.json({
-      transportadora: rows[0]?.TRANSPORTADORA || null,
+      transportadoras,
       itens: rows.map((row) => ({
         ...row,
         NUNOTA: Number(row.NUNOTA),
@@ -1787,19 +1888,20 @@ router.get('/fila-conferencia/romaneio/pedidos', async (req, res) => {
 router.post('/fila-conferencia/romaneio', async (req, res) => {
   try {
     const empresa = obterFiltroEmpresa(req.body?.empresa);
-    const transportadora = obterNumeroInteiro(req.body?.transportadora);
+    const transportadoras = obterTransportadorasRomaneio(req.body?.transportadoras, req.body?.transportadora);
+    const transportadoraPrincipal = transportadoras[0];
     const listaSolicitada = Array.isArray(req.body?.notas) ? req.body.notas : req.body?.pedidos;
     const notasSolicitadas = Array.isArray(listaSolicitada)
       ? [...new Set(listaSolicitada.map(obterNumeroInteiro).filter(Boolean))]
       : [];
 
-    if (!empresa || !transportadora || notasSolicitadas.length === 0) {
-      res.status(400).json({ erro: 'Empresa, transportadora e notas faturadas sao obrigatorios.' });
+    if (!empresa || transportadoras.length === 0 || notasSolicitadas.length === 0) {
+      res.status(400).json({ erro: 'Empresa, ao menos uma transportadora e notas faturadas sao obrigatorios.' });
       return;
     }
 
     const intervalo = obterIntervaloDatas(req.body?.dataInicial, req.body?.dataFinal);
-    const elegiveis = await buscarNotasPendentesCarga({ empresa, transportadora, intervalo });
+    const elegiveis = await buscarNotasPendentesCarga({ empresa, transportadoras, intervalo });
     const elegiveisPorNumero = new Map(elegiveis.map((nota) => [Number(nota.NUNOTA), nota]));
     const indisponiveis = notasSolicitadas.filter((nunota) => !elegiveisPorNumero.has(nunota));
 
@@ -1811,7 +1913,10 @@ router.post('/fila-conferencia/romaneio', async (req, res) => {
       return;
     }
 
-    const codigoOrdemCarga = await criarOrdemCargaSankhya({ empresa, transportadora });
+    const codigoOrdemCarga = await criarOrdemCargaSankhya({
+      empresa,
+      transportadora: transportadoraPrincipal
+    });
 
     if (!codigoOrdemCarga) {
       throw new Error('O Sankhya criou a carga, mas nao retornou o codigo da Ordem de Carga.');
@@ -1850,7 +1955,11 @@ router.post('/fila-conferencia/romaneio', async (req, res) => {
 
     const resultado = {
       codigoOrdemCarga,
-      transportadora: elegiveis[0]?.TRANSPORTADORA || String(transportadora),
+      transportadoraPrincipal,
+      transportadoras: transportadoras.map((codigo) => {
+        const nota = elegiveis.find((item) => Number(item.CODPARCTRANSP) === codigo);
+        return { codigo, nome: nota?.TRANSPORTADORA || String(codigo) };
+      }),
       notasVinculadas: vinculados,
       falhas,
       parcial: falhas.length > 0
@@ -1949,8 +2058,11 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
         ITE.SEQUENCIA,
         ITE.CODPROD,
         PRO.DESCRPROD,
+        PRO.CODGRUPOPROD,
+        GRU.DESCRGRUPOPROD,
         ITE.CONTROLE,
         ITE.CODVOL,
+        PRO.CODVOL AS CODVOLPADRAO,
         CAST(NVL(ITE.QTDNEG, 0) AS NUMBER(15,3)) AS QTDNEG,
         CAST(NVL(ITE.VLRUNIT, 0) AS NUMBER(15,2)) AS VLRUNIT,
         NVL(ITE.GTINNFE, PRO.REFERENCIA) AS CODIGO_BARRAS,
@@ -1981,6 +2093,8 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
         ON CAB.NUNOTA = ITE.NUNOTA
       LEFT JOIN TGFPRO PRO
         ON PRO.CODPROD = ITE.CODPROD
+      LEFT JOIN TGFGRU GRU
+        ON GRU.CODGRUPOPROD = PRO.CODGRUPOPROD
       WHERE ITE.NUNOTA = ${nunota}
       ORDER BY ITE.SEQUENCIA
     `);
@@ -2086,7 +2200,7 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
           );
         });
 
-        const metadadosUnidadeItem = { codVol: row.CODVOL || 'UN' };
+        const metadadosUnidadeItem = { codVol: row.CODVOLPADRAO || row.CODVOL || 'UN' };
         adicionarCodigoConferencia(codigosConferencia, row.REFERENCIA, 'REFERENCIA', 1, 'Referencia', metadadosUnidadeItem);
         adicionarCodigoConferencia(codigosConferencia, row.GTINNFE, 'CODIGO_BARRAS', 1, 'Codigo de barras', metadadosUnidadeItem);
         adicionarCodigoConferencia(codigosConferencia, row.GTINTRIBNFE, 'CODIGO_BARRAS', 1, 'Codigo de barras tributavel', metadadosUnidadeItem);
@@ -2100,8 +2214,11 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
           sequencia: row.SEQUENCIA,
           codProd: row.CODPROD,
           descrProd: row.DESCRPROD || `Produto ${row.CODPROD}`,
+          codGrupoProd: row.CODGRUPOPROD || '',
+          descrGrupoProd: row.DESCRGRUPOPROD || 'Sem grupo',
           controle: row.CONTROLE || '',
           codVol: row.CODVOL || 'UN',
+          codVolPadrao: row.CODVOLPADRAO || row.CODVOL || 'UN',
           qtdNeg: normalizarNumero(row.QTDNEG),
           vlrUnit: normalizarNumero(row.VLRUNIT),
           codigoBarras: row.CODIGO_BARRAS || '',
@@ -3351,7 +3468,10 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
       return;
     }
 
-    if (pedido.NUCONFATUAL && pedido.STATUS && pedido.STATUS !== 'A') {
+    const statusProgressoPermitido = modo === 'entrada'
+      ? ['A', 'D'].includes(String(pedido.STATUS || '').toUpperCase())
+      : pedido.STATUS === 'A';
+    if (pedido.NUCONFATUAL && pedido.STATUS && !statusProgressoPermitido) {
       conferenciaProgressStore.remover(nunota);
       res.status(409).json({ erro: 'Conferencia ja finalizada ou em outro status no Sankhya' });
       return;
@@ -3905,9 +4025,22 @@ router.get('/fila-conferencia/pedidos/:nunota/pdf', async (req, res) => {
       [pedido.CIDADE_EMPRESA, pedido.UF_EMPRESA].filter(Boolean).join('-')
     ].filter(Boolean).join(' - ');
 
+    const separacao = separacaoStore.obter(nunota);
+    const itensSeparacao = separacao?.status === 'SEPARADO'
+      ? new Map((separacao.itens || []).map((item) => [Number(item.sequencia), item]))
+      : null;
+    const itensPdf = itens.map((item) => {
+      const itemSeparado = itensSeparacao?.get(Number(item.SEQUENCIA));
+      return {
+        ...item,
+        SEPARACAO_CONCLUIDA: Boolean(itemSeparado),
+        QTD_SEPARADA: itemSeparado ? Number(itemSeparado.qtdSeparada || 0) : null
+      };
+    });
+
     const pdf = await gerarPedidoVendaPdf({
       pedido,
-      itens,
+      itens: itensPdf,
       logoPath: path.join(__dirname, 'frontend', 'favicon.png')
     });
     pedidoPrintStore.registrar(nunota, req.usuario?.codUsu);

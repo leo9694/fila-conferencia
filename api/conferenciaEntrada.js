@@ -114,7 +114,7 @@ function consolidarLeiturasEntrada(itensNota, itensInformados) {
       : qtdConferida > 0
         ? [{
             codigo: item.CODBARRA || item.CODPROD,
-            codVol: item.CODVOL || 'UN',
+            codVol: item.CODVOLPADRAO || item.CODVOL || 'UN',
             quantidade: qtdConferida,
             quantidadeConvertida: qtdConferida
           }]
@@ -129,11 +129,18 @@ function consolidarLeiturasEntrada(itensNota, itensInformados) {
 
     for (const leitura of leituras) {
       const codigo = String(leitura.codigo || item.CODBARRA || item.CODPROD).trim();
-      const codVol = String(leitura.codVol || item.CODVOL || 'UN').trim();
-      const controleLeitura = String(leitura.controle ?? '').trim();
-      const controleItem = controle(controleLeitura || item.CONTROLE);
+      const tipoLeitura = String(leitura.tipo || '').trim().toUpperCase();
       const quantidade = Math.max(0, numero(leitura.quantidade));
       const quantidadeConvertida = Math.max(0, numero(leitura.quantidadeConvertida));
+      const leituraUnidadeAlternativa = tipoLeitura === 'UNIDADE_ALTERNATIVA'
+        || (!tipoLeitura && Math.abs(quantidadeConvertida - quantidade) > 0.0001);
+      const codVol = String(
+        leituraUnidadeAlternativa
+          ? (leitura.codVol || item.CODVOL || item.CODVOLPADRAO || 'UN')
+          : (item.CODVOLPADRAO || leitura.codVol || item.CODVOL || 'UN')
+      ).trim();
+      const controleLeitura = String(leitura.controle ?? '').trim();
+      const controleItem = controle(controleLeitura || item.CONTROLE);
       if (!codigo || quantidade <= 0 || quantidadeConvertida <= 0) continue;
 
       const chave = `${item.CODPROD}|${controleItem}|${codVol}|${codigo}`;
