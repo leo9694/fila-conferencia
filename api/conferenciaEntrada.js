@@ -102,6 +102,7 @@ function validarDetalhesConferenciaEntrada(detalhesDesejados, detalhesGravados) 
 function consolidarLeiturasEntrada(itensNota, itensInformados) {
   const porSequencia = new Map(itensNota.map((item) => [Number(item.SEQUENCIA), item]));
   const agrupados = new Map();
+  const toleranciaResiduoConversao = 0.0001;
 
   for (const informado of itensInformados) {
     const item = porSequencia.get(Number(informado.sequencia));
@@ -127,9 +128,15 @@ function consolidarLeiturasEntrada(itensNota, itensInformados) {
       throw new Error(`Leituras do produto ${item.CODPROD} nao correspondem a quantidade conferida.`);
     }
 
+    let ultimaChaveLeitura = null;
+    let ultimaLeituraUnidadePadrao = false;
+
     for (const leitura of leituras) {
-      const codigo = String(leitura.codigo || item.CODBARRA || item.CODPROD).trim();
       const tipoLeitura = String(leitura.tipo || '').trim().toUpperCase();
+      const codigoInformado = String(leitura.codigo || item.CODBARRA || item.CODPROD).trim();
+      const codigo = tipoLeitura === 'CODIGO_PRODUTO' && item.CODBARRA
+        ? String(item.CODBARRA).trim()
+        : codigoInformado;
       const quantidade = Math.max(0, numero(leitura.quantidade));
       const quantidadeConvertida = Math.max(0, numero(leitura.quantidadeConvertida));
       const leituraUnidadeAlternativa = tipoLeitura === 'UNIDADE_ALTERNATIVA'
@@ -155,6 +162,22 @@ function consolidarLeiturasEntrada(itensNota, itensInformados) {
       existente.QTDCONF += quantidade;
       existente.QTDCONFVOLPAD += quantidadeConvertida;
       agrupados.set(chave, existente);
+      ultimaChaveLeitura = chave;
+      ultimaLeituraUnidadePadrao = codVol === String(item.CODVOLPADRAO || item.CODVOL || 'UN').trim();
+    }
+
+    // Conversoes de unidade do Sankhya podem deixar residuos como 18,0000036.
+    // Quando a leitura fecha a quantidade exibida, preserve o valor exato da nota
+    // para que o servico nativo nao classifique a conferencia como "a menor".
+    const residuoConversao = numero(item.QTDNEG) - totalConvertido;
+    if (
+      ultimaChaveLeitura
+      && Math.abs(residuoConversao) > Number.EPSILON
+      && Math.abs(residuoConversao) <= toleranciaResiduoConversao
+    ) {
+      const ultimoDetalhe = agrupados.get(ultimaChaveLeitura);
+      ultimoDetalhe.QTDCONFVOLPAD += residuoConversao;
+      if (ultimaLeituraUnidadePadrao) ultimoDetalhe.QTDCONF += residuoConversao;
     }
   }
 

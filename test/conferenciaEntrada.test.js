@@ -140,13 +140,51 @@ test('normaliza leitura comum para a unidade padrao do produto', () => {
   }]);
 
   assert.deepEqual(detalhes, [{
-    CODBARRA: '7667',
+    CODBARRA: '7896500410462',
     CODPROD: 7667,
     CODVOL: 'DP',
     CONTROLE: '00162500800',
     QTDCONF: 18,
     QTDCONFVOLPAD: 18
   }]);
+});
+
+test('elimina residuo tecnico da conversao para nao finalizar a menor', () => {
+  const detalhes = consolidarLeiturasEntrada([{
+    SEQUENCIA: 1,
+    CODPROD: 7667,
+    CODVOL: 'KG',
+    CODVOLPADRAO: 'DP',
+    CONTROLE: '0016-25-00800',
+    QTDNEG: 18.0000036,
+    CODBARRA: '7896500410462'
+  }], [{
+    sequencia: 1,
+    qtdConferida: 18,
+    leituras: [{
+      codigo: '7667',
+      tipo: 'CODIGO_PRODUTO',
+      codVol: 'DP',
+      controle: '0016-25-00800',
+      quantidade: 18,
+      quantidadeConvertida: 18
+    }]
+  }]);
+
+  assert.equal(detalhes[0].CODBARRA, '7896500410462');
+  assert.equal(detalhes[0].QTDCONF, 18.0000036);
+  assert.equal(detalhes[0].QTDCONFVOLPAD, 18.0000036);
+});
+
+test('nao corrige uma divergencia real de quantidade', () => {
+  const detalhes = consolidarLeiturasEntrada([{ ...itemNota, QTDNEG: 20 }], [{
+    sequencia: 1,
+    qtdConferida: 19,
+    leituras: [{ codigo: '2442', codVol: 'UN', quantidade: 19, quantidadeConvertida: 19 }]
+  }]);
+
+  assert.equal(detalhes[0].QTDCONF, 19);
+  assert.equal(detalhes[0].QTDCONFVOLPAD, 19);
 });
 
 test('preserva o controle informado na leitura da entrada', () => {
