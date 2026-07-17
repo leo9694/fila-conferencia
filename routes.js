@@ -1653,6 +1653,7 @@ router.get('/fila-conferencia/separacao/:nunota/produtos/:codprod/lotes', async 
         AND NVL(EST.ESTOQUE, 0) > 0
         AND TRIM(EST.CONTROLE) IS NOT NULL
       GROUP BY TRIM(EST.CONTROLE)
+      HAVING SUM(NVL(EST.ESTOQUE, 0)) > 0
       ORDER BY TRIM(EST.CONTROLE)
     `);
 

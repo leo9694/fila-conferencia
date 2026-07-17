@@ -5334,7 +5334,9 @@ async function carregarLotesConfirmacaoSeparacao(item) {
     if (!resposta.ok) throw new Error(payload.erro || 'Nao foi possivel consultar os lotes.');
     if (!itemSeparacaoPendente || itemSeparacaoPendente.item !== item) return;
 
-    const lotes = Array.isArray(payload.lotes) ? payload.lotes : [];
+    const lotes = Array.isArray(payload.lotes)
+      ? payload.lotes.filter((lote) => Number(lote.estoque || 0) > 0)
+      : [];
     itemSeparacaoPendente.lotesDisponiveis = lotes;
     const controleAtual = String(item.controleSeparado || item.controle || '').trim();
     const loteAtual = lotes.find((lote) => lote.controle === controleAtual) || null;
