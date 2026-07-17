@@ -5365,7 +5365,7 @@ async function carregarLotesConfirmacaoSeparacao(item) {
     separacaoConfirmStatus.textContent = itemSeparacaoProcessado(item)
       ? 'O item ja foi processado. Voce pode ajustar a quantidade ou devolve-lo para pendente.'
       : itemSeparacaoPendente.entradaCodigo?.tipo === 'UNIDADE_ALTERNATIVA'
-        ? `${obterDescricaoEntradaCodigo(itemSeparacaoPendente.entradaCodigo)}: 1 leitura equivale a ${formatarQuantidade(itemSeparacaoPendente.quantidade)} ${obterUnidadeExibicaoItem(item)}.`
+        ? `${obterDescricaoEntradaCodigo(itemSeparacaoPendente.entradaCodigo)} identificado. Confirme a quantidade total do item.`
         : 'Confirme a quantidade separada.';
     botaoConfirmarSeparacao.disabled = false;
   } catch (error) {
@@ -5386,10 +5386,9 @@ function abrirConfirmacaoSeparacao(item, entradaCodigo = null) {
   const separado = normalizarQuantidade(item.qtdSeparada);
   const restante = Math.max(0, esperado - separado);
   const processado = itemSeparacaoProcessado(item);
-  const multiplicador = Math.max(0, Number(entradaCodigo?.multiplicador) || 1);
   const quantidade = processado
     ? 0
-    : (entradaCodigo ? multiplicador : restante);
+    : restante;
 
   itemSeparacaoPendente = {
     item,
@@ -5414,7 +5413,7 @@ function abrirConfirmacaoSeparacao(item, entradaCodigo = null) {
   separacaoConfirmStatus.textContent = processado
     ? 'O item ja foi processado. Voce pode ajustar a quantidade ou devolve-lo para pendente.'
     : entradaCodigo?.tipo === 'UNIDADE_ALTERNATIVA'
-      ? `${obterDescricaoEntradaCodigo(entradaCodigo)}: 1 leitura equivale a ${formatarQuantidade(quantidade)} ${unidadeExibicao}.`
+      ? `${obterDescricaoEntradaCodigo(entradaCodigo)} identificado. Confirme a quantidade total do item.`
       : 'Confirme a quantidade separada.';
   separacaoConfirmModal.hidden = false;
   carregarLotesConfirmacaoSeparacao(item).then(() => {
