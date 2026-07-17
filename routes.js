@@ -1628,6 +1628,49 @@ router.get('/fila-conferencia/separacao/:nunota', (req, res) => {
   res.json({ separacao: separacaoStore.obter(nunota) });
 });
 
+router.get('/fila-conferencia/separacao/:nunota/produtos/:codprod/lotes', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+  const codProd = obterNumeroInteiro(req.params.codprod);
+  if (!nunota || !codProd) {
+    res.status(400).json({ erro: 'Informe um pedido e produto validos.' });
+    return;
+  }
+
+  try {
+    const lotes = await executeQuery(`
+      SELECT
+        TRIM(EST.CONTROLE) AS CONTROLE,
+        TO_CHAR(MAX(EST.DTVAL), 'YYYY-MM-DD') AS DTVALID,
+        SUM(NVL(EST.ESTOQUE, 0)) AS ESTOQUE,
+        SUM(NVL(EST.RESERVADO, 0)) AS RESERVADO,
+        SUM(NVL(EST.ESTOQUE, 0) - NVL(EST.RESERVADO, 0)) AS DISPONIVEL
+      FROM TGFCAB CAB
+      JOIN TGFEST EST
+        ON EST.CODEMP = CAB.CODEMP
+       AND EST.CODPROD = ${codProd}
+      WHERE CAB.NUNOTA = ${nunota}
+        AND NVL(EST.ATIVO, 'S') = 'S'
+        AND NVL(EST.ESTOQUE, 0) > 0
+        AND TRIM(EST.CONTROLE) IS NOT NULL
+      GROUP BY TRIM(EST.CONTROLE)
+      ORDER BY TRIM(EST.CONTROLE)
+    `);
+
+    res.json({
+      lotes: lotes.map((lote) => ({
+        controle: String(lote.CONTROLE || '').trim(),
+        dtValidade: String(lote.DTVALID || '').trim() || null,
+        estoque: Number(lote.ESTOQUE || 0),
+        reservado: Number(lote.RESERVADO || 0),
+        disponivel: Number(lote.DISPONIVEL || 0)
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Nao foi possivel consultar os lotes do produto.' });
+  }
+});
+
 async function garantirPedidoNaoConferidoParaSeparacao(nunota) {
   const rows = await executeQuery(`
     SELECT CONF.STATUS

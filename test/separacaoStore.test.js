@@ -23,12 +23,21 @@ test('compartilha progresso e conclusao da separacao entre instancias', () => {
     dispositivoA.atualizarItem({
       nunota: 123,
       codUsu: 10,
-      item: { chave: 'seq:1', qtdSeparada: 5, processado: true, ajustado: true }
+      item: {
+        chave: 'seq:1',
+        qtdSeparada: 5,
+        processado: true,
+        ajustado: true,
+        controleSeparado: 'LOTE-02',
+        dtValidadeSeparada: '2028-12-10'
+      }
     });
 
     const dispositivoB = criarSeparacaoStore({ filePath });
     assert.equal(dispositivoB.obter(123).status, 'EM_SEPARACAO');
     assert.equal(dispositivoB.obter(123).itens[0].qtdSeparada, 5);
+    assert.equal(dispositivoB.obter(123).itens[0].controleSeparado, 'LOTE-02');
+    assert.equal(dispositivoB.obter(123).itens[0].dtValidadeSeparada, '2028-12-10');
     assert.throws(
       () => dispositivoB.concluir({ nunota: 123, codUsu: 11 }),
       /Todos os itens precisam/

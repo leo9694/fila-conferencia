@@ -4108,7 +4108,7 @@
 
     .item-qtd {
       min-width: 0;
-      text-align: right;
+      text-align: left;
       font-weight: 900;
       font-size: 0.7rem;
       color: var(--text-main);
@@ -6375,6 +6375,42 @@
       font-size: 0.78rem;
     }
 
+    .separacao-lote-field {
+      margin: 12px 0;
+      padding: 11px;
+      border: 1px solid #b9d6d0;
+      border-radius: 10px;
+      background: #f4faf9;
+    }
+
+    .separacao-lote-field label {
+      display: block;
+      margin-bottom: 6px;
+      color: #387064;
+      font-size: 0.7rem;
+      font-weight: 900;
+      text-transform: uppercase;
+    }
+
+    .separacao-lote-field select {
+      width: 100%;
+      min-height: 44px;
+      padding: 0 11px;
+      border: 1px solid #9fcac1;
+      border-radius: 9px;
+      color: #073047;
+      background: #fff;
+      font-weight: 800;
+    }
+
+    .separacao-lote-info {
+      display: block;
+      margin-top: 6px;
+      color: #64748b;
+      font-size: 0.76rem;
+      font-weight: 700;
+    }
+
     .separacao-confirm-field label {
       display: block;
       margin-bottom: 5px;
@@ -7789,6 +7825,11 @@
             <div class="separacao-confirm-card" role="dialog" aria-modal="true" aria-labelledby="separacao-confirm-titulo">
               <h3 id="separacao-confirm-titulo">Confirmar separação</h3>
               <div class="separacao-confirm-product" id="separacao-confirm-produto">-</div>
+              <div class="separacao-lote-field" id="separacao-lote-field" hidden>
+                <label for="separacao-lote-select">Lote do estoque</label>
+                <select id="separacao-lote-select"></select>
+                <small class="separacao-lote-info" id="separacao-lote-info"></small>
+              </div>
               <div class="separacao-confirm-field" id="separacao-confirm-field">
                 <label for="separacao-confirm-qtd">Quantidade separada</label>
                 <div class="separacao-confirm-quantity-row">

@@ -34,6 +34,8 @@ function normalizarItem(item = {}) {
     qtdSeparada: Math.max(0, numero(item.qtdSeparada)),
     processado: item.processado === true,
     ajustado: item.ajustado === true,
+    controleSeparado: String(item.controleSeparado || '').trim() || null,
+    dtValidadeSeparada: String(item.dtValidadeSeparada || '').trim() || null,
     atualizadoEm: item.atualizadoEm || null,
     atualizadoPor: item.atualizadoPor === null || item.atualizadoPor === undefined
       ? null
@@ -109,6 +111,8 @@ function criarSeparacaoStore(options = {}) {
       qtdSeparada: atualizado.qtdSeparada,
       processado: atualizado.processado,
       ajustado: atualizado.ajustado,
+      controleSeparado: atualizado.controleSeparado,
+      dtValidadeSeparada: atualizado.dtValidadeSeparada,
       atualizadoEm: agora,
       atualizadoPor: codUsu === null ? null : numero(codUsu)
     };

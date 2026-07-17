@@ -87,6 +87,9 @@ const botaoFinalizarSeparacao = document.getElementById('finalizar-separacao');
 const separacaoConfirmModal = document.getElementById('separacao-confirm-modal');
 const separacaoConfirmTitulo = document.getElementById('separacao-confirm-titulo');
 const separacaoConfirmProduto = document.getElementById('separacao-confirm-produto');
+const separacaoLoteField = document.getElementById('separacao-lote-field');
+const separacaoLoteSelect = document.getElementById('separacao-lote-select');
+const separacaoLoteInfo = document.getElementById('separacao-lote-info');
 const separacaoConfirmField = document.getElementById('separacao-confirm-field');
 const separacaoConfirmQtd = document.getElementById('separacao-confirm-qtd');
 const separacaoConfirmStatus = document.getElementById('separacao-confirm-status');
@@ -5000,7 +5003,9 @@ function aplicarEstadoSeparacao(separacao) {
       ...item,
       qtdSeparada: Math.max(0, normalizarQuantidade(registro.qtdSeparada)),
       separacaoProcessada: Boolean(registro.processado),
-      separacaoAjustada: Boolean(registro.ajustado)
+      separacaoAjustada: Boolean(registro.ajustado),
+      controleSeparado: String(registro.controleSeparado || '').trim() || null,
+      dtValidadeSeparada: String(registro.dtValidadeSeparada || '').trim() || null
     };
   });
   separacaoConcluida = separacao.status === 'SEPARADO';
@@ -5038,7 +5043,9 @@ async function salvarProgressoSeparacao(item) {
         chave: item.chaveSeparacao,
         qtdSeparada: normalizarQuantidade(item.qtdSeparada),
         processado: Boolean(item.separacaoProcessada),
-        ajustado: Boolean(item.separacaoAjustada)
+        ajustado: Boolean(item.separacaoAjustada),
+        controleSeparado: item.controleSeparado || null,
+        dtValidadeSeparada: item.dtValidadeSeparada || null
       }
     })
   });
@@ -5069,12 +5076,21 @@ function itemSeparacaoDivergente(item) {
 }
 
 function obterLoteSeparacao(item) {
-  const controle = String(item.controle || item.CONTROLE || '').trim();
+  const controle = String(
+    item.controleSeparado || item.controle || item.CONTROLE || ''
+  ).trim();
   return controle || 'Sem lote';
 }
 
 function obterValidadeSeparacao(item) {
-  const validade = item.dtValidade || item.DTVALID || item.validade || item.dataValidade || '';
+  const possuiLoteSeparado = Boolean(String(item.controleSeparado || '').trim());
+  const validade = possuiLoteSeparado
+    ? (item.dtValidadeSeparada || '')
+    : item.dtValidade
+    || item.DTVALID
+    || item.validade
+    || item.dataValidade
+    || '';
   return formatarData(validade) || 'Sem validade';
 }
 
@@ -5097,7 +5113,13 @@ async function prepararItensSeparacao() {
       chaveSeparacao,
       qtdSeparada: separado,
       separacaoProcessada: processado,
-      separacaoAjustada: registroEstruturado ? Boolean(registro.ajustado) : false
+      separacaoAjustada: registroEstruturado ? Boolean(registro.ajustado) : false,
+      controleSeparado: registroEstruturado
+        ? (String(registro.controleSeparado || '').trim() || null)
+        : null,
+      dtValidadeSeparada: registroEstruturado
+        ? (String(registro.dtValidadeSeparada || '').trim() || null)
+        : null
     };
   });
 
@@ -5112,7 +5134,9 @@ async function prepararItensSeparacao() {
         qtdEsperada: quantidadeEsperadaSeparacao(item),
         qtdSeparada: normalizarQuantidade(item.qtdSeparada),
         processado: Boolean(item.separacaoProcessada),
-        ajustado: Boolean(item.separacaoAjustada)
+        ajustado: Boolean(item.separacaoAjustada),
+        controleSeparado: item.controleSeparado || null,
+        dtValidadeSeparada: item.dtValidadeSeparada || null
       }))
     })
   });
@@ -5264,8 +5288,89 @@ function renderizarItensSeparacao() {
 function fecharConfirmacaoSeparacao() {
   itemSeparacaoPendente = null;
   separacaoConfirmModal.hidden = true;
+  separacaoLoteField.hidden = true;
+  separacaoLoteSelect.innerHTML = '';
+  separacaoLoteInfo.textContent = '';
   separacaoAjustePainel.hidden = true;
   separacaoConfirmStatus.textContent = '';
+}
+
+function atualizarProdutoConfirmacaoSeparacao() {
+  if (!itemSeparacaoPendente) return;
+  const { item, loteSelecionado } = itemSeparacaoPendente;
+  const esperado = quantidadeEsperadaSeparacao(item);
+  const separado = normalizarQuantidade(item.qtdSeparada);
+  const unidadeExibicao = obterUnidadeExibicaoItem(item);
+  const lote = loteSelecionado?.controle || obterLoteSeparacao(item);
+  const validade = loteSelecionado
+    ? (formatarData(loteSelecionado.dtValidade) || 'Sem validade')
+    : obterValidadeSeparacao(item);
+
+  separacaoConfirmProduto.innerHTML = `
+    ${escaparHtml(item.codProd)} - ${escaparHtml(item.descrProd || '-')}
+    <div class="separacao-confirm-meta">Lote: ${escaparHtml(lote)} | Validade: ${escaparHtml(validade)}</div>
+    <div class="separacao-confirm-meta">Pedido: ${formatarQuantidade(esperado)} ${escaparHtml(unidadeExibicao)} | Separado: ${formatarQuantidade(separado)} ${escaparHtml(unidadeExibicao)}</div>
+  `;
+}
+
+function obterLoteSelecionadoConfirmacao() {
+  if (!itemSeparacaoPendente) return null;
+  const lotes = itemSeparacaoPendente.lotesDisponiveis || [];
+  if (lotes.length <= 1) return itemSeparacaoPendente.loteSelecionado || lotes[0] || null;
+  return lotes.find((lote) => lote.controle === separacaoLoteSelect.value) || null;
+}
+
+async function carregarLotesConfirmacaoSeparacao(item) {
+  separacaoLoteField.hidden = true;
+  separacaoLoteSelect.innerHTML = '';
+  separacaoLoteInfo.textContent = '';
+  botaoConfirmarSeparacao.disabled = true;
+  separacaoConfirmStatus.textContent = 'Consultando lotes disponiveis no estoque...';
+
+  try {
+    const nunota = Number(pedidoPreviewSelecionado?.NUNOTA || 0);
+    const resposta = await fetch(`/api/fila-conferencia/separacao/${nunota}/produtos/${Number(item.codProd)}/lotes`);
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Nao foi possivel consultar os lotes.');
+    if (!itemSeparacaoPendente || itemSeparacaoPendente.item !== item) return;
+
+    const lotes = Array.isArray(payload.lotes) ? payload.lotes : [];
+    itemSeparacaoPendente.lotesDisponiveis = lotes;
+    const controleAtual = String(item.controleSeparado || item.controle || '').trim();
+    const loteAtual = lotes.find((lote) => lote.controle === controleAtual) || null;
+
+    if (lotes.length === 1) {
+      itemSeparacaoPendente.loteSelecionado = lotes[0];
+      separacaoLoteInfo.textContent = `Lote unico do estoque: ${lotes[0].controle}.`;
+    } else if (lotes.length > 1) {
+      separacaoLoteField.hidden = false;
+      separacaoLoteSelect.innerHTML = `
+        <option value="">Selecione o lote separado</option>
+        ${lotes.map((lote) => {
+          const validade = formatarData(lote.dtValidade) || 'Sem validade';
+          const disponivel = formatarQuantidade(lote.disponivel);
+          return `<option value="${escaparAtributo(lote.controle)}">${escaparHtml(lote.controle)} | Validade: ${escaparHtml(validade)} | Disponivel: ${disponivel}</option>`;
+        }).join('')}
+      `;
+      if (loteAtual) separacaoLoteSelect.value = loteAtual.controle;
+      itemSeparacaoPendente.loteSelecionado = loteAtual;
+      separacaoLoteInfo.textContent = `${lotes.length} lotes positivos encontrados na empresa do pedido.`;
+    } else {
+      itemSeparacaoPendente.loteSelecionado = null;
+    }
+
+    atualizarProdutoConfirmacaoSeparacao();
+    separacaoConfirmStatus.textContent = itemSeparacaoProcessado(item)
+      ? 'O item ja foi processado. Voce pode ajustar a quantidade ou devolve-lo para pendente.'
+      : itemSeparacaoPendente.entradaCodigo?.tipo === 'UNIDADE_ALTERNATIVA'
+        ? `${obterDescricaoEntradaCodigo(itemSeparacaoPendente.entradaCodigo)}: 1 leitura equivale a ${formatarQuantidade(itemSeparacaoPendente.quantidade)} ${obterUnidadeExibicaoItem(item)}.`
+        : 'Confirme a quantidade separada.';
+    botaoConfirmarSeparacao.disabled = false;
+  } catch (error) {
+    if (!itemSeparacaoPendente || itemSeparacaoPendente.item !== item) return;
+    separacaoConfirmStatus.textContent = error.message;
+    botaoConfirmarSeparacao.disabled = true;
+  }
 }
 
 function abrirConfirmacaoSeparacao(item, entradaCodigo = null) {
@@ -5284,14 +5389,16 @@ function abrirConfirmacaoSeparacao(item, entradaCodigo = null) {
     ? 0
     : (entradaCodigo ? multiplicador : restante);
 
-  itemSeparacaoPendente = { item, quantidade, entradaCodigo };
+  itemSeparacaoPendente = {
+    item,
+    quantidade,
+    entradaCodigo,
+    lotesDisponiveis: [],
+    loteSelecionado: null
+  };
 
   const unidadeExibicao = obterUnidadeExibicaoItem(item);
-  separacaoConfirmProduto.innerHTML = `
-    ${escaparHtml(item.codProd)} - ${escaparHtml(item.descrProd || '-')}
-    <div class="separacao-confirm-meta">Lote: ${escaparHtml(obterLoteSeparacao(item))} | Validade: ${escaparHtml(obterValidadeSeparacao(item))}</div>
-    <div class="separacao-confirm-meta">Pedido: ${formatarQuantidade(esperado)} ${escaparHtml(unidadeExibicao)} | Separado: ${formatarQuantidade(separado)} ${escaparHtml(unidadeExibicao)}</div>
-  `;
+  atualizarProdutoConfirmacaoSeparacao();
   separacaoConfirmTitulo.textContent = processado ? 'Item processado' : 'Confirmar separacao';
   separacaoConfirmField.hidden = false;
   separacaoAjustePainel.hidden = true;
@@ -5308,7 +5415,9 @@ function abrirConfirmacaoSeparacao(item, entradaCodigo = null) {
       ? `${obterDescricaoEntradaCodigo(entradaCodigo)}: 1 leitura equivale a ${formatarQuantidade(quantidade)} ${unidadeExibicao}.`
       : 'Confirme a quantidade separada.';
   separacaoConfirmModal.hidden = false;
-  setTimeout(() => botaoConfirmarSeparacao.focus(), 0);
+  carregarLotesConfirmacaoSeparacao(item).then(() => {
+    if (!botaoConfirmarSeparacao.disabled) botaoConfirmarSeparacao.focus();
+  });
 }
 
 async function confirmarItemSeparacao() {
@@ -5317,13 +5426,17 @@ async function confirmarItemSeparacao() {
   const estadoAnterior = {
     qtdSeparada: item.qtdSeparada,
     separacaoProcessada: item.separacaoProcessada,
-    separacaoAjustada: item.separacaoAjustada
+    separacaoAjustada: item.separacaoAjustada,
+    controleSeparado: item.controleSeparado,
+    dtValidadeSeparada: item.dtValidadeSeparada
   };
   if (itemSeparacaoProcessado(item)) {
     const descricao = item.descrProd || `Produto ${item.codProd}`;
     item.qtdSeparada = 0;
     item.separacaoProcessada = false;
     item.separacaoAjustada = false;
+    item.controleSeparado = null;
+    item.dtValidadeSeparada = null;
     try {
       await salvarProgressoSeparacao(item);
       fecharConfirmacaoSeparacao();
@@ -5350,10 +5463,21 @@ async function confirmarItemSeparacao() {
     return;
   }
 
+  const loteSelecionado = obterLoteSelecionadoConfirmacao();
+  if ((itemSeparacaoPendente.lotesDisponiveis || []).length > 1 && !loteSelecionado) {
+    separacaoConfirmStatus.textContent = 'Selecione o lote que foi separado.';
+    separacaoLoteSelect.focus();
+    return;
+  }
+
   const descricao = item.descrProd || `Produto ${item.codProd}`;
   item.qtdSeparada = separado + quantidade;
   item.separacaoProcessada = item.qtdSeparada >= esperado;
   item.separacaoAjustada = false;
+  if (loteSelecionado) {
+    item.controleSeparado = loteSelecionado.controle;
+    item.dtValidadeSeparada = loteSelecionado.dtValidade || null;
+  }
   const completo = itemSeparacaoCompleto(item);
   try {
     await salvarProgressoSeparacao(item);
@@ -5396,13 +5520,28 @@ async function aplicarAjusteQuantidadeSeparacao() {
   const estadoAnterior = {
     qtdSeparada: item.qtdSeparada,
     separacaoProcessada: item.separacaoProcessada,
-    separacaoAjustada: item.separacaoAjustada
+    separacaoAjustada: item.separacaoAjustada,
+    controleSeparado: item.controleSeparado,
+    dtValidadeSeparada: item.dtValidadeSeparada
   };
   const esperado = quantidadeEsperadaSeparacao(item);
   const descricao = item.descrProd || `Produto ${item.codProd}`;
+  const loteSelecionado = obterLoteSelecionadoConfirmacao();
+  if (valor > 0 && (itemSeparacaoPendente.lotesDisponiveis || []).length > 1 && !loteSelecionado) {
+    separacaoConfirmStatus.textContent = 'Selecione o lote que foi separado.';
+    separacaoLoteSelect.focus();
+    return;
+  }
   item.qtdSeparada = valor;
   item.separacaoProcessada = true;
   item.separacaoAjustada = true;
+  if (valor === 0) {
+    item.controleSeparado = null;
+    item.dtValidadeSeparada = null;
+  } else if (loteSelecionado) {
+    item.controleSeparado = loteSelecionado.controle;
+    item.dtValidadeSeparada = loteSelecionado.dtValidade || null;
+  }
   try {
     await salvarProgressoSeparacao(item);
     fecharConfirmacaoSeparacao();
@@ -6707,6 +6846,14 @@ botaoFecharSeparacaoPedido.addEventListener('click', fecharSeparacaoPedido);
 botaoFinalizarSeparacao.addEventListener('click', abrirResumoFinalSeparacao);
 botaoCancelarConfirmacaoSeparacao.addEventListener('click', fecharConfirmacaoSeparacao);
 botaoConfirmarSeparacao.addEventListener('click', confirmarItemSeparacao);
+separacaoLoteSelect.addEventListener('change', () => {
+  if (!itemSeparacaoPendente) return;
+  itemSeparacaoPendente.loteSelecionado = obterLoteSelecionadoConfirmacao();
+  atualizarProdutoConfirmacaoSeparacao();
+  separacaoConfirmStatus.textContent = itemSeparacaoPendente.loteSelecionado
+    ? `Lote ${itemSeparacaoPendente.loteSelecionado.controle} selecionado.`
+    : 'Selecione o lote que foi separado.';
+});
 botaoAjustarQuantidadeSeparacao.addEventListener('click', abrirAjusteQuantidadeSeparacao);
 botaoCancelarAjusteSeparacao.addEventListener('click', () => {
   separacaoAjustePainel.hidden = true;
