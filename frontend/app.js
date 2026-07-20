@@ -10,6 +10,7 @@ const loginSenha = document.getElementById('login-senha');
 const botaoToggleLoginSenha = document.getElementById('toggle-login-senha');
 const loginSubmit = document.getElementById('login-submit');
 const loginStatus = document.getElementById('login-status');
+const appBootScreen = document.getElementById('app-boot-screen');
 const homeScreen = document.getElementById('home-screen');
 const conferenciaScreen = document.getElementById('conferencia-screen');
 const acompanhamentoScreen = document.getElementById('acompanhamento-screen');
@@ -475,6 +476,11 @@ function mostrarLogin(mensagem = '') {
   }
 
   setTimeout(() => loginUsuario.focus(), 0);
+}
+
+function finalizarInicializacaoApp() {
+  document.body.classList.remove('app-booting');
+  appBootScreen?.setAttribute('aria-hidden', 'true');
 }
 
 async function carregarEmpresas() {
@@ -4825,9 +4831,9 @@ function obterEstadoOperacionalPedido(pedido) {
   if (statusConferencia === 'EM ANDAMENTO' || statusConferencia === 'EM CONFERENCIA') {
     return 'em-conferencia';
   }
+  if (statusConferencia === 'CONFERIDO') return 'conferido';
   if (statusSeparacao === 'EM_SEPARACAO') return 'em-separacao';
   if (statusSeparacao === 'SEPARADO') return 'separado';
-  if (statusConferencia === 'CONFERIDO') return 'conferido';
   return 'novo';
 }
 
@@ -5871,7 +5877,6 @@ async function abrirPreviewPedido(pedido) {
 
   pedidoPreviewSelecionado = pedido;
   itensPedidoPreview = [];
-  pedidoPreview.hidden = false;
   pedidoPreviewTitulo.textContent = formatarTituloPedidoConferencia(pedido);
   pedidoPreviewMeta.textContent = `${formatarData(pedido.DTNEG)} | ${pedido.EMPRESA || '-'}`;
   pedidoPreviewValor.textContent = formatarMoeda(pedido.VLRNOTA);
@@ -5885,6 +5890,13 @@ async function abrirPreviewPedido(pedido) {
   botaoAbrirSeparacaoPedido.hidden = filaModoConferencia !== 'saida'
     || pedido.STATUS_CONFERENCIA === 'CONFERIDO';
   botaoAbrirSeparacaoPedido.disabled = true;
+  if (pedido.STATUS_SEPARACAO === 'SEPARADO') {
+    botaoAbrirSeparacaoPedido.textContent = 'Separa\u00e7\u00e3o conclu\u00edda';
+  } else if (pedido.STATUS_SEPARACAO === 'EM_SEPARACAO') {
+    botaoAbrirSeparacaoPedido.textContent = 'Continuar separa\u00e7\u00e3o';
+  } else {
+    botaoAbrirSeparacaoPedido.textContent = 'Separa\u00e7\u00e3o';
+  }
   pedidoPreviewStatus.textContent = pedido.STATUS_CONFERENCIA === 'EM ANDAMENTO' ? 'Continuar' : 'Novo';
   pedidoPreviewStatus.textContent = pedido.STATUS_CONFERENCIA === 'CONFERIDO'
     ? 'Conferido'
@@ -5902,6 +5914,7 @@ async function abrirPreviewPedido(pedido) {
   }
   renderizarEstadoVazio(pedidoPreviewItensLista, 'Carregando itens do pedido...');
   atualizarIcones();
+  pedidoPreview.hidden = false;
 
   try {
     const res = await fetch(`/api/fila-conferencia/pedidos/${pedido.NUNOTA}/itens`);
@@ -6715,6 +6728,8 @@ async function inicializarApp() {
   } catch (error) {
     console.error('Erro ao verificar sessao:', error);
     mostrarLogin('Nao foi possivel verificar o login.');
+  } finally {
+    finalizarInicializacaoApp();
   }
 }
 
