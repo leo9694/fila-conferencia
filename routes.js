@@ -123,7 +123,7 @@ async function obterProximoCodigoOrdemCarga() {
   const codigo = obterNumeroInteiro(registro?.PROXIMO_CODIGO);
 
   if (!codigo) {
-    throw new Error('Nao foi possivel determinar o proximo codigo da Ordem de Carga.');
+    throw new Error('Não foi possível determinar o próximo código da Ordem de Carga.');
   }
 
   return codigo;
@@ -154,7 +154,7 @@ async function criarOrdemCargaSankhya({ empresa, transportadora }) {
           codigoTransportadora: transportadora,
           tipo: 3,
           situacao: 1,
-          observacoes: 'Gerado pela Fila de Conferencia'
+          observacoes: 'Gerado pela Fila de Conferência'
         }
       });
       const codigoRetornado = obterNumeroInteiro(
@@ -177,7 +177,7 @@ async function criarOrdemCargaSankhya({ empresa, transportadora }) {
     }
   }
 
-  throw ultimoErro || new Error('Nao foi possivel criar a Ordem de Carga.');
+  throw ultimoErro || new Error('Não foi possível criar a Ordem de Carga.');
 }
 
 function obterTransportadorasRomaneio(valor, legado = null) {
@@ -363,14 +363,14 @@ function escaparHtmlBitrix(valor) {
 }
 
 async function localizarFunilEtapaBitrix() {
-  const nomeFunil = normalizarNomeBitrix(process.env.BITRIX_FUNNEL_NAME || 'Atualizacao Cadastral');
+  const nomeFunil = normalizarNomeBitrix(process.env.BITRIX_FUNNEL_NAME || 'Atualização Cadastral');
   const nomeEtapa = normalizarNomeBitrix(process.env.BITRIX_FUNNEL_STAGE || 'Aguardando Contato');
   const funis = await bitrixService.consultarFunisEtapas();
   const funil = funis.find(({ funil: item }) => {
     const nome = normalizarNomeBitrix(item.name ?? item.NAME);
     return nome === nomeFunil || nome.replace(/s$/, '') === nomeFunil.replace(/s$/, '');
   });
-  if (!funil) throw new Error(`Funil Bitrix "${process.env.BITRIX_FUNNEL_NAME || 'Atualizacao Cadastral'}" nao encontrado.`);
+  if (!funil) throw new Error(`Funil Bitrix "${process.env.BITRIX_FUNNEL_NAME || 'Atualização Cadastral'}" não encontrado.`);
   const etapa = funil.etapas.find((item) => normalizarNomeBitrix(item.NAME ?? item.name) === nomeEtapa);
   if (!etapa) throw new Error(`Etapa Bitrix "${process.env.BITRIX_FUNNEL_STAGE || 'Aguardando Contato'}" nao encontrada.`);
   return { funil: funil.funil, etapa };
@@ -393,7 +393,7 @@ async function resolverResponsavelBitrix(usuarioSessao = {}) {
     WHERE CODUSU = ${codUsu}
   `) : [];
   const nomeSankhya = String(usuarioSankhya?.NOMEUSU || usuarioSessao.nome || '').trim();
-  if (!nomeSankhya) throw new Error('Nao foi possivel identificar o usuario logado no Sankhya.');
+  if (!nomeSankhya) throw new Error('Não foi possível identificar o usuário logado no Sankhya.');
 
   try {
     const usuarioBitrix = await bitrixService.buscarUsuarioPorNome(nomeSankhya);
@@ -712,8 +712,8 @@ async function obterSituacaoDocumentosPedido(nunotaPedido) {
       faturado: false,
       pedido: nunotaPedido,
       nota: null,
-      danfe: { disponivel: false, motivo: 'Pedido ainda nao faturado.' },
-      boleto: { disponivel: false, motivo: 'Pedido ainda nao faturado.' }
+      danfe: { disponivel: false, motivo: 'Pedido ainda não faturado.' },
+      boleto: { disponivel: false, motivo: 'Pedido ainda não faturado.' }
     };
   }
 
@@ -751,7 +751,7 @@ async function obterSituacaoDocumentosPedido(nunotaPedido) {
     },
     boleto: {
       disponivel: possuiFinanceiro,
-      motivo: possuiFinanceiro ? null : 'A nota nao possui titulo financeiro para boleto.'
+      motivo: possuiFinanceiro ? null : 'A nota não possui título financeiro para boleto.'
     }
   };
 }
@@ -819,7 +819,7 @@ async function gerarPrevisualizacaoBoleto(nunota) {
   `);
 
   if (titulos.length === 0) {
-    throw new Error('A nota faturada nao possui titulos financeiros para gerar boleto.');
+    throw new Error('A nota faturada não possui títulos financeiros para gerar boleto.');
   }
 
   const primeiro = titulos[0];
@@ -839,7 +839,7 @@ async function gerarPrevisualizacaoBoleto(nunota) {
     || 0;
 
   if (!codigoContaInterna || !codigoBanco || !codigoRelatorio) {
-    throw new Error('A conta bancaria do titulo nao possui banco ou modelo de boleto configurado no Sankhya.');
+    throw new Error('A conta bancária do título não possui banco ou modelo de boleto configurado no Sankhya.');
   }
 
   const resultado = await executeDirectService('BoletoSP.buildPreVisualizacao', {
@@ -869,7 +869,7 @@ async function gerarPrevisualizacaoBoleto(nunota) {
   });
   const chaveArquivo = extrairChaveDocumento(resultado);
   if (!chaveArquivo) {
-    throw new Error(extrairAvisosDocumento(resultado).join(' ') || 'O Sankhya nao retornou a chave de visualizacao do boleto.');
+    throw new Error(extrairAvisosDocumento(resultado).join(' ') || 'O Sankhya não retornou a chave de visualização do boleto.');
   }
 
   const arquivo = await downloadDirectFile('mge', 'visualizadorArquivos.mge', {
@@ -925,7 +925,7 @@ async function gerarDocumentoFiscalSankhya(nunota, tipo) {
 
   if (!pdf) {
     const complemento = tipo === 'boleto'
-      ? `${process.env.SANKHYA_OM_BASE_URL ? '' : ' Configure SANKHYA_OM_BASE_URL com o endereco direto do ambiente Sankhya.'} Confira tambem o parametro VERPDFBOLPORTAL e a configuracao de impressao da TOP, negociacao, parceiro e conta.`
+      ? `${process.env.SANKHYA_OM_BASE_URL ? '' : ' Configure SANKHYA_OM_BASE_URL com o endereço direto do ambiente Sankhya.'} Confira também o parâmetro VERPDFBOLPORTAL e a configuração de impressão da TOP, negociação, parceiro e conta.`
       : '';
     throw new Error(`${avisos.join(' ') || `O Sankhya nao gerou o PDF de ${tipo.toUpperCase()}.`}${complemento}`);
   }
@@ -952,7 +952,7 @@ async function gerarDocumentosFiscaisCombinados(nunota) {
       .map((resultado) => resultado.reason?.message)
       .filter(Boolean)
       .join(' ');
-    throw new Error(detalhes || 'O Sankhya nao retornou DANFE nem boleto.');
+    throw new Error(detalhes || 'O Sankhya não retornou DANFE nem boleto.');
   }
 
   if (arquivos.length === 1) {
@@ -1014,15 +1014,15 @@ function traduzirStatusConferencia(status) {
   const statusNormalizado = String(status || '').toUpperCase();
 
   if (statusNormalizado === 'D') {
-    return 'Status D: o Sankhya classificou a conferencia como divergente/nao finalizada.';
+    return 'Status D: o Sankhya classificou a conferência como divergente/não finalizada.';
   }
 
   if (statusNormalizado === 'A') {
-    return 'Status A: a conferencia continua em andamento no Sankhya.';
+    return 'Status A: a conferência continua em andamento no Sankhya.';
   }
 
   if (statusNormalizado === 'F') {
-    return 'Status F: conferencia finalizada.';
+    return 'Status F: conferência finalizada.';
   }
 
   return status ? `Status ${status}: status retornado pelo Sankhya.` : null;
@@ -1593,7 +1593,7 @@ router.get('/conferencias', async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ erro: 'Erro ao buscar conferencias' });
+    res.status(500).json({ erro: 'Erro ao buscar conferências' });
   }
 });
 
@@ -1668,7 +1668,7 @@ router.get('/fila-conferencia/separacao/:nunota/produtos/:codprod/lotes', async 
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ erro: 'Nao foi possivel consultar os lotes do produto.' });
+    res.status(500).json({ erro: 'Não foi possível consultar os lotes do produto.' });
   }
 });
 
@@ -1681,12 +1681,12 @@ async function garantirPedidoNaoConferidoParaSeparacao(nunota) {
      WHERE CAB.NUNOTA = ${nunota}
   `);
   if (rows.length === 0) {
-    const erro = new Error('Pedido nao encontrado.');
+    const erro = new Error('Pedido não encontrado.');
     erro.statusCode = 404;
     throw erro;
   }
   if (String(rows[0].STATUS || '').trim().toUpperCase() === 'F') {
-    const erro = new Error('Pedido ja conferido nao pode ser enviado para separacao.');
+    const erro = new Error('Pedido já conferido não pode ser enviado para separação.');
     erro.statusCode = 409;
     throw erro;
   }
@@ -1859,7 +1859,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ erro: 'Erro ao buscar fila de conferencia' });
+    res.status(500).json({ erro: 'Erro ao buscar fila de conferência' });
   }
 });
 
@@ -1963,7 +1963,7 @@ router.post('/fila-conferencia/romaneio', async (req, res) => {
     });
 
     if (!codigoOrdemCarga) {
-      throw new Error('O Sankhya criou a carga, mas nao retornou o codigo da Ordem de Carga.');
+      throw new Error('O Sankhya criou a carga, mas não retornou o código da Ordem de Carga.');
     }
 
     await executeDirectService('FormacaoCargaSP.confirmaAlteracoesNotasOC', {
@@ -1995,7 +1995,7 @@ router.post('/fila-conferencia/romaneio', async (req, res) => {
     const vinculadosSet = new Set(vinculados);
     const falhas = notasSolicitadas
       .filter((nunota) => !vinculadosSet.has(nunota))
-      .map((nunota) => ({ nunota, erro: 'A nota nao ficou vinculada a Ordem de Carga.' }));
+      .map((nunota) => ({ nunota, erro: 'A nota não ficou vinculada à Ordem de Carga.' }));
 
     const resultado = {
       codigoOrdemCarga,
@@ -2246,12 +2246,12 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
 
         const metadadosUnidadeItem = { codVol: row.CODVOLPADRAO || row.CODVOL || 'UN' };
         adicionarCodigoConferencia(codigosConferencia, row.REFERENCIA, 'REFERENCIA', 1, 'Referencia', metadadosUnidadeItem);
-        adicionarCodigoConferencia(codigosConferencia, row.GTINNFE, 'CODIGO_BARRAS', 1, 'Codigo de barras', metadadosUnidadeItem);
-        adicionarCodigoConferencia(codigosConferencia, row.GTINTRIBNFE, 'CODIGO_BARRAS', 1, 'Codigo de barras tributavel', metadadosUnidadeItem);
-        adicionarCodigoConferencia(codigosConferencia, row.PRODUTONFE, 'CODIGO_BARRAS', 1, 'Codigo do produto na NFe', metadadosUnidadeItem);
-        adicionarCodigoConferencia(codigosConferencia, row.AD_CODBAR, 'CODIGO_BARRAS', 1, 'Codigo de barras adicional', metadadosUnidadeItem);
-        adicionarCodigoConferencia(codigosConferencia, row.AD_CBARANT, 'CODIGO_BARRAS', 1, 'Codigo de barras anterior', metadadosUnidadeItem);
-        adicionarCodigoConferencia(codigosConferencia, row.CODPROD, 'CODIGO_PRODUTO', 1, 'Codigo do produto', metadadosUnidadeItem);
+        adicionarCodigoConferencia(codigosConferencia, row.GTINNFE, 'CODIGO_BARRAS', 1, 'Código de barras', metadadosUnidadeItem);
+        adicionarCodigoConferencia(codigosConferencia, row.GTINTRIBNFE, 'CODIGO_BARRAS', 1, 'Código de barras tributável', metadadosUnidadeItem);
+        adicionarCodigoConferencia(codigosConferencia, row.PRODUTONFE, 'CODIGO_BARRAS', 1, 'Código do produto na NFe', metadadosUnidadeItem);
+        adicionarCodigoConferencia(codigosConferencia, row.AD_CODBAR, 'CODIGO_BARRAS', 1, 'Código de barras adicional', metadadosUnidadeItem);
+        adicionarCodigoConferencia(codigosConferencia, row.AD_CBARANT, 'CODIGO_BARRAS', 1, 'Código de barras anterior', metadadosUnidadeItem);
+        adicionarCodigoConferencia(codigosConferencia, row.CODPROD, 'CODIGO_PRODUTO', 1, 'Código do produto', metadadosUnidadeItem);
 
         return {
           nunota: row.NUNOTA,
@@ -2304,7 +2304,7 @@ router.get('/fila-conferencia/produtos/:codprod/foto', async (req, res) => {
     `);
 
     if (!produto) {
-      res.status(404).json({ erro: 'Produto nao encontrado' });
+      res.status(404).json({ erro: 'Produto não encontrado' });
       return;
     }
 
@@ -2342,7 +2342,7 @@ router.get('/fila-conferencia/produtos/:codprod/foto', async (req, res) => {
       .join('');
 
     if (!hex) {
-      res.status(404).json({ erro: 'Foto do produto nao encontrada' });
+      res.status(404).json({ erro: 'Foto do produto não encontrada' });
       return;
     }
 
@@ -2361,7 +2361,7 @@ router.get('/produtos/consulta', async (req, res) => {
     const codigo = String(req.query.codigo || '').trim();
 
     if (!codigo) {
-      res.status(400).json({ erro: 'Informe o codigo do produto' });
+      res.status(400).json({ erro: 'Informe o código do produto' });
       return;
     }
 
@@ -3299,7 +3299,7 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
   const tipMov = tipoMovimentoConferencia(modo);
 
   if (!nunota || codUsu === null) {
-    res.status(400).json({ erro: 'Informe pedido e usuario logado' });
+    res.status(400).json({ erro: 'Informe pedido e usuário logado' });
     return;
   }
 
@@ -3484,7 +3484,7 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
   const sincronizarSankhya = req.body?.sincronizarSankhya !== false;
 
   if (!nunota || codUsu === null) {
-    res.status(400).json({ erro: 'Informe pedido e usuario logado' });
+    res.status(400).json({ erro: 'Informe pedido e usuário logado' });
     return;
   }
 
@@ -3499,7 +3499,7 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
     `);
 
     if (!pedido) {
-      res.status(404).json({ erro: 'Pedido nao encontrado' });
+      res.status(404).json({ erro: 'Pedido não encontrado' });
       return;
     }
 
@@ -3508,7 +3508,7 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
       || pedido.TIPMOV !== 'C'
       || !['A', 'P', 'L'].includes(String(pedido.STATUSNOTA || '').toUpperCase())
     )) {
-      res.status(409).json({ erro: 'Nota nao esta liberada para conferencia de entrada no Sankhya' });
+      res.status(409).json({ erro: 'A nota não está liberada para conferência de entrada no Sankhya' });
       return;
     }
 
@@ -3517,7 +3517,7 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
       : pedido.STATUS === 'A';
     if (pedido.NUCONFATUAL && pedido.STATUS && !statusProgressoPermitido) {
       conferenciaProgressStore.remover(nunota);
-      res.status(409).json({ erro: 'Conferencia ja finalizada ou em outro status no Sankhya' });
+      res.status(409).json({ erro: 'Conferência já finalizada ou em outro status no Sankhya' });
       return;
     }
 
@@ -3531,7 +3531,7 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
     if (modo === 'entrada' && sincronizarSankhya) {
       const nuconfEntrada = Number(pedido.NUCONFATUAL || nuconf || 0);
       if (!nuconfEntrada) {
-        res.status(409).json({ erro: 'Conferencia de entrada ainda nao foi iniciada no Sankhya' });
+        res.status(409).json({ erro: 'A conferência de entrada ainda não foi iniciada no Sankhya' });
         return;
       }
       await enfileirarSincronizacaoEntrada(nunota, () => sincronizarDetalhesConferenciaEntrada({
@@ -3544,7 +3544,7 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
     res.json({ ok: true, progresso, sincronizadoSankhya: modo !== 'entrada' || sincronizarSankhya });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ erro: 'Erro ao salvar progresso da conferencia' });
+    res.status(500).json({ erro: 'Erro ao salvar o progresso da conferência' });
   }
 });
 
@@ -3552,7 +3552,7 @@ router.get('/fila-conferencia/progresso/caixas', (req, res) => {
   const nunota = obterNumeroInteiro(req.query?.nunota);
 
   if (!nunota) {
-    res.status(400).json({ erro: 'Informe a nota da conferencia' });
+    res.status(400).json({ erro: 'Informe a nota da conferência' });
     return;
   }
 
@@ -3571,13 +3571,13 @@ router.post('/fila-conferencia/progresso/caixas/encerrar', async (req, res) => {
   }
 
   if (modo !== 'entrada') {
-    res.status(409).json({ erro: 'O fechamento de caixa esta disponivel somente na conferencia de entrada' });
+    res.status(409).json({ erro: 'O fechamento de caixa está disponível somente na conferência de entrada' });
     return;
   }
 
   const resultado = conferenciaProgressStore.encerrarCaixa({ nunota, caixaId });
   if (!resultado.encontrado) {
-    res.status(404).json({ erro: 'A caixa nao possui leituras salvas para esta nota' });
+    res.status(404).json({ erro: 'A caixa não possui leituras salvas para esta nota' });
     return;
   }
 
@@ -3608,7 +3608,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
 
   const volumesInvalidos = modo === 'saida' ? !volumes : volumes === null;
   if (!nunota || codUsu === null || volumesInvalidos || itens.length === 0) {
-    res.status(400).json({ erro: 'Informe pedido, usuario logado, quantidade de volumes e itens conferidos' });
+    res.status(400).json({ erro: 'Informe pedido, usuário logado, quantidade de volumes e itens conferidos' });
     return;
   }
 
@@ -3639,17 +3639,17 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
 
     const pedido = pedidoRows[0];
     if (!pedido) {
-      res.status(404).json({ erro: 'Pedido nao encontrado ou nao esta liberado para conferencia' });
+      res.status(404).json({ erro: 'Pedido não encontrado ou não está liberado para conferência' });
       return;
     }
 
     if (modo === 'entrada' && !pedido.NUCCO) {
-      res.status(409).json({ erro: 'A TOP desta nota de entrada nao possui Configuracao p/ conferencia no Sankhya.' });
+      res.status(409).json({ erro: 'A TOP desta nota de entrada não possui configuração para conferência no Sankhya.' });
       return;
     }
 
     if (modo === 'entrada' && pedido.EXPLODIRLOTE === 'S') {
-      res.status(409).json({ erro: 'A configuracao da conferencia de entrada nao pode usar Detalhar lote pela conferencia.' });
+      res.status(409).json({ erro: 'A configuração da conferência de entrada não pode usar detalhamento de lote pela conferência.' });
       return;
     }
 
@@ -3657,7 +3657,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       ? ['A', 'D'].includes(String(pedido.STATUS || '').toUpperCase())
       : pedido.STATUS === 'A';
     if (pedido.NUCONFATUAL && !statusPermitido) {
-      res.status(409).json({ erro: 'Pedido ja possui conferencia finalizada ou em outro status no Sankhya' });
+      res.status(409).json({ erro: 'Pedido já possui conferência finalizada ou está em outro status no Sankhya' });
       return;
     }
 
@@ -3668,7 +3668,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     `);
 
     if (usuarioRows.length === 0) {
-      res.status(400).json({ erro: 'Conferente nao encontrado no Sankhya' });
+      res.status(400).json({ erro: 'Conferente não encontrado no Sankhya' });
       return;
     }
 
@@ -3721,7 +3721,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
 
     if (divergencias.length > 0) {
       res.status(409).json({
-        erro: 'Existem divergencias na conferencia',
+        erro: 'Existem divergências na conferência',
         divergencias
       });
       return;
@@ -3758,7 +3758,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       `);
 
       if (!conferenciaAtual || Number(conferenciaAtual.NUNOTAORIG) !== nunota) {
-        res.status(409).json({ erro: 'Conferencia iniciada nao pertence a este pedido no Sankhya' });
+        res.status(409).json({ erro: 'A conferência iniciada não pertence a este pedido no Sankhya' });
         return;
       }
 
@@ -3766,7 +3766,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
         ? ['A', 'D'].includes(String(conferenciaAtual.STATUS || '').toUpperCase())
         : conferenciaAtual.STATUS === 'A';
       if (conferenciaAtual.STATUS && !statusAtualPermitido) {
-        res.status(409).json({ erro: 'Conferencia ja esta finalizada ou em outro status no Sankhya' });
+        res.status(409).json({ erro: 'A conferência já está finalizada ou em outro status no Sankhya' });
         return;
       }
 
@@ -3886,7 +3886,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       ].filter(Boolean);
 
       res.status(409).json({
-        erro: 'O Sankhya recebeu a conferencia, mas nao finalizou como conferido',
+        erro: 'O Sankhya recebeu a conferência, mas não finalizou como conferido',
         statusSankhya: conferenciaConferida?.STATUS || null,
         detalhesSankhya,
         resultadoFinalizacao
@@ -3929,13 +3929,13 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
             nota: null,
             detalhes: detalhesFaturamento.length > 0
               ? detalhesFaturamento
-              : ['O Sankhya concluiu a conferencia, mas nao gerou uma nota de faturamento.']
+              : ['O Sankhya concluiu a conferência, mas não gerou uma nota de faturamento.']
           }
         : {
             status: 'NAO_CONFIGURADO',
             automatico: false,
             nota: null,
-            detalhes: ['Faturamento automatico nao configurado para esta conferencia.']
+            detalhes: ['Faturamento automático não configurado para esta conferência.']
           };
 
     res.json({
@@ -3956,7 +3956,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({
-      erro: 'Erro ao confirmar conferencia',
+      erro: 'Erro ao confirmar conferência',
       detalhesSankhya: [err.message].filter(Boolean)
     });
   }

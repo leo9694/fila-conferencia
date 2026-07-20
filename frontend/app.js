@@ -429,7 +429,7 @@ function salvarNavegacaoFila(extra = {}) {
   try {
     sessionStorage.setItem(STORAGE_NAVEGACAO_FILA, JSON.stringify(estado));
   } catch (error) {
-    console.warn('Nao foi possivel salvar a navegacao da fila:', error);
+    console.warn('Não foi possível salvar a navegação da fila:', error);
   }
 }
 
@@ -438,7 +438,7 @@ function obterNavegacaoFilaSalva() {
     const texto = sessionStorage.getItem(STORAGE_NAVEGACAO_FILA);
     return texto ? JSON.parse(texto) : null;
   } catch (error) {
-    console.warn('Nao foi possivel ler a navegacao da fila:', error);
+    console.warn('Não foi possível ler a navegação da fila:', error);
     return null;
   }
 }
@@ -447,7 +447,7 @@ function limparNavegacaoFilaSalva() {
   try {
     sessionStorage.removeItem(STORAGE_NAVEGACAO_FILA);
   } catch (error) {
-    console.warn('Nao foi possivel limpar a navegacao da fila:', error);
+    console.warn('Não foi possível limpar a navegação da fila:', error);
   }
 }
 
@@ -688,7 +688,7 @@ function renderizarPedidosRomaneio() {
     <div class="romaneio-row">
       <span class="romaneio-selecao"><input type="checkbox" data-romaneio-nota="${Number(pedido.NUNOTA)}" ${pedido.selecionada !== false ? 'checked' : ''} aria-label="Selecionar nota ${Number(pedido.NUMNOTA || pedido.NUNOTA)}"></span>
       <span><span class="romaneio-tipo ${pedido.TIPO_DOCUMENTO === 'BONIFICACAO' ? 'bonificacao' : 'venda'}">${pedido.TIPO_DOCUMENTO === 'BONIFICACAO' ? 'Bonificação' : 'Venda'}</span></span>
-      <span>${Number(pedido.NUMNOTA) > 0 ? `Nro. ${Number(pedido.NUMNOTA)}` : 'Sem numero fiscal'}<small>Interna ${Number(pedido.NUNOTA)}</small></span>
+      <span>${Number(pedido.NUMNOTA) > 0 ? `Nro. ${Number(pedido.NUMNOTA)}` : 'Sem número fiscal'}<small>Interna ${Number(pedido.NUNOTA)}</small></span>
       <span>${formatarData(pedido.DTNEG)}</span>
       <span class="romaneio-cliente" title="${escaparAtributo(`${pedido.CODPARC || '-'} - ${pedido.CLIENTE || '-'}`)}">${escaparHtml(`${pedido.CODPARC || '-'} - ${pedido.CLIENTE || '-'}`)}</span>
       <span>${formatarMoeda(pedido.VLRNOTA)}</span>
@@ -767,7 +767,7 @@ async function carregarPedidosRomaneio() {
     renderizarPedidosRomaneio();
   } catch (error) {
     if (buscaId !== romaneioBuscaPedidosId) return;
-    limparPedidosRomaneio('Nao foi possivel carregar as notas faturadas.');
+    limparPedidosRomaneio('Não foi possível carregar as notas faturadas.');
     definirStatusRomaneio(error.message, 'error');
   }
 }
@@ -801,7 +801,7 @@ async function carregarTransportadorasRomaneio() {
     `).join('');
     atualizarResumoTransportadorasRomaneio();
     if (romaneioTransportadoras.length === 0) {
-      limparPedidosRomaneio('Nenhuma transportadora possui notas faturadas pendentes de carga neste periodo.');
+      limparPedidosRomaneio('Nenhuma transportadora possui notas faturadas pendentes de carga neste período.');
     }
   } finally {
     romaneioTransportadoraTrigger.disabled = false;
@@ -865,7 +865,7 @@ async function gerarRomaneioCargas() {
 
     const quantidade = payload.notasVinculadas?.length || 0;
     const textoFalhas = payload.falhas?.length
-      ? ` ${payload.falhas.length} nota(s) nao puderam ser vinculadas.`
+      ? ` ${payload.falhas.length} nota(s) não puderam ser vinculadas.`
       : '';
     definirStatusRomaneio(
       `Ordem de Carga ${payload.codigoOrdemCarga} gerada com ${quantidade} nota(s) faturada(s).${textoFalhas}`,
@@ -876,7 +876,7 @@ async function gerarRomaneioCargas() {
     romaneioResumo.innerHTML = `<span>Ordem de Carga</span><strong>${payload.codigoOrdemCarga}</strong>`;
     romaneioLista.innerHTML = `
       <div class="romaneio-empty">
-        Romaneio gerado no Sankhya. Codigo da Ordem de Carga: <strong>${payload.codigoOrdemCarga}</strong>.
+        Romaneio gerado no Sankhya. Código da Ordem de Carga: <strong>${payload.codigoOrdemCarga}</strong>.
       </div>
     `;
     botaoImprimirRomaneio.hidden = false;
@@ -1058,7 +1058,7 @@ function mostrarConsultaProdutos() {
 
 function mostrarAtualizacaoContato() {
   if (!usuarioLogado) {
-    mostrarLogin('Entre para acessar a atualizacao de contato.');
+    mostrarLogin('Entre para acessar a atualização de contato.');
     return;
   }
 
@@ -1076,7 +1076,7 @@ function criarIndicadorStatusPedido(tipo, valor) {
   const financeiro = tipo === 'financeiro';
   const ok = String(valor ?? '').trim() === '1';
   const nome = financeiro ? 'Financeiro' : 'Comercial';
-  const descricao = ok ? 'OK' : 'Pendente de analise';
+  const descricao = ok ? 'OK' : 'Pendente de análise';
   const icone = financeiro ? 'circle-dollar-sign' : 'briefcase-business';
 
   return `
@@ -1125,7 +1125,7 @@ function criarCard(item) {
   const resumoPedido = formatarResumoPedidoPainel(item);
   const resumoItensUnidades = formatarResumoItensUnidadesPainel(item);
   const conclusao = mostrarTempoTotal && item.DT_FIM_CONFERENCIA
-    ? `Concluido: ${formatarDataHora(item.DT_FIM_CONFERENCIA)}`
+    ? `Concluído: ${formatarDataHora(item.DT_FIM_CONFERENCIA)}`
     : '';
   const tempo = mostrarTempoTotal
     ? formatarTempoMinutos(item.TEMPO_TOTAL_CONFERENCIA_MIN)
@@ -1296,7 +1296,7 @@ function montarErroConfirmacao(payload) {
     ? `<div class="erro-detalhes">${detalhes.map((detalhe) => `<div>${escaparHtml(detalhe)}</div>`).join('')}</div>`
     : '';
 
-  return `<span class="danger-text">${escaparHtml(payload?.erro || 'Erro ao confirmar conferencia')}</span>${detalheHtml}`;
+  return `<span class="danger-text">${escaparHtml(payload?.erro || 'Erro ao confirmar conferência')}</span>${detalheHtml}`;
 }
 
 function obterCodigosItem(item) {
@@ -1323,11 +1323,11 @@ function obterEntradaCodigoItem(item, codigo) {
 }
 
 function obterDescricaoEntradaCodigo(entrada) {
-  if (!entrada) return 'codigo';
+  if (!entrada) return 'código';
   if (entrada.tipo === 'UNIDADE_ALTERNATIVA') return entrada.descricao || 'unidade alternativa';
-  if (entrada.tipo === 'REFERENCIA') return 'referencia';
-  if (entrada.tipo === 'CODIGO_PRODUTO') return 'codigo do produto';
-  return entrada.descricao || 'codigo de barras';
+  if (entrada.tipo === 'REFERENCIA') return 'referência';
+  if (entrada.tipo === 'CODIGO_PRODUTO') return 'código do produto';
+  return entrada.descricao || 'código de barras';
 }
 
 function obterItensCompativeisCodigo(codigo) {
@@ -1402,7 +1402,7 @@ function atualizarProdutoLeituraEntrada() {
     scanProdutoPreview.hidden = false;
     scanProdutoPreview.classList.add('not-found');
     scanProdutoPreview.innerHTML = `
-      <span>Codigo digitado</span>
+      <span>Código digitado</span>
       <strong>${escaparHtml(codigoOriginal)}</strong>
       <small>Nenhum produto encontrado nesta nota.</small>
     `;
@@ -1557,10 +1557,10 @@ function renderizarResumoConferencia() {
     : '-';
 }
 
-function renderizarConsultaVazia(mensagem = 'Digite o codigo do produto para visualizar o estoque.') {
+function renderizarConsultaVazia(mensagem = 'Digite o código do produto para visualizar o estoque.') {
   consultaProdutoAtual = null;
   consultaProdutoTitulo.textContent = 'Produto';
-  consultaProdutoLegenda.textContent = 'Informe um codigo para consultar.';
+  consultaProdutoLegenda.textContent = 'Informe um código para consultar.';
   consultaProdutoFoto.innerHTML = '<div class="consulta-empty">Sem produto selecionado.</div>';
   botaoConsultaProdutoEtiqueta.disabled = true;
   consultaProdutoResumo.innerHTML = `<div class="consulta-empty">${escaparHtml(mensagem)}</div>`;
@@ -1608,13 +1608,13 @@ function renderizarConsultaProduto(payload) {
   `;
   const img = consultaProdutoFoto.querySelector('img');
   img.addEventListener('error', () => {
-    consultaProdutoFoto.innerHTML = '<div class="consulta-empty">Foto nao cadastrada para este produto.</div>';
+    consultaProdutoFoto.innerHTML = '<div class="consulta-empty">Foto não cadastrada para este produto.</div>';
   }, { once: true });
 
   const colunasResumo = [
     { titulo: 'Referencia', render: () => produto.REFERENCIA || '-' },
-    { titulo: 'Codigo', render: () => produto.CODPROD },
-    { titulo: 'Descricao', render: () => produto.DESCRPROD || '-' },
+    { titulo: 'Código', render: () => produto.CODPROD },
+    { titulo: 'Descrição', render: () => produto.DESCRPROD || '-' },
     { titulo: 'Unidade', render: () => produto.CODVOL || '-' },
     ...estoquePorEmpresa.map((empresa) => ({
       titulo: empresa.NOMEEMPRESA || `Emp. ${empresa.CODEMP}`,
@@ -1622,20 +1622,20 @@ function renderizarConsultaProduto(payload) {
       render: () => formatarQuantidade(empresa.DISPONIVEL)
     })),
     { titulo: 'Total estoque', numero: true, render: () => formatarQuantidade(estoquePorEmpresa.reduce((total, item) => total + Number(item.ESTOQUE || 0), 0)) },
-    { titulo: 'Total disponivel', numero: true, render: () => formatarQuantidade(estoquePorEmpresa.reduce((total, item) => total + Number(item.DISPONIVEL || 0), 0)) }
+    { titulo: 'Total disponível', numero: true, render: () => formatarQuantidade(estoquePorEmpresa.reduce((total, item) => total + Number(item.DISPONIVEL || 0), 0)) }
   ];
 
   consultaProdutoResumo.innerHTML = montarTabelaConsulta(colunasResumo, [produto]);
 
   const colunasDetalhes = [
-    { titulo: 'Cod. empresa', campo: 'CODEMP', numero: true },
+    { titulo: 'Cód. empresa', campo: 'CODEMP', numero: true },
     { titulo: 'Nome empresa', campo: 'NOMEEMPRESA' },
     { titulo: 'Local', campo: 'CODLOCAL', numero: true },
-    { titulo: 'Descricao local', campo: 'DESCRLOCAL' },
+    { titulo: 'Descrição local', campo: 'DESCRLOCAL' },
     { titulo: 'Estoque', numero: true, render: (linha) => formatarQuantidade(linha.ESTOQUE) },
     { titulo: 'Reservado', numero: true, render: (linha) => formatarQuantidade(linha.RESERVADO) },
     { titulo: 'Controle', campo: 'CONTROLE' },
-    { titulo: 'Disponivel', numero: true, render: (linha) => formatarQuantidade(linha.DISPONIVEL) },
+    { titulo: 'Disponível', numero: true, render: (linha) => formatarQuantidade(linha.DISPONIVEL) },
     { titulo: 'Dt. Validade', render: (linha) => formatarData(linha.DTVAL) },
     { titulo: 'Tipo', render: (linha) => formatarTipoEstoque(linha.TIPO) },
     { titulo: 'Poder', render: (linha) => formatarTipoEstoque(linha.TIPO) },
@@ -1698,7 +1698,7 @@ function abrirSelecaoEtiquetaProduto() {
       const validade = estoque.DTVAL ? (formatarData(estoque.DTVAL) || 'Sem validade') : 'Sem validade';
       return `<option value="${indice}">${escaparHtml(lote)} | Validade: ${escaparHtml(validade)}</option>`;
     }).join('')
-    : '<option value="-1">Sem Lote | Sem validade</option>';
+    : '<option value="-1">Sem lote | Sem validade</option>';
 
   consultaEtiquetaModal.hidden = false;
   consultaEtiquetaLote.focus();
@@ -1717,7 +1717,7 @@ async function buscarConsultaProduto() {
   const codigo = consultaProdutoCodigo.value.trim();
 
   if (!codigo) {
-    renderizarConsultaVazia('Informe um codigo, referencia ou codigo de barras.');
+    renderizarConsultaVazia('Informe um código, referência ou código de barras.');
     consultaProdutoCodigo.focus();
     return;
   }
@@ -1734,7 +1734,7 @@ async function buscarConsultaProduto() {
     const payload = await res.json();
 
     if (!res.ok) {
-      throw new Error(payload.erro || 'Produto nao encontrado');
+      throw new Error(payload.erro || 'Produto não encontrado');
     }
 
     consultaProdutoAtual = payload;
@@ -1978,7 +1978,7 @@ function atualizarPaginacaoContato() {
   if (!ativa) return;
 
   const { pagina, totalPaginas, total } = contatoPaginacao;
-  contatoPaginaInfo.textContent = `Pagina ${pagina} de ${totalPaginas} | ${total} clientes`;
+  contatoPaginaInfo.textContent = `Página ${pagina} de ${totalPaginas} | ${total} clientes`;
   contatoPaginaPrimeira.disabled = pagina <= 1;
   contatoPaginaAnterior.disabled = pagina <= 1;
   contatoPaginaProxima.disabled = pagina >= totalPaginas;
@@ -2286,7 +2286,7 @@ function criarPainelLimiteCredito(parceiro = {}, situacoes = []) {
             </div>
           </label>
           <label>
-            <span>Situacao de credito</span>
+            <span>Situação de crédito</span>
             <select id="contato-situacao-credito">
               <option value="">Selecione</option>
               ${opcoesSituacao}
@@ -2411,7 +2411,7 @@ function renderizarDetalheContato(payload) {
         </div>
       </div>
       <div class="contato-info-section">
-        <h3><span class="contato-section-icon">${iconeContato('endereco')}</span>Endereco</h3>
+        <h3><span class="contato-section-icon">${iconeContato('endereco')}</span>Endereço</h3>
         <div class="contato-person-card">
           <div class="contato-person-avatar">${iconeContato('endereco')}</div>
           <div>
@@ -2531,7 +2531,7 @@ async function salvarLimiteCreditoCliente() {
   }
 
   if (!situacaoInput.value) {
-    status.textContent = 'Selecione a situacao de credito.';
+    status.textContent = 'Selecione a situação de crédito.';
     status.className = 'contato-limite-status error';
     situacaoInput.focus();
     return;
@@ -2813,7 +2813,7 @@ async function criarCardBitrixCliente() {
     const payload = await res.json();
     if (!res.ok) throw new Error([payload.erro, payload.detalhes].filter(Boolean).join(' - ') || 'Erro ao criar card');
     const mensagem = payload.negocio?.criado
-      ? `Card criado em ${payload.funil?.nome || 'Atualizacao Cadastral'}, etapa ${payload.etapa?.nome || 'Aguardando Contato'}.`
+      ? `Card criado em ${payload.funil?.nome || 'Atualização Cadastral'}, etapa ${payload.etapa?.nome || 'Aguardando Contato'}.`
       : 'Este cliente ja possui card nesse funil.';
     contatoBitrixStatus.textContent = mensagem;
     contatoBitrixStatus.classList.add('success');
@@ -2845,7 +2845,7 @@ function desenharClientesContato() {
     const indicadorVazio = contatoOrdenacaoUltimaCompra === 'asc' ? '&uarr;' : contatoOrdenacaoUltimaCompra === 'desc' ? '&darr;' : '&varr;';
     contatoClientesLista.innerHTML = `
       ${criarCabecalhoListaContato(indicadorVazio)}
-      <div class="consulta-empty">${periodoAtivo ? 'Nenhum cliente da lista possui ultima compra neste periodo.' : 'Nenhum cliente encontrado para os filtros selecionados.'}</div>
+      <div class="consulta-empty">${periodoAtivo ? 'Nenhum cliente da lista possui última compra neste período.' : 'Nenhum cliente encontrado para os filtros selecionados.'}</div>
     `;
     contatoStatus.textContent = '0 clientes';
     configurarCabecalhoListaContato();
@@ -2883,9 +2883,9 @@ function desenharClientesContato() {
   configurarCabecalhoListaContato();
   const periodoAtivo = contatoCompraInicial.value || contatoCompraFinal.value;
   contatoStatus.textContent = contatoOrigemLista === 'cidade'
-    ? `${contatoClientesAtuais.length} nesta pagina de ${contatoPaginacao.total} clientes`
+    ? `${contatoClientesAtuais.length} nesta página de ${contatoPaginacao.total} clientes`
     : periodoAtivo
-      ? `${clientes.length} de ${contatoClientesAtuais.length} clientes no periodo`
+      ? `${clientes.length} de ${contatoClientesAtuais.length} clientes no período`
       : `${clientes.length} clientes`;
   atualizarPaginacaoContato();
 }
@@ -3181,7 +3181,7 @@ async function buscarClientesContato() {
     } else {
       contatoClientesAtuais = [];
       contatoClientesLista.innerHTML = '<div class="consulta-empty">Selecione uma cidade para listar os clientes.</div>';
-      contatoStatus.textContent = 'Selecione uma cidade ou pesquise por codigo, nome ou CNPJ.';
+      contatoStatus.textContent = 'Selecione uma cidade ou pesquise por código, nome ou CNPJ.';
     }
     return;
   }
@@ -3196,7 +3196,7 @@ async function buscarClientesContato() {
   contatoOrigemLista = 'pesquisa';
 
   contatoStatus.textContent = 'Pesquisando clientes...';
-  contatoClientesLista.innerHTML = '<div class="consulta-empty">Buscando por codigo, nome ou CNPJ...</div>';
+  contatoClientesLista.innerHTML = '<div class="consulta-empty">Buscando por código, nome ou CNPJ...</div>';
 
   try {
     const res = await fetch(`/api/contatos/busca?q=${encodeURIComponent(termo)}&ativos=${parametroAtivosContato()}`);
@@ -3320,7 +3320,7 @@ function mostrarFotoProduto(item, origem = 'selecionado') {
 
   const codProd = Number(item.codProd);
   if (!codProd) {
-    renderizarFotoProdutoVazia('Produto sem codigo para buscar foto.');
+    renderizarFotoProdutoVazia('Produto sem código para buscar foto.');
     return;
   }
 
@@ -3354,7 +3354,7 @@ function mostrarFotoProduto(item, origem = 'selecionado') {
     }
     produtoFotoAtual = null;
     produtoFotoFrame.classList.remove('has-image');
-    produtoFotoFrame.innerHTML = `<div class="produto-foto-placeholder">Foto nao cadastrada para ${escaparHtml(descricao)}.</div>`;
+    produtoFotoFrame.innerHTML = `<div class="produto-foto-placeholder">Foto não cadastrada para ${escaparHtml(descricao)}.</div>`;
   }, { once: true });
 }
 
@@ -3397,14 +3397,14 @@ function salvarProgressoConferencia(options = {}) {
           body: JSON.stringify(dados)
         });
         const payload = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(payload.erro || 'Erro ao salvar progresso da conferencia');
+        if (!res.ok) throw new Error(payload.erro || 'Erro ao salvar progresso da conferência');
         return payload;
       } finally {
         salvamentoProgressoEmAndamento = false;
       }
     })
     .catch((error) => {
-      console.error('Erro ao salvar progresso da conferencia:', error);
+      console.error('Erro ao salvar progresso da conferência:', error);
       return null;
     })
     .finally(() => {
@@ -3494,7 +3494,7 @@ async function encerrarCaixaEntradaNoServidor(caixaId) {
     })
   });
   const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload.erro || 'Nao foi possivel encerrar a caixa');
+  if (!res.ok) throw new Error(payload.erro || 'Não foi possível encerrar a caixa');
   maiorCaixaEntradaRemota = Math.max(maiorCaixaEntradaRemota, Number(payload.resumo?.maiorCaixaId || 0));
   return payload;
 }
@@ -3720,20 +3720,20 @@ function montarHtmlEtiquetasCaixaEntrada(caixaId, itens) {
 
 async function imprimirEtiquetasCaixaEntrada() {
   if (window.matchMedia('(max-width: 900px), (pointer: coarse) and (max-width: 1280px)').matches) {
-    entradaCaixaResumo.textContent = 'Imprima esta caixa no computador conectado a impressora de etiquetas.';
+    entradaCaixaResumo.textContent = 'Imprima esta caixa no computador conectado à impressora de etiquetas.';
     return;
   }
 
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
-    entradaCaixaResumo.textContent = 'O navegador bloqueou a nova guia de impressao.';
+    entradaCaixaResumo.textContent = 'O navegador bloqueou a nova guia de impressão.';
     return;
   }
 
   const progressoSalvo = await salvarProgressoConferencia({ sincronizarSankhya: false });
   if (!progressoSalvo) {
     printWindow.close();
-    entradaCaixaResumo.textContent = 'Nao foi possivel sincronizar a caixa antes da impressao.';
+    entradaCaixaResumo.textContent = 'Não foi possível sincronizar a caixa antes da impressão.';
     return;
   }
   await sincronizarCaixaEntrada(true);
@@ -3766,7 +3766,7 @@ async function imprimirEtiquetasCaixaEntrada() {
 async function zerarCaixaEntradaAtual() {
   const progressoSalvo = await salvarProgressoConferencia({ sincronizarSankhya: false });
   if (!progressoSalvo) {
-    entradaCaixaResumo.textContent = 'Nao foi possivel sincronizar a caixa antes de zerar.';
+    entradaCaixaResumo.textContent = 'Não foi possível sincronizar a caixa antes de zerar.';
     return;
   }
   await sincronizarCaixaEntrada(true);
@@ -3806,7 +3806,7 @@ function criarLinhaItemConferencia(item, quantidade, classe, rotuloQuantidade, o
   const dataValidadeExibida = datasLidas.find((leitura) => leitura.dtValidade)?.dtValidade || item.dtValidade || '';
   const dataFabricacaoExibida = datasLidas.find((leitura) => leitura.dtFabricacao)?.dtFabricacao || item.dtFabricacao || '';
   row.innerHTML = `
-    <div>${options.desfazer ? '<button class="item-action item-action-return" type="button" aria-label="Voltar item para conferencia" title="Voltar item para conferencia"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 4 12l6 6"/><path d="M5 12h15"/></svg></button>' : ''}${options.cortar ? '<button class="item-action item-action-cut" type="button" aria-label="Cortar quantidade do item" title="Cortar quantidade do item"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="M8.5 8.5 19 19"/><path d="M8.5 15.5 19 5"/></svg></button>' : ''}</div>
+    <div>${options.desfazer ? '<button class="item-action item-action-return" type="button" aria-label="Voltar item para conferência" title="Voltar item para conferência"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6 4 12l6 6"/><path d="M5 12h15"/></svg></button>' : ''}${options.cortar ? '<button class="item-action item-action-cut" type="button" aria-label="Cortar quantidade do item" title="Cortar quantidade do item"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="7" r="3"/><circle cx="6" cy="17" r="3"/><path d="M8.5 8.5 19 19"/><path d="M8.5 15.5 19 5"/></svg></button>' : ''}</div>
     <div class="item-code" title="${codigoProduto}">${item.codProd}</div>
     <div class="item-name" title="${descricao}">${item.descrProd}</div>
     <div class="item-qtd" title="${escaparAtributo(quantidadeComUnidade)}">${quantidadeComUnidade}</div>
@@ -3845,8 +3845,8 @@ function criarCabecalhoItens() {
   const entradaDatas = filaModoConferencia === 'entrada';
   header.className = `itens-grid-header${entradaDatas ? ' entrada-datas' : ''}`;
   const colunas = entradaDatas
-    ? ['', 'Produto', 'Descricao (Produto)', 'Quantidade', 'Controle', 'Fabricacao', 'Validade', 'Cod. Barras']
-    : ['', 'Produto', 'Descricao (Produto)', 'Quantidade', 'Controle', 'Cod. Barras'];
+    ? ['', 'Produto', 'Descrição (Produto)', 'Quantidade', 'Controle', 'Fabricação', 'Validade', 'Cód. Barras']
+    : ['', 'Produto', 'Descrição (Produto)', 'Quantidade', 'Controle', 'Cód. Barras'];
   header.innerHTML = colunas.map((coluna, index) => `
     <div class="itens-grid-col-header${index === 1 || index === 2 ? ' coluna-ordenavel' : ''}">
       <span>${coluna}</span>
@@ -4035,7 +4035,7 @@ function desfazerConferenciaItem(sequencia) {
   item.leituras = [];
   const corteAnterior = quantidadeCortadaItem(item);
   item.qtdCortada = 0;
-  scanStatus.innerHTML = `<span class="success-text">${item.codProd} voltou para itens em conferencia. Conferido removido: ${formatarQuantidade(quantidadeAnterior)}${corteAnterior > 0 ? ` | corte removido: ${formatarQuantidade(corteAnterior)}` : ''}.</span>`;
+  scanStatus.innerHTML = `<span class="success-text">${item.codProd} voltou para itens em conferência. Conferido removido: ${formatarQuantidade(quantidadeAnterior)}${corteAnterior > 0 ? ` | corte removido: ${formatarQuantidade(corteAnterior)}` : ''}.</span>`;
   renderizarItensConferencia();
   salvarProgressoConferencia();
   scanCodigo.focus();
@@ -4083,7 +4083,7 @@ function confirmarCorteItem() {
   }
 
   if (quantidade > disponivel) {
-    corteStatus.innerHTML = `<span class="danger-text">A quantidade maxima para corte e ${formatarQuantidade(disponivel)}.</span>`;
+    corteStatus.innerHTML = `<span class="danger-text">A quantidade máxima para corte é ${formatarQuantidade(disponivel)}.</span>`;
     return;
   }
 
@@ -4108,8 +4108,8 @@ function renderizarPainelDocumentosFiscais(container, situacao = {}, fallback = 
     container.hidden = false;
     container.innerHTML = `
       <div class="documentos-fiscais-info">
-        <strong class="danger-text">Pedido nao faturado</strong>
-        <span>${escaparHtml(erroFaturamento || situacao.danfe?.motivo || 'A nota de faturamento ainda nao foi localizada.')}</span>
+        <strong class="danger-text">Pedido não faturado</strong>
+        <span>${escaparHtml(erroFaturamento || situacao.danfe?.motivo || 'A nota de faturamento ainda não foi localizada.')}</span>
       </div>
     `;
     return;
@@ -4149,7 +4149,7 @@ function renderizarPainelDocumentosFiscais(container, situacao = {}, fallback = 
     : `<button class="documento-fiscal-button" type="button" data-documento="danfe" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(situacao.danfe?.motivo || 'Abrir DANFE')}">
         <i data-lucide="file-text" aria-hidden="true"></i>Abrir DANFE
       </button>
-      <button class="documento-fiscal-button" type="button" data-documento="boleto" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(desabilitarBoleto ? 'Bonificacao nao gera boleto' : situacao.boleto?.motivo || 'Abrir boleto')}" ${boletoIndisponivel ? 'disabled' : ''}>
+      <button class="documento-fiscal-button" type="button" data-documento="boleto" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(desabilitarBoleto ? 'Bonificação não gera boleto' : situacao.boleto?.motivo || 'Abrir boleto')}" ${boletoIndisponivel ? 'disabled' : ''}>
         <i data-lucide="barcode" aria-hidden="true"></i>Abrir boleto
       </button>`;
 
@@ -4211,7 +4211,7 @@ async function abrirDocumentoFiscal(botao) {
 
     if (!res.ok || !contentType.includes('application/pdf')) {
       const payload = await res.json().catch(() => ({}));
-      throw new Error([payload.erro, payload.detalhes].filter(Boolean).join(' - ') || 'Documento indisponivel');
+      throw new Error([payload.erro, payload.detalhes].filter(Boolean).join(' - ') || 'Documento indisponível');
     }
 
     const blob = await res.blob();
@@ -4254,7 +4254,7 @@ async function abrirPdfRomaneio(ordemCarga, empresa, botao = null) {
     const contentType = res.headers.get('content-type') || '';
     if (!res.ok || !contentType.includes('application/pdf')) {
       const payload = await res.json().catch(() => ({}));
-      throw new Error(payload.erro || 'Romaneio indisponivel');
+      throw new Error(payload.erro || 'Romaneio indisponível');
     }
 
     const blob = await res.blob();
@@ -4292,7 +4292,7 @@ async function abrirPdfPedido() {
     const contentType = res.headers.get('content-type') || '';
     if (!res.ok || !contentType.includes('application/pdf')) {
       const payload = await res.json().catch(() => ({}));
-      throw new Error([payload.erro, payload.detalhes].filter(Boolean).join(' - ') || 'PDF indisponivel');
+      throw new Error([payload.erro, payload.detalhes].filter(Boolean).join(' - ') || 'PDF indisponível');
     }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -4356,8 +4356,8 @@ function abrirModalPosConferencia(pedido, faturamento, documentosAuxiliares = nu
   posConferenciaTitulo.innerHTML = entrada
     ? '<span class="entrada-sucesso-head"><span class="entrada-sucesso-icon"><i data-lucide="package-check"></i></span><span><strong class="entrada-sucesso-title">Entrada concluida</strong><span class="entrada-sucesso-subtitle">Nota finalizada com sucesso no Sankhya.</span></span></span>'
     : faturamentoPendente
-      ? 'Conferencia finalizada, mas faturamento pendente'
-      : 'Conferencia concluida';
+      ? 'Conferência finalizada, mas faturamento pendente'
+      : 'Conferência concluída';
   botaoVoltarListaPosConferencia.textContent = 'Voltar para lista';
   pedidoConcluido = pedido;
   posConferenciaDocumentos.hidden = entrada;
@@ -4381,7 +4381,7 @@ function abrirModalProcessandoConferencia(pedido) {
   pedidoConcluido = null;
   posConferenciaModal.classList.add('is-processing');
   posConferenciaModal.classList.remove('has-error', 'has-billing-warning');
-  posConferenciaTitulo.textContent = 'Finalizando conferencia';
+  posConferenciaTitulo.textContent = 'Finalizando conferência';
   botaoVoltarListaPosConferencia.textContent = 'Voltar para lista';
   posConferenciaTexto.textContent = filaModoConferencia === 'entrada'
     ? `Aguarde enquanto a nota de entrada ${pedido.NUNOTA} e finalizada no Sankhya.`
@@ -4403,8 +4403,8 @@ function exibirErroModalConferencia(payload, error = null) {
 
   posConferenciaModal.classList.remove('is-processing');
   posConferenciaModal.classList.add('has-error');
-  posConferenciaTitulo.textContent = 'Nao foi possivel concluir';
-  posConferenciaTexto.textContent = detalhes.join(' - ') || 'O Sankhya nao concluiu a conferencia. Tente novamente.';
+  posConferenciaTitulo.textContent = 'Não foi possível concluir';
+  posConferenciaTexto.textContent = detalhes.join(' - ') || 'O Sankhya não concluiu a conferência. Tente novamente.';
   posConferenciaDocumentos.hidden = true;
   posConferenciaDocumentos.innerHTML = '';
   botaoVoltarListaPosConferencia.textContent = 'Fechar e revisar';
@@ -4776,7 +4776,7 @@ async function imprimirEtiquetaVolume() {
 
   const volumes = Number(pedidoConcluido.QTDVOL || 0);
   if (!Number.isInteger(volumes) || volumes <= 0) {
-    posConferenciaTexto.textContent = 'Este pedido nao possui quantidade de volumes registrada no Sankhya.';
+    posConferenciaTexto.textContent = 'Este pedido não possui quantidade de volumes registrada no Sankhya.';
     return;
   }
 
@@ -4905,7 +4905,7 @@ function renderizarPedidosFila() {
         ? '<span class="pedido-status-type-icon entrada"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 19h14"/></svg></span>'
         : '<span class="pedido-status-type-icon venda"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l1 13H5L6 8Z"/><path d="M9 10V6a3 3 0 0 1 6 0v4"/></svg></span>';
     const tituloTipoPedido = bonificacao
-      ? (entrada ? 'Bonificacao de entrada' : 'Pedido de bonificacao')
+      ? (entrada ? 'Bonificação de entrada' : 'Pedido de bonificação')
       : (entrada ? 'Compra de produtos' : 'Pedido de venda');
     const numeroNotaFiscal = Number(pedido.NUMNOTA || 0) > 0 ? String(pedido.NUMNOTA) : '-';
     card.className = `pedido-operacao-card ${estadoOperacional} ${pedidoSelecionado?.NUNOTA === pedido.NUNOTA ? 'active' : ''}`;
@@ -4968,7 +4968,7 @@ function renderizarPedidoEmConferencia() {
         <span><i data-lucide="boxes"></i>${formatarQuantidade(pedidoSelecionado.QTD_TOTAL)} un.</span>
         ${filaModoConferencia === 'entrada' ? `<span><i data-lucide="layers"></i>${formatarQuantidade(pedidoSelecionado.QTDVOL || 0)} vol.</span>` : ''}
       </div>
-      ${pedidoSelecionado.STATUS_CONFERENCIA === 'EM ANDAMENTO' ? '<span class="pedido-status-mini">Conferencia em andamento</span>' : ''}
+      ${pedidoSelecionado.STATUS_CONFERENCIA === 'EM ANDAMENTO' ? '<span class="pedido-status-mini">Conferência em andamento</span>' : ''}
     </div>
   `;
   atualizarIcones();
@@ -4994,7 +4994,7 @@ function carregarProgressoSeparacaoLocal() {
     const salvo = JSON.parse(localStorage.getItem(obterChaveStorageSeparacao()) || '{}');
     return salvo && typeof salvo === 'object' ? salvo : {};
   } catch (error) {
-    console.warn('Nao foi possivel carregar o progresso da separacao:', error);
+    console.warn('Não foi possível carregar o progresso da separação:', error);
     return {};
   }
 }
@@ -5026,16 +5026,16 @@ function refletirSeparacaoConcluidaNaInterface() {
   ));
   if (pedidoFila) pedidoFila.STATUS_SEPARACAO = 'SEPARADO';
   botaoAbrirSeparacaoPedido.disabled = true;
-  botaoAbrirSeparacaoPedido.textContent = 'Separacao concluida';
+  botaoAbrirSeparacaoPedido.textContent = 'Separação concluída';
   renderizarPedidosFila();
 }
 
 async function requisitarSeparacao(caminho = '', options = {}) {
   const nunota = Number(pedidoPreviewSelecionado?.NUNOTA || 0);
-  if (!nunota) throw new Error('Pedido de separacao invalido.');
+  if (!nunota) throw new Error('Pedido de separação inválido.');
   const resposta = await fetch(`/api/fila-conferencia/separacao/${nunota}${caminho}`, options);
   const payload = await resposta.json();
-  if (!resposta.ok) throw new Error(payload.erro || 'Nao foi possivel salvar a separacao.');
+  if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível salvar a separação.');
   return payload.separacao || null;
 }
 
@@ -5164,13 +5164,13 @@ async function sincronizarSeparacaoAberta() {
       renderizarItensSeparacao();
       atualizarStatusSeparacao(
         separacaoConcluida
-          ? 'Separacao concluida em outro dispositivo.'
-          : 'Separacao atualizada por outro dispositivo.',
+          ? 'Separação concluída em outro dispositivo.'
+          : 'Separação atualizada por outro dispositivo.',
         'success'
       );
     }
   } catch (error) {
-    console.warn('Nao foi possivel sincronizar a separacao:', error);
+    console.warn('Não foi possível sincronizar a separação:', error);
   } finally {
     separacaoSyncEmAndamento = false;
   }
@@ -5232,7 +5232,7 @@ function agruparItensSeparacao() {
 function renderizarItensSeparacao() {
   const processados = itensSeparacao.filter(itemSeparacaoProcessado).length;
   separacaoProgresso.textContent = separacaoConcluida
-    ? 'Separacao concluida'
+    ? 'Separação concluída'
     : `${processados}/${itensSeparacao.length} itens separados`;
   const todosProcessados = itensSeparacao.length > 0 && processados === itensSeparacao.length;
   botaoFinalizarSeparacao.hidden = separacaoConcluida || !todosProcessados;
@@ -5337,7 +5337,7 @@ async function carregarLotesConfirmacaoSeparacao(item) {
     const nunota = Number(pedidoPreviewSelecionado?.NUNOTA || 0);
     const resposta = await fetch(`/api/fila-conferencia/separacao/${nunota}/produtos/${Number(item.codProd)}/lotes`);
     const payload = await resposta.json();
-    if (!resposta.ok) throw new Error(payload.erro || 'Nao foi possivel consultar os lotes.');
+    if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível consultar os lotes.');
     if (!itemSeparacaoPendente || itemSeparacaoPendente.item !== item) return;
 
     const lotes = Array.isArray(payload.lotes)
@@ -5369,7 +5369,7 @@ async function carregarLotesConfirmacaoSeparacao(item) {
 
     atualizarProdutoConfirmacaoSeparacao();
     separacaoConfirmStatus.textContent = itemSeparacaoProcessado(item)
-      ? 'O item ja foi processado. Voce pode ajustar a quantidade ou devolve-lo para pendente.'
+      ? 'O item já foi processado. Você pode ajustar a quantidade ou devolvê-lo para pendente.'
       : itemSeparacaoPendente.entradaCodigo?.tipo === 'UNIDADE_ALTERNATIVA'
         ? `${obterDescricaoEntradaCodigo(itemSeparacaoPendente.entradaCodigo)} identificado. Confirme a quantidade total do item.`
         : 'Confirme a quantidade separada.';
@@ -5384,7 +5384,7 @@ async function carregarLotesConfirmacaoSeparacao(item) {
 function abrirConfirmacaoSeparacao(item, entradaCodigo = null) {
   if (!item) return;
   if (separacaoConcluida) {
-    atualizarStatusSeparacao('Esta separacao ja foi concluida.', 'warning');
+    atualizarStatusSeparacao('Esta separação já foi concluída.', 'warning');
     return;
   }
   limparCodigoSeparacao();
@@ -5406,7 +5406,7 @@ function abrirConfirmacaoSeparacao(item, entradaCodigo = null) {
 
   const unidadeExibicao = obterUnidadeExibicaoItem(item);
   atualizarProdutoConfirmacaoSeparacao();
-  separacaoConfirmTitulo.textContent = processado ? 'Item processado' : 'Confirmar separacao';
+  separacaoConfirmTitulo.textContent = processado ? 'Item processado' : 'Confirmar separação';
   separacaoConfirmField.hidden = false;
   separacaoAjustePainel.hidden = true;
   separacaoAjusteQtd.value = String(separado);
@@ -5417,7 +5417,7 @@ function abrirConfirmacaoSeparacao(item, entradaCodigo = null) {
     ? `${formatarQuantidade(separado)} ${unidadeExibicao}`
     : `${formatarQuantidade(quantidade)} ${unidadeExibicao}`;
   separacaoConfirmStatus.textContent = processado
-    ? 'O item ja foi processado. Voce pode ajustar a quantidade ou devolve-lo para pendente.'
+    ? 'O item já foi processado. Você pode ajustar a quantidade ou devolvê-lo para pendente.'
     : entradaCodigo?.tipo === 'UNIDADE_ALTERNATIVA'
       ? `${obterDescricaoEntradaCodigo(entradaCodigo)} identificado. Confirme a quantidade total do item.`
       : 'Confirme a quantidade separada.';
@@ -5462,7 +5462,7 @@ async function confirmarItemSeparacao() {
   const restante = Math.max(0, esperado - separado);
 
   if (quantidade <= 0) {
-    separacaoConfirmStatus.textContent = 'Nao foi possivel calcular a quantidade para esta leitura.';
+    separacaoConfirmStatus.textContent = 'Não foi possível calcular a quantidade para esta leitura.';
     return;
   }
   if (quantidade > restante) {
@@ -5581,7 +5581,7 @@ function localizarItemSeparacaoPorCodigo(codigo) {
 function processarCodigoSeparacao() {
   const codigo = normalizarCodigo(separacaoCodigo.value);
   if (!codigo) {
-    atualizarStatusSeparacao('Bipe ou digite um codigo para localizar o produto.', 'warning');
+    atualizarStatusSeparacao('Bipe ou digite um código para localizar o produto.', 'warning');
     return;
   }
   const correspondencia = localizarItemSeparacaoPorCodigo(codigo);
@@ -5601,7 +5601,7 @@ function fecharResumoFinalSeparacao() {
 function abrirResumoFinalSeparacao() {
   const processados = itensSeparacao.filter(itemSeparacaoProcessado);
   if (itensSeparacao.length === 0 || processados.length !== itensSeparacao.length) {
-    atualizarStatusSeparacao('Separe ou ajuste todos os itens antes de finalizar a separacao.', 'warning');
+    atualizarStatusSeparacao('Separe ou ajuste todos os itens antes de finalizar a separação.', 'warning');
     return;
   }
 
@@ -5628,7 +5628,7 @@ async function concluirSeparacao() {
     pararSincronizacaoSeparacao();
     fecharResumoFinalSeparacao();
     renderizarItensSeparacao();
-    atualizarStatusSeparacao('Separacao concluida e quantidades registradas.', 'success');
+    atualizarStatusSeparacao('Separação concluída e quantidades registradas.', 'success');
   } catch (error) {
     atualizarStatusSeparacao(error.message, 'warning');
   } finally {
@@ -5775,7 +5775,7 @@ async function buscarFilaConferencia() {
     renderizarPedidosFila();
     salvarNavegacaoFila({ etapa: 'pedidos', pedido: null });
   } catch (error) {
-    console.error('Erro ao buscar fila de conferencia:', error);
+    console.error('Erro ao buscar fila de conferência:', error);
     filaPedidos = [];
     renderizarPedidosFila();
     scanStatus.textContent = error.message;
@@ -5802,7 +5802,7 @@ async function restaurarConferenciaEmAndamento(estado) {
   };
   itensPedidoSelecionado = [];
   confirmarStatus.textContent = '';
-  scanStatus.textContent = 'Restaurando conferencia em andamento...';
+  scanStatus.textContent = 'Restaurando conferência em andamento...';
   pedidoConferenciaTitulo.textContent = formatarTituloPedidoConferencia(pedidoSelecionado);
   filaContexto.textContent = `Periodo ${formatarPeriodo(filaDataInicial.value, filaDataFinal.value)} | ${filaEmpresa.options[filaEmpresa.selectedIndex]?.textContent || '-'} | ${formatarUsuarioLogado()}`;
   mostrarEtapaConferenciaFila();
@@ -5814,7 +5814,7 @@ async function restaurarConferenciaEmAndamento(estado) {
     const payload = await res.json();
 
     if (!res.ok) {
-      throw new Error(payload.erro || 'Erro ao restaurar itens da conferencia');
+      throw new Error(payload.erro || 'Erro ao restaurar itens da conferência');
     }
 
     itensPedidoSelecionado = (payload.itens || []).map((item) => ({
@@ -5832,7 +5832,7 @@ async function restaurarConferenciaEmAndamento(estado) {
     setTimeout(() => scanCodigo.focus(), 0);
     return true;
   } catch (error) {
-    console.error('Erro ao restaurar conferencia:', error);
+    console.error('Erro ao restaurar conferência:', error);
     scanStatus.textContent = error.message;
     renderizarItensConferencia();
     return true;
@@ -5905,7 +5905,7 @@ async function abrirPreviewPedido(pedido) {
   // A impressao continua disponivel mesmo depois da conferencia.
   botaoImprimirPreviewPedido.hidden = false;
   botaoConfirmarPreviewPedido.textContent = pedidoPodeIniciarConferencia(pedido)
-    ? 'Iniciar conferencia'
+    ? 'Iniciar conferência'
     : `${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'} ja conferido`;
   pedidoPreviewDocumentos.hidden = pedido.STATUS_CONFERENCIA !== 'CONFERIDO' || filaModoConferencia === 'entrada';
   pedidoPreviewDocumentos.innerHTML = '';
@@ -5945,7 +5945,7 @@ async function abrirPreviewPedido(pedido) {
 
 async function selecionarPedidoConferencia(pedido) {
   if (!temUsuarioLogado()) {
-    scanStatus.textContent = 'Entre no sistema antes de iniciar a conferencia.';
+    scanStatus.textContent = 'Entre no sistema antes de iniciar a conferência.';
     return;
   }
 
@@ -5953,7 +5953,7 @@ async function selecionarPedidoConferencia(pedido) {
   itensPedidoSelecionado = [];
   scanQtd.value = valorPadraoQuantidadeConferencia();
   confirmarStatus.textContent = '';
-  scanStatus.textContent = 'Iniciando conferencia no Sankhya...';
+  scanStatus.textContent = 'Iniciando conferência no Sankhya...';
   pedidoConferenciaTitulo.textContent = formatarTituloPedidoConferencia(pedido);
   filaContexto.textContent = `Periodo ${formatarPeriodo(filaDataInicial.value, filaDataFinal.value)} | ${filaEmpresa.options[filaEmpresa.selectedIndex]?.textContent || '-'} | ${formatarUsuarioLogado()}`;
   atualizarControlesConferencia();
@@ -5973,7 +5973,7 @@ async function selecionarPedidoConferencia(pedido) {
     const iniciarPayload = await iniciarRes.json();
 
     if (!iniciarRes.ok) {
-      throw new Error(iniciarPayload.erro || 'Erro ao iniciar conferencia');
+      throw new Error(iniciarPayload.erro || 'Erro ao iniciar conferência');
     }
 
     pedidoSelecionado.nuconf = iniciarPayload.nuconf;
@@ -6174,7 +6174,7 @@ function obterAlteracoesConferenciaEntrada() {
 
       if (fabricacoesDiferentes.length > 0) {
         detalhes.push({
-          campo: 'Fabricacao',
+          campo: 'Fabricação',
           de: formatarDataAlteracaoEntrada(fabricacaoOriginal),
           para: fabricacoesDiferentes.map(formatarDataAlteracaoEntrada).join(', ')
         });
@@ -6256,7 +6256,7 @@ function abrirModalAlteracoesEntrada(alteracoes) {
               <small>${resumoItem.map(escaparHtml).join(' | ')}</small>
             </span>
           </strong>
-          <span class="entrada-alteracoes-badge">${detalhes.length} ${detalhes.length === 1 ? 'divergencia' : 'divergencias'}</span>
+          <span class="entrada-alteracoes-badge">${detalhes.length} ${detalhes.length === 1 ? 'divergência' : 'divergências'}</span>
         </div>
         <div class="entrada-alteracoes-detalhes">
           ${detalhes.map((detalhe) => `
@@ -6278,8 +6278,8 @@ function abrirModalAlteracoesEntrada(alteracoes) {
 
   entradaAlteracoesLista.innerHTML = `
     <div class="entrada-alteracoes-resumo">
-      <strong><i data-lucide="triangle-alert"></i> ${alteracoes.length} ${alteracoes.length === 1 ? 'item com divergencia' : 'itens com divergencia'}</strong>
-      <span>${totalDivergencias} ${totalDivergencias === 1 ? 'alteracao encontrada' : 'alteracoes encontradas'}. Revise antes de confirmar.</span>
+      <strong><i data-lucide="triangle-alert"></i> ${alteracoes.length} ${alteracoes.length === 1 ? 'item com divergência' : 'itens com divergências'}</strong>
+      <span>${totalDivergencias} ${totalDivergencias === 1 ? 'alteração encontrada' : 'alterações encontradas'}. Revise antes de confirmar.</span>
     </div>
     ${itensHtml}
   `;
@@ -6340,14 +6340,14 @@ function solicitarVolumesConferencia() {
 async function confirmarConferencia(volumes) {
   const volumesInvalidos = filaModoConferencia === 'saida' ? volumes <= 0 : volumes < 0;
   if (!pedidoSelecionado || !Number.isInteger(volumes) || volumesInvalidos) {
-    confirmarVolumesStatus.innerHTML = '<span class="danger-text">Informe uma quantidade valida de volumes.</span>';
+    confirmarVolumesStatus.innerHTML = '<span class="danger-text">Informe uma quantidade válida de volumes.</span>';
     return;
   }
 
   fecharModalVolumesConferencia();
 
   botaoConfirmarConferencia.disabled = true;
-  confirmarStatus.textContent = 'Confirmando conferencia no Sankhya...';
+  confirmarStatus.textContent = 'Confirmando conferência no Sankhya...';
   abrirModalProcessandoConferencia(pedidoSelecionado);
 
   try {
@@ -6379,13 +6379,13 @@ async function confirmarConferencia(volumes) {
     }
 
     const pedidoFinalizado = { ...pedidoSelecionado, QTDVOL: volumes };
-    confirmarStatus.innerHTML = '<span class="success-text">Conferencia confirmada.</span>';
+    confirmarStatus.innerHTML = '<span class="success-text">Conferência confirmada.</span>';
     filaPedidos = filaPedidos.filter((pedido) => pedido.NUNOTA !== pedidoSelecionado.NUNOTA);
     limparNavegacaoFilaSalva();
-    limparPedidoConferencia('Pedido conferido. Selecione o proximo pedido.');
+    limparPedidoConferencia('Pedido conferido. Selecione o próximo pedido.');
     abrirModalPosConferencia(pedidoFinalizado, payload.faturamento, payload.documentosAuxiliares);
   } catch (error) {
-    console.error('Erro ao confirmar conferencia:', error);
+    console.error('Erro ao confirmar conferência:', error);
     confirmarStatus.innerHTML = `<span class="danger-text">${error.message}</span>`;
     renderizarResumoConferencia();
     exibirErroModalConferencia(null, error);
@@ -6450,7 +6450,7 @@ async function carregarFila() {
     countConferidos.textContent = `${conferidos.length} pedidos`;
 
     if (emConferencia.length === 0 && aguardando.length === 0) {
-      renderizarEstadoVazio(poolPendentes, 'Nenhuma nota pendente no periodo selecionado.');
+      renderizarEstadoVazio(poolPendentes, 'Nenhuma nota pendente no período selecionado.');
     } else {
       [...emConferencia, ...aguardando].forEach((item) => {
         poolPendentes.appendChild(criarCard(item));
@@ -6458,7 +6458,7 @@ async function carregarFila() {
     }
 
     if (conferidos.length === 0) {
-      renderizarEstadoVazio(poolConferidos, 'Nenhuma nota conferida no periodo selecionado.');
+      renderizarEstadoVazio(poolConferidos, 'Nenhuma nota conferida no período selecionado.');
     } else {
       conferidos.forEach((item) => {
         poolConferidos.appendChild(criarCard(item));
@@ -6561,14 +6561,14 @@ function atualizarModoFilaConferencia() {
   filaScreen.classList.toggle('fila-modo-entrada', entrada);
   botaoModoEntrada.classList.toggle('active', entrada);
   botaoModoEntrada.setAttribute('aria-checked', entrada ? 'true' : 'false');
-  botaoModoEntrada.setAttribute('aria-label', entrada ? 'Modo atual: conferencia de entrada' : 'Modo atual: conferencia de saida');
-  filaModoTitulo.textContent = entrada ? 'Conferencia de entrada' : 'Conferencia de saida';
-  filaModoDescricao.textContent = entrada ? 'Recebimento de mercadorias' : 'Separacao e expedicao de pedidos';
+  botaoModoEntrada.setAttribute('aria-label', entrada ? 'Modo atual: conferência de entrada' : 'Modo atual: conferência de saída');
+  filaModoTitulo.textContent = entrada ? 'Conferência de entrada' : 'Conferência de saída';
+  filaModoDescricao.textContent = entrada ? 'Recebimento de mercadorias' : 'Separação e expedição de pedidos';
   filaModoIcone.setAttribute('data-lucide', entrada ? 'package-plus' : 'package-check');
-  filaTituloOperacao.textContent = entrada ? 'Conferencia de Entrada' : 'Fila de Conferencia';
+  filaTituloOperacao.textContent = entrada ? 'Conferência de Entrada' : 'Fila de Conferência';
   botaoBuscarFilaConferencia.textContent = entrada ? 'Buscar entradas' : 'Buscar pedidos';
-  filaBuscaPedido.placeholder = entrada ? 'Numero da nota de entrada' : 'Numero do pedido ou nota fiscal';
-  filaSidebarTitle.textContent = entrada ? 'Entrada em conferencia' : 'Pedido em conferencia';
+  filaBuscaPedido.placeholder = entrada ? 'Número da nota de entrada' : 'Número do pedido ou nota fiscal';
+  filaSidebarTitle.textContent = entrada ? 'Entrada em conferência' : 'Pedido em conferência';
   botaoAbrirRomaneio.hidden = entrada;
   if (entrada && !romaneioModal.hidden) fecharRomaneioCargas();
   scanControleField.hidden = !entrada;
@@ -6683,7 +6683,7 @@ async function autenticarUsuario(event) {
     const payload = await res.json();
 
     if (!res.ok) {
-      throw new Error(payload.erro || 'Usuario ou senha invalidos');
+      throw new Error(payload.erro || 'Usuário ou senha inválidos');
     }
 
     loginSenha.value = '';
@@ -6727,7 +6727,7 @@ async function inicializarApp() {
     history.replaceState({ tela: 'login' }, '', window.location.pathname + window.location.search);
   } catch (error) {
     console.error('Erro ao verificar sessao:', error);
-    mostrarLogin('Nao foi possivel verificar o login.');
+    mostrarLogin('Não foi possível verificar o login.');
   } finally {
     finalizarInicializacaoApp();
   }
@@ -6886,7 +6886,7 @@ botaoCancelarFinalSeparacao.addEventListener('click', fecharResumoFinalSeparacao
 botaoConfirmarFinalSeparacao.addEventListener('click', concluirSeparacao);
 botaoLimparCodigoSeparacao.addEventListener('click', () => {
   limparCodigoSeparacao({ focar: true });
-  atualizarStatusSeparacao('Campo limpo. Bipe o proximo codigo.');
+  atualizarStatusSeparacao('Campo limpo. Bipe o próximo código.');
 });
 separacaoCodigo.addEventListener('input', () => {
   const somenteDigitos = separacaoCodigo.value.replace(/\D/g, '');

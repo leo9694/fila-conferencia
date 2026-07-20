@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Fila de Conferencia</title>
+  <title>Fila de Conferência</title>
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="apple-touch-icon" href="/favicon.png">
 
@@ -533,7 +533,11 @@
     .fila-screen {
       display: none;
       align-items: stretch;
-      padding: 12px;
+      width: 100%;
+      max-width: none;
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
     }
 
     .fila-screen.active {
@@ -546,6 +550,9 @@
     }
 
     .fila-app {
+      width: 100%;
+      max-width: none;
+      margin: 0;
       min-height: calc(100vh - 24px);
       display: grid;
       grid-template-rows: auto 1fr;
@@ -633,9 +640,10 @@
       gap: 10px;
       align-items: start;
       width: 100%;
-      max-width: 1600px;
-      margin: 0 auto;
-      padding-inline: 2px;
+      max-width: none;
+      margin: 0;
+      padding-inline: 12px;
+      box-sizing: border-box;
     }
 
     .fila-operacao-panel {
@@ -1347,6 +1355,15 @@
       width: 100%;
     }
 
+    .fila-pedidos-stage:has(.fila-pedidos-grid > .empty-state) {
+      min-height: 0;
+    }
+
+    .fila-pedidos-grid:has(> .empty-state) {
+      min-height: 0;
+      max-height: none;
+    }
+
     .fila-pedidos-grid > .empty-state {
       min-width: 920px;
     }
@@ -1638,7 +1655,7 @@
 
     .pedido-list-status {
       display: flex;
-      justify-content: center;
+      justify-content: flex-start;
       align-items: center;
       gap: 5px;
       overflow: visible !important;
@@ -6964,7 +6981,7 @@
       .pedido-list-status {
         grid-column: 3;
         grid-row: 1;
-        justify-content: flex-end;
+        justify-content: flex-start;
       }
 
       .pedido-list-action {
@@ -7586,13 +7603,13 @@
 
   <section class="screen login-screen" id="login-screen">
     <div class="login-card">
-      <div class="home-kicker">Conferencia operacional</div>
+      <div class="home-kicker">Conferência operacional</div>
       <h1>Entrar no sistema</h1>
-      <p>Use o mesmo usuario e senha do Sankhya para acessar a fila de conferencia.</p>
+      <p>Use o mesmo usuário e senha do Sankhya para acessar a fila de conferência.</p>
 
       <form class="login-form" id="login-form" autocomplete="on">
         <div class="login-field">
-          <label for="login-usuario">Usuario Sankhya</label>
+          <label for="login-usuario">Usuário Sankhya</label>
           <input id="login-usuario" name="usuario" autocomplete="username" required>
         </div>
         <div class="login-field password-field">
@@ -7615,9 +7632,9 @@
     <div class="home-shell">
       <div class="home-topbar">
         <div>
-          <div class="home-kicker">Central de Conferencia</div>
+          <div class="home-kicker">Central de Conferência</div>
           <h1>Escolha uma tela</h1>
-          <p>Escolha entre a conferencia operacional e o acompanhamento visual da fila.</p>
+          <p>Escolha entre a conferência operacional e o acompanhamento visual da fila.</p>
         </div>
         <div class="home-user">
           <div class="home-user-name" id="home-usuario-logado">-</div>
@@ -7628,13 +7645,13 @@
       <div class="home-menu">
         <button class="home-menu-button primary" id="abrir-conferencia" type="button">
           <span class="home-menu-icon">CF</span>
-          <span class="home-menu-title">Fila de Conferencia</span>
-          <span class="home-menu-text">Confira pedidos por codigo de barras ou codigo do produto.</span>
+          <span class="home-menu-title">Fila de Conferência</span>
+          <span class="home-menu-text">Confira pedidos por código de barras ou código do produto.</span>
         </button>
 
         <button class="home-menu-button secondary" id="abrir-acompanhamento" type="button">
           <span class="home-menu-icon">AC</span>
-          <span class="home-menu-title">Acompanhamento de Conferencia</span>
+          <span class="home-menu-title">Acompanhamento de Conferência</span>
           <span class="home-menu-text">Selecione data e empresa para abrir o painel visual de acompanhamento.</span>
         </button>
 
@@ -7646,7 +7663,7 @@
 
         <button class="home-menu-button quaternary" id="abrir-atualizacao-contato" type="button">
           <span class="home-menu-icon">AC</span>
-          <span class="home-menu-title">Atualizacao de Contato</span>
+          <span class="home-menu-title">Atualização de Contato</span>
           <span class="home-menu-text">Atualize dados de contato dos parceiros.</span>
         </button>
       </div>
@@ -7660,8 +7677,8 @@
           <aside class="fila-operacao-panel">
             <div class="fila-toolbar-top">
               <div>
-                <div class="home-kicker">Conferencia operacional</div>
-                <h2>Fila de Conferencia</h2>
+                <div class="home-kicker">Conferência operacional</div>
+                <h2>Fila de Conferência</h2>
                 <div class="fila-contexto" id="fila-contexto">-</div>
               </div>
             </div>
@@ -7670,8 +7687,8 @@
               <button class="fila-mode-toggle" id="fila-modo-entrada" type="button" role="switch" aria-checked="false">
                 <span class="fila-mode-toggle-icon"><i id="fila-modo-icone" data-lucide="package-check" aria-hidden="true"></i></span>
                 <span class="fila-mode-toggle-copy">
-                  <strong id="fila-modo-titulo">Conferencia de saida</strong>
-                  <small id="fila-modo-descricao">Separacao e expedicao de pedidos</small>
+                  <strong id="fila-modo-titulo">Conferência de saída</strong>
+                  <small id="fila-modo-descricao">Separação e expedição de pedidos</small>
                 </span>
                 <span class="fila-mode-toggle-control" aria-hidden="true"><span></span></span>
               </button>
@@ -7700,7 +7717,7 @@
 
               <div class="fila-field fila-user-field">
                 <label>Conferente</label>
-                <div class="fila-user-chip" id="fila-usuario-logado">Usuario logado</div>
+                <div class="fila-user-chip" id="fila-usuario-logado">Usuário logado</div>
               </div>
 
               <button class="btn-start" id="buscar-fila-conferencia" type="button">Buscar pedidos</button>
@@ -7794,7 +7811,7 @@
                     <i data-lucide="list-checks" aria-hidden="true"></i>
                     Separação
                   </button>
-                  <button class="btn-start" id="confirmar-preview-pedido" type="button">Iniciar conferencia</button>
+                  <button class="btn-start" id="confirmar-preview-pedido" type="button">Iniciar conferência</button>
                 </div>
               </div>
 
@@ -7956,12 +7973,12 @@
 
       <section class="pos-conferencia-modal" id="pos-conferencia-modal" hidden>
         <div class="pos-conferencia-dialog" role="dialog" aria-modal="true" aria-labelledby="pos-conferencia-titulo">
-          <h3 id="pos-conferencia-titulo">Conferencia concluida</h3>
+          <h3 id="pos-conferencia-titulo">Conferência concluída</h3>
           <p id="pos-conferencia-texto">Pedido conferido com sucesso.</p>
 
           <div class="pos-conferencia-loading" id="pos-conferencia-loading" role="status" aria-live="assertive">
             <span class="pos-conferencia-spinner" aria-hidden="true"></span>
-            <span>Finalizando conferencia e processando faturamento...</span>
+            <span>Finalizando conferência e processando faturamento...</span>
           </div>
 
           <div class="documentos-fiscais-panel" id="pos-conferencia-documentos" aria-live="polite"></div>
@@ -7976,7 +7993,7 @@
       <section class="pos-conferencia-modal" id="confirmar-volumes-modal" hidden>
         <div class="pos-conferencia-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmar-volumes-titulo">
           <h3 id="confirmar-volumes-titulo">Volumes do pedido</h3>
-          <p>Informe a quantidade de volumes antes de finalizar e faturar a conferencia.</p>
+          <p>Informe a quantidade de volumes antes de finalizar e faturar a conferência.</p>
           <div class="volume-panel active">
             <div class="fila-field">
               <label for="confirmar-volumes-qtd">Quantidade de volumes</label>
@@ -7993,8 +8010,8 @@
 
       <section class="pos-conferencia-modal" id="entrada-alteracoes-modal" hidden>
         <div class="pos-conferencia-dialog" role="dialog" aria-modal="true" aria-labelledby="entrada-alteracoes-titulo">
-          <h3 id="entrada-alteracoes-titulo">Revisar alteracoes da entrada</h3>
-          <p>Estes itens ficaram diferentes da nota. Confirme para finalizar a conferencia.</p>
+          <h3 id="entrada-alteracoes-titulo">Revisar alterações da entrada</h3>
+          <p>Estes itens ficaram diferentes da nota. Confirme para finalizar a conferência.</p>
           <div class="entrada-alteracoes-lista" id="entrada-alteracoes-lista" aria-live="polite"></div>
           <div class="pos-conferencia-actions">
             <button class="btn-back" id="cancelar-alteracoes-entrada" type="button">Voltar e revisar</button>
@@ -8007,7 +8024,7 @@
         <div class="pos-conferencia-dialog" role="dialog" aria-modal="true" aria-labelledby="entrada-caixa-titulo">
           <div class="entrada-caixa-modal-head">
             <div>
-              <span class="entrada-caixa-kicker">Conferencia de entrada</span>
+              <span class="entrada-caixa-kicker">Conferência de entrada</span>
               <h3 id="entrada-caixa-titulo">Itens da caixa atual</h3>
               <p id="entrada-caixa-resumo">Nenhum item bipado nesta caixa.</p>
             </div>
@@ -8062,7 +8079,7 @@
         <aside class="pedido-lista" id="pedido-sidebar" aria-label="Resumo da conferencia">
           <div class="box-title">
             <span class="sidebar-title-icon"><i data-lucide="clipboard-check"></i></span>
-            <span id="fila-sidebar-title">Pedido em conferencia</span>
+            <span id="fila-sidebar-title">Pedido em conferência</span>
           </div>
           <div id="pedido-em-conferencia-card">
             <div class="empty-state">Nenhum pedido selecionado.</div>
@@ -8085,14 +8102,14 @@
             </div>
 
             <div class="resumo-metric">
-              <label>Divergencias</label>
+              <label>Divergências</label>
               <strong id="resumo-divergencias">0</strong>
             </div>
           </div>
           <div class="scan-status" id="confirmar-status"></div>
 
           <div class="pedido-sidebar-actions">
-            <button class="btn-confirmar" id="confirmar-conferencia" type="button" disabled><i data-lucide="check-circle-2"></i>Confirmar conferencia</button>
+            <button class="btn-confirmar" id="confirmar-conferencia" type="button" disabled><i data-lucide="check-circle-2"></i>Confirmar conferência</button>
             <button class="btn-back btn-back-compact" id="voltar-lista-fila" type="button"><i data-lucide="arrow-left"></i>Voltar</button>
           </div>
 
@@ -8127,7 +8144,7 @@
             </button>
             <div class="scan-produto-preview" id="scan-produto-preview" hidden></div>
             <div class="fila-field scan-codigo-field">
-              <label for="scan-codigo">Codigo de barras ou produto</label>
+              <label for="scan-codigo">Código de barras ou produto</label>
               <input class="scan-input" id="scan-codigo" type="number" min="0" step="1" inputmode="numeric" autocomplete="off" placeholder="Bipe ou digite o codigo" disabled>
             </div>
             <div class="fila-field" id="scan-controle-field" hidden>
@@ -8142,7 +8159,7 @@
               <input class="qtd-input" id="scan-qtd" type="number" min="1" step="1" placeholder="Qtd." disabled>
             </div>
             <div class="fila-field scan-data-entrada" id="scan-fabricacao-field" hidden>
-              <label for="scan-fabricacao">Fabricacao</label>
+              <label for="scan-fabricacao">Fabricação</label>
               <input class="scan-input" id="scan-fabricacao" type="date" disabled>
             </div>
             <div class="fila-field scan-data-entrada" id="scan-validade-field" hidden>
@@ -8156,7 +8173,7 @@
           <div class="itens-pools" id="itens-conferencia-lista">
             <section class="itens-pool">
               <div class="itens-pool-header">
-                <strong>Itens em conferencia</strong>
+                <strong>Itens em conferência</strong>
                 <span id="itens-pendentes-count">0 itens</span>
               </div>
               <div class="itens-scroll" id="itens-pendentes-lista"></div>
@@ -8184,7 +8201,7 @@
           <h1>Consulta de Produtos</h1>
         </div>
         <div class="fila-field">
-          <label for="consulta-produto-codigo">Codigo do produto</label>
+          <label for="consulta-produto-codigo">Código do produto</label>
           <input id="consulta-produto-codigo" autocomplete="off" placeholder="Digite codigo, referencia ou barras">
         </div>
         <button class="btn-start" id="consulta-produto-buscar" type="button">Buscar produto</button>
@@ -8213,7 +8230,7 @@
             <span class="consulta-status" id="consulta-produto-status">Aguardando consulta</span>
           </div>
           <div class="consulta-table-scroll" id="consulta-produto-resumo">
-            <div class="consulta-empty">Digite o codigo do produto para visualizar o estoque.</div>
+            <div class="consulta-empty">Digite o código do produto para visualizar o estoque.</div>
           </div>
 
           <div class="consulta-card-title">
@@ -8247,7 +8264,7 @@
     <div class="atualizacao-contato-app">
       <div class="contato-page-heading">
         <div class="home-kicker">Cadastro comercial</div>
-        <h1>Atualizacao de Contato</h1>
+        <h1>Atualização de Contato</h1>
       </div>
       <div class="contato-toolbar">
         <div class="fila-field contato-busca-field">
@@ -8305,7 +8322,7 @@
         <nav class="contato-pagination" id="contato-pagination" aria-label="Paginas de clientes" hidden>
           <button id="contato-pagina-primeira" type="button" title="Primeira pagina" aria-label="Primeira pagina"><i data-lucide="chevrons-left" aria-hidden="true"></i></button>
           <button id="contato-pagina-anterior" type="button" title="Pagina anterior" aria-label="Pagina anterior"><i data-lucide="chevron-left" aria-hidden="true"></i></button>
-          <span class="contato-pagination-info" id="contato-pagina-info">Pagina 1 de 1</span>
+          <span class="contato-pagination-info" id="contato-pagina-info">Página 1 de 1</span>
           <button id="contato-pagina-proxima" type="button" title="Proxima pagina" aria-label="Proxima pagina"><i data-lucide="chevron-right" aria-hidden="true"></i></button>
           <button id="contato-pagina-ultima" type="button" title="Ultima pagina" aria-label="Ultima pagina"><i data-lucide="chevrons-right" aria-hidden="true"></i></button>
         </nav>
@@ -8336,7 +8353,7 @@
                 <span>Voltar para lista</span>
               </button>
               <button class="contato-next-button" id="proximo-cliente-contatos" type="button">
-                <span>Proximo cliente</span>
+                <span>Próximo cliente</span>
                 <i data-lucide="arrow-right" aria-hidden="true"></i>
               </button>
             </div>
@@ -8355,7 +8372,7 @@
         <div>
           <div class="home-kicker">Acompanhamento</div>
           <h1>Selecione os filtros</h1>
-          <p>Informe o periodo e a empresa antes de exibir o acompanhamento da fila.</p>
+          <p>Informe o período e a empresa antes de exibir o acompanhamento da fila.</p>
         </div>
       </div>
 
@@ -8391,7 +8408,7 @@
         <div>
           <div class="hero-kicker">Painel ao vivo</div>
           <h2 class="hero-title" id="hero-titulo">Fila de Conferência</h2>
-          <div class="hero-subtitle" id="hero-periodo">Periodo: -</div>
+          <div class="hero-subtitle" id="hero-periodo">Período: -</div>
         </div>
       </div>
 
@@ -8431,7 +8448,7 @@
         <div class="metric-card live">
           <span class="metric-icon live" aria-hidden="true"><i data-lucide="clock-3"></i></span>
           <div>
-            <div class="metric-label">Horario</div>
+            <div class="metric-label">Horário</div>
             <div class="metric-value" id="metric-relogio">--:--</div>
           </div>
         </div>
@@ -8469,12 +8486,12 @@
         <span class="bitrix-confirm-icon"><i data-lucide="send" aria-hidden="true"></i></span>
         <h3 id="bitrix-confirm-title">Criar card no Bitrix</h3>
       </div>
-      <p id="bitrix-confirm-text">Confirma a criacao do card para este cliente?</p>
+      <p id="bitrix-confirm-text">Confirma a criação do card para este cliente?</p>
       <label class="bitrix-confirm-field" for="bitrix-card-title">
         <span>Nome do card</span>
         <input id="bitrix-card-title" type="text" maxlength="255" autocomplete="off">
       </label>
-      <div class="bitrix-confirm-destination">Atualizacao Cadastral &rsaquo; Aguardando Contato</div>
+      <div class="bitrix-confirm-destination">Atualização Cadastral &rsaquo; Aguardando Contato</div>
       <div class="bitrix-confirm-loading" role="status">
         <span class="pos-conferencia-spinner" aria-hidden="true"></span>
         <span>Enviando dados e criando o card...</span>
