@@ -4035,7 +4035,7 @@ router.get('/fila-conferencia/pedidos/:nunota/pdf', async (req, res) => {
         AND (
           (CAB.TIPMOV = 'P' AND CAB.STATUSNOTA = 'L')
           OR
-          (CAB.TIPMOV = 'C' AND CAB.STATUSNOTA = 'A')
+          (CAB.TIPMOV = 'C' AND CAB.STATUSNOTA IN ('A', 'P', 'L'))
         )
     `);
 
