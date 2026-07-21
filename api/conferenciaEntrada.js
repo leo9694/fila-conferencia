@@ -134,13 +134,19 @@ function consolidarLeiturasEntrada(itensNota, itensInformados) {
     for (const leitura of leituras) {
       const tipoLeitura = String(leitura.tipo || '').trim().toUpperCase();
       const codigoInformado = String(leitura.codigo || item.CODBARRA || item.CODPROD).trim();
-      const codigo = tipoLeitura === 'CODIGO_PRODUTO' && item.CODBARRA
-        ? String(item.CODBARRA).trim()
-        : codigoInformado;
       const quantidade = Math.max(0, numero(leitura.quantidade));
       const quantidadeConvertida = Math.max(0, numero(leitura.quantidadeConvertida));
       const leituraUnidadeAlternativa = tipoLeitura === 'UNIDADE_ALTERNATIVA'
         || (!tipoLeitura && Math.abs(quantidadeConvertida - quantidade) > 0.0001);
+      // Referencia, codigo do produto e codigos auxiliares servem para localizar o
+      // item na tela. Para a conferencia nativa, porem, o Sankhya espera o GTIN da
+      // nota ou, quando ele nao existe, o PRODUTONFE. Somente uma unidade
+      // alternativa deve preservar o codigo de barras da embalagem lida.
+      const leituraNativaDoItem = !leituraUnidadeAlternativa
+        && ['REFERENCIA', 'CODIGO_PRODUTO', 'CODIGO_BARRAS'].includes(tipoLeitura);
+      const codigo = leituraNativaDoItem
+        ? String(item.CODBARRA || codigoInformado).trim()
+        : codigoInformado;
       const codVol = String(
         leituraUnidadeAlternativa
           ? (leitura.codVol || item.CODVOL || item.CODVOLPADRAO || 'UN')
@@ -184,6 +190,40 @@ function consolidarLeiturasEntrada(itensNota, itensInformados) {
   return [...agrupados.values()];
 }
 
+function planejarControlesItensEntrada(itensNota, itensInformados) {
+  const porSequencia = new Map(itensNota.map((item) => [Number(item.SEQUENCIA), item]));
+  const alteracoes = [];
+
+  for (const informado of itensInformados) {
+    const item = porSequencia.get(Number(informado.sequencia));
+    if (!item) throw new Error(`Item ${informado.sequencia} nao pertence a nota de entrada.`);
+
+    const controles = [...new Set((Array.isArray(informado.leituras) ? informado.leituras : [])
+      .map((leitura) => String(leitura?.controle ?? '').trim())
+      .filter(Boolean))];
+
+    if (controles.length > 1) {
+      throw new Error(
+        `O produto ${item.CODPROD} foi conferido com mais de um lote. `
+        + 'Separe os lotes em itens distintos na nota antes de finalizar.'
+      );
+    }
+
+    const controleRecebido = controles[0] || '';
+    const controleAtual = String(item.CONTROLE ?? '').trim();
+    if (controleRecebido && controleRecebido !== controleAtual) {
+      alteracoes.push({
+        sequencia: Number(item.SEQUENCIA),
+        codProd: Number(item.CODPROD),
+        controleAnterior: controleAtual,
+        controle: controleRecebido
+      });
+    }
+  }
+
+  return alteracoes;
+}
+
 function deveAplicarDivergenciaEntrada(resultadoFinalizacao) {
   const body = resultadoFinalizacao?.responseBody || {};
   return String(body.status || '').toUpperCase() === 'D'
@@ -210,6 +250,7 @@ function retornoPossuiDocumentosAuxiliares(resultado) {
 
 module.exports = {
   consolidarLeiturasEntrada,
+  planejarControlesItensEntrada,
   planejarSincronizacaoDetalhesEntrada,
   validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,

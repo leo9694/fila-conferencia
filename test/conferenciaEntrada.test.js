@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   consolidarLeiturasEntrada,
+  planejarControlesItensEntrada,
   planejarSincronizacaoDetalhesEntrada,
   validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,
@@ -147,6 +148,63 @@ test('normaliza leitura comum para a unidade padrao do produto', () => {
     QTDCONF: 18,
     QTDCONFVOLPAD: 18
   }]);
+});
+
+test('normaliza referencia para o identificador nativo do item da NFe', () => {
+  const detalhes = consolidarLeiturasEntrada([{
+    SEQUENCIA: 6,
+    CODPROD: 7789,
+    CODVOL: 'CX',
+    CODVOLPADRAO: 'UN',
+    CONTROLE: ' ',
+    QTDNEG: 10,
+    CODBARRA: '37898026081134'
+  }], [{
+    sequencia: 6,
+    qtdConferida: 10,
+    leituras: [{
+      codigo: '7898026081133',
+      tipo: 'REFERENCIA',
+      codVol: 'UN',
+      controle: '003.26',
+      quantidade: 10,
+      quantidadeConvertida: 10
+    }]
+  }]);
+
+  assert.equal(detalhes[0].CODBARRA, '37898026081134');
+  assert.equal(detalhes[0].CODVOL, 'UN');
+  assert.equal(detalhes[0].QTDCONF, 10);
+  assert.equal(detalhes[0].QTDCONFVOLPAD, 10);
+});
+
+test('planeja a aplicacao do lote recebido no item da nota', () => {
+  const alteracoes = planejarControlesItensEntrada([{
+    SEQUENCIA: 1,
+    CODPROD: 7452,
+    CONTROLE: ' '
+  }], [{
+    sequencia: 1,
+    leituras: [{ controle: '004.26' }]
+  }]);
+
+  assert.deepEqual(alteracoes, [{
+    sequencia: 1,
+    codProd: 7452,
+    controleAnterior: '',
+    controle: '004.26'
+  }]);
+});
+
+test('impede finalizar um item com mais de um lote sem separar a nota', () => {
+  assert.throws(() => planejarControlesItensEntrada([{
+    SEQUENCIA: 1,
+    CODPROD: 7452,
+    CONTROLE: ' '
+  }], [{
+    sequencia: 1,
+    leituras: [{ controle: '004.26' }, { controle: '005.26' }]
+  }]), /mais de um lote/);
 });
 
 test('elimina residuo tecnico da conversao para nao finalizar a menor', () => {

@@ -14,6 +14,7 @@ const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
 const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
 const {
   consolidarLeiturasEntrada,
+  planejarControlesItensEntrada,
   planejarSincronizacaoDetalhesEntrada,
   validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,
@@ -1370,6 +1371,25 @@ async function sincronizarDetalhesConferenciaEntrada({ nuconf, nunota, itens }) 
   }
 
   return detalhesDesejados;
+}
+
+async function aplicarControlesEntradaNaNota({ nunota, itensPedido, itensInformados }) {
+  const alteracoes = planejarControlesItensEntrada(itensPedido, itensInformados);
+
+  for (const alteracao of alteracoes) {
+    await atualizarRegistroApi(
+      'ItemNota',
+      { NUNOTA: nunota, SEQUENCIA: alteracao.sequencia },
+      { CONTROLE: alteracao.controle }
+    );
+
+    const itemPedido = itensPedido.find(
+      (item) => Number(item.SEQUENCIA) === Number(alteracao.sequencia)
+    );
+    if (itemPedido) itemPedido.CONTROLE = alteracao.controle;
+  }
+
+  return alteracoes;
 }
 
 function normalizarDataSankhya(valor) {
@@ -3825,6 +3845,14 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
         })
       : [];
 
+    const controlesAplicados = modo === 'entrada'
+      ? await aplicarControlesEntradaNaNota({
+          nunota,
+          itensPedido,
+          itensInformados: itens
+        })
+      : [];
+
     if (modo === 'entrada') {
       await enfileirarSincronizacaoEntrada(nunota, () => sincronizarDetalhesConferenciaEntrada({
         nuconf,
@@ -3833,6 +3861,14 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       }));
     } else {
       await salvarDetalhesConferenciaSankhya({ nuconf, nunota });
+    }
+
+    if (modo === 'entrada' && String(pedido.STATUS || '').trim().toUpperCase() === 'D') {
+      await atualizarRegistroApi(
+        'CabecalhoConferencia',
+        { NUCONF: nuconf },
+        { STATUS: 'A', DHFINCONF: '' }
+      );
     }
 
     let resultadoFinalizacao = null;
@@ -3945,6 +3981,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       status: 'CONFERIDO',
       fechamentoOperacionalAplicado,
       cortesAplicados,
+      controlesAplicados,
       documentosAuxiliares: modo === 'entrada'
         ? documentosAuxiliaresConferencia(conferenciaConferida)
         : null,
