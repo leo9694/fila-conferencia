@@ -130,7 +130,18 @@ function criarEstoqueContagemStore(options = {}) {
   function listar() {
     return Object.values(state.sessoes)
       .sort((a, b) => String(b.criadoEm).localeCompare(String(a.criadoEm)))
-      .map((sessao) => ({ ...sessao, resumo: resumir(sessao), itens: undefined }));
+      .map((sessao) => {
+        const grupoSelecionado = numero(sessao.filtros?.grupo);
+        const itemGrupo = grupoSelecionado
+          ? (sessao.itens || []).find((item) => numero(item.codGrupoProd) === grupoSelecionado)
+          : null;
+        return {
+          ...sessao,
+          nomeGrupo: texto(sessao.nomeGrupo) || itemGrupo?.descrGrupoProd || null,
+          resumo: resumir(sessao),
+          itens: undefined
+        };
+      });
   }
 
   function excluir({ id }) {
@@ -143,6 +154,7 @@ function criarEstoqueContagemStore(options = {}) {
   function criar({
     empresa,
     nomeEmpresa,
+    nomeGrupo = '',
     local = null,
     nomeLocal = '',
     filtros = {},
@@ -158,6 +170,7 @@ function criarEstoqueContagemStore(options = {}) {
       ambiente: namespace,
       empresa: numero(empresa),
       nomeEmpresa: texto(nomeEmpresa) || `Empresa ${numero(empresa)}`,
+      nomeGrupo: texto(nomeGrupo) || null,
       local: local === null || local === undefined || local === '' ? null : numero(local),
       nomeLocal: texto(nomeLocal),
       filtros: { ...filtros },

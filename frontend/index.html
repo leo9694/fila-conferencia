@@ -1835,6 +1835,52 @@
       stroke-linejoin: round;
     }
 
+    .pedido-fase-indicator {
+      width: 28px;
+      height: 28px;
+      padding: 0;
+      border-radius: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff4d6;
+      color: #9a5a00;
+      border: 1px solid rgba(202, 124, 0, 0.3);
+      box-shadow: 0 3px 8px rgba(154, 90, 0, 0.12);
+      flex: 0 0 auto;
+    }
+
+    button.pedido-fase-indicator {
+      cursor: pointer;
+      transition: transform 0.12s ease, box-shadow 0.12s ease;
+    }
+
+    button.pedido-fase-indicator:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 12px rgba(154, 90, 0, 0.2);
+    }
+
+    .pedido-fase-indicator.is-uploaded {
+      color: #ffffff;
+      background: linear-gradient(180deg, #2389ff 0%, #0967d8 100%);
+      border-color: rgba(5, 82, 180, 0.55);
+      box-shadow: 0 5px 13px rgba(9, 103, 216, 0.34);
+    }
+
+    .pedido-fase-indicator.is-disabled {
+      opacity: 0.68;
+    }
+
+    .pedido-fase-indicator svg {
+      width: 16px;
+      height: 16px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2.1;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
     .scan-panel {
       display: grid;
       grid-template-columns: minmax(0, 1fr) 96px 150px;
@@ -3300,6 +3346,10 @@
       margin-top: 1px;
     }
 
+    .app-confirm-note[hidden] {
+      display: none;
+    }
+
     .app-confirm-actions {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -3333,6 +3383,24 @@
     .app-confirm-dialog.is-danger .app-confirm-submit {
       background: #c52f2f;
       box-shadow: 0 7px 18px rgba(197, 47, 47, .2);
+    }
+
+    .app-confirm-dialog.is-informative {
+      border-color: rgba(26, 111, 224, .28);
+    }
+
+    .app-confirm-dialog.is-informative .app-confirm-icon {
+      color: #0b67d1;
+      background: #e4f0ff;
+    }
+
+    .app-confirm-dialog.is-informative .app-confirm-actions {
+      grid-template-columns: 1fr;
+    }
+
+    .app-confirm-dialog.is-informative .app-confirm-submit {
+      background: linear-gradient(180deg, #2389ff 0%, #0967d8 100%);
+      box-shadow: 0 7px 18px rgba(9, 103, 216, .24);
     }
 
     @media (max-width: 520px) {
@@ -4873,6 +4941,301 @@
 
     .pos-conferencia-modal.has-billing-warning .pos-conferencia-dialog h3 {
       color: #9a4f00;
+    }
+
+    .guia-fase-dialog {
+      width: min(620px, 100%);
+      max-height: min(760px, calc(100vh - 32px));
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow: hidden;
+      padding: 0;
+    }
+
+    .guia-fase-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 18px 0;
+    }
+
+    .guia-fase-head-copy {
+      display: flex;
+      align-items: flex-start;
+      gap: 11px;
+      min-width: 0;
+    }
+
+    .guia-fase-head-icon {
+      width: 38px;
+      height: 38px;
+      flex: 0 0 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 11px;
+      color: #9a5a00;
+      background: #fff4d6;
+      border: 1px solid rgba(202, 124, 0, 0.28);
+    }
+
+    .guia-fase-head-icon svg,
+    .guia-fase-close svg,
+    .guia-fase-upload-icon svg,
+    .guia-fase-item-icon svg,
+    .guia-fase-delete svg {
+      width: 19px;
+      height: 19px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .guia-fase-head h3 {
+      margin: 1px 0 3px;
+      color: #073047;
+    }
+
+    .guia-fase-head p {
+      margin: 0;
+      font-size: 0.78rem;
+    }
+
+    .guia-fase-close {
+      width: 36px;
+      height: 36px;
+      flex: 0 0 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #d7e4e2;
+      border-radius: 10px;
+      background: #fff;
+      color: #47636b;
+      cursor: pointer;
+    }
+
+    .guia-fase-content {
+      min-height: 0;
+      overflow-y: auto;
+      padding: 0 18px 18px;
+    }
+
+    .guia-fase-upload {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: stretch;
+      padding: 12px;
+      border: 1px solid #d8e8e4;
+      border-radius: 13px;
+      background: #f7fbfa;
+    }
+
+    .guia-fase-file-label {
+      min-width: 0;
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border: 1px dashed #91b9af;
+      border-radius: 10px;
+      background: #fff;
+      color: #174c50;
+      cursor: pointer;
+    }
+
+    .guia-fase-file-label input {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .guia-fase-upload-icon {
+      color: #078965;
+      flex: 0 0 auto;
+    }
+
+    .guia-fase-file-copy {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+    }
+
+    .guia-fase-file-copy strong {
+      color: #0d3b45;
+      font-size: 0.79rem;
+    }
+
+    .guia-fase-file-copy span {
+      color: #657c82;
+      font-size: 0.68rem;
+      font-weight: 750;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .guia-fase-submit {
+      min-width: 118px;
+      border: 0;
+      border-radius: 10px;
+      padding: 0 16px;
+      background: linear-gradient(180deg, #13ae87, #078965);
+      color: #fff;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .guia-fase-submit:disabled {
+      opacity: 0.55;
+      cursor: wait;
+    }
+
+    .guia-fase-status {
+      min-height: 19px;
+      margin: 8px 2px 0;
+      color: #526d74;
+      font-size: 0.72rem;
+      font-weight: 800;
+    }
+
+    .guia-fase-status.is-error {
+      color: #b42318;
+    }
+
+    .guia-fase-list-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin: 15px 1px 8px;
+    }
+
+    .guia-fase-list-head strong {
+      color: #073047;
+      font-size: 0.85rem;
+    }
+
+    .guia-fase-count {
+      border-radius: 999px;
+      padding: 3px 8px;
+      color: #067653;
+      background: #e2f7ef;
+      font-size: 0.68rem;
+      font-weight: 900;
+    }
+
+    .guia-fase-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .guia-fase-empty {
+      padding: 22px 14px;
+      border: 1px dashed #cbded9;
+      border-radius: 12px;
+      background: #fbfdfd;
+      color: #60777d;
+      text-align: center;
+      font-size: 0.75rem;
+      font-weight: 800;
+    }
+
+    .guia-fase-item {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 11px;
+      border: 1px solid #dce9e6;
+      border-radius: 11px;
+      background: #fff;
+    }
+
+    .guia-fase-item-icon {
+      width: 34px;
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 9px;
+      color: #087b61;
+      background: #e7f8f2;
+    }
+
+    .guia-fase-item-copy {
+      min-width: 0;
+    }
+
+    .guia-fase-item-copy a {
+      display: block;
+      overflow: hidden;
+      color: #0b4350;
+      font-size: 0.78rem;
+      font-weight: 900;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      text-decoration: none;
+    }
+
+    .guia-fase-item-copy a:hover {
+      text-decoration: underline;
+    }
+
+    .guia-fase-item-copy span {
+      display: block;
+      margin-top: 2px;
+      color: #6a7f84;
+      font-size: 0.65rem;
+      font-weight: 750;
+    }
+
+    .guia-fase-delete {
+      width: 34px;
+      height: 34px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #f1c1bd;
+      border-radius: 9px;
+      background: #fff8f7;
+      color: #c0352b;
+      cursor: pointer;
+    }
+
+    @media (max-width: 640px) {
+      .guia-fase-modal {
+        padding: 8px;
+      }
+
+      .guia-fase-dialog {
+        max-height: calc(100vh - 16px);
+        border-radius: 14px;
+      }
+
+      .guia-fase-head {
+        padding: 14px 14px 0;
+      }
+
+      .guia-fase-content {
+        padding: 0 14px 14px;
+      }
+
+      .guia-fase-upload {
+        grid-template-columns: 1fr;
+      }
+
+      .guia-fase-submit {
+        min-height: 44px;
+      }
     }
 
     .pos-conferencia-modal.is-entrada-success .pos-conferencia-dialog {
@@ -6880,7 +7243,7 @@
       display: grid;
       grid-template-columns: minmax(0, 2.1fr) minmax(340px, 1fr);
       gap: 24px;
-      align-items: start;
+      align-items: stretch;
     }
 
     .estoque-sidebar,
@@ -6905,19 +7268,160 @@
     }
 
     .estoque-history-card {
-      min-height: 100%;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
       background: rgba(255, 255, 255, .98);
+      overflow: hidden;
+    }
+
+    .estoque-history-card .estoque-sidebar-section {
+      min-height: 0;
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .estoque-history-card .estoque-sidebar-title {
+      flex: 0 0 auto;
     }
 
     .estoque-history-card .estoque-sessoes {
-      max-height: 720px;
+      min-height: 0;
+      max-height: none;
+      flex: 1 1 auto;
+      overflow-y: auto;
+      overscroll-behavior: contain;
       align-content: start;
       grid-auto-rows: max-content;
+      scrollbar-gutter: stable;
     }
 
     .estoque-selection-view[hidden],
+    .estoque-history-view[hidden],
     .estoque-items-view[hidden] {
       display: none;
+    }
+
+    .estoque-history-view {
+      width: min(1120px, 100%);
+      margin: 0 auto;
+    }
+
+    .estoque-history-panel {
+      min-height: min(760px, calc(100dvh - 170px));
+      padding: 26px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      border: 1px solid #e3ebe8;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, .98);
+      box-shadow: 0 14px 35px rgba(21, 52, 47, .075);
+    }
+
+    .estoque-history-heading {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .estoque-history-heading h2 {
+      margin: 0;
+      color: #18262d;
+      font-size: clamp(1.25rem, 2vw, 1.6rem);
+      font-weight: 950;
+      letter-spacing: -.02em;
+    }
+
+    .estoque-history-heading p {
+      margin: 5px 0 0;
+      color: #6e7c82;
+      font-size: .8rem;
+      font-weight: 650;
+    }
+
+    .estoque-history-actions {
+      display: flex;
+      gap: 9px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .estoque-history-filters {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.5fr) repeat(2, minmax(160px, .75fr)) auto;
+      gap: 12px;
+      align-items: end;
+      padding: 15px;
+      border: 1px solid #e1ebe8;
+      border-radius: 13px;
+      background: #f9fcfb;
+    }
+
+    .estoque-history-filters .estoque-field input,
+    .estoque-history-filters .estoque-field select {
+      min-height: 46px;
+      color: #1f3036;
+      background: #fff;
+    }
+
+    .estoque-history-count {
+      min-height: 46px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 13px;
+      border-radius: 9px;
+      color: #35656e;
+      background: #edf6f3;
+      font-size: .72rem;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    .estoque-history-list {
+      min-height: 0;
+      flex: 1 1 auto;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      align-content: start;
+      gap: 12px;
+      overflow-y: auto;
+      padding-right: 4px;
+      scrollbar-gutter: stable;
+    }
+
+    .estoque-history-list .consulta-empty {
+      grid-column: 1 / -1;
+    }
+
+    @media (max-width: 760px) {
+      .estoque-history-panel {
+        min-height: calc(100dvh - 32px);
+        padding: 16px;
+        gap: 14px;
+      }
+
+      .estoque-history-heading {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .estoque-history-actions > button {
+        flex: 1;
+      }
+
+      .estoque-history-filters,
+      .estoque-history-list {
+        grid-template-columns: 1fr;
+      }
+
+      .estoque-history-list {
+        gap: 10px;
+      }
     }
 
     .estoque-contagem-screen.contagem-itens-ativa {
@@ -7445,7 +7949,7 @@
     .estoque-sessao-card {
       position: relative;
       width: 100%;
-      min-height: 112px;
+      min-height: 140px;
       border: 1px solid #dce5e2;
       border-radius: 11px;
       color: #1c2c32;
@@ -7504,10 +8008,42 @@
 
     .estoque-sessao-topline {
       display: flex !important;
-      align-items: center;
+      align-items: flex-start;
       justify-content: space-between;
       gap: 8px;
       padding-right: 4px;
+    }
+
+    .estoque-sessao-identidade {
+      min-width: 0;
+    }
+
+    .estoque-sessao-identidade small {
+      display: block;
+      margin-bottom: 2px;
+      color: #718589;
+      font-size: .56rem;
+      font-weight: 950;
+      letter-spacing: .07em;
+      line-height: 1;
+      text-transform: uppercase;
+    }
+
+    .estoque-sessao-identidade strong {
+      color: #173f48;
+      line-height: 1.25;
+    }
+
+    .estoque-sessao-escopo {
+      margin-top: 7px;
+      color: #345a61 !important;
+      font-weight: 850 !important;
+    }
+
+    .estoque-sessao-escopo.secondary {
+      margin-top: 2px;
+      color: #647b80 !important;
+      font-weight: 750 !important;
     }
 
     .estoque-sessao-status {
@@ -7893,6 +8429,10 @@
       .estoque-sidebar {
         position: static;
         max-height: none;
+      }
+
+      .estoque-history-card {
+        height: clamp(420px, 72dvh, 620px);
       }
 
       .estoque-items-nav {
@@ -9286,15 +9826,16 @@
       }
 
       .estoque-history-card {
-        min-height: auto;
+        height: clamp(420px, 72dvh, 620px);
+        min-height: 0;
       }
 
       .estoque-history-card .estoque-sessoes {
-        max-height: none;
+        min-height: 0;
       }
 
       .estoque-sessao-card {
-        min-height: 108px;
+        min-height: 140px;
       }
 
       .atualizacao-contato-screen { padding: 8px; }
@@ -9573,6 +10114,49 @@
           </section>
         </section>
         </div>
+      </div>
+
+      <div class="estoque-history-view" id="estoque-contagem-historico-view" hidden>
+        <section class="estoque-history-panel">
+          <div class="estoque-history-heading">
+            <div>
+              <h2>Histórico de contagens</h2>
+              <p>Consulte todas as cópias iniciadas neste ambiente.</p>
+            </div>
+            <div class="estoque-history-actions">
+              <button class="estoque-heading-button" id="estoque-contagem-voltar-historico" type="button">
+                <i data-lucide="arrow-left" aria-hidden="true"></i>
+                Voltar
+              </button>
+              <button class="estoque-heading-button" id="estoque-contagem-atualizar-historico" type="button">
+                <i data-lucide="refresh-cw" aria-hidden="true"></i>
+                Atualizar
+              </button>
+            </div>
+          </div>
+
+          <div class="estoque-history-filters">
+            <div class="estoque-field">
+              <label for="estoque-historico-empresa">Empresa</label>
+              <select id="estoque-historico-empresa">
+                <option value="">Todas as empresas</option>
+              </select>
+            </div>
+            <div class="estoque-field">
+              <label for="estoque-historico-data-inicial">Data inicial</label>
+              <input id="estoque-historico-data-inicial" type="date">
+            </div>
+            <div class="estoque-field">
+              <label for="estoque-historico-data-final">Data final</label>
+              <input id="estoque-historico-data-final" type="date">
+            </div>
+            <output class="estoque-history-count" id="estoque-historico-quantidade">0 contagens</output>
+          </div>
+
+          <div class="estoque-history-list" id="estoque-contagem-historico-lista">
+            <div class="consulta-empty">Nenhuma contagem carregada.</div>
+          </div>
+        </section>
       </div>
 
       <div class="estoque-items-view" id="estoque-contagem-itens-view" hidden>
@@ -10016,6 +10600,46 @@
           <div class="pos-conferencia-actions">
             <button class="btn-start" id="imprimir-etiqueta-volume" type="button">Imprimir etiqueta</button>
             <button class="btn-back" id="voltar-lista-pos-conferencia" type="button">Voltar para lista</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="pos-conferencia-modal guia-fase-modal" id="guia-fase-modal" hidden>
+        <div class="pos-conferencia-dialog guia-fase-dialog" role="dialog" aria-modal="true" aria-labelledby="guia-fase-titulo">
+          <div class="guia-fase-head">
+            <div class="guia-fase-head-copy">
+              <span class="guia-fase-head-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h5"/><path d="M9 13h6M9 17h4"/><path d="M9 9h2"/></svg>
+              </span>
+              <div>
+                <h3 id="guia-fase-titulo">Guias FASE</h3>
+                <p id="guia-fase-subtitulo">Documentos vinculados ao pedido.</p>
+              </div>
+            </div>
+            <button class="guia-fase-close" id="guia-fase-fechar" type="button" aria-label="Fechar painel">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg>
+            </button>
+          </div>
+          <div class="guia-fase-content">
+            <form class="guia-fase-upload" id="guia-fase-form">
+              <label class="guia-fase-file-label" for="guia-fase-arquivos">
+                <span class="guia-fase-upload-icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></svg>
+                </span>
+                <span class="guia-fase-file-copy">
+                  <strong>Selecionar guias</strong>
+                  <span id="guia-fase-arquivos-resumo">PDF ou imagem, até 10 MB por arquivo</span>
+                </span>
+                <input id="guia-fase-arquivos" name="arquivos" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,application/pdf,image/jpeg,image/png,image/webp" multiple>
+              </label>
+              <button class="guia-fase-submit" id="guia-fase-enviar" type="submit">Enviar guias</button>
+            </form>
+            <div class="guia-fase-status" id="guia-fase-status" aria-live="polite"></div>
+            <div class="guia-fase-list-head">
+              <strong>Documentos enviados</strong>
+              <span class="guia-fase-count" id="guia-fase-count">0 guias</span>
+            </div>
+            <div class="guia-fase-list" id="guia-fase-lista" aria-live="polite"></div>
           </div>
         </div>
       </section>
@@ -10561,6 +11185,6 @@
 
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <script src="asyncRefresh.js?v=20260601-2"></script>
-  <script src="app.js?v=20260723-1"></script>
+  <script src="app.js?v=20260723-2"></script>
 </body>
 </html>

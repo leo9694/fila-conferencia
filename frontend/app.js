@@ -66,6 +66,14 @@ const botaoHistoricoContagemEstoque = document.getElementById('estoque-contagem-
 const botaoNovaContagemEstoque = document.getElementById('estoque-contagem-nova');
 const estoqueContagemSessoes = document.getElementById('estoque-contagem-sessoes');
 const estoqueContagemSelecao = document.getElementById('estoque-contagem-selecao');
+const estoqueContagemHistoricoView = document.getElementById('estoque-contagem-historico-view');
+const botaoVoltarHistoricoContagem = document.getElementById('estoque-contagem-voltar-historico');
+const botaoAtualizarHistoricoContagem = document.getElementById('estoque-contagem-atualizar-historico');
+const estoqueHistoricoEmpresa = document.getElementById('estoque-historico-empresa');
+const estoqueHistoricoDataInicial = document.getElementById('estoque-historico-data-inicial');
+const estoqueHistoricoDataFinal = document.getElementById('estoque-historico-data-final');
+const estoqueHistoricoQuantidade = document.getElementById('estoque-historico-quantidade');
+const estoqueContagemHistoricoLista = document.getElementById('estoque-contagem-historico-lista');
 const estoqueContagemItensView = document.getElementById('estoque-contagem-itens-view');
 const botaoVoltarCopiasEstoque = document.getElementById('voltar-copias-estoque');
 const estoqueContagemActive = document.getElementById('estoque-contagem-active');
@@ -102,6 +110,7 @@ const confirmacaoAppModal = document.getElementById('app-confirm-modal');
 const confirmacaoAppDialog = document.querySelector('.app-confirm-dialog');
 const confirmacaoAppTitulo = document.getElementById('app-confirm-title');
 const confirmacaoAppMensagem = document.getElementById('app-confirm-message');
+const confirmacaoAppNota = document.querySelector('.app-confirm-note');
 const confirmacaoAppCancelar = document.getElementById('app-confirm-cancel');
 const confirmacaoAppConfirmar = document.getElementById('app-confirm-submit');
 const filaDataInicial = document.getElementById('fila-data-inicial');
@@ -147,6 +156,17 @@ const pedidoPreviewVolumes = document.getElementById('pedido-preview-volumes');
 const pedidoPreviewStatus = document.getElementById('pedido-preview-status');
 const pedidoPreviewItensLista = document.getElementById('pedido-preview-itens-lista');
 const pedidoPreviewDocumentos = document.getElementById('pedido-preview-documentos');
+const guiaFaseModal = document.getElementById('guia-fase-modal');
+const guiaFaseTitulo = document.getElementById('guia-fase-titulo');
+const guiaFaseSubtitulo = document.getElementById('guia-fase-subtitulo');
+const guiaFaseForm = document.getElementById('guia-fase-form');
+const guiaFaseArquivos = document.getElementById('guia-fase-arquivos');
+const guiaFaseArquivosResumo = document.getElementById('guia-fase-arquivos-resumo');
+const botaoEnviarGuiasFase = document.getElementById('guia-fase-enviar');
+const botaoFecharGuiasFase = document.getElementById('guia-fase-fechar');
+const guiaFaseStatus = document.getElementById('guia-fase-status');
+const guiaFaseCount = document.getElementById('guia-fase-count');
+const guiaFaseLista = document.getElementById('guia-fase-lista');
 const botaoCancelarPreviewPedido = document.getElementById('cancelar-preview-pedido');
 const botaoImprimirPreviewPedido = document.getElementById('imprimir-preview-pedido');
 const botaoAbrirSeparacaoPedido = document.getElementById('abrir-separacao-pedido');
@@ -326,6 +346,7 @@ let salvamentosProgressoPendentes = 0;
 let salvamentoProgressoPendente = Promise.resolve();
 let maiorCaixaEntradaRemota = 0;
 let pedidoPreviewSelecionado = null;
+let pedidoGuiaFaseAtual = null;
 let itensPedidoPreview = [];
 let itensSeparacao = [];
 let itemSeparacaoPendente = null;
@@ -1268,6 +1289,7 @@ function mostrarSelecaoContagemEstoque() {
   estoqueContagemChavesLocalizadas = null;
   estoqueContagemScreen.classList.remove('contagem-itens-ativa');
   estoqueContagemSelecao.hidden = false;
+  estoqueContagemHistoricoView.hidden = true;
   estoqueContagemItensView.hidden = true;
   estoqueContagemActive.hidden = true;
   renderizarListaContagensEstoque();
@@ -1281,10 +1303,24 @@ function mostrarItensContagemEstoque() {
   }
 
   estoqueContagemSelecao.hidden = true;
+  estoqueContagemHistoricoView.hidden = true;
   estoqueContagemItensView.hidden = false;
   estoqueContagemActive.hidden = false;
   estoqueContagemScreen.classList.add('contagem-itens-ativa');
   configurarLeitorContagemEstoque();
+  atualizarIcones();
+}
+
+async function mostrarHistoricoContagemEstoque() {
+  estoqueContagemAtual = null;
+  estoqueContagemChavesLocalizadas = null;
+  estoqueContagemScreen.classList.remove('contagem-itens-ativa');
+  estoqueContagemSelecao.hidden = true;
+  estoqueContagemItensView.hidden = true;
+  estoqueContagemHistoricoView.hidden = false;
+  await carregarListaContagensEstoque();
+  preencherFiltroEmpresasHistoricoContagem();
+  renderizarHistoricoContagemEstoque();
   atualizarIcones();
 }
 
@@ -1324,8 +1360,23 @@ function classeStatusCardContagemEstoque(status) {
 }
 
 function tituloCardContagemEstoque(sessao) {
-  const marca = String(sessao?.filtros?.marca || '').trim();
-  return marca || sessao?.nomeEmpresa || `Empresa ${sessao?.empresa || ''}`;
+  const codigo = String(sessao?.empresa || '').trim();
+  const nome = String(sessao?.nomeEmpresa || '').trim() || `Empresa ${codigo}`;
+  return codigo ? `${codigo} - ${nome}` : nome;
+}
+
+function escopoCardContagemEstoque(sessao) {
+  const codigoGrupo = String(sessao?.filtros?.grupo || '').trim();
+  const nomeGrupo = String(sessao?.nomeGrupo || '').trim();
+  const grupo = codigoGrupo
+    ? `${nomeGrupo || codigoGrupo}${sessao?.filtros?.incluirSubgrupos ? ' + subgrupos' : ''}`
+    : 'Todos os grupos';
+  const marca = String(sessao?.filtros?.marca || '').trim() || 'Todas as marcas';
+  const local = String(sessao?.nomeLocal || '').trim() || 'Todos os locais';
+  return {
+    grupo: `Grupo: ${grupo}`,
+    detalhes: `Marca: ${marca} · ${local}`
+  };
 }
 
 function reiniciarFiltrosContagemEstoque() {
@@ -1553,17 +1604,16 @@ async function atualizarPreviaContagemEstoque() {
   }
 }
 
-function renderizarListaContagensEstoque() {
-  if (!estoqueContagemLista.length) {
-    estoqueContagemSessoes.innerHTML = '<div class="consulta-empty">Nenhuma contagem criada nesta base.</div>';
-    return;
-  }
-
-  estoqueContagemSessoes.innerHTML = estoqueContagemLista.map((sessao) => {
+function renderizarCardsContagemEstoque(sessoes) {
+  return sessoes.map((sessao) => {
     const titulo = tituloCardContagemEstoque(sessao);
-    const inicial = String(titulo || 'C').trim().charAt(0).toUpperCase();
+    const inicial = String(sessao.nomeEmpresa || titulo || 'E').trim().charAt(0).toUpperCase();
     const resumo = sessao.resumo || {};
     const statusClasse = classeStatusCardContagemEstoque(sessao.status);
+    const escopo = escopoCardContagemEstoque(sessao);
+    const seloStatus = sessao.status === 'AJUSTE_GERADO'
+      ? `<span class="estoque-sessao-status ${statusClasse}">${escaparHtml(rotuloStatusCardContagemEstoque(sessao.status))}</span>`
+      : '';
     return `
       <article
         class="estoque-sessao-card${estoqueContagemAtual?.id === sessao.id ? ' ativa' : ''}"
@@ -1575,10 +1625,14 @@ function renderizarListaContagensEstoque() {
           data-estoque-sessao="${escaparAtributo(sessao.id)}"
         >
           <span class="estoque-sessao-topline">
-            <strong>${escaparHtml(titulo)}</strong>
-            <span class="estoque-sessao-status ${statusClasse}">${escaparHtml(rotuloStatusCardContagemEstoque(sessao.status))}</span>
+            <span class="estoque-sessao-identidade">
+              <small>Empresa</small>
+              <strong>${escaparHtml(titulo)}</strong>
+            </span>
+            ${seloStatus}
           </span>
-          <span>${escaparHtml(sessao.nomeLocal || 'Todos os locais')}</span>
+          <span class="estoque-sessao-escopo">${escaparHtml(escopo.grupo)}</span>
+          <span class="estoque-sessao-escopo secondary">${escaparHtml(escopo.detalhes)}</span>
           <span>${formatarDataHora(sessao.criadoEm)}</span>
           <span class="estoque-sessao-progress">${resumo.itensContados || 0} / ${resumo.totalItens || 0}</span>
         </button>
@@ -1594,6 +1648,64 @@ function renderizarListaContagensEstoque() {
       </article>
     `;
   }).join('');
+}
+
+function renderizarListaContagensEstoque() {
+  if (!estoqueContagemLista.length) {
+    estoqueContagemSessoes.innerHTML = '<div class="consulta-empty">Nenhuma contagem criada nesta base.</div>';
+    return;
+  }
+
+  estoqueContagemSessoes.innerHTML = renderizarCardsContagemEstoque(estoqueContagemLista);
+  atualizarIcones();
+}
+
+function preencherFiltroEmpresasHistoricoContagem() {
+  const empresaSelecionada = estoqueHistoricoEmpresa.value;
+  const empresas = [...new Map(
+    estoqueContagemLista.map((sessao) => [
+      String(sessao.empresa || ''),
+      tituloCardContagemEstoque(sessao)
+    ])
+  ).entries()]
+    .filter(([codigo]) => codigo)
+    .sort((a, b) => a[1].localeCompare(b[1], 'pt-BR', { sensitivity: 'base', numeric: true }));
+
+  estoqueHistoricoEmpresa.innerHTML = [
+    '<option value="">Todas as empresas</option>',
+    ...empresas.map(([codigo, titulo]) => (
+      `<option value="${escaparAtributo(codigo)}">${escaparHtml(titulo)}</option>`
+    ))
+  ].join('');
+  if ([...estoqueHistoricoEmpresa.options].some((opcao) => opcao.value === empresaSelecionada)) {
+    estoqueHistoricoEmpresa.value = empresaSelecionada;
+  }
+}
+
+function dataCriacaoContagem(sessao) {
+  return String(sessao?.criadoEm || '').slice(0, 10);
+}
+
+function contagensFiltradasHistorico() {
+  const empresa = estoqueHistoricoEmpresa.value;
+  const dataInicial = estoqueHistoricoDataInicial.value;
+  const dataFinal = estoqueHistoricoDataFinal.value;
+
+  return estoqueContagemLista.filter((sessao) => {
+    const data = dataCriacaoContagem(sessao);
+    if (empresa && String(sessao.empresa) !== empresa) return false;
+    if (dataInicial && (!data || data < dataInicial)) return false;
+    if (dataFinal && (!data || data > dataFinal)) return false;
+    return true;
+  });
+}
+
+function renderizarHistoricoContagemEstoque() {
+  const sessoes = contagensFiltradasHistorico();
+  estoqueHistoricoQuantidade.textContent = `${sessoes.length} ${sessoes.length === 1 ? 'contagem' : 'contagens'}`;
+  estoqueContagemHistoricoLista.innerHTML = sessoes.length
+    ? renderizarCardsContagemEstoque(sessoes)
+    : '<div class="consulta-empty">Nenhuma contagem encontrada para os filtros informados.</div>';
   atualizarIcones();
 }
 
@@ -1604,8 +1716,15 @@ async function carregarListaContagensEstoque() {
     if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível listar as contagens.');
     estoqueContagemLista = payload.itens || [];
     renderizarListaContagensEstoque();
+    if (!estoqueContagemHistoricoView.hidden) {
+      preencherFiltroEmpresasHistoricoContagem();
+      renderizarHistoricoContagemEstoque();
+    }
   } catch (error) {
     estoqueContagemSessoes.innerHTML = `<div class="consulta-empty">${escaparHtml(error.message)}</div>`;
+    if (!estoqueContagemHistoricoView.hidden) {
+      estoqueContagemHistoricoLista.innerHTML = `<div class="consulta-empty">${escaparHtml(error.message)}</div>`;
+    }
   }
 }
 
@@ -1662,7 +1781,8 @@ function confirmarAcaoApp({
   titulo = 'Confirmar ação',
   mensagem,
   textoConfirmar = 'Confirmar',
-  perigo = false
+  perigo = false,
+  informativo = false
 }) {
   if (confirmacaoAppResolver) concluirConfirmacaoApp(false);
   confirmacaoAppFocoAnterior = document.activeElement;
@@ -1670,12 +1790,24 @@ function confirmarAcaoApp({
   confirmacaoAppMensagem.textContent = mensagem;
   confirmacaoAppConfirmar.textContent = textoConfirmar;
   confirmacaoAppDialog.classList.toggle('is-danger', perigo);
+  confirmacaoAppDialog.classList.toggle('is-informative', informativo);
+  confirmacaoAppCancelar.hidden = informativo;
+  confirmacaoAppNota.hidden = informativo;
   confirmacaoAppModal.hidden = false;
   document.body.classList.add('app-confirm-open');
   atualizarIcones();
   setTimeout(() => confirmacaoAppConfirmar.focus(), 0);
   return new Promise((resolve) => {
     confirmacaoAppResolver = resolve;
+  });
+}
+
+function mostrarAlertaApp({ titulo, mensagem, textoConfirmar = 'Entendi' }) {
+  return confirmarAcaoApp({
+    titulo,
+    mensagem,
+    textoConfirmar,
+    informativo: true
   });
 }
 
@@ -5894,6 +6026,173 @@ function obterEstadoOperacionalPedido(pedido) {
   return 'novo';
 }
 
+function formatarTamanhoArquivo(bytes) {
+  const tamanho = Number(bytes || 0);
+  if (tamanho < 1024) return `${tamanho} B`;
+  if (tamanho < 1024 * 1024) return `${(tamanho / 1024).toFixed(1).replace('.', ',')} KB`;
+  return `${(tamanho / (1024 * 1024)).toFixed(1).replace('.', ',')} MB`;
+}
+
+function atualizarResumoArquivosGuiaFase() {
+  const arquivos = [...(guiaFaseArquivos?.files || [])];
+  guiaFaseArquivosResumo.textContent = arquivos.length
+    ? `${arquivos.length} ${arquivos.length === 1 ? 'arquivo selecionado' : 'arquivos selecionados'}`
+    : 'PDF ou imagem, até 10 MB por arquivo';
+}
+
+function atualizarPedidoComGuiasFase(guias) {
+  if (!pedidoGuiaFaseAtual) return;
+  const quantidade = Array.isArray(guias) ? guias.length : 0;
+  pedidoGuiaFaseAtual.GUIAS_FASE_QTD = quantidade;
+  const pedidoFila = filaPedidos.find((pedido) => Number(pedido.NUNOTA) === Number(pedidoGuiaFaseAtual.NUNOTA));
+  if (pedidoFila) pedidoFila.GUIAS_FASE_QTD = quantidade;
+  renderizarPedidosFila();
+}
+
+function renderizarGuiasFase(guias = []) {
+  guiaFaseCount.textContent = `${guias.length} ${guias.length === 1 ? 'guia' : 'guias'}`;
+  if (guias.length === 0) {
+    guiaFaseLista.innerHTML = '<div class="guia-fase-empty">Nenhuma Guia FASE foi enviada para este pedido.</div>';
+    return;
+  }
+
+  guiaFaseLista.innerHTML = guias.map((guia) => `
+    <article class="guia-fase-item">
+      <span class="guia-fase-item-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h5"/><path d="M9 13h6M9 17h4"/></svg>
+      </span>
+      <div class="guia-fase-item-copy">
+        <a
+          href="/api/fila-conferencia/pedidos/${encodeURIComponent(pedidoGuiaFaseAtual.NUNOTA)}/guias-fase/${encodeURIComponent(guia.id)}/arquivo"
+          target="_blank"
+          rel="noopener"
+          title="Abrir ${escaparAtributo(guia.nome)}"
+        >${escaparHtml(guia.nome)}</a>
+        <span>${escaparHtml(formatarTamanhoArquivo(guia.tamanho))} · enviado em ${escaparHtml(formatarDataHora(guia.enviadoEm))}</span>
+      </div>
+      <button
+        class="guia-fase-delete"
+        type="button"
+        data-guia-fase-id="${escaparAtributo(guia.id)}"
+        data-guia-fase-nome="${escaparAtributo(guia.nome)}"
+        aria-label="Excluir ${escaparAtributo(guia.nome)}"
+        title="Excluir guia"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="m7 7 1 14h8l1-14"/><path d="M10 11v6M14 11v6"/></svg>
+      </button>
+    </article>
+  `).join('');
+}
+
+function fecharPainelGuiasFase() {
+  guiaFaseModal.hidden = true;
+  pedidoGuiaFaseAtual = null;
+  guiaFaseForm.reset();
+  atualizarResumoArquivosGuiaFase();
+  guiaFaseStatus.textContent = '';
+  guiaFaseStatus.classList.remove('is-error');
+}
+
+async function abrirPainelGuiasFase(pedido) {
+  if (!pedido?.FATURADO) {
+    await mostrarAlertaApp({
+      titulo: 'Guia FASE aguardando faturamento',
+      mensagem: 'A Guia FASE só pode ser enviada depois do faturamento do pedido.'
+    });
+    return;
+  }
+  pedidoGuiaFaseAtual = pedido;
+  guiaFaseTitulo.textContent = `Guias FASE · Pedido ${pedido.NUNOTA}`;
+  guiaFaseSubtitulo.textContent = 'Envie uma ou mais guias e mantenha os documentos vinculados ao pedido.';
+  guiaFaseStatus.textContent = 'Carregando documentos...';
+  guiaFaseStatus.classList.remove('is-error');
+  guiaFaseLista.innerHTML = '<div class="guia-fase-empty">Consultando Guias FASE...</div>';
+  guiaFaseCount.textContent = '...';
+  guiaFaseForm.reset();
+  atualizarResumoArquivosGuiaFase();
+  guiaFaseModal.hidden = false;
+
+  try {
+    const resposta = await fetch(`/api/fila-conferencia/pedidos/${encodeURIComponent(pedido.NUNOTA)}/guias-fase`);
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível consultar as Guias FASE.');
+    if (!payload.faturado) throw new Error('O pedido ainda não foi faturado.');
+    renderizarGuiasFase(payload.guias || []);
+    atualizarPedidoComGuiasFase(payload.guias || []);
+    guiaFaseStatus.textContent = '';
+  } catch (error) {
+    guiaFaseStatus.textContent = error.message;
+    guiaFaseStatus.classList.add('is-error');
+    guiaFaseLista.innerHTML = '<div class="guia-fase-empty">Não foi possível carregar os documentos.</div>';
+  }
+}
+
+async function enviarGuiasFase(event) {
+  event.preventDefault();
+  if (!pedidoGuiaFaseAtual) return;
+  const arquivos = [...(guiaFaseArquivos.files || [])];
+  if (arquivos.length === 0) {
+    guiaFaseStatus.textContent = 'Selecione ao menos uma guia para enviar.';
+    guiaFaseStatus.classList.add('is-error');
+    return;
+  }
+
+  const dados = new FormData();
+  arquivos.forEach((arquivo) => dados.append('arquivos', arquivo));
+  botaoEnviarGuiasFase.disabled = true;
+  botaoEnviarGuiasFase.textContent = 'Enviando...';
+  guiaFaseStatus.textContent = 'Salvando os documentos...';
+  guiaFaseStatus.classList.remove('is-error');
+
+  try {
+    const resposta = await fetch(
+      `/api/fila-conferencia/pedidos/${encodeURIComponent(pedidoGuiaFaseAtual.NUNOTA)}/guias-fase`,
+      { method: 'POST', body: dados }
+    );
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível enviar as Guias FASE.');
+    guiaFaseForm.reset();
+    atualizarResumoArquivosGuiaFase();
+    renderizarGuiasFase(payload.guias || []);
+    atualizarPedidoComGuiasFase(payload.guias || []);
+    guiaFaseStatus.textContent = 'Guia FASE enviada com sucesso.';
+  } catch (error) {
+    guiaFaseStatus.textContent = error.message;
+    guiaFaseStatus.classList.add('is-error');
+  } finally {
+    botaoEnviarGuiasFase.disabled = false;
+    botaoEnviarGuiasFase.textContent = 'Enviar guias';
+  }
+}
+
+async function excluirGuiaFase(id, nome) {
+  if (!pedidoGuiaFaseAtual) return;
+  const confirmado = await confirmarAcaoApp({
+    titulo: 'Excluir Guia FASE',
+    mensagem: `Excluir o documento “${nome}” deste pedido?`,
+    textoConfirmar: 'Excluir guia',
+    perigo: true
+  });
+  if (!confirmado || !pedidoGuiaFaseAtual) return;
+
+  guiaFaseStatus.textContent = 'Excluindo documento...';
+  guiaFaseStatus.classList.remove('is-error');
+  try {
+    const resposta = await fetch(
+      `/api/fila-conferencia/pedidos/${encodeURIComponent(pedidoGuiaFaseAtual.NUNOTA)}/guias-fase/${encodeURIComponent(id)}`,
+      { method: 'DELETE' }
+    );
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível excluir a Guia FASE.');
+    renderizarGuiasFase(payload.guias || []);
+    atualizarPedidoComGuiasFase(payload.guias || []);
+    guiaFaseStatus.textContent = 'Guia FASE excluída.';
+  } catch (error) {
+    guiaFaseStatus.textContent = error.message;
+    guiaFaseStatus.classList.add('is-error');
+  }
+}
+
 function renderizarPedidosFila() {
   filaPedidosLista.innerHTML = '';
   const prioridadeStatus = {
@@ -5990,6 +6289,16 @@ function renderizarPedidosFila() {
               : conferido
                 ? '<span class="pedido-status-mini conferido">Conferido</span>'
                 : '<span class="pedido-status-mini novo">Novo</span>'}
+        ${!entrada && pedido.NECESSITA_GUIA_FASE
+          ? pedido.FATURADO
+            ? `<button
+                class="pedido-fase-indicator pedido-fase-button ${Number(pedido.GUIAS_FASE_QTD || 0) > 0 ? 'is-uploaded' : ''}"
+                type="button"
+                aria-label="${Number(pedido.GUIAS_FASE_QTD || 0) > 0 ? `${pedido.GUIAS_FASE_QTD} Guia FASE enviada` : 'Enviar Guia FASE'}"
+                title="${Number(pedido.GUIAS_FASE_QTD || 0) > 0 ? `${pedido.GUIAS_FASE_QTD} Guia FASE enviada` : 'Enviar Guia FASE'}"
+              ><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h5"/><path d="M9 13h6M9 17h4"/><path d="M9 9h2"/></svg></button>`
+            : '<button class="pedido-fase-indicator pedido-fase-button is-disabled" type="button" aria-label="Guia FASE aguardando faturamento" title="Guia FASE aguardando faturamento"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h5"/><path d="M9 13h6M9 17h4"/><path d="M9 9h2"/></svg></button>'
+          : ''}
       </div>
       ${entrada ? `<div class="pedido-num-nota">${escaparHtml(numeroNotaFiscal)}</div>` : ''}
       <strong>${entrada ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}</strong>
@@ -6003,6 +6312,13 @@ function renderizarPedidosFila() {
       botaoEtiqueta.addEventListener('click', (event) => {
         event.stopPropagation();
         abrirModalEtiquetaPedido(pedido);
+      });
+    }
+    const botaoGuiaFase = card.querySelector('.pedido-fase-button');
+    if (botaoGuiaFase) {
+      botaoGuiaFase.addEventListener('click', (event) => {
+        event.stopPropagation();
+        abrirPainelGuiasFase(pedido);
       });
     }
     card.addEventListener('click', () => abrirPreviewPedido(pedido));
@@ -7905,11 +8221,36 @@ estoqueContagemControle.addEventListener('change', () => agendarPreviaContagemEs
 estoqueContagemSaldo.addEventListener('change', () => agendarPreviaContagemEstoque());
 botaoCriarContagemEstoque.addEventListener('click', criarSessaoContagemEstoque);
 botaoAtualizarContagensEstoque.addEventListener('click', carregarListaContagensEstoque);
-botaoHistoricoContagemEstoque.addEventListener('click', () => {
-  document.querySelector('.estoque-history-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+botaoHistoricoContagemEstoque.addEventListener('click', mostrarHistoricoContagemEstoque);
+botaoVoltarHistoricoContagem.addEventListener('click', mostrarSelecaoContagemEstoque);
+botaoAtualizarHistoricoContagem.addEventListener('click', carregarListaContagensEstoque);
+estoqueHistoricoEmpresa.addEventListener('change', renderizarHistoricoContagemEstoque);
+estoqueHistoricoDataInicial.addEventListener('change', () => {
+  if (estoqueHistoricoDataFinal.value && estoqueHistoricoDataInicial.value > estoqueHistoricoDataFinal.value) {
+    estoqueHistoricoDataFinal.value = estoqueHistoricoDataInicial.value;
+  }
+  renderizarHistoricoContagemEstoque();
 });
-botaoNovaContagemEstoque.addEventListener('click', reiniciarFiltrosContagemEstoque);
+estoqueHistoricoDataFinal.addEventListener('change', () => {
+  if (estoqueHistoricoDataInicial.value && estoqueHistoricoDataFinal.value < estoqueHistoricoDataInicial.value) {
+    estoqueHistoricoDataInicial.value = estoqueHistoricoDataFinal.value;
+  }
+  renderizarHistoricoContagemEstoque();
+});
+botaoNovaContagemEstoque.addEventListener('click', () => {
+  mostrarSelecaoContagemEstoque();
+  reiniciarFiltrosContagemEstoque();
+});
 estoqueContagemSessoes.addEventListener('click', (event) => {
+  const excluir = event.target.closest('[data-estoque-excluir]');
+  if (excluir) {
+    excluirCopiaContagemEstoque(excluir.dataset.estoqueExcluir);
+    return;
+  }
+  const botao = event.target.closest('[data-estoque-sessao]');
+  if (botao) abrirSessaoContagemEstoque(botao.dataset.estoqueSessao);
+});
+estoqueContagemHistoricoLista.addEventListener('click', (event) => {
   const excluir = event.target.closest('[data-estoque-excluir]');
   if (excluir) {
     excluirCopiaContagemEstoque(excluir.dataset.estoqueExcluir);
@@ -8257,6 +8598,17 @@ pedidoPreview.addEventListener('click', (event) => {
     if (botao) abrirDocumentoFiscal(botao);
   });
 });
+botaoFecharGuiasFase?.addEventListener('click', fecharPainelGuiasFase);
+guiaFaseModal?.addEventListener('click', (event) => {
+  if (event.target === guiaFaseModal) fecharPainelGuiasFase();
+});
+guiaFaseArquivos?.addEventListener('change', atualizarResumoArquivosGuiaFase);
+guiaFaseForm?.addEventListener('submit', enviarGuiasFase);
+guiaFaseLista?.addEventListener('click', (event) => {
+  const botao = event.target.closest('[data-guia-fase-id]');
+  if (!botao) return;
+  excluirGuiaFase(botao.dataset.guiaFaseId, botao.dataset.guiaFaseNome || 'Guia FASE');
+});
 botaoCancelarCorte.addEventListener('click', fecharModalCorte);
 botaoConfirmarCorte.addEventListener('click', confirmarCorteItem);
 corteModal.addEventListener('click', (event) => {
@@ -8431,6 +8783,9 @@ document.addEventListener('keydown', (event) => {
   }
   if (event.key === 'Escape' && produtoFotoModal && !produtoFotoModal.hidden) {
     fecharModalFotoProduto();
+  }
+  if (event.key === 'Escape' && guiaFaseModal && !guiaFaseModal.hidden) {
+    fecharPainelGuiasFase();
   }
 });
 window.addEventListener('resize', () => {

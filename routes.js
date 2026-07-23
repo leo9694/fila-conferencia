@@ -1,4 +1,5 @@
 const express = require('express');
+const multer = require('multer');
 const path = require('path');
 const { PDFDocument } = require('pdf-lib');
 const router = express.Router();
@@ -27,6 +28,7 @@ const { criarContatoStatusStore } = require('./api/contatoStatusStore');
 const { gerarPedidoVendaPdf } = require('./api/pedidoVendaPdf');
 const { gerarRomaneioCargaPdf } = require('./api/romaneioPdf');
 const { criarPedidoPrintStore } = require('./api/pedidoPrintStore');
+const { criarGuiaFaseStore } = require('./api/guiaFaseStore');
 const { criarSeparacaoStore } = require('./api/separacaoStore');
 const {
   criarEstoqueContagemStore,
@@ -52,6 +54,9 @@ const contatoStatusStore = criarContatoStatusStore({
 const pedidoPrintStore = criarPedidoPrintStore({
   namespace: process.env.SANKHYA_API_BASE_URL || 'padrao'
 });
+const guiaFaseStore = criarGuiaFaseStore({
+  namespace: process.env.SANKHYA_API_BASE_URL || 'padrao'
+});
 const separacaoStore = criarSeparacaoStore({
   namespace: process.env.SANKHYA_API_BASE_URL || 'padrao'
 });
@@ -69,6 +74,21 @@ const TOPS_AJUSTE_ESTOQUE = Object.freeze({
   SAIDA: 157
 });
 const ajustesEstoqueEmAndamento = new Set();
+const uploadGuiasFase = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+    files: 10
+  },
+  fileFilter: (req, arquivo, callback) => {
+    const permitidos = new Set(['application/pdf', 'image/jpeg', 'image/png', 'image/webp']);
+    if (!permitidos.has(String(arquivo.mimetype || '').toLowerCase())) {
+      callback(new Error('Envie a Guia FASE em PDF, JPG, PNG ou WEBP.'));
+      return;
+    }
+    callback(null, true);
+  }
+});
 
 function ambienteSankhyaTeste() {
   const baseUrl = String(process.env.SANKHYA_API_BASE_URL || '').toLowerCase();
@@ -784,6 +804,41 @@ async function obterSituacaoDocumentosPedido(nunotaPedido) {
       motivo: possuiFinanceiro ? null : 'A nota não possui título financeiro para boleto.'
     }
   };
+}
+
+async function pedidoNecessitaGuiaFase(nunotaPedido) {
+  const [registro] = await executeQuery(`
+    SELECT COUNT(*) AS QUANTIDADE
+    FROM TGFITE ITE
+    INNER JOIN TGFPRO PRO
+      ON PRO.CODPROD = ITE.CODPROD
+    WHERE ITE.NUNOTA = ${nunotaPedido}
+      AND PRO.CODGRUPOPROD IN (
+        SELECT GRU.CODGRUPOPROD
+        FROM TGFGRU GRU
+        START WITH
+          UPPER(NVL(GRU.DESCRGRUPOPROD, '')) LIKE '%WINNER%'
+          OR UPPER(NVL(GRU.DESCRGRUPOPROD, '')) LIKE '%COMODIT%'
+          OR UPPER(NVL(GRU.DESCRGRUPOPROD, '')) LIKE '%COMMODIT%'
+        CONNECT BY NOCYCLE PRIOR GRU.CODGRUPOPROD = GRU.CODGRUPAI
+      )
+  `);
+  return normalizarNumero(registro?.QUANTIDADE) > 0;
+}
+
+function receberGuiasFase(req, res, next) {
+  uploadGuiasFase.array('arquivos', 10)(req, res, (error) => {
+    if (!error) {
+      next();
+      return;
+    }
+    const limite = error.code === 'LIMIT_FILE_SIZE'
+      ? 'Cada Guia FASE pode ter no maximo 10 MB.'
+      : error.code === 'LIMIT_FILE_COUNT'
+        ? 'Envie no maximo 10 arquivos por vez.'
+        : error.message;
+    res.status(400).json({ erro: limite || 'Nao foi possivel receber os arquivos.' });
+  });
 }
 
 async function obterDanfeArmazenado(nunota) {
@@ -1847,7 +1902,9 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
           ELSE 'STATUS DESCONHECIDO'
         END AS STATUS_CONFERENCIA,
         COUNT(ITE.SEQUENCIA) AS QTD_ITENS,
-        SUM(NVL(ITE.QTDNEG, 0)) AS QTD_TOTAL
+        SUM(NVL(ITE.QTDNEG, 0)) AS QTD_TOTAL,
+        MAX(CASE WHEN GRU_FASE.CODGRUPOPROD IS NOT NULL THEN 1 ELSE 0 END) AS NECESSITA_GUIA_FASE,
+        MAX(CASE WHEN FAT.NUNOTA_FATURADA IS NOT NULL THEN 1 ELSE 0 END) AS FATURADO
       FROM TGFCAB CAB
       LEFT JOIN TGFCON2 CONF
         ON CONF.NUCONF = CAB.NUCONFATUAL
@@ -1857,6 +1914,29 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         ON USU.CODUSU = CONF.CODUSUCONF
       LEFT JOIN TGFITE ITE
         ON ITE.NUNOTA = CAB.NUNOTA
+      LEFT JOIN TGFPRO PRO
+        ON PRO.CODPROD = ITE.CODPROD
+      LEFT JOIN (
+        SELECT DISTINCT GRU.CODGRUPOPROD
+        FROM TGFGRU GRU
+        START WITH
+          UPPER(NVL(GRU.DESCRGRUPOPROD, '')) LIKE '%WINNER%'
+          OR UPPER(NVL(GRU.DESCRGRUPOPROD, '')) LIKE '%COMODIT%'
+          OR UPPER(NVL(GRU.DESCRGRUPOPROD, '')) LIKE '%COMMODIT%'
+        CONNECT BY NOCYCLE PRIOR GRU.CODGRUPOPROD = GRU.CODGRUPAI
+      ) GRU_FASE
+        ON GRU_FASE.CODGRUPOPROD = PRO.CODGRUPOPROD
+      LEFT JOIN (
+        SELECT
+          VAR.NUNOTAORIG,
+          MAX(NOTA.NUNOTA) AS NUNOTA_FATURADA
+        FROM TGFVAR VAR
+        INNER JOIN TGFCAB NOTA
+          ON NOTA.NUNOTA = VAR.NUNOTA
+         AND NOTA.TIPMOV <> 'P'
+        GROUP BY VAR.NUNOTAORIG
+      ) FAT
+        ON FAT.NUNOTAORIG = CAB.NUNOTA
       LEFT JOIN TGFTOP TOP_ATUAL
         ON TOP_ATUAL.CODTIPOPER = CAB.CODTIPOPER
        AND TOP_ATUAL.DHALTER = CAB.DHTIPOPER
@@ -1905,6 +1985,9 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
           QTDVOL: normalizarNumero(row.QTDVOL),
           QTD_ITENS: normalizarNumero(row.QTD_ITENS),
           QTD_TOTAL: normalizarNumero(row.QTD_TOTAL),
+          NECESSITA_GUIA_FASE: modo === 'saida' && Number(row.NECESSITA_GUIA_FASE) === 1,
+          FATURADO: modo === 'saida' && Number(row.FATURADO) === 1,
+          GUIAS_FASE_QTD: modo === 'saida' ? guiaFaseStore.quantidade(row.NUNOTA) : 0,
           PEDIDO_IMPRESSO: Boolean(pedidoPrintStore.obter(row.NUNOTA)),
           IMPRESSAO_PEDIDO: pedidoPrintStore.obter(row.NUNOTA)
         };
@@ -2924,17 +3007,27 @@ router.post('/estoque-contagem/sessoes', async (req, res) => {
       return;
     }
 
-    const [empresaRegistro] = await executeQuery(`
-      SELECT NVL(NOMEFANTASIA, RAZAOSOCIAL) AS EMPRESA
-      FROM TSIEMP
-      WHERE CODEMP = ${empresa}
-    `);
+    const [empresaRegistro, grupoRegistro] = await Promise.all([
+      executeQuery(`
+        SELECT NVL(NOMEFANTASIA, RAZAOSOCIAL) AS EMPRESA
+        FROM TSIEMP
+        WHERE CODEMP = ${empresa}
+      `),
+      filtros.grupo
+        ? executeQuery(`
+            SELECT DESCRGRUPOPROD
+            FROM TGFGRU
+            WHERE CODGRUPOPROD = ${filtros.grupo}
+          `)
+        : Promise.resolve([])
+    ]);
     const nomeLocal = local === null
       ? 'Todos os locais'
       : (itens.find((item) => Number(item.CODLOCAL) === local)?.DESCRLOCAL || `Local ${local}`);
     const sessao = estoqueContagemStore.criar({
       empresa,
       nomeEmpresa: empresaRegistro?.EMPRESA,
+      nomeGrupo: grupoRegistro?.[0]?.DESCRGRUPOPROD || null,
       local,
       nomeLocal,
       filtros,
@@ -4673,6 +4766,99 @@ router.get('/fila-conferencia/pedidos/:nunota/documentos', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: 'Erro ao consultar documentos do faturamento', detalhes: err.message });
+  }
+});
+
+router.get('/fila-conferencia/pedidos/:nunota/guias-fase', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+  if (!nunota) {
+    res.status(400).json({ erro: 'Informe um pedido valido.' });
+    return;
+  }
+
+  try {
+    const [faturamento, necessitaGuia] = await Promise.all([
+      consultarFaturamentoExistente(nunota),
+      pedidoNecessitaGuiaFase(nunota)
+    ]);
+    res.json({
+      pedido: nunota,
+      faturado: Boolean(faturamento),
+      necessitaGuia,
+      guias: guiaFaseStore.listar(nunota)
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Erro ao consultar as Guias FASE do pedido.' });
+  }
+});
+
+router.post('/fila-conferencia/pedidos/:nunota/guias-fase', receberGuiasFase, async (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+  if (!nunota) {
+    res.status(400).json({ erro: 'Informe um pedido valido.' });
+    return;
+  }
+  if (!Array.isArray(req.files) || req.files.length === 0) {
+    res.status(400).json({ erro: 'Selecione ao menos uma Guia FASE.' });
+    return;
+  }
+
+  try {
+    const [faturamento, necessitaGuia] = await Promise.all([
+      consultarFaturamentoExistente(nunota),
+      pedidoNecessitaGuiaFase(nunota)
+    ]);
+    if (!necessitaGuia) {
+      res.status(409).json({ erro: 'Este pedido nao pertence aos grupos que exigem Guia FASE.' });
+      return;
+    }
+    if (!faturamento) {
+      res.status(409).json({ erro: 'A Guia FASE so pode ser enviada depois que o pedido for faturado.' });
+      return;
+    }
+
+    const guias = guiaFaseStore.adicionar({
+      nunota,
+      arquivos: req.files,
+      codUsu: req.usuario?.codUsu
+    });
+    res.status(201).json({ pedido: nunota, guias });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Nao foi possivel salvar a Guia FASE.' });
+  }
+});
+
+router.get('/fila-conferencia/pedidos/:nunota/guias-fase/:id/arquivo', (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+  const guia = nunota ? guiaFaseStore.obterArquivo(nunota, req.params.id) : null;
+  if (!guia) {
+    res.status(404).json({ erro: 'Guia FASE nao encontrada.' });
+    return;
+  }
+
+  res.setHeader('Content-Type', guia.mimeType || 'application/octet-stream');
+  res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodeURIComponent(guia.nome)}`);
+  res.sendFile(guia.path);
+});
+
+router.delete('/fila-conferencia/pedidos/:nunota/guias-fase/:id', (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+  if (!nunota) {
+    res.status(400).json({ erro: 'Informe um pedido valido.' });
+    return;
+  }
+  try {
+    const removida = guiaFaseStore.excluir(nunota, req.params.id);
+    if (!removida) {
+      res.status(404).json({ erro: 'Guia FASE nao encontrada.' });
+      return;
+    }
+    res.json({ pedido: nunota, guias: guiaFaseStore.listar(nunota) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Nao foi possivel excluir a Guia FASE.' });
   }
 });
 
