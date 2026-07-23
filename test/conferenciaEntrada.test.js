@@ -84,6 +84,34 @@ test('valida quantidades e linhas gravadas antes da finalizacao', () => {
   }]).valido, false);
 });
 
+test('ignora detalhe obsoleto zerado ao validar a conferencia de entrada', () => {
+  const desejados = [{
+    CODPROD: 1066,
+    CONTROLE: '0017702530017070',
+    CODVOL: 'UN',
+    CODBARRA: '7896061734786',
+    QTDCONF: 550,
+    QTDCONFVOLPAD: 550
+  }];
+  const gravados = [{
+    ...desejados[0],
+    SEQCONF: 16
+  }, {
+    SEQCONF: 37,
+    CODPROD: 1066,
+    CONTROLE: '0017702530017070',
+    CODVOL: 'PT',
+    CODBARRA: '17896061734783',
+    QTDCONF: 0,
+    QTDCONFVOLPAD: 0
+  }];
+
+  const validacao = validarDetalhesConferenciaEntrada(desejados, gravados);
+
+  assert.equal(validacao.valido, true);
+  assert.deepEqual(validacao.erros, []);
+});
+
 const itemNota = {
   SEQUENCIA: 1,
   CODPROD: 2442,

@@ -28,6 +28,20 @@ const { gerarPedidoVendaPdf } = require('./api/pedidoVendaPdf');
 const { gerarRomaneioCargaPdf } = require('./api/romaneioPdf');
 const { criarPedidoPrintStore } = require('./api/pedidoPrintStore');
 const { criarSeparacaoStore } = require('./api/separacaoStore');
+const {
+  criarEstoqueContagemStore,
+  obterContagemAtual
+} = require('./api/estoqueContagemStore');
+const {
+  montarSqlFiltrosCopiaEstoque,
+  normalizarFiltrosCopiaEstoque
+} = require('./api/estoqueContagemFiltros');
+const {
+  dividirEmLotes,
+  extrairNunotaAjuste,
+  montarPayloadNotaAjuste,
+  planejarAjustesEstoque
+} = require('./api/estoqueAjuste');
 const bitrixService = require('./api/bitrixService');
 
 const conferenciaTimerStore = criarConferenciaTimerStore();
@@ -41,12 +55,35 @@ const pedidoPrintStore = criarPedidoPrintStore({
 const separacaoStore = criarSeparacaoStore({
   namespace: process.env.SANKHYA_API_BASE_URL || 'padrao'
 });
+const estoqueContagemStore = criarEstoqueContagemStore({
+  namespace: process.env.SANKHYA_API_BASE_URL || 'padrao'
+});
 const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Cuiaba';
 const TOPS_CONFERENCIA = Object.freeze({
   saida: [5, 6, 237],
   entrada: [13, 21]
 });
 const TOPS_ROMANEIO = Object.freeze([10, 35]);
+const TOPS_AJUSTE_ESTOQUE = Object.freeze({
+  ENTRADA: 156,
+  SAIDA: 157
+});
+const ajustesEstoqueEmAndamento = new Set();
+
+function ambienteContagemEstoqueTeste() {
+  const baseUrl = String(process.env.SANKHYA_API_BASE_URL || '').toLowerCase();
+  return /sandbox|treinamento|teste/.test(baseUrl);
+}
+
+function exigirAmbienteContagemTeste(req, res, next) {
+  if (!ambienteContagemEstoqueTeste()) {
+    res.status(403).json({
+      erro: 'A contagem de estoque esta liberada somente na base de teste.'
+    });
+    return;
+  }
+  next();
+}
 
 function obterModoConferencia(valor) {
   return String(valor || '').trim().toLowerCase() === 'entrada' ? 'entrada' : 'saida';
@@ -2213,6 +2250,10 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
       JOIN TGFCOI2 COI
         ON COI.NUCONF = CAB.NUCONFATUAL
       WHERE CAB.NUNOTA = ${nunota}
+        AND (
+          ABS(NVL(COI.QTDCONF, 0)) > 0.0001
+          OR ABS(NVL(COI.QTDCONFVOLPAD, 0)) > 0.0001
+        )
       ORDER BY COI.SEQCONF
     `);
     const detalhesNativosPorItem = new Map();
@@ -2487,6 +2528,601 @@ router.get('/produtos/consulta', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: 'Erro ao consultar produto' });
+  }
+});
+
+function serializarSessaoContagemEstoque(sessao) {
+  const resumo = estoqueContagemStore.resumir(sessao);
+
+  return {
+    ...sessao,
+    resumo,
+    itens: (sessao.itens || []).map((item) => {
+      const primeiraContagem = item.contagens?.['1'];
+      const divergentePrimeira = primeiraContagem !== null
+        && primeiraContagem !== undefined
+        && Math.abs(Number(primeiraContagem) - Number(item.estoqueSistema)) > 0.000001;
+      const contagemAtual = obterContagemAtual(sessao, item);
+
+      return {
+        chave: item.chave,
+        codProd: item.codProd,
+        descrProd: item.descrProd,
+        referencia: item.referencia,
+        codVol: item.codVol,
+        codGrupoProd: item.codGrupoProd,
+        descrGrupoProd: item.descrGrupoProd,
+        codLocal: item.codLocal,
+        descrLocal: item.descrLocal,
+        controle: item.controle,
+        dtVal: item.dtVal,
+        contagemAtual: contagemAtual === null || contagemAtual === undefined
+          ? null
+          : Number(contagemAtual),
+        estoqueSistema: Number(item.estoqueSistema),
+        primeiraContagem: primeiraContagem !== undefined ? Number(primeiraContagem) : null,
+        divergente: contagemAtual === null
+          ? null
+          : Math.abs(Number(contagemAtual) - Number(item.estoqueSistema)) > 0.000001,
+        podeContar: ['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(sessao.status)
+          && (sessao.status !== 'EM_RECONTAGEM' || divergentePrimeira)
+      };
+    })
+  };
+}
+
+function dataNegociacaoAjusteEstoque() {
+  const [ano, mes, dia] = obterDataHoje().split('-');
+  return `${dia}/${mes}/${ano}`;
+}
+
+async function obterTemplateNotaAjusteEstoque(empresa, tipo) {
+  const codTipOper = TOPS_AJUSTE_ESTOQUE[tipo];
+  const linhas = await executeQuery(`
+    SELECT * FROM (
+      SELECT
+        CAB.CODPARC,
+        CAB.CODTIPVENDA,
+        CAB.CODVEND,
+        CAB.CODNAT,
+        CAB.CODCENCUS,
+        TOP.CODTIPOPER,
+        TOP.TIPMOV,
+        TOP.ATUALEST,
+        TOP.ATUALFIN
+      FROM TGFCAB CAB
+      JOIN TGFTOP TOP
+        ON TOP.CODTIPOPER = CAB.CODTIPOPER
+       AND TOP.DHALTER = (
+         SELECT MAX(T2.DHALTER)
+         FROM TGFTOP T2
+         WHERE T2.CODTIPOPER = TOP.CODTIPOPER
+       )
+      WHERE CAB.CODEMP = ${Number(empresa)}
+        AND CAB.CODTIPOPER = ${codTipOper}
+      ORDER BY CAB.NUNOTA DESC
+    )
+    WHERE ROWNUM = 1
+  `);
+
+  const template = linhas[0];
+  if (!template) {
+    throw new Error(`Nao existe nota modelo recente da TOP ${codTipOper} para a empresa ${empresa}.`);
+  }
+
+  const atualizaEstoqueEsperado = tipo === 'ENTRADA' ? 'E' : 'B';
+  if (String(template.ATUALEST || '').toUpperCase() !== atualizaEstoqueEsperado) {
+    throw new Error(`A TOP ${codTipOper} nao esta configurada para ${tipo === 'ENTRADA' ? 'entrada' : 'baixa'} de estoque.`);
+  }
+  if (Number(template.ATUALFIN || 0) !== 0) {
+    throw new Error(`A TOP ${codTipOper} esta configurada para atualizar financeiro.`);
+  }
+  if (!Number(template.CODPARC) || !Number(template.CODTIPVENDA)) {
+    throw new Error(`A nota modelo da TOP ${codTipOper} nao possui parceiro ou tipo de negociacao.`);
+  }
+
+  return template;
+}
+
+async function obterCustosReposicaoAjuste(empresa, itens) {
+  const produtos = [...new Set(itens.map((item) => Number(item.codProd)).filter(Boolean))];
+  if (!produtos.length) return new Map();
+
+  const linhas = await executeQuery(`
+    SELECT
+      CUS.CODPROD,
+      NVL(CUS.CUSREP, 0) AS VLRUNIT
+    FROM TGFCUS CUS
+    WHERE CUS.CODEMP = ${Number(empresa)}
+      AND CUS.CODPROD IN (${produtos.join(', ')})
+      AND CUS.DTATUAL = (
+        SELECT MAX(C2.DTATUAL)
+        FROM TGFCUS C2
+        WHERE C2.CODEMP = CUS.CODEMP
+          AND C2.CODPROD = CUS.CODPROD
+      )
+  `);
+
+  return new Map(linhas.map((item) => [Number(item.CODPROD), Number(item.VLRUNIT)]));
+}
+
+async function localizarNotaAjustePorObservacao(empresa, codTipOper, observacao) {
+  const linhas = await executeQuery(`
+    SELECT NUNOTA, STATUSNOTA
+    FROM TGFCAB
+    WHERE CODEMP = ${Number(empresa)}
+      AND CODTIPOPER = ${Number(codTipOper)}
+      AND OBSERVACAO = '${textoSql(observacao)}'
+    ORDER BY NUNOTA DESC
+  `);
+  return linhas[0] || null;
+}
+
+async function gerarNotaPendenteAjuste({
+  sessao,
+  tipo,
+  itens,
+  template,
+  custos,
+  indice,
+  total
+}) {
+  const observacao = `Contagem app ${sessao.id} - ${tipo} ${indice}/${total}`;
+  const existente = await localizarNotaAjustePorObservacao(
+    sessao.empresa,
+    template.CODTIPOPER,
+    observacao
+  );
+  if (existente) {
+    return {
+      nunota: Number(existente.NUNOTA),
+      tipo,
+      codTipOper: Number(template.CODTIPOPER),
+      quantidadeItens: itens.length,
+      observacao,
+      status: String(existente.STATUSNOTA || '').toUpperCase() === 'L'
+        ? 'CONFIRMADA_NO_SANKHYA'
+        : 'PENDENTE_CONFIRMACAO',
+      reutilizada: true
+    };
+  }
+
+  const payload = montarPayloadNotaAjuste({
+    sessao,
+    itens,
+    template,
+    custos,
+    dataNegociacao: dataNegociacaoAjusteEstoque(),
+    observacao
+  });
+  const resposta = await executeService(
+    'CACSP.incluirNota',
+    payload,
+    { modulePath: 'mgecom', forceAccessSession: true }
+  );
+
+  return {
+    nunota: extrairNunotaAjuste(resposta),
+    tipo,
+    codTipOper: Number(template.CODTIPOPER),
+    quantidadeItens: itens.length,
+    observacao,
+    status: 'PENDENTE_CONFIRMACAO',
+    reutilizada: false
+  };
+}
+
+router.get('/estoque-contagem/config', exigirAmbienteContagemTeste, async (req, res) => {
+  try {
+    const empresas = await executeQuery(`
+      SELECT
+        EST.CODEMP,
+        NVL(EMP.NOMEFANTASIA, EMP.RAZAOSOCIAL) AS EMPRESA,
+        COUNT(DISTINCT EST.CODPROD) AS PRODUTOS
+      FROM TGFEST EST
+      LEFT JOIN TSIEMP EMP ON EMP.CODEMP = EST.CODEMP
+      WHERE NVL(EST.ATIVO, 'S') = 'S'
+        AND NVL(EST.TIPO, 'P') = 'P'
+        AND NVL(EST.CODPARC, 0) = 0
+        AND ABS(NVL(EST.ESTOQUE, 0)) > 0.000001
+      GROUP BY EST.CODEMP, NVL(EMP.NOMEFANTASIA, EMP.RAZAOSOCIAL)
+      ORDER BY EST.CODEMP
+    `);
+
+    res.json({
+      ambienteTeste: true,
+      ambiente: 'Sankhya Sandbox',
+      empresas: empresas.map((item) => ({
+        codEmp: Number(item.CODEMP),
+        empresa: item.EMPRESA || `Empresa ${item.CODEMP}`,
+        produtos: Number(item.PRODUTOS || 0)
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Nao foi possivel preparar a contagem de estoque.' });
+  }
+});
+
+router.get('/estoque-contagem/locais', exigirAmbienteContagemTeste, async (req, res) => {
+  try {
+    const empresa = obterNumeroInteiro(req.query.empresa);
+    if (!empresa) {
+      res.status(400).json({ erro: 'Informe a empresa.' });
+      return;
+    }
+
+    const locais = await executeQuery(`
+      SELECT
+        EST.CODLOCAL,
+        NVL(LOC.DESCRLOCAL, 'Local ' || EST.CODLOCAL) AS DESCRLOCAL,
+        COUNT(DISTINCT EST.CODPROD) AS PRODUTOS
+      FROM TGFEST EST
+      LEFT JOIN TGFLOC LOC ON LOC.CODLOCAL = EST.CODLOCAL
+      WHERE EST.CODEMP = ${empresa}
+        AND NVL(EST.ATIVO, 'S') = 'S'
+        AND NVL(EST.TIPO, 'P') = 'P'
+        AND NVL(EST.CODPARC, 0) = 0
+        AND ABS(NVL(EST.ESTOQUE, 0)) > 0.000001
+      GROUP BY EST.CODLOCAL, NVL(LOC.DESCRLOCAL, 'Local ' || EST.CODLOCAL)
+      ORDER BY EST.CODLOCAL
+    `);
+
+    res.json({
+      itens: locais.map((item) => ({
+        codLocal: Number(item.CODLOCAL),
+        descrLocal: item.DESCRLOCAL,
+        produtos: Number(item.PRODUTOS || 0)
+      }))
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Nao foi possivel consultar os locais de estoque.' });
+  }
+});
+
+router.get('/estoque-contagem/filtros', exigirAmbienteContagemTeste, async (req, res) => {
+  try {
+    const empresa = obterNumeroInteiro(req.query.empresa);
+    const localTexto = String(req.query.local ?? '').trim();
+    const local = localTexto === '' ? null : Number(localTexto);
+    if (!empresa || (local !== null && (!Number.isInteger(local) || local < 0))) {
+      res.status(400).json({ erro: 'Informe empresa e local validos.' });
+      return;
+    }
+
+    const filtroLocal = local === null ? '' : `AND EST.CODLOCAL = ${local}`;
+    const baseEstoque = `
+      EST.CODEMP = ${empresa}
+      ${filtroLocal}
+      AND NVL(EST.ATIVO, 'S') = 'S'
+      AND NVL(EST.TIPO, 'P') = 'P'
+      AND NVL(EST.CODPARC, 0) = 0
+      AND ABS(NVL(EST.ESTOQUE, 0)) > 0.000001
+    `;
+    const [grupos, marcas] = await Promise.all([
+      executeQuery(`
+        SELECT DISTINCT
+          PRO.CODGRUPOPROD,
+          NVL(GRU.DESCRGRUPOPROD, 'Grupo ' || PRO.CODGRUPOPROD) AS DESCRGRUPOPROD,
+          GRU.CODGRUPAI
+        FROM TGFEST EST
+        INNER JOIN TGFPRO PRO ON PRO.CODPROD = EST.CODPROD
+        LEFT JOIN TGFGRU GRU ON GRU.CODGRUPOPROD = PRO.CODGRUPOPROD
+        WHERE ${baseEstoque}
+        ORDER BY PRO.CODGRUPOPROD
+      `),
+      executeQuery(`
+        SELECT DISTINCT TRIM(PRO.MARCA) AS MARCA
+        FROM TGFEST EST
+        INNER JOIN TGFPRO PRO ON PRO.CODPROD = EST.CODPROD
+        WHERE ${baseEstoque}
+          AND TRIM(PRO.MARCA) IS NOT NULL
+        ORDER BY TRIM(PRO.MARCA)
+      `)
+    ]);
+
+    res.json({
+      grupos: grupos.map((item) => ({
+        codigo: Number(item.CODGRUPOPROD),
+        descricao: item.DESCRGRUPOPROD,
+        grupoPai: item.CODGRUPAI === null ? null : Number(item.CODGRUPAI)
+      })),
+      marcas: marcas.map((item) => item.MARCA).filter(Boolean)
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Nao foi possivel carregar os filtros da copia.' });
+  }
+});
+
+router.post('/estoque-contagem/previa', exigirAmbienteContagemTeste, async (req, res) => {
+  try {
+    const filtros = normalizarFiltrosCopiaEstoque(req.body);
+    if (!filtros.empresa) {
+      res.status(400).json({ erro: 'Informe a empresa.' });
+      return;
+    }
+
+    const [previa] = await executeQuery(`
+      SELECT
+        COUNT(*) AS LINHAS,
+        COUNT(DISTINCT EST.CODPROD) AS PRODUTOS,
+        COUNT(DISTINCT EST.CODLOCAL) AS LOCAIS,
+        SUM(NVL(EST.ESTOQUE, 0)) AS UNIDADES
+      FROM TGFEST EST
+      INNER JOIN TGFPRO PRO ON PRO.CODPROD = EST.CODPROD
+      WHERE ${montarSqlFiltrosCopiaEstoque(filtros)}
+    `);
+
+    res.json({
+      filtros,
+      previa: {
+        linhas: Number(previa?.LINHAS || 0),
+        produtos: Number(previa?.PRODUTOS || 0),
+        locais: Number(previa?.LOCAIS || 0),
+        unidades: Number(previa?.UNIDADES || 0)
+      }
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Nao foi possivel calcular a previa da copia.' });
+  }
+});
+
+router.get('/estoque-contagem/sessoes', exigirAmbienteContagemTeste, (req, res) => {
+  res.json({ itens: estoqueContagemStore.listar() });
+});
+
+router.delete('/estoque-contagem/sessoes/:id', exigirAmbienteContagemTeste, (req, res) => {
+  try {
+    const sessao = estoqueContagemStore.excluir({ id: req.params.id });
+    res.json({
+      removida: {
+        id: sessao.id,
+        status: sessao.status,
+        notasAjuste: sessao.ajuste?.notas || []
+      }
+    });
+  } catch (err) {
+    res.status(404).json({ erro: err.message });
+  }
+});
+
+router.post('/estoque-contagem/sessoes', exigirAmbienteContagemTeste, async (req, res) => {
+  try {
+    const filtros = normalizarFiltrosCopiaEstoque(req.body);
+    const { empresa, local } = filtros;
+    if (!empresa) {
+      res.status(400).json({ erro: 'Informe uma empresa valida.' });
+      return;
+    }
+
+    const itens = await executeQuery(`
+      SELECT
+        EST.CODEMP,
+        EST.CODLOCAL,
+        NVL(LOC.DESCRLOCAL, 'Local ' || EST.CODLOCAL) AS DESCRLOCAL,
+        EST.CODPROD,
+        PRO.DESCRPROD,
+        PRO.REFERENCIA,
+        PRO.CODVOL,
+        PRO.CODGRUPOPROD,
+        NVL(GRU.DESCRGRUPOPROD, 'Sem grupo') AS DESCRGRUPOPROD,
+        NVL(TRIM(EST.CONTROLE), '') AS CONTROLE,
+        EST.DTVAL,
+        NVL(EST.ESTOQUE, 0) AS ESTOQUE
+      FROM TGFEST EST
+      INNER JOIN TGFPRO PRO ON PRO.CODPROD = EST.CODPROD
+      LEFT JOIN TGFGRU GRU ON GRU.CODGRUPOPROD = PRO.CODGRUPOPROD
+      LEFT JOIN TGFLOC LOC ON LOC.CODLOCAL = EST.CODLOCAL
+      WHERE ${montarSqlFiltrosCopiaEstoque(filtros)}
+      ORDER BY NVL(GRU.DESCRGRUPOPROD, 'Sem grupo'), PRO.DESCRPROD, EST.CODLOCAL, EST.CONTROLE
+    `);
+
+    if (!itens.length) {
+      res.status(422).json({ erro: 'Nenhum saldo de estoque foi encontrado para gerar a copia.' });
+      return;
+    }
+
+    const [empresaRegistro] = await executeQuery(`
+      SELECT NVL(NOMEFANTASIA, RAZAOSOCIAL) AS EMPRESA
+      FROM TSIEMP
+      WHERE CODEMP = ${empresa}
+    `);
+    const nomeLocal = local === null
+      ? 'Todos os locais'
+      : (itens.find((item) => Number(item.CODLOCAL) === local)?.DESCRLOCAL || `Local ${local}`);
+    const sessao = estoqueContagemStore.criar({
+      empresa,
+      nomeEmpresa: empresaRegistro?.EMPRESA,
+      local,
+      nomeLocal,
+      filtros,
+      usuario: req.usuario,
+      itens
+    });
+
+    res.status(201).json({ sessao: serializarSessaoContagemEstoque(sessao) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: err.message || 'Nao foi possivel criar a copia de estoque.' });
+  }
+});
+
+router.get('/estoque-contagem/sessoes/:id', exigirAmbienteContagemTeste, (req, res) => {
+  const sessao = estoqueContagemStore.obter(req.params.id);
+  if (!sessao) {
+    res.status(404).json({ erro: 'Contagem de estoque nao encontrada.' });
+    return;
+  }
+  res.json({ sessao: serializarSessaoContagemEstoque(sessao) });
+});
+
+router.get('/estoque-contagem/sessoes/:id/localizar', exigirAmbienteContagemTeste, async (req, res) => {
+  try {
+    const sessao = estoqueContagemStore.obter(req.params.id);
+    const codigo = String(req.query.codigo || '').trim();
+    if (!sessao || !codigo) {
+      res.status(400).json({ erro: 'Informe uma contagem e um codigo validos.' });
+      return;
+    }
+
+    const codigoSql = textoSql(codigo);
+    const codigoNumero = obterNumeroInteiro(codigo);
+    const filtroNumero = codigoNumero ? `OR PRO.CODPROD = ${codigoNumero}` : '';
+    const produtos = await executeQuery(`
+      SELECT DISTINCT PRO.CODPROD
+      FROM TGFPRO PRO
+      WHERE (
+        PRO.REFERENCIA = '${codigoSql}'
+        OR PRO.AD_CODBAR = '${codigoSql}'
+        OR PRO.AD_CBARANT = '${codigoSql}'
+        ${filtroNumero}
+        OR EXISTS (
+          SELECT 1 FROM TGFVOA VOA
+          WHERE VOA.CODPROD = PRO.CODPROD
+            AND VOA.CODBARRA = '${codigoSql}'
+            AND NVL(VOA.ATIVO, 'S') = 'S'
+        )
+        OR EXISTS (
+          SELECT 1 FROM TGFEST EST
+          WHERE EST.CODPROD = PRO.CODPROD
+            AND EST.CODBARRA = '${codigoSql}'
+        )
+      )
+    `);
+    const codigos = new Set(produtos.map((item) => Number(item.CODPROD)));
+    const serializada = serializarSessaoContagemEstoque(sessao);
+    const itens = serializada.itens.filter((item) => codigos.has(Number(item.codProd)) && item.podeContar);
+
+    if (!itens.length) {
+      res.status(404).json({ erro: 'Produto nao encontrado ou fora do escopo desta contagem.' });
+      return;
+    }
+    res.json({ itens });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Nao foi possivel localizar o produto.' });
+  }
+});
+
+router.put('/estoque-contagem/sessoes/:id/itens/:chave', exigirAmbienteContagemTeste, (req, res) => {
+  try {
+    const sessao = estoqueContagemStore.registrar({
+      id: req.params.id,
+      chave: decodeURIComponent(req.params.chave),
+      quantidade: req.body?.quantidade,
+      usuario: req.usuario
+    });
+    res.json({ sessao: serializarSessaoContagemEstoque(sessao) });
+  } catch (err) {
+    res.status(422).json({ erro: err.message });
+  }
+});
+
+router.post('/estoque-contagem/sessoes/:id/finalizar', exigirAmbienteContagemTeste, (req, res) => {
+  try {
+    const sessao = estoqueContagemStore.finalizarRodada({ id: req.params.id, usuario: req.usuario });
+    res.json({ sessao: serializarSessaoContagemEstoque(sessao) });
+  } catch (err) {
+    res.status(422).json({ erro: err.message });
+  }
+});
+
+router.post('/estoque-contagem/sessoes/:id/recontar', exigirAmbienteContagemTeste, (req, res) => {
+  try {
+    const sessao = estoqueContagemStore.iniciarRecontagem({ id: req.params.id, usuario: req.usuario });
+    res.json({ sessao: serializarSessaoContagemEstoque(sessao) });
+  } catch (err) {
+    res.status(422).json({ erro: err.message });
+  }
+});
+
+router.post('/estoque-contagem/sessoes/:id/concluir-analise', exigirAmbienteContagemTeste, (req, res) => {
+  try {
+    const sessao = estoqueContagemStore.concluirAnalise({ id: req.params.id, usuario: req.usuario });
+    res.json({ sessao: serializarSessaoContagemEstoque(sessao) });
+  } catch (err) {
+    res.status(422).json({ erro: err.message });
+  }
+});
+
+router.post('/estoque-contagem/sessoes/:id/aplicar-ajuste', exigirAmbienteContagemTeste, async (req, res) => {
+  const id = String(req.params.id);
+  if (ajustesEstoqueEmAndamento.has(id)) {
+    res.status(409).json({ erro: 'A geracao das notas de ajuste ja esta em andamento.' });
+    return;
+  }
+
+  ajustesEstoqueEmAndamento.add(id);
+  try {
+    const sessao = estoqueContagemStore.obter(id);
+    if (!sessao) {
+      res.status(404).json({ erro: 'Contagem de estoque nao encontrada.' });
+      return;
+    }
+    if (sessao.status === 'AJUSTE_GERADO' && sessao.ajuste?.notas?.length) {
+      res.json({
+        sessao: serializarSessaoContagemEstoque(sessao),
+        notas: sessao.ajuste.notas,
+        reutilizada: true
+      });
+      return;
+    }
+    if (sessao.status !== 'PRONTA_PARA_AJUSTE') {
+      res.status(422).json({ erro: 'A contagem precisa estar pronta para ajuste.' });
+      return;
+    }
+
+    const plano = planejarAjustesEstoque(sessao);
+    if (!plano.itens.length) {
+      res.status(422).json({ erro: 'Nao existem divergencias contadas para gerar ajuste.' });
+      return;
+    }
+
+    const custos = await obterCustosReposicaoAjuste(sessao.empresa, plano.itens);
+    const notas = [];
+    for (const tipo of ['ENTRADA', 'SAIDA']) {
+      const itensTipo = tipo === 'ENTRADA' ? plano.entrada : plano.saida;
+      if (!itensTipo.length) continue;
+
+      const template = await obterTemplateNotaAjusteEstoque(sessao.empresa, tipo);
+      const lotes = dividirEmLotes(itensTipo);
+      for (let indice = 0; indice < lotes.length; indice += 1) {
+        notas.push(await gerarNotaPendenteAjuste({
+          sessao,
+          tipo,
+          itens: lotes[indice],
+          template,
+          custos,
+          indice: indice + 1,
+          total: lotes.length
+        }));
+      }
+    }
+
+    const atualizada = estoqueContagemStore.registrarAjustes({
+      id,
+      notas,
+      usuario: req.usuario
+    });
+    res.json({
+      sessao: serializarSessaoContagemEstoque(atualizada),
+      notas: atualizada.ajuste.notas,
+      reutilizada: false
+    });
+  } catch (err) {
+    console.error('Erro ao gerar notas de ajuste da contagem:', err);
+    const mensagem = String(err.message || 'Nao foi possivel gerar as notas de ajuste no Sankhya.')
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    res.status(422).json({
+      erro: mensagem
+    });
+  } finally {
+    ajustesEstoqueEmAndamento.delete(id);
   }
 });
 

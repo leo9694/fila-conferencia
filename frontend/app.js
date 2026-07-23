@@ -2,6 +2,18 @@ let periodoSelecionado = null;
 let refreshLoop = null;
 let relogioInterval = null;
 let usuarioLogado = null;
+let estoqueContagemAtual = null;
+let estoqueContagemLista = [];
+let estoqueContagemItemSelecionado = null;
+let estoqueContagemChavesLocalizadas = null;
+let estoqueContagemFiltroAuditoria = 'TODOS';
+let estoqueContagemFiltroStatus = 'TODOS';
+let estoqueContagemQuantidadeProposta = 0;
+let leituraContagemEstoqueMobile = '';
+let estoqueContagemPreviaTimer = null;
+let estoqueContagemPreviaVersao = 0;
+let confirmacaoAppResolver = null;
+let confirmacaoAppFocoAnterior = null;
 
 const loginScreen = document.getElementById('login-screen');
 const loginForm = document.getElementById('login-form');
@@ -17,6 +29,7 @@ const acompanhamentoScreen = document.getElementById('acompanhamento-screen');
 const filaScreen = document.getElementById('fila-screen');
 const consultaProdutosScreen = document.getElementById('consulta-produtos-screen');
 const atualizacaoContatoScreen = document.getElementById('atualizacao-contato-screen');
+const estoqueContagemScreen = document.getElementById('estoque-contagem-screen');
 const filaContexto = document.getElementById('fila-contexto');
 const inputDataInicial = document.getElementById('data-inicial');
 const inputDataFinal = document.getElementById('data-final');
@@ -25,10 +38,66 @@ const botaoAbrirConferencia = document.getElementById('abrir-conferencia');
 const botaoAbrirAcompanhamento = document.getElementById('abrir-acompanhamento');
 const botaoAbrirConsultaHome = document.getElementById('abrir-consulta-home');
 const botaoAbrirAtualizacaoContato = document.getElementById('abrir-atualizacao-contato');
+const botaoAbrirContagemEstoque = document.getElementById('abrir-contagem-estoque');
 const botaoExibirAcompanhamento = document.getElementById('exibir-acompanhamento');
 const botaoVoltarHomeAcompanhamento = document.getElementById('voltar-home-acompanhamento');
 const botaoVoltarHomeFila = document.getElementById('voltar-home-fila');
 const botaoVoltarHomeContato = document.getElementById('voltar-home-contato');
+const botaoVoltarHomeContagemEstoque = document.getElementById('voltar-home-contagem-estoque');
+const estoqueContagemEmpresa = document.getElementById('estoque-contagem-empresa');
+const estoqueContagemLocal = document.getElementById('estoque-contagem-local');
+const estoqueContagemGrupo = document.getElementById('estoque-contagem-grupo');
+const estoqueContagemSubgrupos = document.getElementById('estoque-contagem-subgrupos');
+const estoqueContagemMarca = document.getElementById('estoque-contagem-marca');
+const estoqueContagemSituacao = document.getElementById('estoque-contagem-situacao');
+const estoqueContagemControle = document.getElementById('estoque-contagem-controle');
+const estoqueContagemSaldo = document.getElementById('estoque-contagem-saldo');
+const estoquePreviaProdutos = document.getElementById('estoque-previa-produtos');
+const estoquePreviaLinhas = document.getElementById('estoque-previa-linhas');
+const estoquePreviaLocais = document.getElementById('estoque-previa-locais');
+const estoquePreviaUnidades = document.getElementById('estoque-previa-unidades');
+const botaoCriarContagemEstoque = document.getElementById('estoque-contagem-criar');
+const botaoAtualizarContagensEstoque = document.getElementById('estoque-contagem-atualizar');
+const estoqueContagemSessoes = document.getElementById('estoque-contagem-sessoes');
+const estoqueContagemSelecao = document.getElementById('estoque-contagem-selecao');
+const estoqueContagemItensView = document.getElementById('estoque-contagem-itens-view');
+const botaoVoltarCopiasEstoque = document.getElementById('voltar-copias-estoque');
+const estoqueContagemActive = document.getElementById('estoque-contagem-active');
+const estoqueContagemTitulo = document.getElementById('estoque-contagem-titulo');
+const estoqueContagemMeta = document.getElementById('estoque-contagem-meta');
+const estoqueContagemScan = document.getElementById('estoque-contagem-scan');
+const estoqueContagemCodigo = document.getElementById('estoque-contagem-codigo');
+const botaoLimparCodigoContagemEstoque = document.getElementById('estoque-contagem-limpar-codigo');
+const estoqueContagemQuantidade = document.getElementById('estoque-contagem-quantidade');
+const estoqueContagemProgresso = document.getElementById('estoque-contagem-progresso');
+const estoqueContagemMensagem = document.getElementById('estoque-contagem-mensagem');
+const estoqueContagemAuditoria = document.getElementById('estoque-contagem-auditoria');
+const estoqueContagemAuditoriaResumo = document.getElementById('estoque-contagem-auditoria-resumo');
+const estoqueContagemAuditoriaNotas = document.getElementById('estoque-contagem-auditoria-notas');
+const botaoAplicarAjusteEstoque = document.getElementById('estoque-contagem-aplicar-ajuste');
+const estoqueContagemStatusFiltro = document.getElementById('estoque-contagem-status-filtro');
+const estoqueContagemFiltroResumo = document.getElementById('estoque-contagem-filtro-resumo');
+const estoqueContagemItens = document.getElementById('estoque-contagem-itens');
+const estoqueColunaSistema = document.getElementById('estoque-coluna-sistema');
+const estoqueContagemConfirmModal = document.getElementById('estoque-contagem-confirm-modal');
+const estoqueContagemConfirmTitulo = document.getElementById('estoque-contagem-confirm-titulo');
+const estoqueContagemConfirmProduto = document.getElementById('estoque-contagem-confirm-produto');
+const estoqueContagemConfirmMensagem = document.getElementById('estoque-contagem-confirm-mensagem');
+const estoqueContagemConfirmQtd = document.getElementById('estoque-contagem-confirm-qtd');
+const botaoAjustarQuantidadeEstoque = document.getElementById('estoque-contagem-ajustar-qtd');
+const estoqueContagemAjustePainel = document.getElementById('estoque-contagem-ajuste-painel');
+const botaoCancelarAjusteEstoque = document.getElementById('estoque-contagem-ajuste-cancelar');
+const botaoCancelarConfirmacaoEstoque = document.getElementById('estoque-contagem-confirm-cancelar');
+const botaoConfirmarItemEstoque = document.getElementById('estoque-contagem-confirmar');
+const botaoRecontarEstoque = document.getElementById('estoque-contagem-recontar');
+const botaoConcluirAnaliseEstoque = document.getElementById('estoque-contagem-concluir-analise');
+const botaoFinalizarContagemEstoque = document.getElementById('estoque-contagem-finalizar');
+const confirmacaoAppModal = document.getElementById('app-confirm-modal');
+const confirmacaoAppDialog = document.querySelector('.app-confirm-dialog');
+const confirmacaoAppTitulo = document.getElementById('app-confirm-title');
+const confirmacaoAppMensagem = document.getElementById('app-confirm-message');
+const confirmacaoAppCancelar = document.getElementById('app-confirm-cancel');
+const confirmacaoAppConfirmar = document.getElementById('app-confirm-submit');
 const filaDataInicial = document.getElementById('fila-data-inicial');
 const filaDataFinal = document.getElementById('fila-data-final');
 const filaEmpresa = document.getElementById('fila-empresa');
@@ -365,6 +434,29 @@ function limparCodigoSeparacao({ focar = false } = {}) {
   if (focar) setTimeout(() => separacaoCodigo.focus({ preventScroll: true }), 0);
 }
 
+function configurarLeitorContagemEstoque() {
+  if (!estoqueContagemCodigo) return;
+  const mobile = separacaoEmMobile();
+  // Mantém o campo gravável para o leitor físico, mas bloqueia o teclado virtual.
+  estoqueContagemCodigo.readOnly = false;
+  estoqueContagemCodigo.inputMode = mobile ? 'none' : 'numeric';
+  estoqueContagemCodigo.setAttribute('virtualkeyboardpolicy', mobile ? 'manual' : 'auto');
+  estoqueContagemCodigo.setAttribute(
+    'aria-label',
+    mobile ? 'Leitor de código de barras. Use o bipador para informar o produto.' : 'Código de barras ou produto'
+  );
+}
+
+function limparCodigoContagemEstoque({ focar = false } = {}) {
+  estoqueContagemCodigo.value = '';
+  leituraContagemEstoqueMobile = '';
+  if (estoqueContagemChavesLocalizadas) {
+    estoqueContagemChavesLocalizadas = null;
+    renderizarItensContagemEstoque();
+  }
+  if (focar) setTimeout(() => estoqueContagemCodigo.focus({ preventScroll: true }), 0);
+}
+
 function aplicarLargurasGridItens() {
   document.documentElement.style.setProperty(
     '--itens-grid-columns',
@@ -528,6 +620,7 @@ function mostrarLogin(mensagem = '') {
   filaScreen.classList.remove('active');
   consultaProdutosScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.remove('active');
+  estoqueContagemScreen.classList.remove('active');
   loginStatus.textContent = mensagem;
   atualizarUsuarioLogadoNaTela();
 
@@ -1053,6 +1146,7 @@ function mostrarHome() {
   filaScreen.classList.remove('active');
   consultaProdutosScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.remove('active');
+  estoqueContagemScreen.classList.remove('active');
   homeScreen.classList.add('active');
 }
 
@@ -1068,6 +1162,7 @@ function mostrarConferencia() {
   filaScreen.classList.remove('active');
   consultaProdutosScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.remove('active');
+  estoqueContagemScreen.classList.remove('active');
   conferenciaScreen.classList.add('active');
 }
 
@@ -1083,6 +1178,7 @@ function mostrarAcompanhamento() {
   filaScreen.classList.remove('active');
   consultaProdutosScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.remove('active');
+  estoqueContagemScreen.classList.remove('active');
   acompanhamentoScreen.classList.add('active');
 }
 
@@ -1098,6 +1194,7 @@ function mostrarFila() {
   acompanhamentoScreen.classList.remove('active');
   consultaProdutosScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.remove('active');
+  estoqueContagemScreen.classList.remove('active');
   filaScreen.classList.add('active');
 }
 
@@ -1113,6 +1210,7 @@ function mostrarConsultaProdutos() {
   acompanhamentoScreen.classList.remove('active');
   filaScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.remove('active');
+  estoqueContagemScreen.classList.remove('active');
   consultaProdutosScreen.classList.add('active');
   consultaProdutoCodigo.focus();
 }
@@ -1129,8 +1227,815 @@ function mostrarAtualizacaoContato() {
   acompanhamentoScreen.classList.remove('active');
   filaScreen.classList.remove('active');
   consultaProdutosScreen.classList.remove('active');
+  estoqueContagemScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.add('active');
   contatoPerfil.focus();
+}
+
+function mostrarContagemEstoque() {
+  if (!usuarioLogado) {
+    mostrarLogin('Entre para acessar a contagem de estoque.');
+    return;
+  }
+
+  loginScreen.classList.remove('active');
+  homeScreen.classList.remove('active');
+  conferenciaScreen.classList.remove('active');
+  acompanhamentoScreen.classList.remove('active');
+  filaScreen.classList.remove('active');
+  consultaProdutosScreen.classList.remove('active');
+  atualizacaoContatoScreen.classList.remove('active');
+  estoqueContagemScreen.classList.add('active');
+}
+
+function mostrarSelecaoContagemEstoque() {
+  if (estoqueContagemConfirmModal) fecharConfirmacaoContagemEstoque();
+  estoqueContagemAtual = null;
+  estoqueContagemChavesLocalizadas = null;
+  estoqueContagemScreen.classList.remove('contagem-itens-ativa');
+  estoqueContagemSelecao.hidden = false;
+  estoqueContagemItensView.hidden = true;
+  estoqueContagemActive.hidden = true;
+  renderizarListaContagensEstoque();
+  atualizarIcones();
+}
+
+function mostrarItensContagemEstoque() {
+  if (!estoqueContagemAtual) {
+    mostrarSelecaoContagemEstoque();
+    return;
+  }
+
+  estoqueContagemSelecao.hidden = true;
+  estoqueContagemItensView.hidden = false;
+  estoqueContagemActive.hidden = false;
+  estoqueContagemScreen.classList.add('contagem-itens-ativa');
+  configurarLeitorContagemEstoque();
+  atualizarIcones();
+}
+
+function rotuloStatusContagemEstoque(status) {
+  return {
+    EM_CONTAGEM: '1ª contagem',
+    EM_RECONTAGEM: '2ª contagem',
+    EM_ANALISE: 'Em análise',
+    CONCLUIDA: 'Concluída',
+    PRONTA_PARA_AJUSTE: 'Pronta para ajuste',
+    AJUSTE_GERADO: 'Ajuste gerado'
+  }[status] || status;
+}
+
+function classeStatusContagemEstoque(status) {
+  if (status === 'EM_ANALISE') return 'analise';
+  if (['PRONTA_PARA_AJUSTE', 'AJUSTE_GERADO'].includes(status)) return 'ajuste';
+  return '';
+}
+
+function atualizarMensagemContagemEstoque(mensagem, erro = false) {
+  estoqueContagemMensagem.textContent = mensagem;
+  estoqueContagemMensagem.className = `separacao-status${erro ? ' is-warning' : ''}`;
+}
+
+async function carregarConfigContagemEstoque() {
+  estoqueContagemEmpresa.innerHTML = '<option value="">Carregando empresas...</option>';
+  estoqueContagemEmpresa.disabled = true;
+  botaoCriarContagemEstoque.disabled = true;
+
+  try {
+    const resposta = await fetch('/api/estoque-contagem/config');
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível carregar a configuração.');
+
+    estoqueContagemEmpresa.innerHTML = [
+      '<option value="">Selecione a empresa</option>',
+      ...payload.empresas.map((empresa) => (
+        `<option value="${empresa.codEmp}">${escaparHtml(empresa.codEmp)} - ${escaparHtml(empresa.empresa)} (${empresa.produtos} produtos)</option>`
+      ))
+    ].join('');
+    estoqueContagemEmpresa.disabled = false;
+    estoqueContagemGrupo.innerHTML = '<option value="">Todos os grupos</option>';
+    estoqueContagemMarca.innerHTML = '<option value="">Todas as marcas</option>';
+    estoqueContagemGrupo.disabled = true;
+    estoqueContagemMarca.disabled = true;
+    estoqueContagemSubgrupos.disabled = true;
+  } catch (error) {
+    estoqueContagemEmpresa.innerHTML = '<option value="">Base de teste indisponível</option>';
+    atualizarMensagemContagemEstoque(error.message, true);
+  }
+}
+
+async function carregarLocaisContagemEstoque() {
+  const empresa = estoqueContagemEmpresa.value;
+  estoqueContagemLocal.innerHTML = '<option value="">Todos os locais</option>';
+  estoqueContagemLocal.disabled = !empresa;
+  botaoCriarContagemEstoque.disabled = !empresa;
+  estoqueContagemGrupo.innerHTML = '<option value="">Todos os grupos</option>';
+  estoqueContagemMarca.innerHTML = '<option value="">Todas as marcas</option>';
+  estoqueContagemGrupo.disabled = true;
+  estoqueContagemMarca.disabled = true;
+  if (!empresa) {
+    limparPreviaContagemEstoque();
+    return;
+  }
+
+  estoqueContagemLocal.disabled = true;
+  try {
+    const resposta = await fetch(`/api/estoque-contagem/locais?empresa=${encodeURIComponent(empresa)}`);
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível carregar os locais.');
+
+    estoqueContagemLocal.innerHTML = [
+      '<option value="">Todos os locais</option>',
+      ...payload.itens.map((local) => (
+        `<option value="${local.codLocal}">${escaparHtml(local.codLocal)} - ${escaparHtml(local.descrLocal)} (${local.produtos} produtos)</option>`
+      ))
+    ].join('');
+  } catch (error) {
+    atualizarMensagemContagemEstoque(error.message, true);
+  } finally {
+    estoqueContagemLocal.disabled = false;
+  }
+
+  await carregarOpcoesFiltrosContagemEstoque();
+}
+
+function obterFiltrosCopiaEstoqueTela() {
+  return {
+    empresa: estoqueContagemEmpresa.value,
+    local: estoqueContagemLocal.value,
+    grupo: estoqueContagemGrupo.value,
+    incluirSubgrupos: estoqueContagemSubgrupos.checked,
+    marca: estoqueContagemMarca.value,
+    situacao: estoqueContagemSituacao.value,
+    controle: estoqueContagemControle.value,
+    saldo: estoqueContagemSaldo.value
+  };
+}
+
+function limparPreviaContagemEstoque() {
+  estoquePreviaProdutos.textContent = '—';
+  estoquePreviaLinhas.textContent = '—';
+  estoquePreviaLocais.textContent = '—';
+  estoquePreviaUnidades.textContent = '—';
+  botaoCriarContagemEstoque.disabled = true;
+}
+
+async function carregarOpcoesFiltrosContagemEstoque() {
+  const empresa = estoqueContagemEmpresa.value;
+  if (!empresa) return;
+  const grupoAnterior = estoqueContagemGrupo.value;
+  const marcaAnterior = estoqueContagemMarca.value;
+  estoqueContagemGrupo.disabled = true;
+  estoqueContagemMarca.disabled = true;
+
+  try {
+    const parametros = new URLSearchParams({
+      empresa,
+      local: estoqueContagemLocal.value
+    });
+    const resposta = await fetch(`/api/estoque-contagem/filtros?${parametros}`);
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível carregar grupos e marcas.');
+
+    estoqueContagemGrupo.innerHTML = [
+      '<option value="">Todos os grupos</option>',
+      ...payload.grupos.map((grupo) => (
+        `<option value="${grupo.codigo}">${escaparHtml(grupo.codigo)} - ${escaparHtml(grupo.descricao)}</option>`
+      ))
+    ].join('');
+    estoqueContagemMarca.innerHTML = [
+      '<option value="">Todas as marcas</option>',
+      ...payload.marcas.map((marca) => (
+        `<option value="${escaparAtributo(marca)}">${escaparHtml(marca)}</option>`
+      ))
+    ].join('');
+    if ([...estoqueContagemGrupo.options].some((item) => item.value === grupoAnterior)) {
+      estoqueContagemGrupo.value = grupoAnterior;
+    }
+    if ([...estoqueContagemMarca.options].some((item) => item.value === marcaAnterior)) {
+      estoqueContagemMarca.value = marcaAnterior;
+    }
+    estoqueContagemGrupo.disabled = false;
+    estoqueContagemMarca.disabled = false;
+    estoqueContagemSubgrupos.disabled = !estoqueContagemGrupo.value;
+    agendarPreviaContagemEstoque(0);
+  } catch (error) {
+    atualizarMensagemContagemEstoque(error.message, true);
+    limparPreviaContagemEstoque();
+  }
+}
+
+function resumirFiltrosCopiaEstoque(filtros = {}) {
+  const partes = [];
+  if (filtros.grupo) partes.push(`grupo ${filtros.grupo}${filtros.incluirSubgrupos ? ' + subgrupos' : ''}`);
+  if (filtros.marca) partes.push(`marca ${filtros.marca}`);
+  if (filtros.produtoInicial || filtros.produtoFinal) {
+    partes.push(`produtos ${filtros.produtoInicial || 'início'}–${filtros.produtoFinal || 'fim'}`);
+  }
+  if (filtros.situacao === 'INATIVOS') partes.push('inativos');
+  if (filtros.situacao === 'TODOS') partes.push('ativos e inativos');
+  if (filtros.controle === 'COM_CONTROLE') partes.push('com controle');
+  if (filtros.controle === 'SEM_CONTROLE') partes.push('sem controle');
+  if (filtros.saldo === 'NEGATIVO') partes.push('saldo negativo');
+  if (filtros.saldo === 'NAO_ZERO') partes.push('saldo diferente de zero');
+  return partes.length ? partes.join(' · ') : 'ativos com saldo positivo';
+}
+
+function agendarPreviaContagemEstoque(atraso = 280) {
+  clearTimeout(estoqueContagemPreviaTimer);
+  estoqueContagemPreviaTimer = setTimeout(atualizarPreviaContagemEstoque, atraso);
+}
+
+async function atualizarPreviaContagemEstoque() {
+  if (!estoqueContagemEmpresa.value) {
+    limparPreviaContagemEstoque();
+    return;
+  }
+
+  const versao = ++estoqueContagemPreviaVersao;
+  estoquePreviaProdutos.textContent = '…';
+  estoquePreviaLinhas.textContent = '…';
+  estoquePreviaLocais.textContent = '…';
+  estoquePreviaUnidades.textContent = '…';
+  botaoCriarContagemEstoque.disabled = true;
+
+  try {
+    const resposta = await fetch('/api/estoque-contagem/previa', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(obterFiltrosCopiaEstoqueTela())
+    });
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível calcular a prévia.');
+    if (versao !== estoqueContagemPreviaVersao) return;
+
+    estoquePreviaProdutos.textContent = payload.previa.produtos;
+    estoquePreviaLinhas.textContent = payload.previa.linhas;
+    estoquePreviaLocais.textContent = payload.previa.locais;
+    estoquePreviaUnidades.textContent = formatarQuantidade(payload.previa.unidades);
+    botaoCriarContagemEstoque.disabled = payload.previa.linhas === 0;
+  } catch (error) {
+    if (versao !== estoqueContagemPreviaVersao) return;
+    limparPreviaContagemEstoque();
+    atualizarMensagemContagemEstoque(error.message, true);
+  }
+}
+
+function renderizarListaContagensEstoque() {
+  if (!estoqueContagemLista.length) {
+    estoqueContagemSessoes.innerHTML = '<div class="consulta-empty">Nenhuma contagem criada nesta base.</div>';
+    return;
+  }
+
+  estoqueContagemSessoes.innerHTML = estoqueContagemLista.map((sessao) => `
+    <article
+      class="estoque-sessao-card${estoqueContagemAtual?.id === sessao.id ? ' ativa' : ''}"
+    >
+      <button
+        class="estoque-sessao-abrir"
+        type="button"
+        data-estoque-sessao="${escaparAtributo(sessao.id)}"
+      >
+        <strong>${escaparHtml(sessao.empresa)} - ${escaparHtml(sessao.nomeEmpresa)}</strong>
+        <span>${escaparHtml(sessao.nomeLocal || 'Todos os locais')} · ${rotuloStatusContagemEstoque(sessao.status)}</span>
+        <span>${escaparHtml(resumirFiltrosCopiaEstoque(sessao.filtros))}</span>
+        <span>${formatarDataHora(sessao.criadoEm)} · ${sessao.resumo?.itensContados || 0}/${sessao.resumo?.totalItens || 0} itens</span>
+      </button>
+      <button
+        class="estoque-sessao-excluir"
+        type="button"
+        data-estoque-excluir="${escaparAtributo(sessao.id)}"
+        aria-label="Excluir esta cópia"
+        title="Excluir cópia"
+      >
+        <i data-lucide="trash-2" aria-hidden="true"></i>
+      </button>
+    </article>
+  `).join('');
+  atualizarIcones();
+}
+
+async function carregarListaContagensEstoque() {
+  try {
+    const resposta = await fetch('/api/estoque-contagem/sessoes');
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível listar as contagens.');
+    estoqueContagemLista = payload.itens || [];
+    renderizarListaContagensEstoque();
+  } catch (error) {
+    estoqueContagemSessoes.innerHTML = `<div class="consulta-empty">${escaparHtml(error.message)}</div>`;
+  }
+}
+
+function itensVisiveisContagemEstoque() {
+  if (!estoqueContagemAtual) return [];
+  const recontagem = estoqueContagemAtual.status === 'EM_RECONTAGEM';
+  return estoqueContagemAtual.itens.filter((item) => {
+    if (recontagem && !item.podeContar) return false;
+    if (estoqueContagemChavesLocalizadas && !estoqueContagemChavesLocalizadas.has(item.chave)) return false;
+    if (estoqueContagemFiltroAuditoria === 'DIVERGENTES' && item.divergente !== true) return false;
+    if (estoqueContagemFiltroAuditoria === 'CONTADOS' && item.contagemAtual === null) return false;
+    if (estoqueContagemFiltroAuditoria === 'PENDENTES' && item.contagemAtual !== null) return false;
+    if (
+      estoqueContagemFiltroStatus !== 'TODOS'
+      && statusItemContagemEstoque(item) !== estoqueContagemFiltroStatus
+    ) return false;
+    return true;
+  });
+}
+
+function statusItemContagemEstoque(item) {
+  if (item.contagemAtual === null) return 'PENDENTE';
+  if (Number(item.contagemAtual) === 0 && Number(item.estoqueSistema) !== 0) return 'ZERADO';
+  return item.divergente === false ? 'CONFERIDO' : 'DIVERGENTE';
+}
+
+function compararItensContagemEstoque(a, b) {
+  const pendenteA = a.contagemAtual === null ? 0 : 1;
+  const pendenteB = b.contagemAtual === null ? 0 : 1;
+  if (pendenteA !== pendenteB) return pendenteA - pendenteB;
+  return (
+    String(a.descrProd || '').localeCompare(String(b.descrProd || ''), 'pt-BR', {
+      sensitivity: 'base',
+      numeric: true
+    })
+    || Number(a.codProd) - Number(b.codProd)
+    || Number(a.codLocal) - Number(b.codLocal)
+    || String(a.controle || '').localeCompare(String(b.controle || ''), 'pt-BR', { numeric: true })
+  );
+}
+
+function concluirConfirmacaoApp(confirmado) {
+  if (confirmacaoAppModal.hidden) return;
+  const resolver = confirmacaoAppResolver;
+  confirmacaoAppResolver = null;
+  confirmacaoAppModal.hidden = true;
+  document.body.classList.remove('app-confirm-open');
+  if (confirmacaoAppFocoAnterior?.focus) confirmacaoAppFocoAnterior.focus();
+  confirmacaoAppFocoAnterior = null;
+  if (resolver) resolver(Boolean(confirmado));
+}
+
+function confirmarAcaoApp({
+  titulo = 'Confirmar ação',
+  mensagem,
+  textoConfirmar = 'Confirmar',
+  perigo = false
+}) {
+  if (confirmacaoAppResolver) concluirConfirmacaoApp(false);
+  confirmacaoAppFocoAnterior = document.activeElement;
+  confirmacaoAppTitulo.textContent = titulo;
+  confirmacaoAppMensagem.textContent = mensagem;
+  confirmacaoAppConfirmar.textContent = textoConfirmar;
+  confirmacaoAppDialog.classList.toggle('is-danger', perigo);
+  confirmacaoAppModal.hidden = false;
+  document.body.classList.add('app-confirm-open');
+  atualizarIcones();
+  setTimeout(() => confirmacaoAppConfirmar.focus(), 0);
+  return new Promise((resolve) => {
+    confirmacaoAppResolver = resolve;
+  });
+}
+
+async function excluirCopiaContagemEstoque(id) {
+  const sessao = estoqueContagemLista.find((item) => item.id === id);
+  if (!sessao) return;
+
+  const notas = sessao.ajuste?.notas || [];
+  const avisoNotas = notas.length
+    ? ` As notas ${notas.map((nota) => nota.nunota).join(', ')} permanecerão no Sankhya e não serão excluídas.`
+    : '';
+  const confirmado = await confirmarAcaoApp({
+    titulo: 'Excluir cópia de estoque',
+    mensagem: `Excluir definitivamente esta cópia e todo o histórico de contagem armazenado no app?${avisoNotas}`,
+    textoConfirmar: 'Excluir cópia',
+    perigo: true
+  });
+  if (!confirmado) return;
+
+  try {
+    const resposta = await fetch(
+      `/api/estoque-contagem/sessoes/${encodeURIComponent(id)}`,
+      { method: 'DELETE' }
+    );
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível excluir a cópia.');
+
+    if (estoqueContagemAtual?.id === id) {
+      estoqueContagemAtual = null;
+      mostrarSelecaoContagemEstoque();
+    }
+    await carregarListaContagensEstoque();
+  } catch (error) {
+    atualizarMensagemContagemEstoque(error.message, true);
+  }
+}
+
+function agruparItensContagemEstoque() {
+  const grupos = new Map();
+  itensVisiveisContagemEstoque().forEach((item) => {
+    const codigo = String(item.codGrupoProd || '').trim();
+    const descricao = String(item.descrGrupoProd || '').trim() || 'Sem grupo';
+    const chave = codigo || `SEM_GRUPO:${descricao}`;
+    if (!grupos.has(chave)) {
+      grupos.set(chave, {
+        codigo,
+        descricao,
+        itens: []
+      });
+    }
+    grupos.get(chave).itens.push(item);
+  });
+
+  return [...grupos.values()]
+    .sort((a, b) => a.descricao.localeCompare(b.descricao, 'pt-BR', {
+      sensitivity: 'base',
+      numeric: true
+    }))
+    .map((grupo) => ({
+      ...grupo,
+      itens: grupo.itens.sort(compararItensContagemEstoque)
+    }));
+}
+
+function renderizarItensContagemEstoque() {
+  estoqueColunaSistema.textContent = 'Estoque sistema';
+  const grupos = agruparItensContagemEstoque();
+  if (!grupos.length) {
+    estoqueContagemItens.innerHTML = '<tr><td colspan="6" class="empty-state">Nenhuma linha encontrada para esta contagem.</td></tr>';
+    return;
+  }
+
+  estoqueContagemItens.innerHTML = grupos.map((grupo) => {
+    const cabecalho = `
+      <tr class="separacao-group-row">
+        <td colspan="6">${grupo.codigo ? `Grupo ${escaparHtml(grupo.codigo)} - ` : ''}${escaparHtml(grupo.descricao)}</td>
+      </tr>
+    `;
+    const linhas = grupo.itens.map((item) => {
+      const contagem = item.contagemAtual;
+      const contado = contagem !== null;
+      const statusChave = statusItemContagemEstoque(item);
+      const classe = statusChave === 'ZERADO'
+        ? ' is-zero'
+        : statusChave === 'CONFERIDO' ? ' is-complete' : contado ? ' is-partial' : '';
+      const status = {
+        ZERADO: 'Zerado',
+        CONFERIDO: 'Conferido',
+        DIVERGENTE: 'Divergente',
+        PENDENTE: 'Pendente'
+      }[statusChave];
+      const badgeClasse = statusChave === 'ZERADO'
+        ? ' zero'
+        : statusChave === 'CONFERIDO' ? '' : ' pending';
+      const contagemTexto = contado
+        ? `${formatarQuantidade(contagem)} ${escaparHtml(item.codVol)}`
+        : '—';
+
+      return `
+        <tr
+          class="separacao-row${classe}"
+          data-estoque-item="${escaparAtributo(item.chave)}"
+          tabindex="${item.podeContar ? '0' : '-1'}"
+        >
+          <td><strong class="separacao-product-code">${escaparHtml(item.codProd)}</strong></td>
+          <td class="separacao-description" title="${escaparAtributo(item.descrProd)}">${escaparHtml(item.descrProd || '-')}</td>
+          <td class="estoque-lista-lote" data-label="Lote" title="${escaparAtributo(item.controle || 'Sem controle')}">${escaparHtml(item.controle || 'Sem controle')}</td>
+          <td class="estoque-lista-sistema" data-label="Estoque">${formatarQuantidade(item.estoqueSistema)} ${escaparHtml(item.codVol)}</td>
+          <td class="estoque-lista-contagem" data-label="Contagem">${contagemTexto}</td>
+          <td class="estoque-lista-status"><span class="separacao-badge${badgeClasse}">${status}</span></td>
+        </tr>
+      `;
+    }).join('');
+    return cabecalho + linhas;
+  }).join('');
+}
+
+function renderizarContagemEstoque() {
+  const sessao = estoqueContagemAtual;
+  estoqueContagemActive.hidden = !sessao;
+  renderizarListaContagensEstoque();
+  if (!sessao) return;
+
+  const resumo = sessao.resumo || {};
+  const aberta = ['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(sessao.status);
+  const analise = sessao.status === 'EM_ANALISE';
+  const exibirAuditoria = !aberta;
+  estoqueContagemTitulo.textContent = `${sessao.empresa} - ${sessao.nomeEmpresa}`;
+  estoqueContagemMeta.textContent = `${rotuloStatusContagemEstoque(sessao.status)} · ${sessao.nomeLocal || 'Todos os locais'} · ${resumirFiltrosCopiaEstoque(sessao.filtros)} · cópia ${formatarDataHora(sessao.criadoEm)}`;
+  estoqueContagemProgresso.textContent = ['CONCLUIDA', 'AJUSTE_GERADO'].includes(sessao.status)
+    ? sessao.status === 'AJUSTE_GERADO' ? 'Notas de ajuste geradas' : 'Contagem concluída'
+    : `${resumo.itensContados || 0}/${resumo.totalItens || 0} itens contados`;
+  estoqueContagemScan.hidden = !aberta;
+  estoqueContagemAuditoria.hidden = !exibirAuditoria;
+  estoqueContagemAuditoriaResumo.textContent = exibirAuditoria
+    ? `${resumo.itensContados || 0} contados · ${resumo.itensDivergentes || 0} divergentes · ${resumo.itensPendentes || 0} pendentes ignorados`
+    : '';
+  const notasAjuste = sessao.ajuste?.notas || [];
+  estoqueContagemAuditoriaNotas.hidden = !notasAjuste.length;
+  estoqueContagemAuditoriaNotas.textContent = notasAjuste.length
+    ? `Notas pendentes no Sankhya: ${notasAjuste.map((nota) => `${nota.nunota} (${nota.tipo.toLowerCase()})`).join(', ')}`
+    : '';
+  botaoAplicarAjusteEstoque.hidden = sessao.status !== 'PRONTA_PARA_AJUSTE';
+  botaoAplicarAjusteEstoque.disabled = false;
+  estoqueContagemAuditoria.querySelectorAll('[data-estoque-auditoria-filtro]').forEach((botao) => {
+    botao.classList.toggle(
+      'ativo',
+      botao.dataset.estoqueAuditoriaFiltro === estoqueContagemFiltroAuditoria
+    );
+  });
+  const quantidadeVisivel = itensVisiveisContagemEstoque().length;
+  estoqueContagemFiltroResumo.textContent = `${quantidadeVisivel} ${quantidadeVisivel === 1 ? 'item exibido' : 'itens exibidos'}`;
+  botaoFinalizarContagemEstoque.hidden = !aberta;
+  botaoFinalizarContagemEstoque.innerHTML = `
+    <i data-lucide="circle-check-big" aria-hidden="true"></i>
+    ${sessao.status === 'EM_RECONTAGEM' ? 'Concluir recontagem' : 'Concluir contagem'}
+  `;
+  botaoRecontarEstoque.hidden = !(analise && sessao.rodadaAtual === 1 && resumo.itensDivergentes > 0);
+  botaoConcluirAnaliseEstoque.hidden = !analise;
+  renderizarItensContagemEstoque();
+  atualizarIcones();
+}
+
+function fecharConfirmacaoContagemEstoque() {
+  estoqueContagemItemSelecionado = null;
+  estoqueContagemQuantidadeProposta = 0;
+  estoqueContagemConfirmModal.hidden = true;
+  estoqueContagemAjustePainel.hidden = true;
+  estoqueContagemConfirmMensagem.textContent = '';
+  estoqueContagemConfirmQtd.textContent = '-';
+  estoqueContagemQuantidade.value = '';
+}
+
+function abrirConfirmacaoContagemEstoque(item) {
+  if (!item || !item.podeContar) {
+    atualizarMensagemContagemEstoque('Esta linha não está disponível para contagem nesta rodada.', true);
+    return;
+  }
+
+  estoqueContagemItemSelecionado = item;
+  estoqueContagemConfirmTitulo.textContent = item.contagemAtual === null
+    ? 'Confirmar contagem'
+    : 'Atualizar contagem';
+  estoqueContagemConfirmProduto.innerHTML = `
+    ${escaparHtml(item.codProd)} - ${escaparHtml(item.descrProd || '-')}
+    <div class="separacao-confirm-meta">Local: ${escaparHtml(item.codLocal)} - ${escaparHtml(item.descrLocal)}</div>
+    <div class="separacao-confirm-meta">Lote: ${escaparHtml(item.controle || 'Sem controle')} | Estoque sistema: ${formatarQuantidade(item.estoqueSistema)} ${escaparHtml(item.codVol)}</div>
+  `;
+  estoqueContagemQuantidadeProposta = item.contagemAtual === null
+    ? Number(item.estoqueSistema)
+    : Number(item.contagemAtual);
+  estoqueContagemConfirmQtd.textContent = `${formatarQuantidade(estoqueContagemQuantidadeProposta)} ${item.codVol}`;
+  estoqueContagemQuantidade.value = String(estoqueContagemQuantidadeProposta);
+  estoqueContagemAjustePainel.hidden = true;
+  estoqueContagemConfirmMensagem.textContent = 'Confirme a quantidade encontrada ou use Ajustar quantidade.';
+  estoqueContagemConfirmModal.hidden = false;
+  setTimeout(() => botaoConfirmarItemEstoque.focus(), 0);
+}
+
+function abrirAjusteQuantidadeContagemEstoque() {
+  if (!estoqueContagemItemSelecionado) return;
+  estoqueContagemQuantidade.value = String(estoqueContagemQuantidadeProposta);
+  estoqueContagemAjustePainel.hidden = false;
+  estoqueContagemConfirmMensagem.textContent = 'Informe a quantidade encontrada e toque em Confirmar item.';
+  setTimeout(() => {
+    estoqueContagemQuantidade.focus();
+    estoqueContagemQuantidade.select();
+  }, 0);
+}
+
+function cancelarAjusteQuantidadeContagemEstoque() {
+  estoqueContagemAjustePainel.hidden = true;
+  estoqueContagemQuantidade.value = String(estoqueContagemQuantidadeProposta);
+  estoqueContagemConfirmMensagem.textContent = 'Ajuste cancelado. Confirme a quantidade exibida.';
+}
+
+async function abrirSessaoContagemEstoque(id) {
+  try {
+    const resposta = await fetch(`/api/estoque-contagem/sessoes/${encodeURIComponent(id)}`);
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível abrir a contagem.');
+    estoqueContagemAtual = payload.sessao;
+    estoqueContagemChavesLocalizadas = null;
+    estoqueContagemFiltroStatus = 'TODOS';
+    estoqueContagemStatusFiltro.value = 'TODOS';
+    estoqueContagemFiltroAuditoria = ['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(payload.sessao.status)
+      ? 'TODOS'
+      : payload.sessao.resumo?.itensDivergentes > 0 ? 'DIVERGENTES' : 'TODOS';
+    fecharConfirmacaoContagemEstoque();
+    mostrarItensContagemEstoque();
+    renderizarContagemEstoque();
+    if (['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(estoqueContagemAtual.status)) {
+      setTimeout(() => estoqueContagemCodigo.focus(), 0);
+    }
+  } catch (error) {
+    atualizarMensagemContagemEstoque(error.message, true);
+  }
+}
+
+async function criarSessaoContagemEstoque() {
+  const empresa = estoqueContagemEmpresa.value;
+  if (!empresa) return;
+  botaoCriarContagemEstoque.disabled = true;
+  botaoCriarContagemEstoque.textContent = 'Criando fotografia...';
+
+  try {
+    const resposta = await fetch('/api/estoque-contagem/sessoes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(obterFiltrosCopiaEstoqueTela())
+    });
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível criar a cópia.');
+    estoqueContagemAtual = payload.sessao;
+    estoqueContagemFiltroAuditoria = 'TODOS';
+    estoqueContagemFiltroStatus = 'TODOS';
+    estoqueContagemStatusFiltro.value = 'TODOS';
+    estoqueContagemChavesLocalizadas = null;
+    atualizarMensagemContagemEstoque('Cópia criada. A contagem física já pode começar.');
+    await carregarListaContagensEstoque();
+    mostrarItensContagemEstoque();
+    renderizarContagemEstoque();
+    estoqueContagemCodigo.focus();
+  } catch (error) {
+    atualizarMensagemContagemEstoque(error.message, true);
+  } finally {
+    botaoCriarContagemEstoque.disabled = false;
+    botaoCriarContagemEstoque.textContent = 'Criar cópia e iniciar';
+  }
+}
+
+async function salvarItemContagemEstoque(chave, quantidade) {
+  if (!estoqueContagemAtual) return;
+  const valor = Number(quantidade);
+  if (!Number.isFinite(valor) || valor < 0) {
+    atualizarMensagemContagemEstoque('Informe uma quantidade física válida.', true);
+    return;
+  }
+
+  try {
+    const resposta = await fetch(
+      `/api/estoque-contagem/sessoes/${encodeURIComponent(estoqueContagemAtual.id)}/itens/${encodeURIComponent(chave)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ quantidade: valor })
+      }
+    );
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível salvar a contagem.');
+    estoqueContagemAtual = payload.sessao;
+    fecharConfirmacaoContagemEstoque();
+    estoqueContagemChavesLocalizadas = null;
+    limparCodigoContagemEstoque();
+    atualizarMensagemContagemEstoque(`Quantidade ${formatarQuantidade(valor)} registrada.`);
+    renderizarContagemEstoque();
+    estoqueContagemCodigo.focus();
+  } catch (error) {
+    atualizarMensagemContagemEstoque(error.message, true);
+  }
+}
+
+async function confirmarItemContagemEstoque() {
+  if (!estoqueContagemItemSelecionado) return;
+
+  let quantidade = estoqueContagemQuantidadeProposta;
+  if (!estoqueContagemAjustePainel.hidden) {
+    quantidade = Number(String(estoqueContagemQuantidade.value || '').replace(',', '.'));
+    if (!Number.isFinite(quantidade) || quantidade < 0) {
+      estoqueContagemConfirmMensagem.textContent = 'Informe uma quantidade válida, igual ou maior que zero.';
+      estoqueContagemQuantidade.focus();
+      return;
+    }
+    estoqueContagemQuantidadeProposta = quantidade;
+  }
+
+  await salvarItemContagemEstoque(
+    estoqueContagemItemSelecionado.chave,
+    quantidade
+  );
+}
+
+async function processarCodigoContagemEstoque() {
+  const codigo = estoqueContagemCodigo.value.trim();
+  if (!codigo) {
+    atualizarMensagemContagemEstoque('Bipe ou digite um código para localizar o produto.', true);
+    return;
+  }
+
+  try {
+    const resposta = await fetch(
+      `/api/estoque-contagem/sessoes/${encodeURIComponent(estoqueContagemAtual.id)}/localizar?codigo=${encodeURIComponent(codigo)}`
+    );
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Produto não encontrado.');
+
+    if (payload.itens.length === 1) {
+      abrirConfirmacaoContagemEstoque(payload.itens[0]);
+      return;
+    }
+
+    estoqueContagemChavesLocalizadas = new Set(payload.itens.map((item) => item.chave));
+    estoqueContagemFiltroStatus = 'TODOS';
+    estoqueContagemFiltroAuditoria = 'TODOS';
+    estoqueContagemStatusFiltro.value = 'TODOS';
+    renderizarItensContagemEstoque();
+    atualizarMensagemContagemEstoque(
+      `${payload.itens.length} linhas encontradas para este produto. Clique na linha do lote contado.`
+    );
+  } catch (error) {
+    atualizarMensagemContagemEstoque(error.message, true);
+  }
+}
+
+async function executarAcaoContagemEstoque(acao, confirmacao) {
+  if (!estoqueContagemAtual) return;
+  if (confirmacao) {
+    const titulos = {
+      finalizar: 'Concluir contagem',
+      recontar: 'Iniciar recontagem',
+      'concluir-analise': 'Preparar ajuste'
+    };
+    const confirmado = await confirmarAcaoApp({
+      titulo: titulos[acao] || 'Confirmar ação',
+      mensagem: confirmacao,
+      textoConfirmar: acao === 'recontar' ? 'Iniciar recontagem' : 'Confirmar'
+    });
+    if (!confirmado) return;
+  }
+
+  try {
+    const resposta = await fetch(
+      `/api/estoque-contagem/sessoes/${encodeURIComponent(estoqueContagemAtual.id)}/${acao}`,
+      { method: 'POST' }
+    );
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível concluir a ação.');
+    estoqueContagemAtual = payload.sessao;
+    if (!['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(estoqueContagemAtual.status)) {
+      estoqueContagemFiltroAuditoria = estoqueContagemAtual.resumo?.itensDivergentes > 0
+        ? 'DIVERGENTES'
+        : 'TODOS';
+      estoqueContagemFiltroStatus = 'TODOS';
+      estoqueContagemStatusFiltro.value = 'TODOS';
+    }
+    await carregarListaContagensEstoque();
+    renderizarContagemEstoque();
+    const pendentesIgnorados = Number(estoqueContagemAtual.resumo?.itensPendentes || 0);
+    atualizarMensagemContagemEstoque(
+      estoqueContagemAtual.status === 'PRONTA_PARA_AJUSTE'
+        ? 'Contagem encerrada e separada para a etapa auditável de ajuste.'
+        : acao === 'finalizar' && pendentesIgnorados > 0
+          ? `Contagem concluída. ${pendentesIgnorados} ${pendentesIgnorados === 1 ? 'item pendente foi ignorado' : 'itens pendentes foram ignorados'} e não terão o estoque alterado.`
+        : 'Ação concluída com sucesso.'
+    );
+  } catch (error) {
+    atualizarMensagemContagemEstoque(error.message, true);
+  }
+}
+
+async function aplicarAjusteContagemEstoque() {
+  if (!estoqueContagemAtual || estoqueContagemAtual.status !== 'PRONTA_PARA_AJUSTE') return;
+  const divergentes = Number(estoqueContagemAtual.resumo?.itensDivergentes || 0);
+  const confirmado = await confirmarAcaoApp({
+    titulo: 'Gerar notas de ajuste',
+    mensagem: `Gerar no Sankhya as notas pendentes para ${divergentes} ${divergentes === 1 ? 'divergência' : 'divergências'}? As notas não serão confirmadas e ainda não movimentarão o estoque.`,
+    textoConfirmar: 'Gerar notas'
+  });
+  if (!confirmado) return;
+
+  botaoAplicarAjusteEstoque.disabled = true;
+  botaoAplicarAjusteEstoque.textContent = 'Gerando notas...';
+  try {
+    const resposta = await fetch(
+      `/api/estoque-contagem/sessoes/${encodeURIComponent(estoqueContagemAtual.id)}/aplicar-ajuste`,
+      { method: 'POST' }
+    );
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível gerar as notas de ajuste.');
+
+    estoqueContagemAtual = payload.sessao;
+    await carregarListaContagensEstoque();
+    renderizarContagemEstoque();
+    const numeros = (payload.notas || []).map((nota) => nota.nunota).join(', ');
+    atualizarMensagemContagemEstoque(
+      `Notas ${numeros} geradas e pendentes de confirmação no Sankhya. Nenhum estoque foi movimentado pelo app.`
+    );
+  } catch (error) {
+    atualizarMensagemContagemEstoque(error.message, true);
+  } finally {
+    botaoAplicarAjusteEstoque.disabled = false;
+    botaoAplicarAjusteEstoque.textContent = 'Aplicar ajuste';
+  }
+}
+
+async function abrirContagemEstoque() {
+  mostrarHomeESuspenderRefresh();
+  mostrarContagemEstoque();
+  mostrarSelecaoContagemEstoque();
+  history.pushState({ tela: 'contagem-estoque' }, '', '#contagem-estoque');
+  await Promise.all([carregarConfigContagemEstoque(), carregarListaContagensEstoque()]);
+  renderizarContagemEstoque();
 }
 
 function criarIndicadorStatusPedido(tipo, valor) {
@@ -6737,6 +7642,15 @@ async function prepararSessaoAutenticada(usuario) {
     return;
   }
 
+  if (window.location.hash === '#contagem-estoque') {
+    mostrarContagemEstoque();
+    mostrarSelecaoContagemEstoque();
+    await Promise.all([carregarConfigContagemEstoque(), carregarListaContagensEstoque()]);
+    renderizarContagemEstoque();
+    history.replaceState({ tela: 'contagem-estoque' }, '', '#contagem-estoque');
+    return;
+  }
+
   mostrarHome();
   history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);
 }
@@ -6816,6 +7730,7 @@ botaoAbrirConferencia.addEventListener('click', abrirFila);
 botaoAbrirAcompanhamento.addEventListener('click', abrirAcompanhamento);
 botaoAbrirConsultaHome.addEventListener('click', abrirConsultaProdutosMesmaTela);
 botaoAbrirAtualizacaoContato.addEventListener('click', abrirAtualizacaoContato);
+botaoAbrirContagemEstoque.addEventListener('click', abrirContagemEstoque);
 botaoAbrirConsultaProdutos.addEventListener('click', abrirConsultaProdutos);
 botaoConsultaProdutoBuscar.addEventListener('click', buscarConsultaProduto);
 botaoConsultaProdutoEtiqueta.addEventListener('click', abrirSelecaoEtiquetaProduto);
@@ -6873,6 +7788,143 @@ botaoExibirAcompanhamento.addEventListener('click', abrirConferencia);
 botaoVoltarHomeAcompanhamento.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeFila.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeContato.addEventListener('click', voltarParaHomeViaHistorico);
+botaoVoltarHomeContagemEstoque.addEventListener('click', voltarParaHomeViaHistorico);
+botaoVoltarCopiasEstoque.addEventListener('click', () => {
+  mostrarSelecaoContagemEstoque();
+  carregarListaContagensEstoque();
+});
+estoqueContagemEmpresa.addEventListener('change', carregarLocaisContagemEstoque);
+estoqueContagemLocal.addEventListener('change', carregarOpcoesFiltrosContagemEstoque);
+estoqueContagemGrupo.addEventListener('change', () => {
+  estoqueContagemSubgrupos.disabled = !estoqueContagemGrupo.value;
+  agendarPreviaContagemEstoque();
+});
+estoqueContagemSubgrupos.addEventListener('change', () => agendarPreviaContagemEstoque());
+estoqueContagemMarca.addEventListener('change', () => agendarPreviaContagemEstoque());
+estoqueContagemSituacao.addEventListener('change', () => agendarPreviaContagemEstoque());
+estoqueContagemControle.addEventListener('change', () => agendarPreviaContagemEstoque());
+estoqueContagemSaldo.addEventListener('change', () => agendarPreviaContagemEstoque());
+botaoCriarContagemEstoque.addEventListener('click', criarSessaoContagemEstoque);
+botaoAtualizarContagensEstoque.addEventListener('click', carregarListaContagensEstoque);
+estoqueContagemSessoes.addEventListener('click', (event) => {
+  const excluir = event.target.closest('[data-estoque-excluir]');
+  if (excluir) {
+    excluirCopiaContagemEstoque(excluir.dataset.estoqueExcluir);
+    return;
+  }
+  const botao = event.target.closest('[data-estoque-sessao]');
+  if (botao) abrirSessaoContagemEstoque(botao.dataset.estoqueSessao);
+});
+estoqueContagemItens.addEventListener('click', (event) => {
+  const linha = event.target.closest('[data-estoque-item]');
+  if (!linha || !estoqueContagemAtual) return;
+  abrirConfirmacaoContagemEstoque(
+    estoqueContagemAtual.itens.find((item) => item.chave === linha.dataset.estoqueItem)
+  );
+});
+estoqueContagemItens.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' && event.key !== ' ') return;
+  const linha = event.target.closest('[data-estoque-item]');
+  if (!linha || !estoqueContagemAtual) return;
+  event.preventDefault();
+  abrirConfirmacaoContagemEstoque(
+    estoqueContagemAtual.itens.find((item) => item.chave === linha.dataset.estoqueItem)
+  );
+});
+estoqueContagemCodigo.addEventListener('input', () => {
+  const somenteDigitos = estoqueContagemCodigo.value.replace(/\D/g, '');
+  estoqueContagemCodigo.value = somenteDigitos;
+  if (separacaoEmMobile()) leituraContagemEstoqueMobile = somenteDigitos;
+  if (estoqueContagemChavesLocalizadas) {
+    estoqueContagemChavesLocalizadas = null;
+    renderizarItensContagemEstoque();
+  }
+});
+estoqueContagemCodigo.addEventListener('keydown', (event) => {
+  if (separacaoEmMobile()) {
+    if (!estoqueContagemItensView.hidden && /^[0-9]$/.test(event.key)) {
+      event.preventDefault();
+      leituraContagemEstoqueMobile += event.key;
+      estoqueContagemCodigo.value = leituraContagemEstoqueMobile;
+      return;
+    }
+    if (event.key === 'Enter' || event.key === 'Tab') {
+      event.preventDefault();
+      leituraContagemEstoqueMobile = '';
+      processarCodigoContagemEstoque();
+    }
+    return;
+  }
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    processarCodigoContagemEstoque();
+  }
+});
+botaoLimparCodigoContagemEstoque.addEventListener('click', () => {
+  limparCodigoContagemEstoque({ focar: true });
+  atualizarMensagemContagemEstoque('Campo limpo. Bipe o próximo código.');
+});
+estoqueContagemQuantidade.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    confirmarItemContagemEstoque();
+  }
+});
+botaoAjustarQuantidadeEstoque.addEventListener('click', abrirAjusteQuantidadeContagemEstoque);
+botaoCancelarAjusteEstoque.addEventListener('click', cancelarAjusteQuantidadeContagemEstoque);
+botaoCancelarConfirmacaoEstoque.addEventListener('click', fecharConfirmacaoContagemEstoque);
+botaoConfirmarItemEstoque.addEventListener('click', confirmarItemContagemEstoque);
+estoqueContagemConfirmModal.addEventListener('click', (event) => {
+  if (event.target === estoqueContagemConfirmModal) fecharConfirmacaoContagemEstoque();
+});
+estoqueContagemAuditoria.addEventListener('click', (event) => {
+  const botao = event.target.closest('[data-estoque-auditoria-filtro]');
+  if (!botao) return;
+  estoqueContagemFiltroAuditoria = botao.dataset.estoqueAuditoriaFiltro;
+  estoqueContagemFiltroStatus = 'TODOS';
+  estoqueContagemStatusFiltro.value = 'TODOS';
+  renderizarContagemEstoque();
+});
+estoqueContagemStatusFiltro.addEventListener('change', () => {
+  estoqueContagemFiltroStatus = estoqueContagemStatusFiltro.value;
+  if (estoqueContagemFiltroStatus !== 'TODOS') estoqueContagemFiltroAuditoria = 'TODOS';
+  renderizarContagemEstoque();
+});
+botaoAplicarAjusteEstoque.addEventListener('click', aplicarAjusteContagemEstoque);
+confirmacaoAppCancelar.addEventListener('click', () => concluirConfirmacaoApp(false));
+confirmacaoAppConfirmar.addEventListener('click', () => concluirConfirmacaoApp(true));
+confirmacaoAppModal.addEventListener('click', (event) => {
+  if (event.target === confirmacaoAppModal) concluirConfirmacaoApp(false);
+});
+document.addEventListener('keydown', (event) => {
+  if (confirmacaoAppModal.hidden) return;
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    concluirConfirmacaoApp(false);
+  }
+  if (event.key === 'Enter' && event.target === confirmacaoAppConfirmar) {
+    event.preventDefault();
+    concluirConfirmacaoApp(true);
+  }
+});
+botaoFinalizarContagemEstoque.addEventListener('click', () => {
+  const pendentes = Number(estoqueContagemAtual?.resumo?.itensPendentes || 0);
+  const avisoPendentes = pendentes
+    ? ` ${pendentes} ${pendentes === 1 ? 'item pendente será ignorado' : 'itens pendentes serão ignorados'} e não terão o estoque alterado.`
+    : '';
+  executarAcaoContagemEstoque(
+    'finalizar',
+    `Concluir esta rodada e analisar somente os itens contados?${avisoPendentes}`
+  );
+});
+botaoRecontarEstoque.addEventListener('click', () => executarAcaoContagemEstoque(
+  'recontar',
+  'Iniciar uma segunda contagem somente dos itens divergentes?'
+));
+botaoConcluirAnaliseEstoque.addEventListener('click', () => executarAcaoContagemEstoque(
+  'concluir-analise',
+  'Encerrar a análise e deixar as divergências prontas para a futura etapa de ajuste? Nenhuma nota será gerada agora.'
+));
 botaoVoltarListaFila.addEventListener('click', () => {
   mostrarEtapaPedidosFila();
   limparPedidoConferencia('Selecione um pedido para iniciar.');
@@ -7294,6 +8346,15 @@ window.addEventListener('popstate', (event) => {
     mostrarHomeESuspenderRefresh();
     mostrarAtualizacaoContato();
     carregarPerfisContato();
+    return;
+  }
+
+  if (state?.tela === 'contagem-estoque' || window.location.hash === '#contagem-estoque') {
+    mostrarHomeESuspenderRefresh();
+    mostrarContagemEstoque();
+    mostrarSelecaoContagemEstoque();
+    carregarConfigContagemEstoque();
+    carregarListaContagensEstoque();
     return;
   }
 

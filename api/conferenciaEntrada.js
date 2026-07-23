@@ -62,16 +62,20 @@ function planejarSincronizacaoDetalhesEntrada(detalhesExistentes, detalhesDeseja
 function validarDetalhesConferenciaEntrada(detalhesDesejados, detalhesGravados) {
   const erros = [];
   const gravadosPorChave = new Map();
+  const detalhesAtivos = detalhesGravados.filter((detalhe) => (
+    Math.abs(numero(detalhe?.QTDCONF)) > 0.0001
+    || Math.abs(numero(detalhe?.QTDCONFVOLPAD)) > 0.0001
+  ));
 
-  for (const gravado of detalhesGravados) {
+  for (const gravado of detalhesAtivos) {
     const chave = chaveDetalheEntrada(gravado);
     const lista = gravadosPorChave.get(chave) || [];
     lista.push(gravado);
     gravadosPorChave.set(chave, lista);
   }
 
-  if (detalhesGravados.length !== detalhesDesejados.length) {
-    erros.push(`quantidade de linhas esperada ${detalhesDesejados.length}, gravada ${detalhesGravados.length}`);
+  if (detalhesAtivos.length !== detalhesDesejados.length) {
+    erros.push(`quantidade de linhas esperada ${detalhesDesejados.length}, gravada ${detalhesAtivos.length}`);
   }
 
   for (const desejado of detalhesDesejados) {
