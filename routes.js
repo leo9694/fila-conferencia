@@ -2712,6 +2712,14 @@ async function gerarNotaPendenteAjuste({
   };
 }
 
+router.get('/estoque-contagem/disponibilidade', (req, res) => {
+  const disponivel = ambienteContagemEstoqueTeste();
+  res.json({
+    disponivel,
+    ambiente: disponivel ? 'TESTE' : 'PRODUCAO'
+  });
+});
+
 router.get('/estoque-contagem/config', exigirAmbienteContagemTeste, async (req, res) => {
   try {
     const empresas = await executeQuery(`

@@ -4,6 +4,7 @@ let relogioInterval = null;
 let usuarioLogado = null;
 let estoqueContagemAtual = null;
 let estoqueContagemLista = [];
+let estoqueContagemDisponivel = false;
 let estoqueContagemItemSelecionado = null;
 let estoqueContagemChavesLocalizadas = null;
 let estoqueContagemFiltroAuditoria = 'TODOS';
@@ -1324,6 +1325,22 @@ async function carregarConfigContagemEstoque() {
   }
 }
 
+async function verificarDisponibilidadeContagemEstoque() {
+  estoqueContagemDisponivel = false;
+  botaoAbrirContagemEstoque.hidden = true;
+
+  try {
+    const resposta = await fetch('/api/estoque-contagem/disponibilidade');
+    const payload = await resposta.json();
+    estoqueContagemDisponivel = resposta.ok && payload.disponivel === true;
+  } catch (error) {
+    console.warn('Não foi possível verificar a disponibilidade da contagem de estoque:', error);
+  }
+
+  botaoAbrirContagemEstoque.hidden = !estoqueContagemDisponivel;
+  return estoqueContagemDisponivel;
+}
+
 async function carregarLocaisContagemEstoque() {
   const empresa = estoqueContagemEmpresa.value;
   estoqueContagemLocal.innerHTML = '<option value="">Todos os locais</option>';
@@ -2030,6 +2047,11 @@ async function aplicarAjusteContagemEstoque() {
 }
 
 async function abrirContagemEstoque() {
+  if (!estoqueContagemDisponivel && !await verificarDisponibilidadeContagemEstoque()) {
+    mostrarHomeESuspenderRefresh();
+    return;
+  }
+
   mostrarHomeESuspenderRefresh();
   mostrarContagemEstoque();
   mostrarSelecaoContagemEstoque();
@@ -7612,7 +7634,10 @@ async function prepararSessaoAutenticada(usuario) {
   usuarioLogado = usuario;
   atualizarUsuarioLogadoNaTela();
   prepararTelaInicial();
-  await carregarEmpresas();
+  await Promise.all([
+    carregarEmpresas(),
+    verificarDisponibilidadeContagemEstoque()
+  ]);
 
   if (window.location.hash === '#fila-conferencia') {
     const restaurouFila = await restaurarNavegacaoFilaSalva();
@@ -7643,6 +7668,11 @@ async function prepararSessaoAutenticada(usuario) {
   }
 
   if (window.location.hash === '#contagem-estoque') {
+    if (!estoqueContagemDisponivel) {
+      mostrarHome();
+      history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);
+      return;
+    }
     mostrarContagemEstoque();
     mostrarSelecaoContagemEstoque();
     await Promise.all([carregarConfigContagemEstoque(), carregarListaContagensEstoque()]);
@@ -8350,6 +8380,11 @@ window.addEventListener('popstate', (event) => {
   }
 
   if (state?.tela === 'contagem-estoque' || window.location.hash === '#contagem-estoque') {
+    if (!estoqueContagemDisponivel) {
+      mostrarHomeESuspenderRefresh();
+      history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);
+      return;
+    }
     mostrarHomeESuspenderRefresh();
     mostrarContagemEstoque();
     mostrarSelecaoContagemEstoque();
