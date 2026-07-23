@@ -448,8 +448,8 @@ function separacaoEmMobile() {
 function configurarLeitorSeparacao() {
   if (!separacaoCodigo) return;
   const mobile = separacaoEmMobile();
-  // Alguns navegadores de tablet ignoram inputMode=none. O readonly bloqueia o
-  // teclado virtual; a captura global da tela continua recebendo o bipador físico.
+  // No toque, o campo e focado como readonly e liberado logo depois. Assim o
+  // teclado virtual nao abre, mas bipadores que injetam texto no input funcionam.
   separacaoCodigo.readOnly = mobile;
   separacaoCodigo.inputMode = mobile ? 'none' : 'numeric';
   separacaoCodigo.setAttribute('virtualkeyboardpolicy', mobile ? 'manual' : 'auto');
@@ -460,17 +460,32 @@ function configurarLeitorSeparacao() {
   );
 }
 
+function focarLeitorSeparacaoSemTeclado() {
+  if (!separacaoCodigo || separacaoCodigo.disabled) return;
+  const mobile = separacaoEmMobile();
+  if (mobile) separacaoCodigo.readOnly = true;
+  separacaoCodigo.focus({ preventScroll: true });
+  if (!mobile) return;
+
+  if (navigator.virtualKeyboard?.hide) navigator.virtualKeyboard.hide();
+  setTimeout(() => {
+    if (separacaoScreen.hidden || separacaoCodigo.disabled) return;
+    separacaoCodigo.readOnly = false;
+    if (navigator.virtualKeyboard?.hide) navigator.virtualKeyboard.hide();
+  }, 80);
+}
+
 function limparCodigoSeparacao({ focar = false } = {}) {
   separacaoCodigo.value = '';
   leituraSeparacaoMobile = '';
-  if (focar) setTimeout(() => separacaoCodigo.focus({ preventScroll: true }), 0);
+  if (focar) setTimeout(focarLeitorSeparacaoSemTeclado, 0);
 }
 
 function configurarLeitorContagemEstoque() {
   if (!estoqueContagemCodigo) return;
   const mobile = separacaoEmMobile();
-  // O bipador envia keydown mesmo com o campo readonly; assim tablets que
-  // ignoram inputMode=none também não abrem o teclado virtual.
+  // O campo e focado como readonly e liberado depois, bloqueando o teclado
+  // virtual sem impedir bipadores que injetam texto diretamente no input.
   estoqueContagemCodigo.readOnly = mobile;
   estoqueContagemCodigo.inputMode = mobile ? 'none' : 'numeric';
   estoqueContagemCodigo.setAttribute('virtualkeyboardpolicy', mobile ? 'manual' : 'auto');
@@ -481,6 +496,21 @@ function configurarLeitorContagemEstoque() {
   );
 }
 
+function focarLeitorContagemEstoqueSemTeclado() {
+  if (!estoqueContagemCodigo || estoqueContagemCodigo.disabled) return;
+  const mobile = separacaoEmMobile();
+  if (mobile) estoqueContagemCodigo.readOnly = true;
+  estoqueContagemCodigo.focus({ preventScroll: true });
+  if (!mobile) return;
+
+  if (navigator.virtualKeyboard?.hide) navigator.virtualKeyboard.hide();
+  setTimeout(() => {
+    if (estoqueContagemItensView.hidden || estoqueContagemCodigo.disabled) return;
+    estoqueContagemCodigo.readOnly = false;
+    if (navigator.virtualKeyboard?.hide) navigator.virtualKeyboard.hide();
+  }, 80);
+}
+
 function limparCodigoContagemEstoque({ focar = false } = {}) {
   estoqueContagemCodigo.value = '';
   leituraContagemEstoqueMobile = '';
@@ -488,7 +518,7 @@ function limparCodigoContagemEstoque({ focar = false } = {}) {
     estoqueContagemChavesLocalizadas = null;
     renderizarItensContagemEstoque();
   }
-  if (focar) setTimeout(() => estoqueContagemCodigo.focus({ preventScroll: true }), 0);
+  if (focar) setTimeout(focarLeitorContagemEstoqueSemTeclado, 0);
 }
 
 function aplicarLargurasGridItens() {
@@ -2043,7 +2073,7 @@ async function abrirSessaoContagemEstoque(id) {
     mostrarItensContagemEstoque();
     renderizarContagemEstoque();
     if (['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(estoqueContagemAtual.status)) {
-      setTimeout(() => estoqueContagemCodigo.focus(), 0);
+      setTimeout(focarLeitorContagemEstoqueSemTeclado, 0);
     }
   } catch (error) {
     atualizarMensagemContagemEstoque(error.message, true);
@@ -2073,7 +2103,7 @@ async function criarSessaoContagemEstoque() {
     await carregarListaContagensEstoque();
     mostrarItensContagemEstoque();
     renderizarContagemEstoque();
-    estoqueContagemCodigo.focus();
+    focarLeitorContagemEstoqueSemTeclado();
   } catch (error) {
     atualizarMensagemContagemEstoque(error.message, true);
   } finally {
@@ -2108,7 +2138,7 @@ async function salvarItemContagemEstoque(chave, quantidade) {
     limparCodigoContagemEstoque();
     atualizarMensagemContagemEstoque(`Quantidade ${formatarQuantidade(valor)} registrada.`);
     renderizarContagemEstoque();
-    estoqueContagemCodigo.focus();
+    focarLeitorContagemEstoqueSemTeclado();
   } catch (error) {
     atualizarMensagemContagemEstoque(error.message, true);
   }
@@ -2164,6 +2194,36 @@ async function processarCodigoContagemEstoque() {
   } catch (error) {
     atualizarMensagemContagemEstoque(error.message, true);
   }
+}
+
+function capturarTeclaLeitorContagemEstoque(event) {
+  if (
+    !separacaoEmMobile()
+    || estoqueContagemItensView.hidden
+    || estoqueContagemScan.hidden
+    || !estoqueContagemConfirmModal.hidden
+    || event.ctrlKey
+    || event.altKey
+    || event.metaKey
+  ) {
+    return false;
+  }
+
+  if (/^[0-9]$/.test(event.key)) {
+    event.preventDefault();
+    leituraContagemEstoqueMobile += event.key;
+    estoqueContagemCodigo.value = leituraContagemEstoqueMobile;
+    return true;
+  }
+
+  if ((event.key === 'Enter' || event.key === 'Tab') && estoqueContagemCodigo.value.trim()) {
+    event.preventDefault();
+    leituraContagemEstoqueMobile = '';
+    processarCodigoContagemEstoque();
+    return true;
+  }
+
+  return false;
 }
 
 async function executarAcaoContagemEstoque(acao, confirmacao) {
@@ -7078,7 +7138,7 @@ async function abrirSeparacaoPedido() {
   renderizarItensSeparacao();
   iniciarSincronizacaoSeparacao();
   atualizarIcones();
-  setTimeout(() => separacaoCodigo.focus(), 0);
+  setTimeout(focarLeitorSeparacaoSemTeclado, 0);
 }
 
 function fecharSeparacaoPedido() {
@@ -8349,25 +8409,29 @@ estoqueContagemCodigo.addEventListener('input', () => {
     renderizarItensContagemEstoque();
   }
 });
+estoqueContagemCodigo.addEventListener('pointerdown', (event) => {
+  if (!separacaoEmMobile()) return;
+  event.preventDefault();
+  focarLeitorContagemEstoqueSemTeclado();
+});
+estoqueContagemCodigo.addEventListener('focus', () => {
+  if (separacaoEmMobile() && navigator.virtualKeyboard?.hide) {
+    navigator.virtualKeyboard.hide();
+  }
+});
 estoqueContagemCodigo.addEventListener('keydown', (event) => {
   if (separacaoEmMobile()) {
-    if (!estoqueContagemItensView.hidden && /^[0-9]$/.test(event.key)) {
-      event.preventDefault();
-      leituraContagemEstoqueMobile += event.key;
-      estoqueContagemCodigo.value = leituraContagemEstoqueMobile;
-      return;
-    }
-    if (event.key === 'Enter' || event.key === 'Tab') {
-      event.preventDefault();
-      leituraContagemEstoqueMobile = '';
-      processarCodigoContagemEstoque();
-    }
+    capturarTeclaLeitorContagemEstoque(event);
     return;
   }
   if (event.key === 'Enter') {
     event.preventDefault();
     processarCodigoContagemEstoque();
   }
+});
+document.addEventListener('keydown', (event) => {
+  if (event.target === estoqueContagemCodigo || event.defaultPrevented) return;
+  capturarTeclaLeitorContagemEstoque(event);
 });
 botaoLimparCodigoContagemEstoque.addEventListener('click', () => {
   limparCodigoContagemEstoque({ focar: true });
@@ -8529,6 +8593,16 @@ separacaoCodigo.addEventListener('input', () => {
   const somenteDigitos = separacaoCodigo.value.replace(/\D/g, '');
   separacaoCodigo.value = somenteDigitos;
   if (separacaoEmMobile()) leituraSeparacaoMobile = somenteDigitos;
+});
+separacaoCodigo.addEventListener('pointerdown', (event) => {
+  if (!separacaoEmMobile()) return;
+  event.preventDefault();
+  focarLeitorSeparacaoSemTeclado();
+});
+separacaoCodigo.addEventListener('focus', () => {
+  if (separacaoEmMobile() && navigator.virtualKeyboard?.hide) {
+    navigator.virtualKeyboard.hide();
+  }
 });
 separacaoCodigo.addEventListener('keydown', (event) => {
   if (separacaoEmMobile()) {
