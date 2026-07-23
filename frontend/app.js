@@ -449,7 +449,7 @@ function configurarLeitorSeparacao() {
   if (!separacaoCodigo) return;
   const mobile = separacaoEmMobile();
   // Alguns navegadores de tablet ignoram inputMode=none. O readonly bloqueia o
-  // teclado virtual e o keydown abaixo continua recebendo o bipador físico.
+  // teclado virtual; a captura global da tela continua recebendo o bipador físico.
   separacaoCodigo.readOnly = mobile;
   separacaoCodigo.inputMode = mobile ? 'none' : 'numeric';
   separacaoCodigo.setAttribute('virtualkeyboardpolicy', mobile ? 'manual' : 'auto');
@@ -6971,6 +6971,37 @@ function processarCodigoSeparacao() {
   abrirConfirmacaoSeparacao(correspondencia.item, correspondencia.entrada);
 }
 
+function capturarTeclaLeitorSeparacao(event) {
+  if (
+    !separacaoEmMobile()
+    || separacaoScreen.hidden
+    || separacaoConcluida
+    || !separacaoConfirmModal.hidden
+    || !separacaoFinalModal.hidden
+    || event.ctrlKey
+    || event.altKey
+    || event.metaKey
+  ) {
+    return false;
+  }
+
+  if (/^[0-9]$/.test(event.key)) {
+    event.preventDefault();
+    leituraSeparacaoMobile += event.key;
+    separacaoCodigo.value = leituraSeparacaoMobile;
+    return true;
+  }
+
+  if ((event.key === 'Enter' || event.key === 'Tab') && normalizarCodigo(separacaoCodigo.value)) {
+    event.preventDefault();
+    leituraSeparacaoMobile = '';
+    processarCodigoSeparacao();
+    return true;
+  }
+
+  return false;
+}
+
 function fecharResumoFinalSeparacao() {
   separacaoFinalModal.hidden = true;
 }
@@ -8501,23 +8532,17 @@ separacaoCodigo.addEventListener('input', () => {
 });
 separacaoCodigo.addEventListener('keydown', (event) => {
   if (separacaoEmMobile()) {
-    if (!separacaoScreen.hidden && /^[0-9]$/.test(event.key)) {
-      event.preventDefault();
-      leituraSeparacaoMobile += event.key;
-      separacaoCodigo.value = leituraSeparacaoMobile;
-      return;
-    }
-    if (event.key === 'Enter' || event.key === 'Tab') {
-      event.preventDefault();
-      leituraSeparacaoMobile = '';
-      processarCodigoSeparacao();
-    }
+    capturarTeclaLeitorSeparacao(event);
     return;
   }
   if (event.key === 'Enter') {
     event.preventDefault();
     processarCodigoSeparacao();
   }
+});
+document.addEventListener('keydown', (event) => {
+  if (event.target === separacaoCodigo || event.defaultPrevented) return;
+  capturarTeclaLeitorSeparacao(event);
 });
 separacaoItensLista.addEventListener('click', (event) => {
   if (separacaoEmMobile()) return;
