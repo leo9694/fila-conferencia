@@ -11,6 +11,7 @@ let estoqueContagemFiltroAuditoria = 'TODOS';
 let estoqueContagemFiltroStatus = 'TODOS';
 let estoqueContagemQuantidadeProposta = 0;
 let leituraContagemEstoqueMobile = '';
+let toqueLongoContagemEstoque = null;
 let estoqueContagemPreviaTimer = null;
 let estoqueContagemPreviaVersao = 0;
 let confirmacaoAppResolver = null;
@@ -45,6 +46,8 @@ const botaoVoltarHomeAcompanhamento = document.getElementById('voltar-home-acomp
 const botaoVoltarHomeFila = document.getElementById('voltar-home-fila');
 const botaoVoltarHomeContato = document.getElementById('voltar-home-contato');
 const botaoVoltarHomeContagemEstoque = document.getElementById('voltar-home-contagem-estoque');
+const estoqueContagemAmbiente = document.getElementById('estoque-contagem-ambiente');
+const estoqueContagemAmbienteTexto = document.getElementById('estoque-contagem-ambiente-texto');
 const estoqueContagemEmpresa = document.getElementById('estoque-contagem-empresa');
 const estoqueContagemLocal = document.getElementById('estoque-contagem-local');
 const estoqueContagemGrupo = document.getElementById('estoque-contagem-grupo');
@@ -59,6 +62,8 @@ const estoquePreviaLocais = document.getElementById('estoque-previa-locais');
 const estoquePreviaUnidades = document.getElementById('estoque-previa-unidades');
 const botaoCriarContagemEstoque = document.getElementById('estoque-contagem-criar');
 const botaoAtualizarContagensEstoque = document.getElementById('estoque-contagem-atualizar');
+const botaoHistoricoContagemEstoque = document.getElementById('estoque-contagem-historico');
+const botaoNovaContagemEstoque = document.getElementById('estoque-contagem-nova');
 const estoqueContagemSessoes = document.getElementById('estoque-contagem-sessoes');
 const estoqueContagemSelecao = document.getElementById('estoque-contagem-selecao');
 const estoqueContagemItensView = document.getElementById('estoque-contagem-itens-view');
@@ -350,6 +355,7 @@ const itensGridLarguras = [34, 92, 240, 142, 170, 132];
 const STORAGE_NAVEGACAO_FILA = 'filaConferencia:navegacaoAtual';
 const STORAGE_SEPARACAO_PREFIX = 'filaConferencia:separacao:';
 const TEMPO_TOQUE_LONGO_SEPARACAO_MS = 550;
+const TEMPO_TOQUE_LONGO_CONTAGEM_ESTOQUE_MS = TEMPO_TOQUE_LONGO_SEPARACAO_MS;
 let toqueLongoSeparacao = null;
 let leituraSeparacaoMobile = '';
 
@@ -412,17 +418,21 @@ function renderizarCarregamentoContato(mensagem = 'Carregando clientes...') {
 }
 
 function separacaoEmMobile() {
-  return window.matchMedia('(max-width: 760px), (pointer: coarse)').matches;
+  const dispositivoComToque = Number(navigator.maxTouchPoints || 0) > 0
+    || 'ontouchstart' in window
+    || window.matchMedia('(any-pointer: coarse), (hover: none)').matches;
+  return dispositivoComToque || window.matchMedia('(max-width: 760px)').matches;
 }
 
 function configurarLeitorSeparacao() {
   if (!separacaoCodigo) return;
   const mobile = separacaoEmMobile();
-  // O leitor fisico funciona como teclado: o campo precisa continuar gravavel.
-  // inputMode=none impede apenas a abertura do teclado virtual no mobile.
-  separacaoCodigo.readOnly = false;
+  // Alguns navegadores de tablet ignoram inputMode=none. O readonly bloqueia o
+  // teclado virtual e o keydown abaixo continua recebendo o bipador físico.
+  separacaoCodigo.readOnly = mobile;
   separacaoCodigo.inputMode = mobile ? 'none' : 'numeric';
   separacaoCodigo.setAttribute('virtualkeyboardpolicy', mobile ? 'manual' : 'auto');
+  separacaoCodigo.setAttribute('autocomplete', 'off');
   separacaoCodigo.setAttribute(
     'aria-label',
     mobile ? 'Leitor de codigo de barras. Use o scanner ou mantenha um produto pressionado.' : 'Codigo de barras ou produto'
@@ -438,13 +448,15 @@ function limparCodigoSeparacao({ focar = false } = {}) {
 function configurarLeitorContagemEstoque() {
   if (!estoqueContagemCodigo) return;
   const mobile = separacaoEmMobile();
-  // Mantém o campo gravável para o leitor físico, mas bloqueia o teclado virtual.
-  estoqueContagemCodigo.readOnly = false;
+  // O bipador envia keydown mesmo com o campo readonly; assim tablets que
+  // ignoram inputMode=none também não abrem o teclado virtual.
+  estoqueContagemCodigo.readOnly = mobile;
   estoqueContagemCodigo.inputMode = mobile ? 'none' : 'numeric';
   estoqueContagemCodigo.setAttribute('virtualkeyboardpolicy', mobile ? 'manual' : 'auto');
+  estoqueContagemCodigo.setAttribute('autocomplete', 'off');
   estoqueContagemCodigo.setAttribute(
     'aria-label',
-    mobile ? 'Leitor de código de barras. Use o bipador para informar o produto.' : 'Código de barras ou produto'
+    mobile ? 'Leitor de código de barras. Use o bipador ou mantenha um produto pressionado.' : 'Código de barras ou produto'
   );
 }
 
@@ -1251,6 +1263,7 @@ function mostrarContagemEstoque() {
 
 function mostrarSelecaoContagemEstoque() {
   if (estoqueContagemConfirmModal) fecharConfirmacaoContagemEstoque();
+  cancelarToqueLongoContagemEstoque();
   estoqueContagemAtual = null;
   estoqueContagemChavesLocalizadas = null;
   estoqueContagemScreen.classList.remove('contagem-itens-ativa');
@@ -1292,6 +1305,46 @@ function classeStatusContagemEstoque(status) {
   return '';
 }
 
+function rotuloStatusCardContagemEstoque(status) {
+  return {
+    EM_CONTAGEM: 'Em andamento',
+    EM_RECONTAGEM: 'Em recontagem',
+    EM_ANALISE: 'Em análise',
+    CONCLUIDA: 'Concluída',
+    PRONTA_PARA_AJUSTE: 'Pronta para ajuste',
+    AJUSTE_GERADO: 'Ajuste gerado'
+  }[status] || status;
+}
+
+function classeStatusCardContagemEstoque(status) {
+  if (status === 'CONCLUIDA') return 'concluida';
+  if (['PRONTA_PARA_AJUSTE', 'AJUSTE_GERADO'].includes(status)) return 'ajuste';
+  if (status === 'EM_ANALISE') return 'analise';
+  return 'andamento';
+}
+
+function tituloCardContagemEstoque(sessao) {
+  const marca = String(sessao?.filtros?.marca || '').trim();
+  return marca || sessao?.nomeEmpresa || `Empresa ${sessao?.empresa || ''}`;
+}
+
+function reiniciarFiltrosContagemEstoque() {
+  estoqueContagemEmpresa.value = '';
+  estoqueContagemLocal.innerHTML = '<option value="">Todos os locais</option>';
+  estoqueContagemLocal.disabled = true;
+  estoqueContagemGrupo.innerHTML = '<option value="">Todos os grupos</option>';
+  estoqueContagemGrupo.disabled = true;
+  estoqueContagemMarca.innerHTML = '<option value="">Todas as marcas</option>';
+  estoqueContagemMarca.disabled = true;
+  estoqueContagemSubgrupos.checked = true;
+  estoqueContagemSubgrupos.disabled = true;
+  estoqueContagemSituacao.value = 'ATIVOS';
+  estoqueContagemControle.value = 'TODOS';
+  estoqueContagemSaldo.value = 'POSITIVO';
+  limparPreviaContagemEstoque();
+  estoqueContagemEmpresa.focus();
+}
+
 function atualizarMensagemContagemEstoque(mensagem, erro = false) {
   estoqueContagemMensagem.textContent = mensagem;
   estoqueContagemMensagem.className = `separacao-status${erro ? ' is-warning' : ''}`;
@@ -1307,6 +1360,8 @@ async function carregarConfigContagemEstoque() {
     const payload = await resposta.json();
     if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível carregar a configuração.');
 
+    estoqueContagemAmbiente.classList.toggle('is-production', !payload.ambienteTeste);
+    estoqueContagemAmbienteTexto.textContent = payload.ambienteTeste ? 'Base de teste' : 'Base de produção';
     estoqueContagemEmpresa.innerHTML = [
       '<option value="">Selecione a empresa</option>',
       ...payload.empresas.map((empresa) => (
@@ -1504,31 +1559,41 @@ function renderizarListaContagensEstoque() {
     return;
   }
 
-  estoqueContagemSessoes.innerHTML = estoqueContagemLista.map((sessao) => `
-    <article
-      class="estoque-sessao-card${estoqueContagemAtual?.id === sessao.id ? ' ativa' : ''}"
-    >
-      <button
-        class="estoque-sessao-abrir"
-        type="button"
-        data-estoque-sessao="${escaparAtributo(sessao.id)}"
+  estoqueContagemSessoes.innerHTML = estoqueContagemLista.map((sessao) => {
+    const titulo = tituloCardContagemEstoque(sessao);
+    const inicial = String(titulo || 'C').trim().charAt(0).toUpperCase();
+    const resumo = sessao.resumo || {};
+    const statusClasse = classeStatusCardContagemEstoque(sessao.status);
+    return `
+      <article
+        class="estoque-sessao-card${estoqueContagemAtual?.id === sessao.id ? ' ativa' : ''}"
       >
-        <strong>${escaparHtml(sessao.empresa)} - ${escaparHtml(sessao.nomeEmpresa)}</strong>
-        <span>${escaparHtml(sessao.nomeLocal || 'Todos os locais')} · ${rotuloStatusContagemEstoque(sessao.status)}</span>
-        <span>${escaparHtml(resumirFiltrosCopiaEstoque(sessao.filtros))}</span>
-        <span>${formatarDataHora(sessao.criadoEm)} · ${sessao.resumo?.itensContados || 0}/${sessao.resumo?.totalItens || 0} itens</span>
-      </button>
-      <button
-        class="estoque-sessao-excluir"
-        type="button"
-        data-estoque-excluir="${escaparAtributo(sessao.id)}"
-        aria-label="Excluir esta cópia"
-        title="Excluir cópia"
-      >
-        <i data-lucide="trash-2" aria-hidden="true"></i>
-      </button>
-    </article>
-  `).join('');
+        <span class="estoque-sessao-avatar" aria-hidden="true">${escaparHtml(inicial)}</span>
+        <button
+          class="estoque-sessao-abrir"
+          type="button"
+          data-estoque-sessao="${escaparAtributo(sessao.id)}"
+        >
+          <span class="estoque-sessao-topline">
+            <strong>${escaparHtml(titulo)}</strong>
+            <span class="estoque-sessao-status ${statusClasse}">${escaparHtml(rotuloStatusCardContagemEstoque(sessao.status))}</span>
+          </span>
+          <span>${escaparHtml(sessao.nomeLocal || 'Todos os locais')}</span>
+          <span>${formatarDataHora(sessao.criadoEm)}</span>
+          <span class="estoque-sessao-progress">${resumo.itensContados || 0} / ${resumo.totalItens || 0}</span>
+        </button>
+        <button
+          class="estoque-sessao-excluir"
+          type="button"
+          data-estoque-excluir="${escaparAtributo(sessao.id)}"
+          aria-label="Excluir esta cópia"
+          title="Excluir cópia"
+        >
+          <i data-lucide="trash-2" aria-hidden="true"></i>
+        </button>
+      </article>
+    `;
+  }).join('');
   atualizarIcones();
 }
 
@@ -1679,14 +1744,14 @@ function renderizarItensContagemEstoque() {
   estoqueColunaSistema.textContent = 'Estoque sistema';
   const grupos = agruparItensContagemEstoque();
   if (!grupos.length) {
-    estoqueContagemItens.innerHTML = '<tr><td colspan="6" class="empty-state">Nenhuma linha encontrada para esta contagem.</td></tr>';
+    estoqueContagemItens.innerHTML = '<tr><td colspan="7" class="empty-state">Nenhuma linha encontrada para esta contagem.</td></tr>';
     return;
   }
 
   estoqueContagemItens.innerHTML = grupos.map((grupo) => {
     const cabecalho = `
       <tr class="separacao-group-row">
-        <td colspan="6">${grupo.codigo ? `Grupo ${escaparHtml(grupo.codigo)} - ` : ''}${escaparHtml(grupo.descricao)}</td>
+        <td colspan="7">${grupo.codigo ? `Grupo ${escaparHtml(grupo.codigo)} - ` : ''}${escaparHtml(grupo.descricao)}</td>
       </tr>
     `;
     const linhas = grupo.itens.map((item) => {
@@ -1708,6 +1773,7 @@ function renderizarItensContagemEstoque() {
       const contagemTexto = contado
         ? `${formatarQuantidade(contagem)} ${escaparHtml(item.codVol)}`
         : '—';
+      const validadeTexto = item.dtVal ? formatarData(item.dtVal) : 'Sem validade';
 
       return `
         <tr
@@ -1718,6 +1784,7 @@ function renderizarItensContagemEstoque() {
           <td><strong class="separacao-product-code">${escaparHtml(item.codProd)}</strong></td>
           <td class="separacao-description" title="${escaparAtributo(item.descrProd)}">${escaparHtml(item.descrProd || '-')}</td>
           <td class="estoque-lista-lote" data-label="Lote" title="${escaparAtributo(item.controle || 'Sem controle')}">${escaparHtml(item.controle || 'Sem controle')}</td>
+          <td class="estoque-lista-validade" data-label="Validade">${escaparHtml(validadeTexto)}</td>
           <td class="estoque-lista-sistema" data-label="Estoque">${formatarQuantidade(item.estoqueSistema)} ${escaparHtml(item.codVol)}</td>
           <td class="estoque-lista-contagem" data-label="Contagem">${contagemTexto}</td>
           <td class="estoque-lista-status"><span class="separacao-badge${badgeClasse}">${status}</span></td>
@@ -1797,7 +1864,8 @@ function abrirConfirmacaoContagemEstoque(item) {
   estoqueContagemConfirmProduto.innerHTML = `
     ${escaparHtml(item.codProd)} - ${escaparHtml(item.descrProd || '-')}
     <div class="separacao-confirm-meta">Local: ${escaparHtml(item.codLocal)} - ${escaparHtml(item.descrLocal)}</div>
-    <div class="separacao-confirm-meta">Lote: ${escaparHtml(item.controle || 'Sem controle')} | Estoque sistema: ${formatarQuantidade(item.estoqueSistema)} ${escaparHtml(item.codVol)}</div>
+    <div class="separacao-confirm-meta">Lote: ${escaparHtml(item.controle || 'Sem controle')}</div>
+    <div class="separacao-confirm-meta">Validade: ${escaparHtml(item.dtVal ? formatarData(item.dtVal) : 'Sem validade')} | Estoque sistema: ${formatarQuantidade(item.estoqueSistema)} ${escaparHtml(item.codVol)}</div>
   `;
   estoqueContagemQuantidadeProposta = item.contagemAtual === null
     ? Number(item.estoqueSistema)
@@ -1854,7 +1922,7 @@ async function criarSessaoContagemEstoque() {
   const empresa = estoqueContagemEmpresa.value;
   if (!empresa) return;
   botaoCriarContagemEstoque.disabled = true;
-  botaoCriarContagemEstoque.textContent = 'Criando fotografia...';
+  botaoCriarContagemEstoque.innerHTML = '<span>Criando fotografia...</span>';
 
   try {
     const resposta = await fetch('/api/estoque-contagem/sessoes', {
@@ -1878,7 +1946,8 @@ async function criarSessaoContagemEstoque() {
     atualizarMensagemContagemEstoque(error.message, true);
   } finally {
     botaoCriarContagemEstoque.disabled = false;
-    botaoCriarContagemEstoque.textContent = 'Criar cópia e iniciar';
+    botaoCriarContagemEstoque.innerHTML = 'Iniciar contagem <i data-lucide="arrow-right" aria-hidden="true"></i>';
+    atualizarIcones();
   }
 }
 
@@ -7836,6 +7905,10 @@ estoqueContagemControle.addEventListener('change', () => agendarPreviaContagemEs
 estoqueContagemSaldo.addEventListener('change', () => agendarPreviaContagemEstoque());
 botaoCriarContagemEstoque.addEventListener('click', criarSessaoContagemEstoque);
 botaoAtualizarContagensEstoque.addEventListener('click', carregarListaContagensEstoque);
+botaoHistoricoContagemEstoque.addEventListener('click', () => {
+  document.querySelector('.estoque-history-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+botaoNovaContagemEstoque.addEventListener('click', reiniciarFiltrosContagemEstoque);
 estoqueContagemSessoes.addEventListener('click', (event) => {
   const excluir = event.target.closest('[data-estoque-excluir]');
   if (excluir) {
@@ -7846,11 +7919,45 @@ estoqueContagemSessoes.addEventListener('click', (event) => {
   if (botao) abrirSessaoContagemEstoque(botao.dataset.estoqueSessao);
 });
 estoqueContagemItens.addEventListener('click', (event) => {
+  if (separacaoEmMobile()) return;
   const linha = event.target.closest('[data-estoque-item]');
   if (!linha || !estoqueContagemAtual) return;
   abrirConfirmacaoContagemEstoque(
     estoqueContagemAtual.itens.find((item) => item.chave === linha.dataset.estoqueItem)
   );
+});
+estoqueContagemItens.addEventListener('pointerdown', (event) => {
+  if (!separacaoEmMobile()) return;
+  const linha = event.target.closest('[data-estoque-item]');
+  if (!linha || !estoqueContagemAtual) return;
+  event.preventDefault();
+
+  const item = estoqueContagemAtual.itens.find(
+    (entrada) => entrada.chave === linha.dataset.estoqueItem
+  );
+  if (!item?.podeContar) return;
+  const pointerId = event.pointerId;
+  const timeout = setTimeout(() => {
+    toqueLongoContagemEstoque = null;
+    if (navigator.vibrate) navigator.vibrate(20);
+    abrirConfirmacaoContagemEstoque(item);
+  }, TEMPO_TOQUE_LONGO_CONTAGEM_ESTOQUE_MS);
+  toqueLongoContagemEstoque = { pointerId, timeout };
+});
+function cancelarToqueLongoContagemEstoque(event) {
+  if (!toqueLongoContagemEstoque) return;
+  if (
+    event?.pointerId !== undefined
+    && event.pointerId !== toqueLongoContagemEstoque.pointerId
+  ) return;
+  clearTimeout(toqueLongoContagemEstoque.timeout);
+  toqueLongoContagemEstoque = null;
+}
+estoqueContagemItens.addEventListener('pointerup', cancelarToqueLongoContagemEstoque);
+estoqueContagemItens.addEventListener('pointercancel', cancelarToqueLongoContagemEstoque);
+estoqueContagemItens.addEventListener('pointerleave', cancelarToqueLongoContagemEstoque);
+estoqueContagemItens.addEventListener('contextmenu', (event) => {
+  if (separacaoEmMobile()) event.preventDefault();
 });
 estoqueContagemItens.addEventListener('keydown', (event) => {
   if (event.key !== 'Enter' && event.key !== ' ') return;

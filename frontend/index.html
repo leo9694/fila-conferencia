@@ -6804,10 +6804,10 @@
     }
 
     .estoque-contagem-screen {
-      padding: 18px;
+      padding: 28px;
       background:
-        radial-gradient(circle at top right, rgba(245, 158, 11, 0.13), transparent 27%),
-        linear-gradient(180deg, #f4faf8 0%, #eaf3f0 100%);
+        radial-gradient(circle at 50% -20%, rgba(255, 255, 255, .96), transparent 48%),
+        linear-gradient(180deg, #f7faf9 0%, #f1f6f4 100%);
     }
 
     .estoque-contagem-app {
@@ -6820,12 +6820,10 @@
       align-items: center;
       justify-content: space-between;
       gap: 16px;
-      margin-bottom: 14px;
-      padding: 18px 20px;
-      border: 1px solid rgba(18, 66, 75, 0.12);
-      border-radius: 22px;
-      background: rgba(255, 255, 255, 0.92);
-      box-shadow: 0 14px 34px rgba(16, 57, 66, 0.08);
+      margin-bottom: 18px;
+      padding: 0 2px;
+      border: 0;
+      background: transparent;
     }
 
     .estoque-contagem-title {
@@ -6840,9 +6838,9 @@
       border-radius: 15px;
       display: grid;
       place-items: center;
-      color: #fff;
-      background: linear-gradient(135deg, #d97706, #f59e0b);
-      box-shadow: 0 10px 20px rgba(217, 119, 6, 0.22);
+      color: #08795e;
+      background: #e2f3ed;
+      box-shadow: none;
     }
 
     .estoque-contagem-title-icon svg {
@@ -6872,23 +6870,29 @@
       letter-spacing: .06em;
     }
 
+    .estoque-test-badge.is-production {
+      color: #9a3412;
+      background: #fff0e8;
+      border-color: #f2b89d;
+    }
+
     .estoque-selection-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1.35fr) minmax(320px, .65fr);
-      gap: 18px;
+      grid-template-columns: minmax(0, 2.1fr) minmax(340px, 1fr);
+      gap: 24px;
       align-items: start;
     }
 
     .estoque-sidebar,
     .estoque-workspace {
-      border: 1px solid rgba(18, 66, 75, 0.12);
-      border-radius: 22px;
-      background: rgba(255, 255, 255, 0.94);
-      box-shadow: 0 14px 34px rgba(16, 57, 66, 0.07);
+      border: 1px solid #e3ebe8;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.98);
+      box-shadow: 0 14px 35px rgba(21, 52, 47, 0.075);
     }
 
     .estoque-sidebar {
-      padding: 22px;
+      padding: 26px;
       display: grid;
       gap: 16px;
       position: static;
@@ -6897,17 +6901,16 @@
     }
 
     .estoque-setup-card .estoque-sidebar-section {
-      gap: 18px;
+      gap: 16px;
     }
 
     .estoque-history-card {
       min-height: 100%;
-      background:
-        linear-gradient(180deg, rgba(245, 250, 248, .72), rgba(255, 255, 255, .96));
+      background: rgba(255, 255, 255, .98);
     }
 
     .estoque-history-card .estoque-sessoes {
-      max-height: 640px;
+      max-height: 720px;
       align-content: start;
       grid-auto-rows: max-content;
     }
@@ -7129,55 +7132,99 @@
       justify-content: space-between;
       gap: 8px;
       color: #123f48;
+      font-size: .94rem;
       font-weight: 950;
+    }
+
+    .estoque-sidebar-title .estoque-filter-chip {
+      min-height: 38px;
+      padding: 0 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: #31464c;
+      border-color: #ccd8d5;
+      border-radius: 9px;
+      background: #fff;
+    }
+
+    .estoque-sidebar-title .estoque-filter-chip svg {
+      width: 15px;
+      height: 15px;
     }
 
     .estoque-setup-heading {
       display: flex;
       align-items: center;
-      gap: 13px;
-      padding-bottom: 2px;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 2px 2px 6px;
     }
 
-    .estoque-setup-heading-icon {
-      width: 42px;
-      height: 42px;
-      flex: 0 0 42px;
-      display: grid;
-      place-items: center;
-      border-radius: 13px;
+    .estoque-setup-heading-actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .estoque-heading-button {
+      min-height: 44px;
+      padding: 0 17px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: 1px solid #ccd8d5;
+      border-radius: 10px;
+      color: #203038;
+      background: #fff;
+      font-size: .78rem;
+      font-weight: 850;
+      transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
+    }
+
+    .estoque-heading-button:hover {
+      border-color: #7bb9aa;
+      box-shadow: 0 6px 16px rgba(20, 79, 66, .08);
+      transform: translateY(-1px);
+    }
+
+    .estoque-heading-button.primary {
       color: #fff;
-      background: linear-gradient(135deg, #0d8a6a, #14a57f);
-      box-shadow: 0 8px 18px rgba(13, 138, 106, .2);
+      border-color: #07845f;
+      background: linear-gradient(135deg, #07845f, #0a9a70);
+      box-shadow: 0 8px 18px rgba(7, 132, 95, .18);
     }
 
-    .estoque-setup-heading-icon svg {
-      width: 20px;
-      height: 20px;
+    .estoque-heading-button svg {
+      width: 17px;
+      height: 17px;
     }
 
     .estoque-setup-heading h2 {
       margin: 0;
-      color: #123f48;
-      font-size: 1.05rem;
+      color: #18262d;
+      font-size: clamp(1.28rem, 2vw, 1.72rem);
       font-weight: 950;
+      letter-spacing: -.025em;
     }
 
     .estoque-setup-heading p {
-      margin: 3px 0 0;
-      color: #6d858a;
-      font-size: .74rem;
-      font-weight: 700;
+      margin: 5px 0 0;
+      color: #6e7c82;
+      font-size: .84rem;
+      font-weight: 650;
       line-height: 1.35;
     }
 
     .estoque-filter-section {
       display: grid;
-      gap: 12px;
-      padding: 15px;
-      border: 1px solid #deebe8;
-      border-radius: 16px;
-      background: #fbfdfc;
+      gap: 13px;
+      padding: 16px 2px 18px;
+      border: 0;
+      border-bottom: 1px solid #e2e9e7;
+      border-radius: 0;
+      background: transparent;
     }
 
     .estoque-filter-section-title {
@@ -7186,58 +7233,55 @@
       gap: 10px;
     }
 
-    .estoque-filter-section-title > span {
-      width: 27px;
-      height: 27px;
-      flex: 0 0 27px;
-      display: grid;
-      place-items: center;
-      border-radius: 9px;
-      color: #0b735d;
-      background: #dcf4ec;
-      font-size: .72rem;
-      font-weight: 950;
-    }
-
-    .estoque-filter-section-title strong,
-    .estoque-filter-section-title small {
-      display: block;
-    }
-
     .estoque-filter-section-title strong {
-      color: #123f48;
-      font-size: .79rem;
+      color: #1d2b31;
+      font-size: .92rem;
       font-weight: 950;
-    }
-
-    .estoque-filter-section-title small {
-      margin-top: 2px;
-      color: #7a9094;
-      font-size: .65rem;
-      font-weight: 700;
     }
 
     .estoque-field label {
       display: block;
       margin-bottom: 5px;
-      color: #577179;
-      font-size: .69rem;
-      font-weight: 950;
-      text-transform: uppercase;
-      letter-spacing: .06em;
+      color: #35474e;
+      font-size: .72rem;
+      font-weight: 800;
+      text-transform: none;
+      letter-spacing: 0;
     }
 
     .estoque-field input,
     .estoque-field select {
       width: 100%;
       min-height: 43px;
-      padding: 0 12px;
-      border: 1px solid #c7d9d5;
-      border-radius: 11px;
-      color: #123f48;
+      padding: 0 38px 0 12px;
+      border: 1px solid #cdd9d6;
+      border-radius: 10px;
+      color: #1f3036;
       background: #fff;
-      font-weight: 800;
+      font-size: .82rem;
+      font-weight: 850;
       transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+    }
+
+    .estoque-select-shell {
+      position: relative;
+    }
+
+    .estoque-select-shell select {
+      min-height: 52px;
+      padding-left: 48px;
+    }
+
+    .estoque-select-shell > svg {
+      position: absolute;
+      z-index: 1;
+      top: 50%;
+      left: 15px;
+      width: 20px;
+      height: 20px;
+      color: #07845f;
+      pointer-events: none;
+      transform: translateY(-50%);
     }
 
     .estoque-field select:disabled {
@@ -7249,19 +7293,19 @@
     .estoque-field input:focus,
     .estoque-field select:focus {
       outline: none;
-      border-color: #d97706;
-      box-shadow: 0 0 0 3px rgba(217, 119, 6, .12);
+      border-color: #53a891;
+      box-shadow: 0 0 0 3px rgba(7, 132, 95, .1);
     }
 
     .estoque-copy-note {
       display: flex;
       align-items: flex-start;
       gap: 10px;
-      padding: 11px 13px;
-      border: 1px solid #f0ddb1;
-      border-radius: 13px;
-      color: #6b4a13;
-      background: #fff8e8;
+      padding: 12px 15px;
+      border: 1px solid #f3d7ae;
+      border-radius: 10px;
+      color: #704512;
+      background: #fff7e9;
       font-size: .76rem;
       font-weight: 750;
       line-height: 1.38;
@@ -7272,15 +7316,7 @@
       height: 17px;
       flex: 0 0 17px;
       margin-top: 1px;
-      color: #c27608;
-    }
-
-    .estoque-copy-note strong {
-      display: block;
-      margin-bottom: 1px;
-      color: #6b4510;
-      font-size: .7rem;
-      font-weight: 950;
+      color: #dd7400;
     }
 
     .estoque-filter-grid {
@@ -7299,10 +7335,11 @@
       gap: 8px;
       width: fit-content;
       margin: 8px 0 0;
-      padding: 5px 8px 5px 6px;
+      min-height: 34px;
+      padding: 6px 11px 6px 7px;
       border-radius: 8px;
-      color: #577179;
-      background: #edf7f4;
+      color: #176c58;
+      background: #eaf6f2;
       font-size: .68rem;
       font-weight: 850;
       text-transform: none;
@@ -7317,14 +7354,18 @@
       padding: 0;
       border: 0;
       border-radius: 4px;
-      accent-color: #d97706;
+      accent-color: #07845f;
     }
 
     .estoque-setup-footer {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr) minmax(190px, 240px);
       align-items: stretch;
-      gap: 12px;
+      gap: 0;
+      padding: 10px;
+      border: 1px solid #dce6e3;
+      border-radius: 12px;
+      background: #fbfdfc;
     }
 
     .estoque-preview-copy {
@@ -7332,20 +7373,20 @@
       grid-template-columns: repeat(4, minmax(80px, 1fr));
       gap: 0;
       padding: 0;
-      border: 1px solid #dce9e6;
-      border-radius: 13px;
-      background: #f7fbfa;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
       overflow: hidden;
     }
 
     .estoque-preview-copy > div {
       position: relative;
-      min-height: 66px;
+      min-height: 64px;
       padding: 11px 10px 9px 36px;
     }
 
     .estoque-preview-copy > div + div {
-      border-left: 1px solid #dce9e6;
+      border-left: 1px solid #dce5e2;
     }
 
     .estoque-preview-copy svg {
@@ -7364,27 +7405,29 @@
 
     .estoque-preview-copy span {
       color: #6b8388;
-      font-size: .61rem;
+      font-size: .66rem;
       font-weight: 900;
-      text-transform: uppercase;
-      letter-spacing: .04em;
+      text-transform: none;
+      letter-spacing: 0;
     }
 
     .estoque-preview-copy strong {
-      margin-top: 5px;
-      color: #123f48;
-      font-size: 1rem;
+      margin-top: 4px;
+      color: #1d2b31;
+      font-size: 1.12rem;
       font-weight: 950;
     }
 
     .estoque-setup-footer .btn-start {
-      min-width: 190px;
+      min-width: 0;
       padding: 0 18px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
       gap: 8px;
-      border-radius: 13px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #07845f, #0a9a70);
+      box-shadow: 0 8px 18px rgba(7, 132, 95, .18);
     }
 
     .estoque-setup-footer .btn-start svg {
@@ -7394,7 +7437,7 @@
 
     .estoque-sessoes {
       display: grid;
-      gap: 8px;
+      gap: 12px;
       max-height: 42vh;
       overflow: auto;
     }
@@ -7402,23 +7445,25 @@
     .estoque-sessao-card {
       position: relative;
       width: 100%;
-      border: 1px solid #dce9e6;
-      border-radius: 13px;
-      color: #123f48;
-      background: #f9fcfb;
+      min-height: 112px;
+      border: 1px solid #dce5e2;
+      border-radius: 11px;
+      color: #1c2c32;
+      background: #fff;
       overflow: hidden;
     }
 
     .estoque-sessao-card:hover,
     .estoque-sessao-card.ativa {
-      border-color: rgba(217, 119, 6, .45);
-      background: #fff9ed;
+      border-color: rgba(7, 132, 95, .4);
+      background: #f8fcfa;
+      box-shadow: 0 7px 18px rgba(19, 74, 62, .07);
     }
 
     .estoque-sessao-abrir {
       width: 100%;
       min-height: 100%;
-      padding: 11px 46px 11px 11px;
+      padding: 17px 48px 15px 64px;
       border: 0;
       color: inherit;
       background: transparent;
@@ -7431,28 +7476,87 @@
     }
 
     .estoque-sessao-abrir strong {
-      margin-bottom: 3px;
-      font-size: .82rem;
+      margin-bottom: 4px;
+      font-size: .86rem;
     }
 
     .estoque-sessao-abrir span {
       color: #647b80;
-      font-size: .69rem;
+      font-size: .7rem;
       font-weight: 750;
+    }
+
+    .estoque-sessao-avatar {
+      position: absolute;
+      top: 19px;
+      left: 16px;
+      width: 34px;
+      height: 34px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      color: #08795e;
+      background: #e3f3ee;
+      font-size: .88rem;
+      font-weight: 950;
+      pointer-events: none;
+    }
+
+    .estoque-sessao-topline {
+      display: flex !important;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      padding-right: 4px;
+    }
+
+    .estoque-sessao-status {
+      display: inline-flex !important;
+      width: fit-content;
+      min-height: 25px;
+      align-items: center;
+      padding: 0 8px;
+      border-radius: 6px;
+      color: #20619b !important;
+      background: #e7f1ff;
+      font-size: .63rem !important;
+      font-weight: 900 !important;
+      white-space: nowrap;
+    }
+
+    .estoque-sessao-status.concluida {
+      color: #08795e !important;
+      background: #dff3ec;
+    }
+
+    .estoque-sessao-status.ajuste {
+      color: #a65300 !important;
+      background: #fff0dd;
+    }
+
+    .estoque-sessao-status.analise {
+      color: #5d6870 !important;
+      background: #edf0f2;
+    }
+
+    .estoque-sessao-progress {
+      margin-top: 7px;
+      color: #536a70 !important;
+      text-align: right;
     }
 
     .estoque-sessao-excluir {
       position: absolute;
-      top: 9px;
-      right: 9px;
-      width: 30px;
-      height: 30px;
+      right: 10px;
+      bottom: 10px;
+      width: 28px;
+      height: 28px;
       display: grid;
       place-items: center;
-      border: 1px solid #f0c1bd;
-      border-radius: 9px;
-      color: #b42318;
-      background: #fff;
+      border: 0;
+      border-radius: 7px;
+      color: #9aabae;
+      background: transparent;
     }
 
     .estoque-sessao-excluir:hover {
@@ -8277,10 +8381,17 @@
         grid-template-columns: 58px minmax(0, 1fr) auto;
       }
       .estoque-contagem-table .separacao-row .estoque-lista-lote {
-        grid-column: 1 / 4;
+        grid-column: 1 / 3;
         grid-row: 2;
         min-width: 0;
         overflow-wrap: anywhere;
+      }
+      .estoque-contagem-table .separacao-row .estoque-lista-validade {
+        grid-column: 3;
+        grid-row: 2;
+        align-self: start;
+        justify-self: end;
+        white-space: nowrap;
       }
       .estoque-contagem-table .separacao-row .estoque-lista-sistema {
         grid-column: 1;
@@ -8297,6 +8408,7 @@
         justify-self: end;
       }
       .estoque-contagem-table .estoque-lista-lote::before,
+      .estoque-contagem-table .estoque-lista-validade::before,
       .estoque-contagem-table .estoque-lista-sistema::before,
       .estoque-contagem-table .estoque-lista-contagem::before {
         content: attr(data-label);
@@ -9123,6 +9235,17 @@
 
       .estoque-setup-heading {
         align-items: flex-start;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .estoque-setup-heading-actions {
+        width: 100%;
+      }
+
+      .estoque-heading-button {
+        flex: 1;
+        min-height: 42px;
       }
 
       .estoque-setup-heading p {
@@ -9131,8 +9254,7 @@
 
       .estoque-filter-section {
         gap: 11px;
-        padding: 12px;
-        border-radius: 14px;
+        padding: 13px 0 15px;
       }
 
       .estoque-filter-grid,
@@ -9156,6 +9278,23 @@
       .estoque-setup-footer .btn-start {
         width: 100%;
         min-height: 48px;
+      }
+
+      .estoque-setup-footer {
+        gap: 10px;
+        padding: 9px;
+      }
+
+      .estoque-history-card {
+        min-height: auto;
+      }
+
+      .estoque-history-card .estoque-sessoes {
+        max-height: none;
+      }
+
+      .estoque-sessao-card {
+        min-height: 108px;
       }
 
       .atualizacao-contato-screen { padding: 8px; }
@@ -9273,7 +9412,10 @@
           </div>
         </div>
         <div class="home-user">
-          <span class="estoque-test-badge"><i data-lucide="flask-conical" aria-hidden="true"></i> Base de teste</span>
+          <span class="estoque-test-badge" id="estoque-contagem-ambiente">
+            <i data-lucide="database" aria-hidden="true"></i>
+            <span id="estoque-contagem-ambiente-texto">Ambiente Sankhya</span>
+          </span>
           <button class="btn-back" id="voltar-home-contagem-estoque" type="button">Voltar</button>
         </div>
       </header>
@@ -9283,51 +9425,61 @@
         <section class="estoque-sidebar estoque-setup-card">
           <section class="estoque-sidebar-section">
             <div class="estoque-setup-heading">
-              <span class="estoque-setup-heading-icon" aria-hidden="true"><i data-lucide="camera"></i></span>
               <div>
-                <h2>Nova cópia de estoque</h2>
-                <p>Defina o escopo da contagem antes de registrar a fotografia do saldo.</p>
+                <h2>Nova contagem de estoque</h2>
+                <p>Configure os produtos e inicie uma nova contagem.</p>
+              </div>
+              <div class="estoque-setup-heading-actions">
+                <button class="estoque-heading-button" id="estoque-contagem-historico" type="button">
+                  <i data-lucide="history" aria-hidden="true"></i>
+                  Histórico
+                </button>
+                <button class="estoque-heading-button primary" id="estoque-contagem-nova" type="button">
+                  <i data-lucide="plus" aria-hidden="true"></i>
+                  Nova
+                </button>
               </div>
             </div>
 
             <div class="estoque-filter-section">
               <div class="estoque-filter-section-title">
-                <span>1</span>
-                <div>
-                  <strong>Onde será feita a contagem?</strong>
-                  <small>Escolha a empresa e o local físico.</small>
-                </div>
+                <strong>Origem</strong>
               </div>
               <div class="estoque-filter-grid">
                 <div class="estoque-field">
                   <label for="estoque-contagem-empresa">Empresa</label>
-                  <select id="estoque-contagem-empresa">
-                    <option value="">Selecione a empresa</option>
-                  </select>
+                  <div class="estoque-select-shell">
+                    <i data-lucide="building-2" aria-hidden="true"></i>
+                    <select id="estoque-contagem-empresa">
+                      <option value="">Selecione a empresa</option>
+                    </select>
+                  </div>
                 </div>
                 <div class="estoque-field">
                   <label for="estoque-contagem-local">Local</label>
-                  <select id="estoque-contagem-local" disabled>
-                    <option value="">Todos os locais</option>
-                  </select>
+                  <div class="estoque-select-shell">
+                    <i data-lucide="map-pin" aria-hidden="true"></i>
+                    <select id="estoque-contagem-local" disabled>
+                      <option value="">Todos os locais</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
 
             <div class="estoque-filter-section">
               <div class="estoque-filter-section-title">
-                <span>2</span>
-                <div>
-                  <strong>Quais produtos entram?</strong>
-                  <small>Use grupo e marca para delimitar a lista.</small>
-                </div>
+                <strong>Produtos da contagem</strong>
               </div>
               <div class="estoque-filter-grid">
                 <div class="estoque-field">
                   <label for="estoque-contagem-grupo">Grupo de produtos</label>
-                  <select id="estoque-contagem-grupo" disabled>
-                    <option value="">Todos os grupos</option>
-                  </select>
+                  <div class="estoque-select-shell">
+                    <i data-lucide="tag" aria-hidden="true"></i>
+                    <select id="estoque-contagem-grupo" disabled>
+                      <option value="">Todos os grupos</option>
+                    </select>
+                  </div>
                   <label class="estoque-subgroup-toggle" for="estoque-contagem-subgrupos">
                     <input id="estoque-contagem-subgrupos" type="checkbox" checked>
                     <span>Incluir subgrupos</span>
@@ -9335,52 +9487,60 @@
                 </div>
                 <div class="estoque-field">
                   <label for="estoque-contagem-marca">Marca</label>
-                  <select id="estoque-contagem-marca" disabled>
-                    <option value="">Todas as marcas</option>
-                  </select>
+                  <div class="estoque-select-shell">
+                    <i data-lucide="badge-check" aria-hidden="true"></i>
+                    <select id="estoque-contagem-marca" disabled>
+                      <option value="">Todas as marcas</option>
+                    </select>
+                  </div>
                 </div>
               </div>
             </div>
 
             <div class="estoque-filter-section">
               <div class="estoque-filter-section-title">
-                <span>3</span>
-                <div>
-                  <strong>Regras da fotografia</strong>
-                  <small>Determine quais saldos e controles serão considerados.</small>
-                </div>
+                <strong>Regras de estoque</strong>
               </div>
               <div class="estoque-filter-grid estoque-rules-grid">
               <div class="estoque-field">
                 <label for="estoque-contagem-situacao">Situação dos produtos</label>
-                <select id="estoque-contagem-situacao">
-                  <option value="ATIVOS">Somente ativos</option>
-                  <option value="INATIVOS">Somente inativos</option>
-                  <option value="TODOS">Ativos e inativos</option>
-                </select>
+                <div class="estoque-select-shell">
+                  <i data-lucide="circle-check" aria-hidden="true"></i>
+                  <select id="estoque-contagem-situacao">
+                    <option value="ATIVOS">Somente ativos</option>
+                    <option value="INATIVOS">Somente inativos</option>
+                    <option value="TODOS">Ativos e inativos</option>
+                  </select>
+                </div>
               </div>
               <div class="estoque-field">
                 <label for="estoque-contagem-controle">Lote/controle</label>
-                <select id="estoque-contagem-controle">
-                  <option value="TODOS">Com ou sem controle</option>
-                  <option value="COM_CONTROLE">Somente com controle</option>
-                  <option value="SEM_CONTROLE">Somente sem controle</option>
-                </select>
+                <div class="estoque-select-shell">
+                  <i data-lucide="package" aria-hidden="true"></i>
+                  <select id="estoque-contagem-controle">
+                    <option value="TODOS">Com ou sem controle</option>
+                    <option value="COM_CONTROLE">Somente com controle</option>
+                    <option value="SEM_CONTROLE">Somente sem controle</option>
+                  </select>
+                </div>
               </div>
               <div class="estoque-field">
                 <label for="estoque-contagem-saldo">Saldo considerado</label>
-                <select id="estoque-contagem-saldo">
-                  <option value="POSITIVO">Somente saldo positivo</option>
-                  <option value="NEGATIVO">Somente saldo negativo</option>
-                  <option value="NAO_ZERO">Todos os saldos diferentes de zero</option>
-                </select>
+                <div class="estoque-select-shell">
+                  <i data-lucide="trending-up" aria-hidden="true"></i>
+                  <select id="estoque-contagem-saldo">
+                    <option value="POSITIVO">Somente saldo positivo</option>
+                    <option value="NEGATIVO">Somente saldo negativo</option>
+                    <option value="NAO_ZERO">Todos os saldos diferentes de zero</option>
+                  </select>
+                </div>
               </div>
             </div>
             </div>
 
             <div class="estoque-copy-note">
-              <i data-lucide="info" aria-hidden="true"></i>
-              <span><strong>Fotografia do estoque</strong>O saldo lógico será congelado no momento da criação. Estoques de terceiros ficam fora do escopo.</span>
+              <i data-lucide="triangle-alert" aria-hidden="true"></i>
+              <span>O estoque será congelado ao iniciar. Estoques de terceiros ficam fora do escopo.</span>
             </div>
 
             <div class="estoque-setup-footer">
@@ -9391,8 +9551,8 @@
                 <div><i data-lucide="boxes" aria-hidden="true"></i><span>Unidades</span><strong id="estoque-previa-unidades">—</strong></div>
               </div>
               <button class="btn-start" id="estoque-contagem-criar" type="button" disabled>
-                <i data-lucide="camera" aria-hidden="true"></i>
-                Criar cópia e iniciar
+                Iniciar contagem
+                <i data-lucide="arrow-right" aria-hidden="true"></i>
               </button>
             </div>
           </section>
@@ -9403,6 +9563,7 @@
             <div class="estoque-sidebar-title">
               <span>Contagens recentes</span>
               <button class="estoque-filter-chip" id="estoque-contagem-atualizar" type="button" title="Atualizar lista">
+                <i data-lucide="refresh-cw" aria-hidden="true"></i>
                 Atualizar
               </button>
             </div>
@@ -9497,6 +9658,7 @@
                     <th style="width: 105px">Produto</th>
                     <th>Descrição</th>
                     <th style="width: 150px">Lote</th>
+                    <th style="width: 115px">Validade</th>
                     <th style="width: 125px" id="estoque-coluna-sistema">Estoque sistema</th>
                     <th style="width: 125px">Contagem</th>
                     <th style="width: 105px">Status</th>

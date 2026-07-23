@@ -34,6 +34,7 @@ const itens = [
     CODLOCAL: 1,
     DESCRLOCAL: 'Deposito',
     CONTROLE: 'L1',
+    DTVAL: '2028-07-23',
     ESTOQUE: 8
   }
 ];
@@ -50,6 +51,7 @@ test('cria copia cega e conclui contagem sem divergencia', () => {
   assert.deepEqual(sessao.filtros, { grupo: 100, marca: 'Marca A', saldo: 'POSITIVO' });
   assert.equal(sessao.itens[0].codGrupoProd, 100);
   assert.equal(sessao.itens[0].descrGrupoProd, 'Defensivos');
+  assert.equal(sessao.itens[1].dtVal, '2028-07-23');
   store.registrar({ id: sessao.id, chave: sessao.itens[0].chave, quantidade: 5, usuario: 7 });
   store.registrar({ id: sessao.id, chave: sessao.itens[1].chave, quantidade: 8, usuario: 7 });
   const concluida = store.finalizarRodada({ id: sessao.id, usuario: 7 });

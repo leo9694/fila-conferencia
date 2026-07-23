@@ -70,19 +70,9 @@ const TOPS_AJUSTE_ESTOQUE = Object.freeze({
 });
 const ajustesEstoqueEmAndamento = new Set();
 
-function ambienteContagemEstoqueTeste() {
+function ambienteSankhyaTeste() {
   const baseUrl = String(process.env.SANKHYA_API_BASE_URL || '').toLowerCase();
   return /sandbox|treinamento|teste/.test(baseUrl);
-}
-
-function exigirAmbienteContagemTeste(req, res, next) {
-  if (!ambienteContagemEstoqueTeste()) {
-    res.status(403).json({
-      erro: 'A contagem de estoque esta liberada somente na base de teste.'
-    });
-    return;
-  }
-  next();
 }
 
 function obterModoConferencia(valor) {
@@ -2713,14 +2703,14 @@ async function gerarNotaPendenteAjuste({
 }
 
 router.get('/estoque-contagem/disponibilidade', (req, res) => {
-  const disponivel = ambienteContagemEstoqueTeste();
+  const ambienteTeste = ambienteSankhyaTeste();
   res.json({
-    disponivel,
-    ambiente: disponivel ? 'TESTE' : 'PRODUCAO'
+    disponivel: true,
+    ambiente: ambienteTeste ? 'TESTE' : 'PRODUCAO'
   });
 });
 
-router.get('/estoque-contagem/config', exigirAmbienteContagemTeste, async (req, res) => {
+router.get('/estoque-contagem/config', async (req, res) => {
   try {
     const empresas = await executeQuery(`
       SELECT
@@ -2737,9 +2727,10 @@ router.get('/estoque-contagem/config', exigirAmbienteContagemTeste, async (req, 
       ORDER BY EST.CODEMP
     `);
 
+    const ambienteTeste = ambienteSankhyaTeste();
     res.json({
-      ambienteTeste: true,
-      ambiente: 'Sankhya Sandbox',
+      ambienteTeste,
+      ambiente: ambienteTeste ? 'Sankhya Sandbox' : 'Sankhya Produção',
       empresas: empresas.map((item) => ({
         codEmp: Number(item.CODEMP),
         empresa: item.EMPRESA || `Empresa ${item.CODEMP}`,
@@ -2752,7 +2743,7 @@ router.get('/estoque-contagem/config', exigirAmbienteContagemTeste, async (req, 
   }
 });
 
-router.get('/estoque-contagem/locais', exigirAmbienteContagemTeste, async (req, res) => {
+router.get('/estoque-contagem/locais', async (req, res) => {
   try {
     const empresa = obterNumeroInteiro(req.query.empresa);
     if (!empresa) {
@@ -2789,7 +2780,7 @@ router.get('/estoque-contagem/locais', exigirAmbienteContagemTeste, async (req, 
   }
 });
 
-router.get('/estoque-contagem/filtros', exigirAmbienteContagemTeste, async (req, res) => {
+router.get('/estoque-contagem/filtros', async (req, res) => {
   try {
     const empresa = obterNumeroInteiro(req.query.empresa);
     const localTexto = String(req.query.local ?? '').trim();
@@ -2844,7 +2835,7 @@ router.get('/estoque-contagem/filtros', exigirAmbienteContagemTeste, async (req,
   }
 });
 
-router.post('/estoque-contagem/previa', exigirAmbienteContagemTeste, async (req, res) => {
+router.post('/estoque-contagem/previa', async (req, res) => {
   try {
     const filtros = normalizarFiltrosCopiaEstoque(req.body);
     if (!filtros.empresa) {
@@ -2878,11 +2869,11 @@ router.post('/estoque-contagem/previa', exigirAmbienteContagemTeste, async (req,
   }
 });
 
-router.get('/estoque-contagem/sessoes', exigirAmbienteContagemTeste, (req, res) => {
+router.get('/estoque-contagem/sessoes', (req, res) => {
   res.json({ itens: estoqueContagemStore.listar() });
 });
 
-router.delete('/estoque-contagem/sessoes/:id', exigirAmbienteContagemTeste, (req, res) => {
+router.delete('/estoque-contagem/sessoes/:id', (req, res) => {
   try {
     const sessao = estoqueContagemStore.excluir({ id: req.params.id });
     res.json({
@@ -2897,7 +2888,7 @@ router.delete('/estoque-contagem/sessoes/:id', exigirAmbienteContagemTeste, (req
   }
 });
 
-router.post('/estoque-contagem/sessoes', exigirAmbienteContagemTeste, async (req, res) => {
+router.post('/estoque-contagem/sessoes', async (req, res) => {
   try {
     const filtros = normalizarFiltrosCopiaEstoque(req.body);
     const { empresa, local } = filtros;
@@ -2958,7 +2949,7 @@ router.post('/estoque-contagem/sessoes', exigirAmbienteContagemTeste, async (req
   }
 });
 
-router.get('/estoque-contagem/sessoes/:id', exigirAmbienteContagemTeste, (req, res) => {
+router.get('/estoque-contagem/sessoes/:id', (req, res) => {
   const sessao = estoqueContagemStore.obter(req.params.id);
   if (!sessao) {
     res.status(404).json({ erro: 'Contagem de estoque nao encontrada.' });
@@ -2967,7 +2958,7 @@ router.get('/estoque-contagem/sessoes/:id', exigirAmbienteContagemTeste, (req, r
   res.json({ sessao: serializarSessaoContagemEstoque(sessao) });
 });
 
-router.get('/estoque-contagem/sessoes/:id/localizar', exigirAmbienteContagemTeste, async (req, res) => {
+router.get('/estoque-contagem/sessoes/:id/localizar', async (req, res) => {
   try {
     const sessao = estoqueContagemStore.obter(req.params.id);
     const codigo = String(req.query.codigo || '').trim();
@@ -3015,7 +3006,7 @@ router.get('/estoque-contagem/sessoes/:id/localizar', exigirAmbienteContagemTest
   }
 });
 
-router.put('/estoque-contagem/sessoes/:id/itens/:chave', exigirAmbienteContagemTeste, (req, res) => {
+router.put('/estoque-contagem/sessoes/:id/itens/:chave', (req, res) => {
   try {
     const sessao = estoqueContagemStore.registrar({
       id: req.params.id,
@@ -3029,7 +3020,7 @@ router.put('/estoque-contagem/sessoes/:id/itens/:chave', exigirAmbienteContagemT
   }
 });
 
-router.post('/estoque-contagem/sessoes/:id/finalizar', exigirAmbienteContagemTeste, (req, res) => {
+router.post('/estoque-contagem/sessoes/:id/finalizar', (req, res) => {
   try {
     const sessao = estoqueContagemStore.finalizarRodada({ id: req.params.id, usuario: req.usuario });
     res.json({ sessao: serializarSessaoContagemEstoque(sessao) });
@@ -3038,7 +3029,7 @@ router.post('/estoque-contagem/sessoes/:id/finalizar', exigirAmbienteContagemTes
   }
 });
 
-router.post('/estoque-contagem/sessoes/:id/recontar', exigirAmbienteContagemTeste, (req, res) => {
+router.post('/estoque-contagem/sessoes/:id/recontar', (req, res) => {
   try {
     const sessao = estoqueContagemStore.iniciarRecontagem({ id: req.params.id, usuario: req.usuario });
     res.json({ sessao: serializarSessaoContagemEstoque(sessao) });
@@ -3047,7 +3038,7 @@ router.post('/estoque-contagem/sessoes/:id/recontar', exigirAmbienteContagemTest
   }
 });
 
-router.post('/estoque-contagem/sessoes/:id/concluir-analise', exigirAmbienteContagemTeste, (req, res) => {
+router.post('/estoque-contagem/sessoes/:id/concluir-analise', (req, res) => {
   try {
     const sessao = estoqueContagemStore.concluirAnalise({ id: req.params.id, usuario: req.usuario });
     res.json({ sessao: serializarSessaoContagemEstoque(sessao) });
@@ -3056,7 +3047,7 @@ router.post('/estoque-contagem/sessoes/:id/concluir-analise', exigirAmbienteCont
   }
 });
 
-router.post('/estoque-contagem/sessoes/:id/aplicar-ajuste', exigirAmbienteContagemTeste, async (req, res) => {
+router.post('/estoque-contagem/sessoes/:id/aplicar-ajuste', async (req, res) => {
   const id = String(req.params.id);
   if (ajustesEstoqueEmAndamento.has(id)) {
     res.status(409).json({ erro: 'A geracao das notas de ajuste ja esta em andamento.' });
