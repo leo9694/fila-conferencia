@@ -1527,6 +1527,11 @@
       background: #fff3c4;
     }
 
+    .pedido-operacao-card.finalizado-divergente {
+      border-left-color: #dc2626;
+      background: #fff0ee;
+    }
+
     .pedido-operacao-card.em-separacao {
       border-left-color: #8b5cf6;
       background: #f1e8ff;
@@ -1734,6 +1739,12 @@
       background: #f59e0b;
       color: #422006;
       border: 1px solid #d97706;
+    }
+
+    .pedido-status-mini.finalizado-divergente {
+      background: #dc2626;
+      color: #fff;
+      border: 1px solid #b91c1c;
     }
 
     .pedido-status-mini.em-separacao {
@@ -7590,6 +7601,252 @@
         height: 76px;
       }
     }
+    /* Atualizacao de contato: interface mais leve, responsiva e orientada a tarefa */
+    .atualizacao-contato-screen {
+      background:
+        radial-gradient(circle at 8% 0%, rgba(0, 143, 118, 0.10), transparent 30%),
+        linear-gradient(180deg, #f7fbfa 0%, #eef7f5 100%);
+    }
+
+    .atualizacao-contato-screen .atualizacao-contato-app {
+      gap: 14px;
+    }
+
+    .atualizacao-contato-screen .contato-page-heading {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 8px 4px 2px;
+    }
+
+    .atualizacao-contato-screen .contato-page-heading h1 {
+      margin: 2px 0 3px;
+      font-size: clamp(1.55rem, 2.2vw, 2.15rem);
+    }
+
+    .atualizacao-contato-screen .contato-page-heading p {
+      margin: 0;
+      color: var(--contact-muted);
+      font-size: .82rem;
+      font-weight: 700;
+    }
+
+    .contato-heading-icon {
+      width: 48px;
+      height: 48px;
+      flex: 0 0 48px;
+      display: grid;
+      place-items: center;
+      border-radius: 15px;
+      color: #fff;
+      background: linear-gradient(145deg, #19ad91, #007966);
+      box-shadow: 0 9px 22px rgba(0, 121, 102, .22);
+    }
+
+    .contato-heading-icon svg { width: 24px; height: 24px; }
+
+    .atualizacao-contato-screen .contato-toolbar {
+      grid-template-columns: minmax(250px, 2fr) minmax(110px, .65fr) minmax(165px, 1fr) minmax(120px, .72fr) minmax(165px, 1fr) auto auto;
+      align-items: end;
+      border-radius: 16px;
+      box-shadow: 0 10px 30px rgba(7, 48, 71, .075);
+    }
+
+    .contato-search-wrap {
+      position: relative;
+    }
+
+    .contato-search-wrap > svg {
+      position: absolute;
+      z-index: 1;
+      left: 13px;
+      top: 50%;
+      width: 18px;
+      height: 18px;
+      color: #74928c;
+      pointer-events: none;
+      transform: translateY(-50%);
+    }
+
+    .atualizacao-contato-screen .contato-search-wrap input {
+      width: 100%;
+      padding-left: 40px;
+      background: #f9fcfb;
+    }
+
+    .atualizacao-contato-screen .contato-toolbar button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease, border-color 150ms ease;
+    }
+
+    .atualizacao-contato-screen .contato-toolbar button:hover:not(:disabled) {
+      transform: translateY(-1px);
+    }
+
+    .atualizacao-contato-screen .contato-toolbar button svg {
+      width: 17px;
+      height: 17px;
+      flex: 0 0 auto;
+    }
+
+    .atualizacao-contato-screen .contato-lista-card {
+      overflow: hidden;
+      padding: 0;
+      border: 1px solid var(--contact-border);
+      border-radius: 16px;
+      background: #fff;
+      box-shadow: 0 12px 34px rgba(7, 48, 71, .07);
+    }
+
+    .atualizacao-contato-screen .contato-lista-card .consulta-card-title {
+      padding: 16px 18px 12px;
+      border-bottom: 1px solid #e9f1ef;
+      background: linear-gradient(180deg, #fff, #fbfdfc);
+    }
+
+    .atualizacao-contato-screen .contato-lista {
+      border: 0;
+      border-radius: 0;
+      background: #fff;
+    }
+
+    .atualizacao-contato-screen .contato-header {
+      border-bottom: 1px solid #cfe3de;
+      background: #eff7f5;
+      color: #486b64;
+    }
+
+    .atualizacao-contato-screen .contato-row {
+      min-height: 54px;
+      border-left-width: 4px;
+      background: #fff;
+      box-shadow: none;
+      transition: background 140ms ease, box-shadow 140ms ease;
+    }
+
+    .atualizacao-contato-screen .contato-row:nth-child(even) { background: #fbfdfc; }
+    .atualizacao-contato-screen .contato-row.contato-status-atualizado { background: #f2fbf7; box-shadow: none; }
+    .atualizacao-contato-screen .contato-row.contato-status-aguardando { background: #fffbef; box-shadow: none; }
+    .atualizacao-contato-screen .contato-row.contato-status-pendente { background: #fff8f7; box-shadow: none; }
+    .atualizacao-contato-screen .contato-row:hover { background: #eaf7f3; box-shadow: inset 0 0 0 1px #cbe9e1; }
+
+    .atualizacao-contato-screen .contato-link {
+      color: #073047;
+      transition: color 140ms ease;
+    }
+
+    .contato-loading {
+      min-height: 116px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      color: #64748b;
+      text-align: center;
+    }
+
+    .contato-loading strong { color: #164e46; font-size: .9rem; }
+    .contato-loading > span:last-child { font-size: .72rem; font-weight: 700; }
+
+    .contato-loading-spinner {
+      width: 25px;
+      height: 25px;
+      margin-bottom: 3px;
+      border: 3px solid #d5ebe6;
+      border-top-color: #008f76;
+      border-radius: 50%;
+      animation: contato-spin 700ms linear infinite;
+    }
+
+    @keyframes contato-spin { to { transform: rotate(360deg); } }
+
+    .contato-skeleton {
+      display: grid;
+      gap: 8px;
+      padding: 0 16px 16px;
+    }
+
+    .contato-skeleton span {
+      height: 43px;
+      border-radius: 9px;
+      background: linear-gradient(90deg, #edf4f2 25%, #f8fbfa 45%, #edf4f2 65%);
+      background-size: 240% 100%;
+      animation: contato-shimmer 1.2s ease-in-out infinite;
+      animation-delay: var(--skeleton-delay);
+    }
+
+    @keyframes contato-shimmer { to { background-position: -240% 0; } }
+
+    .contato-loading-detalhe {
+      grid-column: 1 / -1;
+      min-height: 320px;
+      border: 1px solid var(--contact-border);
+      border-radius: 16px;
+      background: #fff;
+    }
+
+    .atualizacao-contato-screen .contato-info-section,
+    .atualizacao-contato-screen .contato-limite-section {
+      border-color: var(--contact-border);
+      border-radius: 15px;
+      background: rgba(255, 255, 255, .96);
+      box-shadow: 0 7px 22px rgba(7, 48, 71, .055);
+    }
+
+    .atualizacao-contato-screen .contato-card-edit {
+      border-color: #dcebe7;
+      background: #fbfdfc;
+      transition: border-color 150ms ease, box-shadow 150ms ease;
+    }
+
+    .atualizacao-contato-screen .contato-card-edit:focus-within {
+      border-color: #75c9b7;
+      box-shadow: 0 0 0 3px rgba(0, 143, 118, .09);
+    }
+
+    .atualizacao-contato-screen .contato-save-panel {
+      position: sticky;
+      bottom: 8px;
+      z-index: 2;
+      padding: 10px;
+      border: 1px solid #dcebe7;
+      border-radius: 13px;
+      background: rgba(255, 255, 255, .94);
+      box-shadow: 0 10px 28px rgba(7, 48, 71, .12);
+      backdrop-filter: blur(8px);
+    }
+
+    @media (max-width: 1180px) {
+      .atualizacao-contato-screen .contato-toolbar {
+        grid-template-columns: minmax(230px, 2fr) minmax(120px, .8fr) repeat(3, minmax(150px, 1fr));
+      }
+      .atualizacao-contato-screen .contato-updated-button { grid-column: 1 / 4; }
+      .atualizacao-contato-screen .contato-toolbar .btn-back { grid-column: 4 / 6; }
+    }
+
+    @media (max-width: 760px) {
+      .atualizacao-contato-screen { padding: 8px; }
+      .atualizacao-contato-screen .contato-page-heading { align-items: flex-start; }
+      .atualizacao-contato-screen .contato-page-heading p { font-size: .76rem; }
+      .contato-heading-icon { width: 42px; height: 42px; flex-basis: 42px; border-radius: 13px; }
+      .atualizacao-contato-screen .contato-toolbar { grid-template-columns: 1fr 1fr; }
+      .atualizacao-contato-screen .contato-busca-field { grid-column: 1 / -1 !important; }
+      .atualizacao-contato-screen .contato-toggle-field { padding-top: 4px; }
+      .atualizacao-contato-screen .contato-updated-button,
+      .atualizacao-contato-screen .contato-toolbar .btn-back { grid-column: auto; }
+      .atualizacao-contato-screen .contato-card-edit-grid { grid-template-columns: 1fr; }
+      .atualizacao-contato-screen .contato-save-panel { grid-template-columns: 1fr; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .contato-loading-spinner,
+      .contato-skeleton span { animation: none; }
+      .atualizacao-contato-screen * { scroll-behavior: auto !important; }
+    }
   </style>
 </head>
 
@@ -7737,6 +7994,7 @@
                   <select id="fila-filtro-status">
                     <option value="todos">Todos os status</option>
                     <option value="em-conferencia">Em conferência</option>
+                    <option value="finalizado-divergente">Finalizados divergentes</option>
                     <option value="separado">Separados</option>
                     <option value="em-separacao">Em separação</option>
                     <option value="novo">Novos</option>
@@ -8263,13 +8521,20 @@
   <section class="screen atualizacao-contato-screen" id="atualizacao-contato-screen">
     <div class="atualizacao-contato-app">
       <div class="contato-page-heading">
-        <div class="home-kicker">Cadastro comercial</div>
-        <h1>Atualização de Contato</h1>
+        <div class="contato-heading-icon" aria-hidden="true"><i data-lucide="contact-round"></i></div>
+        <div>
+          <div class="home-kicker">Cadastro comercial</div>
+          <h1>Atualização de Contato</h1>
+          <p>Localize o cliente, revise os dados e conclua a atualização em um só fluxo.</p>
+        </div>
       </div>
       <div class="contato-toolbar">
         <div class="fila-field contato-busca-field">
           <label for="contato-busca">Pesquisa inteligente</label>
-          <input id="contato-busca" type="search" placeholder="Codigo, nome ou CNPJ">
+          <div class="contato-search-wrap">
+            <i data-lucide="search" aria-hidden="true"></i>
+            <input id="contato-busca" type="search" placeholder="Código, nome ou CNPJ" autocomplete="off">
+          </div>
         </div>
         <div class="fila-field contato-toggle-field">
           <div class="form-check form-switch">
@@ -8295,8 +8560,8 @@
             <option value="">Selecione a cidade</option>
           </select>
         </div>
-        <button class="contato-updated-button" id="contato-exibir-atualizados" type="button">Exibir somente atualizados</button>
-        <button class="btn-back" id="voltar-home-contato" type="button">Voltar</button>
+        <button class="contato-updated-button" id="contato-exibir-atualizados" type="button"><i data-lucide="badge-check" aria-hidden="true"></i><span>Somente atualizados</span></button>
+        <button class="btn-back" id="voltar-home-contato" type="button"><i data-lucide="arrow-left" aria-hidden="true"></i><span>Voltar</span></button>
       </div>
 
       <section class="consulta-card contato-lista-card">

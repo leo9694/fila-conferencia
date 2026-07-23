@@ -263,6 +263,9 @@ let itemCorteSelecionado = null;
 let pedidoConcluido = null;
 let contatoBuscaTimer = null;
 let contatoClientesAtuais = [];
+const contatoRequisicoes = new Map();
+const contatoCache = new Map();
+let contatoDetalheRequisicaoId = 0;
 let contatoOrdenacaoUltimaCompra = '';
 let contatoOrdenacaoColuna = { coluna: '', direcao: '' };
 let contatoFiltrosColuna = { perfil: null, vendedor: null, status: null };
@@ -279,6 +282,64 @@ const STORAGE_SEPARACAO_PREFIX = 'filaConferencia:separacao:';
 const TEMPO_TOQUE_LONGO_SEPARACAO_MS = 550;
 let toqueLongoSeparacao = null;
 let leituraSeparacaoMobile = '';
+
+function contatoCacheObter(chave) {
+  const item = contatoCache.get(chave);
+  if (!item || item.expiraEm <= Date.now()) {
+    contatoCache.delete(chave);
+    return null;
+  }
+  return item.valor;
+}
+
+async function buscarJsonContato(chave, url, { cacheMs = 0 } = {}) {
+  const chaveCache = `${chave}:${url}`;
+  const valorCache = cacheMs ? contatoCacheObter(chaveCache) : null;
+  if (valorCache) return valorCache;
+
+  contatoRequisicoes.get(chave)?.abort();
+  const controller = new AbortController();
+  contatoRequisicoes.set(chave, controller);
+
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    const payload = await res.json();
+    if (!res.ok) throw new Error(payload.erro || 'Nao foi possivel carregar os dados');
+    if (cacheMs) contatoCache.set(chaveCache, { valor: payload, expiraEm: Date.now() + cacheMs });
+    return payload;
+  } finally {
+    if (contatoRequisicoes.get(chave) === controller) contatoRequisicoes.delete(chave);
+  }
+}
+
+function contatoFoiCancelado(error) {
+  return error?.name === 'AbortError';
+}
+
+function cancelarRequisicaoContato(chave) {
+  contatoRequisicoes.get(chave)?.abort();
+  contatoRequisicoes.delete(chave);
+}
+
+function invalidarCacheClientesContato() {
+  for (const chave of contatoCache.keys()) {
+    if (chave.startsWith('lista:') || chave.startsWith('detalhe:')) contatoCache.delete(chave);
+  }
+}
+
+function renderizarCarregamentoContato(mensagem = 'Carregando clientes...') {
+  contatoClientesLista.setAttribute('aria-busy', 'true');
+  contatoClientesLista.innerHTML = `
+    <div class="contato-loading" role="status">
+      <span class="contato-loading-spinner" aria-hidden="true"></span>
+      <strong>${escaparHtml(mensagem)}</strong>
+      <span>Isso deve levar apenas alguns instantes.</span>
+    </div>
+    <div class="contato-skeleton" aria-hidden="true">
+      ${Array.from({ length: 6 }, (_, indice) => `<span style="--skeleton-delay:${indice * 55}ms"></span>`).join('')}
+    </div>
+  `;
+}
 
 function separacaoEmMobile() {
   return window.matchMedia('(max-width: 760px), (pointer: coarse)').matches;
@@ -1291,6 +1352,9 @@ function montarErroConfirmacao(payload) {
   const detalhes = Array.isArray(payload?.detalhesSankhya)
     ? payload.detalhesSankhya.filter(Boolean)
     : [];
+  if (payload?.progressoPreservado) {
+    detalhes.unshift('A conferência e todas as leituras foram preservadas para revisão.');
+  }
 
   const detalheHtml = detalhes.length > 0
     ? `<div class="erro-detalhes">${detalhes.map((detalhe) => `<div>${escaparHtml(detalhe)}</div>`).join('')}</div>`
@@ -2038,6 +2102,14 @@ function rotuloStatusContato(status) {
   return 'Pendente';
 }
 
+function atualizarStatusCabecalhoContato(statusContato) {
+  const ativo = String(contatoDetalheAtual?.ATIVO || '').toUpperCase() !== 'N';
+  contatoDetalheAtivo.innerHTML = `
+    <span class="contato-header-status ${ativo ? 'contato-header-status-active' : 'contato-header-status-inactive'}"><span></span>${ativo ? 'Ativo' : 'Inativo'}</span>
+    <span class="contato-header-status contato-header-status-${escaparAtributo(statusContato)}"><span></span>${escaparHtml(rotuloStatusContato(statusContato))}</span>
+  `;
+}
+
 function criarIndicadorLimiteCreditoLista(cliente = {}) {
   const limite = Number(cliente.LIMCRED || 0);
   const definido = cliente.LIMCRED_CADASTRADO === 'S';
@@ -2386,10 +2458,7 @@ function renderizarDetalheContato(payload) {
     ${criarSelectPerfilCliente(perfis, parceiro.CODTIPPARC)}
   `;
   const statusContato = obterStatusContatoCliente(parceiro);
-  contatoDetalheAtivo.innerHTML = `
-    <span class="contato-header-status contato-header-status-active"><span></span>Ativo</span>
-    <span class="contato-header-status contato-header-status-${escaparAtributo(statusContato)}"><span></span>${escaparHtml(rotuloStatusContato(statusContato))}</span>
-  `;
+  atualizarStatusCabecalhoContato(statusContato);
   atualizarBotaoProximoClienteContato(parceiro.CODPARC);
 
   contatoDetalheConteudo.innerHTML = `
@@ -2494,6 +2563,7 @@ async function salvarPerfilCliente() {
 
     const perfil = resposta.parceiro?.PERFIL || 'Sem perfil';
     const codTipParc = resposta.parceiro?.CODTIPPARC || '';
+    invalidarCacheClientesContato();
     contatoDetalheAtual = { ...contatoDetalheAtual, PERFIL: perfil, CODTIPPARC: codTipParc };
     atualizarClienteContatoNaLista(contatoDetalheAtual.CODPARC, { PERFIL: perfil, CODTIPPARC: codTipParc });
 
@@ -2559,6 +2629,7 @@ async function salvarLimiteCreditoCliente() {
     }
 
     const limiteSalvo = Number(resposta.parceiro?.LIMCRED ?? limiteCredito);
+    invalidarCacheClientesContato();
     input.value = limiteSalvo.toFixed(2);
     contatoDetalheAtual = {
       ...contatoDetalheAtual,
@@ -2691,6 +2762,7 @@ async function salvarContatoCliente(acao) {
     }
 
     const statusContato = resposta.statusContato || (acao === 'aguardando' ? 'aguardando' : 'atualizado');
+    invalidarCacheClientesContato();
     const dataAtualizacao = resposta.parceiro?.DATA_ATUALIZACAO_CONTATO || contatoDetalheAtual.DATA_ATUALIZACAO_CONTATO;
     const perfilAtualizado = resposta.parceiro?.PERFIL || contatoDetalheAtual.PERFIL;
     const codTipParcAtualizado = resposta.parceiro?.CODTIPPARC ?? contatoDetalheAtual.CODTIPPARC;
@@ -2715,9 +2787,7 @@ async function salvarContatoCliente(acao) {
       statusEl.classList.add(statusContato === 'aguardando' ? 'warning' : 'success');
     }
 
-    if (contatoDetalheAtivo) {
-      contatoDetalheAtivo.textContent = `${contatoDetalheAtual.ATIVO ? `Ativo: ${contatoDetalheAtual.ATIVO}` : 'Ativo'} | ${rotuloStatusContato(statusContato)}`;
-    }
+    if (contatoDetalheAtivo) atualizarStatusCabecalhoContato(statusContato);
   } catch (error) {
     if (statusEl) {
       statusEl.textContent = error.message;
@@ -2732,6 +2802,8 @@ async function salvarContatoCliente(acao) {
 async function abrirDetalheContato(codParc) {
   if (!codParc) return;
 
+  const requisicaoId = ++contatoDetalheRequisicaoId;
+
   mostrarDetalheContato();
   atualizarBotaoProximoClienteContato(codParc);
   contatoDetalheAtual = null;
@@ -2741,18 +2813,14 @@ async function abrirDetalheContato(codParc) {
   contatoDetalheAvatar.textContent = '--';
   contatoDetalheSubtitulo.textContent = `Codigo ${codParc}`;
   contatoDetalheAtivo.textContent = 'Carregando';
-  contatoDetalheConteudo.innerHTML = '<div class="consulta-empty">Buscando dados do cliente...</div>';
+  contatoDetalheConteudo.innerHTML = '<div class="contato-loading contato-loading-detalhe" role="status"><span class="contato-loading-spinner" aria-hidden="true"></span><strong>Carregando cadastro...</strong><span>Buscando dados e contatos do cliente.</span></div>';
 
   try {
-    const res = await fetch(`/api/contatos/clientes/${encodeURIComponent(codParc)}`);
-    const payload = await res.json();
-
-    if (!res.ok) {
-      throw new Error(payload.erro || 'Erro ao carregar cliente');
-    }
-
+    const payload = await buscarJsonContato('detalhe', `/api/contatos/clientes/${encodeURIComponent(codParc)}`);
+    if (requisicaoId !== contatoDetalheRequisicaoId) return;
     renderizarDetalheContato(payload);
   } catch (error) {
+    if (contatoFoiCancelado(error) || requisicaoId !== contatoDetalheRequisicaoId) return;
     contatoDetalheAtual = null;
     contatoDetalheNome.textContent = 'Erro ao carregar cliente';
     contatoDetalheAvatar.textContent = '!';
@@ -2891,6 +2959,7 @@ function desenharClientesContato() {
 }
 
 function renderizarClientesContato(clientes = [], paginacao = null, facetas = null, preservarGrade = false) {
+  contatoClientesLista.removeAttribute('aria-busy');
   contatoClientesAtuais = clientes;
   if (facetas) {
     contatoFacetas = {
@@ -2924,22 +2993,18 @@ async function carregarClientesAtualizadosContato() {
   limparBuscaContato();
   contatoListaTitulo.textContent = 'Clientes atualizados';
   contatoStatus.textContent = 'Carregando atualizados...';
-  contatoClientesLista.innerHTML = '<div class="consulta-empty">Buscando todos os cadastros atualizados...</div>';
+  renderizarCarregamentoContato('Buscando cadastros atualizados...');
   contatoPagination.hidden = true;
   botaoExibirContatosAtualizados.disabled = true;
 
   try {
-    const res = await fetch('/api/contatos/atualizados');
-    const payload = await res.json();
-
-    if (!res.ok) {
-      throw new Error(payload.erro || 'Erro ao buscar clientes atualizados');
-    }
+    const payload = await buscarJsonContato('lista', '/api/contatos/atualizados');
 
     renderizarClientesContato(payload.clientes || []);
     contatoListaTitulo.textContent = 'Clientes atualizados';
     contatoStatus.textContent = `${(payload.clientes || []).length} clientes atualizados`;
   } catch (error) {
+    if (contatoFoiCancelado(error)) return;
     contatoStatus.textContent = 'Erro ao buscar atualizados';
     contatoClientesLista.innerHTML = `<div class="consulta-empty">${escaparHtml(error.message)}</div>`;
   } finally {
@@ -2948,6 +3013,7 @@ async function carregarClientesAtualizadosContato() {
 }
 
 function limparSelecaoContato(mensagem = 'Selecione perfil, estado e cidade.') {
+  cancelarRequisicaoContato('lista');
   contatoOrigemLista = 'nenhuma';
   mostrarListaContato();
   contatoListaTitulo.textContent = 'Clientes da cidade';
@@ -2983,12 +3049,11 @@ async function carregarPerfisContato() {
   limparSelecaoContato('Carregando perfis...');
 
   try {
-    const res = await fetch(`/api/contatos/perfis?ativos=${parametroAtivosContato()}`);
-    const payload = await res.json();
-
-    if (!res.ok) {
-      throw new Error(payload.erro || 'Erro ao carregar perfis');
-    }
+    const payload = await buscarJsonContato(
+      'perfis',
+      `/api/contatos/perfis?ativos=${parametroAtivosContato()}`,
+      { cacheMs: 5 * 60 * 1000 }
+    );
 
     const perfis = payload.perfis || [];
     contatoPerfil.innerHTML = '<option value="">Selecione o perfil</option>';
@@ -3000,6 +3065,7 @@ async function carregarPerfisContato() {
     });
     contatoStatus.textContent = `${perfis.length} perfis`;
   } catch (error) {
+    if (contatoFoiCancelado(error)) return;
     contatoPerfil.innerHTML = '<option value="">Erro ao carregar</option>';
     contatoStatus.textContent = error.message;
   }
@@ -3008,6 +3074,7 @@ async function carregarPerfisContato() {
 async function carregarEstadosContato() {
   const codPerfil = contatoPerfil.value;
   limparBuscaContato();
+  cancelarRequisicaoContato('lista');
   mostrarListaContato();
 
   if (!codPerfil) {
@@ -3025,12 +3092,8 @@ async function carregarEstadosContato() {
   contatoClientesLista.innerHTML = '<div class="consulta-empty">Selecione uma cidade para listar os clientes.</div>';
 
   try {
-    const res = await fetch(`/api/contatos/estados?perfil=${encodeURIComponent(codPerfil)}&ativos=${parametroAtivosContato()}`);
-    const payload = await res.json();
-
-    if (!res.ok) {
-      throw new Error(payload.erro || 'Erro ao carregar estados');
-    }
+    const url = `/api/contatos/estados?perfil=${encodeURIComponent(codPerfil)}&ativos=${parametroAtivosContato()}`;
+    const payload = await buscarJsonContato('estados', url, { cacheMs: 3 * 60 * 1000 });
 
     const estados = payload.estados || [];
     contatoEstado.innerHTML = '<option value="">Selecione o estado</option><option value="todos">Todos os estados</option>';
@@ -3043,6 +3106,7 @@ async function carregarEstadosContato() {
     contatoEstado.disabled = false;
     contatoStatus.textContent = `${estados.length} estados`;
   } catch (error) {
+    if (contatoFoiCancelado(error)) return;
     contatoEstado.innerHTML = '<option value="">Erro ao carregar</option>';
     contatoStatus.textContent = error.message;
   }
@@ -3052,6 +3116,7 @@ async function carregarCidadesContato() {
   const codPerfil = contatoPerfil.value;
   const uf = contatoEstado.value;
   limparBuscaContato();
+  cancelarRequisicaoContato('lista');
   mostrarListaContato();
   contatoCidade.innerHTML = '<option value="">Selecione a cidade</option>';
   contatoCidade.disabled = true;
@@ -3072,12 +3137,8 @@ async function carregarCidadesContato() {
   contatoStatus.textContent = 'Carregando cidades...';
 
   try {
-    const res = await fetch(`/api/contatos/cidades?perfil=${encodeURIComponent(codPerfil)}&uf=${encodeURIComponent(uf)}&ativos=${parametroAtivosContato()}`);
-    const payload = await res.json();
-
-    if (!res.ok) {
-      throw new Error(payload.erro || 'Erro ao carregar cidades');
-    }
+    const url = `/api/contatos/cidades?perfil=${encodeURIComponent(codPerfil)}&uf=${encodeURIComponent(uf)}&ativos=${parametroAtivosContato()}`;
+    const payload = await buscarJsonContato('cidades', url, { cacheMs: 3 * 60 * 1000 });
 
     const cidades = payload.cidades || [];
     contatoCidade.innerHTML = '<option value="">Selecione a cidade</option><option value="todos">Todas as cidades</option>';
@@ -3090,6 +3151,7 @@ async function carregarCidadesContato() {
     contatoCidade.disabled = false;
     contatoStatus.textContent = `${cidades.length} cidades`;
   } catch (error) {
+    if (contatoFoiCancelado(error)) return;
     contatoStatus.textContent = error.message;
   }
 }
@@ -3127,7 +3189,7 @@ async function carregarClientesContato(pagina = 1, preservarGrade = false) {
   contatoOrigemLista = 'cidade';
 
   contatoStatus.textContent = 'Carregando clientes...';
-  contatoClientesLista.innerHTML = '<div class="consulta-empty">Buscando clientes da cidade...</div>';
+  renderizarCarregamentoContato('Buscando clientes da regiao...');
 
   try {
     const params = new URLSearchParams({
@@ -3155,15 +3217,11 @@ async function carregarClientesContato(pagina = 1, preservarGrade = false) {
       params.set('ordenar', 'ultima');
       params.set('direcao', contatoOrdenacaoUltimaCompra);
     }
-    const res = await fetch(`/api/contatos/clientes?${params}`);
-    const payload = await res.json();
-
-    if (!res.ok) {
-      throw new Error(payload.erro || 'Erro ao carregar clientes');
-    }
+    const payload = await buscarJsonContato('lista', `/api/contatos/clientes?${params}`);
 
     renderizarClientesContato(payload.clientes || [], payload.paginacao, payload.facetas, preservarGrade);
   } catch (error) {
+    if (contatoFoiCancelado(error)) return;
     contatoStatus.textContent = 'Erro ao carregar clientes';
     contatoClientesLista.innerHTML = `<div class="consulta-empty">${escaparHtml(error.message)}</div>`;
   }
@@ -3179,6 +3237,7 @@ async function buscarClientesContato() {
     if (contatoCidade.value) {
       carregarClientesContato();
     } else {
+      cancelarRequisicaoContato('lista');
       contatoClientesAtuais = [];
       contatoClientesLista.innerHTML = '<div class="consulta-empty">Selecione uma cidade para listar os clientes.</div>';
       contatoStatus.textContent = 'Selecione uma cidade ou pesquise por código, nome ou CNPJ.';
@@ -3187,6 +3246,7 @@ async function buscarClientesContato() {
   }
 
   if (termo.length < 2) {
+    cancelarRequisicaoContato('lista');
     contatoClientesAtuais = [];
     contatoClientesLista.innerHTML = '<div class="consulta-empty">Digite pelo menos 2 caracteres para pesquisar.</div>';
     contatoStatus.textContent = 'Pesquisa inteligente';
@@ -3196,19 +3256,16 @@ async function buscarClientesContato() {
   contatoOrigemLista = 'pesquisa';
 
   contatoStatus.textContent = 'Pesquisando clientes...';
-  contatoClientesLista.innerHTML = '<div class="consulta-empty">Buscando por código, nome ou CNPJ...</div>';
+  renderizarCarregamentoContato('Pesquisando clientes...');
 
   try {
-    const res = await fetch(`/api/contatos/busca?q=${encodeURIComponent(termo)}&ativos=${parametroAtivosContato()}`);
-    const payload = await res.json();
-
-    if (!res.ok) {
-      throw new Error(payload.erro || 'Erro ao pesquisar clientes');
-    }
+    const url = `/api/contatos/busca?q=${encodeURIComponent(termo)}&ativos=${parametroAtivosContato()}`;
+    const payload = await buscarJsonContato('lista', url, { cacheMs: 30 * 1000 });
 
     renderizarClientesContato(payload.clientes || []);
     contatoStatus.textContent = `${(payload.clientes || []).length} resultados para "${termo}"`;
   } catch (error) {
+    if (contatoFoiCancelado(error)) return;
     contatoStatus.textContent = 'Erro ao pesquisar clientes';
     contatoClientesLista.innerHTML = `<div class="consulta-empty">${escaparHtml(error.message)}</div>`;
   }
@@ -4395,6 +4452,9 @@ function abrirModalProcessandoConferencia(pedido) {
 
 function exibirErroModalConferencia(payload, error = null) {
   const detalhes = [
+    payload?.progressoPreservado
+      ? 'A conferência e todas as leituras foram preservadas para revisão'
+      : null,
     payload?.erro,
     ...(Array.isArray(payload?.detalhesSankhya) ? payload.detalhesSankhya : []),
     payload?.detalhes,
@@ -4831,6 +4891,7 @@ function obterEstadoOperacionalPedido(pedido) {
   if (statusConferencia === 'EM ANDAMENTO' || statusConferencia === 'EM CONFERENCIA') {
     return 'em-conferencia';
   }
+  if (statusConferencia === 'FINALIZADO DIVERGENTE') return 'finalizado-divergente';
   if (statusConferencia === 'CONFERIDO') return 'conferido';
   if (statusSeparacao === 'EM_SEPARACAO') return 'em-separacao';
   if (statusSeparacao === 'SEPARADO') return 'separado';
@@ -4841,10 +4902,11 @@ function renderizarPedidosFila() {
   filaPedidosLista.innerHTML = '';
   const prioridadeStatus = {
     'em-conferencia': 0,
-    separado: 1,
-    'em-separacao': 2,
-    novo: 3,
-    conferido: 4
+    'finalizado-divergente': 1,
+    separado: 2,
+    'em-separacao': 3,
+    novo: 4,
+    conferido: 5
   };
   const statusSelecionado = filaFiltroStatus?.value || 'todos';
   const pedidosFiltrados = filaPedidos
@@ -4894,6 +4956,7 @@ function renderizarPedidosFila() {
     const card = document.createElement('div');
     const estadoOperacional = obterEstadoOperacionalPedido(pedido);
     const emAndamento = estadoOperacional === 'em-conferencia';
+    const finalizadoDivergente = estadoOperacional === 'finalizado-divergente';
     const entrada = filaModoConferencia === 'entrada';
     const conferido = estadoOperacional === 'conferido';
     const separacaoFinalizada = !entrada && estadoOperacional === 'separado';
@@ -4922,6 +4985,8 @@ function renderizarPedidosFila() {
         ${iconeTipoPedido}
         ${emAndamento
           ? `<span class="pedido-status-mini em-conferencia" title="Em conferencia">${pedido.NOME_CONFERENTE || 'Em andamento'}</span>`
+          : finalizadoDivergente
+            ? '<span class="pedido-status-mini finalizado-divergente">Finalizado divergente</span>'
           : separacaoFinalizada
             ? '<span class="pedido-status-mini separado">Separado</span>'
             : separacaoIniciada
@@ -5897,15 +5962,22 @@ async function abrirPreviewPedido(pedido) {
   } else {
     botaoAbrirSeparacaoPedido.textContent = 'Separa\u00e7\u00e3o';
   }
-  pedidoPreviewStatus.textContent = pedido.STATUS_CONFERENCIA === 'EM ANDAMENTO' ? 'Continuar' : 'Novo';
-  pedidoPreviewStatus.textContent = pedido.STATUS_CONFERENCIA === 'CONFERIDO'
-    ? 'Conferido'
-    : pedidoPreviewStatus.textContent;
+  pedidoPreviewStatus.textContent = pedido.STATUS_CONFERENCIA === 'EM ANDAMENTO'
+    ? 'Continuar'
+    : pedido.STATUS_CONFERENCIA === 'FINALIZADO DIVERGENTE'
+      ? 'Finalizado divergente'
+      : pedido.STATUS_CONFERENCIA === 'CONFERIDO'
+        ? 'Conferido'
+        : 'Novo';
   botaoConfirmarPreviewPedido.disabled = !pedidoPodeIniciarConferencia(pedido);
   // A impressao continua disponivel mesmo depois da conferencia.
   botaoImprimirPreviewPedido.hidden = false;
   botaoConfirmarPreviewPedido.textContent = pedidoPodeIniciarConferencia(pedido)
-    ? 'Iniciar conferência'
+    ? pedido.STATUS_CONFERENCIA === 'FINALIZADO DIVERGENTE'
+      ? 'Reabrir conferência'
+      : pedido.STATUS_CONFERENCIA === 'EM ANDAMENTO'
+        ? 'Continuar conferência'
+        : 'Iniciar conferência'
     : `${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'} ja conferido`;
   pedidoPreviewDocumentos.hidden = pedido.STATUS_CONFERENCIA !== 'CONFERIDO' || filaModoConferencia === 'entrada';
   pedidoPreviewDocumentos.innerHTML = '';
@@ -5977,6 +6049,10 @@ async function selecionarPedidoConferencia(pedido) {
     }
 
     pedidoSelecionado.nuconf = iniciarPayload.nuconf;
+    if (iniciarPayload.reabertaDivergente) {
+      pedidoSelecionado.STATUS_CONFERENCIA = 'EM ANDAMENTO';
+      pedidoSelecionado.STATUS_CONF = 'A';
+    }
     mostrarEtapaConferenciaFila();
     scanStatus.textContent = 'Carregando itens do pedido...';
 

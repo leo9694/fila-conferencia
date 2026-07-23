@@ -230,6 +230,20 @@ function deveAplicarDivergenciaEntrada(resultadoFinalizacao) {
     && String(body.podeCortar || '').toLowerCase() === 'true';
 }
 
+function conferenciaEntradaPodeSerReaberta(status) {
+  return ['A', 'D'].includes(String(status || '').trim().toUpperCase());
+}
+
+function statusVisualConferencia(status, possuiConferencia = true) {
+  if (!possuiConferencia) return 'AGUARDANDO CONFERENCIA';
+
+  const statusNormalizado = String(status || '').trim().toUpperCase();
+  if (statusNormalizado === 'A') return 'EM ANDAMENTO';
+  if (statusNormalizado === 'D') return 'FINALIZADO DIVERGENTE';
+  if (statusNormalizado === 'F') return 'CONFERIDO';
+  return 'STATUS DESCONHECIDO';
+}
+
 function documentosAuxiliaresConferencia(conferencia) {
   const pedidoComplementar = numero(conferencia?.NUPEDCOMP);
   const notaDevolucao = numero(conferencia?.NUNOTADEV);
@@ -254,6 +268,8 @@ module.exports = {
   planejarSincronizacaoDetalhesEntrada,
   validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,
+  conferenciaEntradaPodeSerReaberta,
+  statusVisualConferencia,
   documentosAuxiliaresConferencia,
   retornoPossuiDocumentosAuxiliares
 };

@@ -18,6 +18,8 @@ const {
   planejarSincronizacaoDetalhesEntrada,
   validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,
+  conferenciaEntradaPodeSerReaberta,
+  statusVisualConferencia,
   documentosAuxiliaresConferencia,
   retornoPossuiDocumentosAuxiliares
 } = require('./api/conferenciaEntrada');
@@ -1788,10 +1790,10 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
           ))`)
       : `CAB.DTNEG >= TO_DATE('${intervalo.inicio}', 'YYYY-MM-DD')
         AND CAB.DTNEG < TO_DATE('${intervalo.fim}', 'YYYY-MM-DD') + 1
-        AND (CAB.NUCONFATUAL IS NULL OR CONF.STATUS IN ('A', 'F'))
+        AND (CAB.NUCONFATUAL IS NULL OR CONF.STATUS IN (${modo === 'entrada' ? "'A', 'D', 'F'" : "'A', 'F'"}))
         ${modo === 'saida' ? `AND NVL(CAB.AD_STATUSINTPED, '0') = '1'
         AND NVL(CAB.AD_STATUSCOMERCIAL, '0') = '1'` : ''}
-        ${modo === 'entrada' ? `AND CAB.LIBCONF = 'S'
+        ${modo === 'entrada' ? `AND (CAB.LIBCONF = 'S' OR CONF.STATUS = 'D')
         ` : ''}
         ${sqlFiltroEmpresa(empresa)}`;
 
@@ -1813,6 +1815,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         CASE
           WHEN CAB.NUCONFATUAL IS NULL THEN 'AGUARDANDO CONFERENCIA'
           WHEN CONF.STATUS = 'A' THEN 'EM ANDAMENTO'
+          WHEN CONF.STATUS = 'D' THEN 'FINALIZADO DIVERGENTE'
           WHEN CONF.STATUS = 'F' THEN 'CONFERIDO'
           ELSE 'STATUS DESCONHECIDO'
         END AS STATUS_CONFERENCIA,
@@ -1843,9 +1846,10 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
       ORDER BY
         CASE
           WHEN CONF.STATUS = 'A' THEN 0
-          WHEN CAB.NUCONFATUAL IS NULL THEN 1
-          WHEN CONF.STATUS = 'F' THEN 2
-          ELSE 3
+          WHEN CONF.STATUS = 'D' THEN 1
+          WHEN CAB.NUCONFATUAL IS NULL THEN 2
+          WHEN CONF.STATUS = 'F' THEN 3
+          ELSE 4
         END,
         CAB.DTNEG,
         CAB.NUNOTA
@@ -1865,7 +1869,9 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
           NUMNOTA: normalizarNumero(row.NUMNOTA),
           NUCONFATUAL: row.NUCONFATUAL ? Number(row.NUCONFATUAL) : null,
           STATUS_CONF: row.STATUS_CONF || null,
-          STATUS_CONFERENCIA: row.STATUS_CONFERENCIA,
+          STATUS_CONFERENCIA: modo === 'entrada'
+            ? statusVisualConferencia(row.STATUS_CONF, Boolean(row.NUCONFATUAL))
+            : row.STATUS_CONFERENCIA,
           STATUS_SEPARACAO: separacao?.status || null,
           SEPARACAO_ATUALIZADA_EM: separacao?.atualizadoEm || null,
           NOME_CONFERENTE: row.NOME_CONFERENTE || null,
@@ -3364,7 +3370,12 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
         WHERE NUCONF = ${Number(pedido.NUCONFATUAL)}
       `);
 
-      if (conferenciaAtual?.STATUS === 'A') {
+      const statusConferenciaAtual = String(conferenciaAtual?.STATUS || '').toUpperCase();
+      const reabrindoDivergente = modo === 'entrada'
+        && conferenciaEntradaPodeSerReaberta(statusConferenciaAtual)
+        && statusConferenciaAtual === 'D';
+
+      if (conferenciaAtual?.STATUS === 'A' || reabrindoDivergente) {
         await atualizarRegistroApi(
           'CabecalhoConferencia',
           { NUCONF: pedido.NUCONFATUAL },
@@ -3372,7 +3383,8 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
             CODUSUCONF: codUsu,
             QTDVOL: modo === 'entrada'
               ? Math.max(0, normalizarNumero(pedido.QTDVOL))
-              : Math.max(1, normalizarNumero(pedido.QTDVOL))
+              : Math.max(1, normalizarNumero(pedido.QTDVOL)),
+            ...(reabrindoDivergente ? { STATUS: 'A', DHFINCONF: '' } : {})
           }
         );
 
@@ -3380,7 +3392,8 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
           ok: true,
           nunota,
           nuconf: Number(pedido.NUCONFATUAL),
-          status: 'EM ANDAMENTO'
+          status: 'EM ANDAMENTO',
+          reabertaDivergente: reabrindoDivergente
         });
         return;
       }
@@ -3912,18 +3925,31 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     }
 
     if (conferenciaConferida?.STATUS !== 'F') {
-      if (erroFinalizacaoNativa) {
+      const finalizadoDivergente = modo === 'entrada'
+        && String(conferenciaConferida?.STATUS || '').toUpperCase() === 'D';
+      if (finalizadoDivergente) {
+        conferenciaProgressStore.salvar({
+          nunota,
+          nuconf,
+          codUsu,
+          itens
+        });
+      }
+
+      if (erroFinalizacaoNativa && !finalizadoDivergente) {
         throw erroFinalizacaoNativa;
       }
 
       const detalhesSankhya = [
         traduzirStatusConferencia(conferenciaConferida?.STATUS),
+        erroFinalizacaoNativa?.message,
         ...coletarDetalhesSankhya(resultadoFinalizacao)
       ].filter(Boolean);
 
       res.status(409).json({
         erro: 'O Sankhya recebeu a conferência, mas não finalizou como conferido',
         statusSankhya: conferenciaConferida?.STATUS || null,
+        progressoPreservado: finalizadoDivergente,
         detalhesSankhya,
         resultadoFinalizacao
       });

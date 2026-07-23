@@ -6,9 +6,24 @@ const {
   planejarSincronizacaoDetalhesEntrada,
   validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,
+  conferenciaEntradaPodeSerReaberta,
+  statusVisualConferencia,
   documentosAuxiliaresConferencia,
   retornoPossuiDocumentosAuxiliares
 } = require('../api/conferenciaEntrada');
+
+test('permite reabrir conferencia de entrada finalizada divergente', () => {
+  assert.equal(conferenciaEntradaPodeSerReaberta('D'), true);
+  assert.equal(conferenciaEntradaPodeSerReaberta('A'), true);
+  assert.equal(conferenciaEntradaPodeSerReaberta('F'), false);
+});
+
+test('identifica o status visual finalizado divergente sem tratar como novo', () => {
+  assert.equal(statusVisualConferencia('D'), 'FINALIZADO DIVERGENTE');
+  assert.equal(statusVisualConferencia('A'), 'EM ANDAMENTO');
+  assert.equal(statusVisualConferencia('F'), 'CONFERIDO');
+  assert.equal(statusVisualConferencia(null, false), 'AGUARDANDO CONFERENCIA');
+});
 
 test('reserva correspondencias naturais antes de reaproveitar sequencias', () => {
   const existentes = [
