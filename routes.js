@@ -575,18 +575,7 @@ function adicionarCodigoConferencia(lista, codigo, tipo, multiplicador = 1, desc
   }
 }
 
-function formatarDataHoraSankhya(data = new Date()) {
-  const dia = String(data.getDate()).padStart(2, '0');
-  const mes = String(data.getMonth() + 1).padStart(2, '0');
-  const ano = data.getFullYear();
-  const hora = String(data.getHours()).padStart(2, '0');
-  const minuto = String(data.getMinutes()).padStart(2, '0');
-  const segundo = String(data.getSeconds()).padStart(2, '0');
-
-  return `${dia}/${mes}/${ano} ${hora}:${minuto}:${segundo}`;
-}
-
-function formatarDataHoraLocalISO(data) {
+function obterPartesDataHoraNoFuso(data) {
   const partes = new Intl.DateTimeFormat('en-CA', {
     timeZone: APP_TIMEZONE,
     year: 'numeric',
@@ -595,10 +584,19 @@ function formatarDataHoraLocalISO(data) {
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    hour12: false
+    hourCycle: 'h23'
   }).formatToParts(data);
-  const mapa = Object.fromEntries(partes.map((parte) => [parte.type, parte.value]));
 
+  return Object.fromEntries(partes.map((parte) => [parte.type, parte.value]));
+}
+
+function formatarDataHoraSankhya(data = new Date()) {
+  const mapa = obterPartesDataHoraNoFuso(data);
+  return `${mapa.day}/${mapa.month}/${mapa.year} ${mapa.hour}:${mapa.minute}:${mapa.second}`;
+}
+
+function formatarDataHoraLocalISO(data) {
+  const mapa = obterPartesDataHoraNoFuso(data);
   return `${mapa.year}-${mapa.month}-${mapa.day}T${mapa.hour}:${mapa.minute}:${mapa.second}`;
 }
 
@@ -5160,6 +5158,7 @@ router.post('/fila-conferencia/pedidos/:nunota/etiquetas-volume', async (req, re
 
 router._internals = {
   normalizarDataSankhya,
+  formatarDataHoraSankhya,
   obterIntervaloDatas,
   extrairAvisosDocumento,
   extrairChaveDocumento,

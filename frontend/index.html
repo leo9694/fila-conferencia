@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="/home-dashboard.css?v=20260724-23">
+  <link rel="stylesheet" href="/home-dashboard.css?v=20260724-26">
 
   <style>
     :root {
@@ -498,6 +498,56 @@
       .login-help {
         margin-top: 20px;
         padding-top: 18px;
+      }
+    }
+
+    /* Compacta apenas o login desktop em viewports de pouca altura.
+       Os breakpoints de tablet e celular acima continuam inalterados. */
+    @media (min-width: 901px) and (max-height: 700px) {
+      .login-screen {
+        overflow-y: auto;
+        padding: 12px 24px;
+      }
+
+      .login-card {
+        height: min(540px, calc(100dvh - 24px));
+        min-height: 0;
+      }
+
+      .login-panel {
+        justify-content: center;
+        padding: clamp(22px, 4vh, 32px) clamp(32px, 4vw, 48px);
+      }
+
+      .login-panel .home-kicker { margin-bottom: 7px; }
+
+      .login-card h1 {
+        margin-bottom: 7px;
+        font-size: clamp(1.8rem, 3.6vh, 2.1rem);
+      }
+
+      .login-card p { margin-bottom: 18px; }
+      .login-form { gap: 10px; }
+      .login-field label { margin-bottom: 6px; }
+
+      .login-input-shell,
+      .login-field input {
+        min-height: 46px;
+      }
+
+      .login-submit {
+        min-height: 46px;
+        margin-top: 2px;
+      }
+
+      .login-status {
+        min-height: 16px;
+        margin-top: -4px;
+      }
+
+      .login-help {
+        margin-top: 10px;
+        padding-top: 10px;
       }
     }
 

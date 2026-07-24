@@ -15,3 +15,10 @@ test('normaliza data brasileira quando recebida com barras', () => {
     '2026-05-13T08:30:15'
   );
 });
+
+test('grava data do Sankhya no fuso horario configurado da operacao', () => {
+  assert.equal(
+    routes._internals.formatarDataHoraSankhya(new Date('2026-07-24T17:53:00.000Z')),
+    '24/07/2026 13:53:00'
+  );
+});
