@@ -6307,11 +6307,20 @@ function renderizarPedidosFila() {
     .filter(({ estadoOperacional }) => (
       statusSelecionado === 'todos' || estadoOperacional === statusSelecionado
     ))
-    .sort((a, b) => (
-      (prioridadeStatus[a.estadoOperacional] ?? 99)
-      - (prioridadeStatus[b.estadoOperacional] ?? 99)
-      || a.indiceOriginal - b.indiceOriginal
-    ))
+    .sort((a, b) => {
+      const prioridade = (prioridadeStatus[a.estadoOperacional] ?? 99)
+        - (prioridadeStatus[b.estadoOperacional] ?? 99);
+      if (prioridade !== 0) return prioridade;
+      if (a.estadoOperacional === 'conferido') {
+        return ordenarPorDataDesc(
+          a.pedido.DT_FIM_CONFERENCIA,
+          b.pedido.DT_FIM_CONFERENCIA,
+          a.pedido.DTNEG,
+          b.pedido.DTNEG
+        );
+      }
+      return a.indiceOriginal - b.indiceOriginal;
+    })
     .map(({ pedido }) => pedido);
   filaCountPedidos.textContent = pedidosFiltrados.length;
 
