@@ -82,6 +82,14 @@ function itemDivergente(sessao, item) {
   return contagem !== null && Math.abs(contagem - numero(item.estoqueSistema)) > 0.000001;
 }
 
+function itensDaRecontagem(sessao) {
+  return (sessao.itens || []).filter((item) => {
+    const primeiraContagem = obterContagemRodada(item, 1);
+    return primeiraContagem !== null
+      && Math.abs(primeiraContagem - numero(item.estoqueSistema)) > 0.000001;
+  });
+}
+
 function resumir(sessao) {
   const itens = sessao.itens || [];
   const contados = itens.filter((item) => obterContagemAtual(sessao, item) !== null);
@@ -218,6 +226,12 @@ function criarEstoqueContagemStore(options = {}) {
     if (!['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(sessao.status)) {
       throw new Error('Esta contagem nao esta aberta.');
     }
+    if (
+      sessao.status === 'EM_RECONTAGEM'
+      && itensDaRecontagem(sessao).some((item) => obterContagemRodada(item, 2) === null)
+    ) {
+      throw new Error('Confira todos os itens antes de concluir a recontagem.');
+    }
 
     const resumo = resumir(sessao);
     const agora = new Date().toISOString();
@@ -247,6 +261,9 @@ function criarEstoqueContagemStore(options = {}) {
   function concluirAnalise({ id, usuario = null }) {
     const sessao = exigir(id);
     if (sessao.status !== 'EM_ANALISE') throw new Error('A contagem precisa estar em analise.');
+    if (numero(sessao.rodadaAtual) < 2 && resumir(sessao).itensDivergentes > 0) {
+      throw new Error('Conclua a recontagem antes de preparar o ajuste.');
+    }
 
     const agora = new Date().toISOString();
     sessao.status = resumir(sessao).itensDivergentes > 0 ? 'PRONTA_PARA_AJUSTE' : 'CONCLUIDA';

@@ -2605,7 +2605,27 @@ router.get('/produtos/consulta', async (req, res) => {
 });
 
 function serializarSessaoContagemEstoque(sessao) {
-  const resumo = estoqueContagemStore.resumir(sessao);
+  const emRecontagem = sessao.status === 'EM_RECONTAGEM';
+  let resumo = estoqueContagemStore.resumir(sessao);
+
+  if (emRecontagem) {
+    const itensRecontagem = (sessao.itens || []).filter((item) => {
+      const primeira = item.contagens?.['1'];
+      return primeira !== null
+        && primeira !== undefined
+        && Math.abs(Number(primeira) - Number(item.estoqueSistema)) > 0.000001;
+    });
+    const itensRecontados = itensRecontagem.filter((item) => {
+      const segunda = item.contagens?.['2'];
+      return segunda !== null && segunda !== undefined;
+    });
+    resumo = {
+      ...resumo,
+      totalItens: itensRecontagem.length,
+      itensContados: itensRecontados.length,
+      itensPendentes: itensRecontagem.length - itensRecontados.length
+    };
+  }
 
   return {
     ...sessao,
@@ -2615,7 +2635,19 @@ function serializarSessaoContagemEstoque(sessao) {
       const divergentePrimeira = primeiraContagem !== null
         && primeiraContagem !== undefined
         && Math.abs(Number(primeiraContagem) - Number(item.estoqueSistema)) > 0.000001;
-      const contagemAtual = obterContagemAtual(sessao, item);
+      const contagemRodadaAtual = item.contagens?.[String(sessao.rodadaAtual)];
+      const segundaContagem = item.contagens?.['2'];
+      const contagemAtual = emRecontagem
+        ? contagemRodadaAtual
+        : obterContagemAtual(sessao, item);
+      const possuiContagemAtual = contagemAtual !== null && contagemAtual !== undefined;
+      const divergenteDaContagem = Number(sessao.rodadaAtual) >= 2
+        && primeiraContagem !== null
+        && primeiraContagem !== undefined
+        && segundaContagem !== null
+        && segundaContagem !== undefined
+        ? Math.abs(Number(segundaContagem) - Number(primeiraContagem)) > 0.000001
+        : null;
 
       return {
         chave: item.chave,
@@ -2629,12 +2661,15 @@ function serializarSessaoContagemEstoque(sessao) {
         descrLocal: item.descrLocal,
         controle: item.controle,
         dtVal: item.dtVal,
-        contagemAtual: contagemAtual === null || contagemAtual === undefined
+        contagemAtual: !possuiContagemAtual
           ? null
           : Number(contagemAtual),
         estoqueSistema: Number(item.estoqueSistema),
-        primeiraContagem: primeiraContagem !== undefined ? Number(primeiraContagem) : null,
-        divergente: contagemAtual === null
+        primeiraContagem: primeiraContagem !== null && primeiraContagem !== undefined
+          ? Number(primeiraContagem)
+          : null,
+        divergenteDaContagem,
+        divergente: !possuiContagemAtual
           ? null
           : Math.abs(Number(contagemAtual) - Number(item.estoqueSistema)) > 0.000001,
         podeContar: ['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(sessao.status)
@@ -2868,12 +2903,16 @@ router.get('/estoque-contagem/filtros', async (req, res) => {
     const empresa = obterNumeroInteiro(req.query.empresa);
     const localTexto = String(req.query.local ?? '').trim();
     const local = localTexto === '' ? null : Number(localTexto);
+    const marca = String(req.query.marca || '').trim().slice(0, 100);
     if (!empresa || (local !== null && (!Number.isInteger(local) || local < 0))) {
       res.status(400).json({ erro: 'Informe empresa e local validos.' });
       return;
     }
 
     const filtroLocal = local === null ? '' : `AND EST.CODLOCAL = ${local}`;
+    const filtroMarcaGrupos = marca
+      ? `AND TRIM(PRO.MARCA) = '${textoSql(marca)}'`
+      : '';
     const baseEstoque = `
       EST.CODEMP = ${empresa}
       ${filtroLocal}
@@ -2892,6 +2931,7 @@ router.get('/estoque-contagem/filtros', async (req, res) => {
         INNER JOIN TGFPRO PRO ON PRO.CODPROD = EST.CODPROD
         LEFT JOIN TGFGRU GRU ON GRU.CODGRUPOPROD = PRO.CODGRUPOPROD
         WHERE ${baseEstoque}
+          ${filtroMarcaGrupos}
         ORDER BY PRO.CODGRUPOPROD
       `),
       executeQuery(`

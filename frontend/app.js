@@ -9,7 +9,6 @@ let estoqueContagemItemSelecionado = null;
 let estoqueContagemChavesLocalizadas = null;
 let estoqueContagemFiltroAuditoria = 'TODOS';
 let estoqueContagemFiltroStatus = 'TODOS';
-let estoqueContagemQuantidadeProposta = 0;
 let leituraContagemEstoqueMobile = '';
 let toqueLongoContagemEstoque = null;
 let estoqueContagemPreviaTimer = null;
@@ -92,15 +91,11 @@ const botaoAplicarAjusteEstoque = document.getElementById('estoque-contagem-apli
 const estoqueContagemStatusFiltro = document.getElementById('estoque-contagem-status-filtro');
 const estoqueContagemFiltroResumo = document.getElementById('estoque-contagem-filtro-resumo');
 const estoqueContagemItens = document.getElementById('estoque-contagem-itens');
-const estoqueColunaSistema = document.getElementById('estoque-coluna-sistema');
 const estoqueContagemConfirmModal = document.getElementById('estoque-contagem-confirm-modal');
 const estoqueContagemConfirmTitulo = document.getElementById('estoque-contagem-confirm-titulo');
 const estoqueContagemConfirmProduto = document.getElementById('estoque-contagem-confirm-produto');
 const estoqueContagemConfirmMensagem = document.getElementById('estoque-contagem-confirm-mensagem');
-const estoqueContagemConfirmQtd = document.getElementById('estoque-contagem-confirm-qtd');
-const botaoAjustarQuantidadeEstoque = document.getElementById('estoque-contagem-ajustar-qtd');
-const estoqueContagemAjustePainel = document.getElementById('estoque-contagem-ajuste-painel');
-const botaoCancelarAjusteEstoque = document.getElementById('estoque-contagem-ajuste-cancelar');
+const estoqueContagemUnidade = document.getElementById('estoque-contagem-unidade');
 const botaoCancelarConfirmacaoEstoque = document.getElementById('estoque-contagem-confirm-cancelar');
 const botaoConfirmarItemEstoque = document.getElementById('estoque-contagem-confirmar');
 const botaoRecontarEstoque = document.getElementById('estoque-contagem-recontar');
@@ -1544,7 +1539,8 @@ async function carregarOpcoesFiltrosContagemEstoque() {
   try {
     const parametros = new URLSearchParams({
       empresa,
-      local: estoqueContagemLocal.value
+      local: estoqueContagemLocal.value,
+      marca: marcaAnterior
     });
     const resposta = await fetch(`/api/estoque-contagem/filtros?${parametros}`);
     const payload = await resposta.json();
@@ -1681,12 +1677,17 @@ function renderizarCardsContagemEstoque(sessoes) {
 }
 
 function renderizarListaContagensEstoque() {
-  if (!estoqueContagemLista.length) {
-    estoqueContagemSessoes.innerHTML = '<div class="consulta-empty">Nenhuma contagem criada nesta base.</div>';
+  const hoje = dataAtualContagemEstoque();
+  const contagensHoje = estoqueContagemLista.filter(
+    (sessao) => dataCriacaoContagem(sessao) === hoje
+  );
+
+  if (!contagensHoje.length) {
+    estoqueContagemSessoes.innerHTML = '<div class="consulta-empty">Nenhuma contagem criada hoje.</div>';
     return;
   }
 
-  estoqueContagemSessoes.innerHTML = renderizarCardsContagemEstoque(estoqueContagemLista);
+  estoqueContagemSessoes.innerHTML = renderizarCardsContagemEstoque(contagensHoje);
   atualizarIcones();
 }
 
@@ -1713,7 +1714,27 @@ function preencherFiltroEmpresasHistoricoContagem() {
 }
 
 function dataCriacaoContagem(sessao) {
-  return String(sessao?.criadoEm || '').slice(0, 10);
+  const valor = sessao?.criadoEm;
+  if (!valor) return '';
+
+  const data = new Date(valor);
+  if (Number.isNaN(data.getTime())) return String(valor).slice(0, 10);
+  return dataFormatadaNoFusoContagemEstoque(data);
+}
+
+function dataFormatadaNoFusoContagemEstoque(data) {
+  const partes = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Cuiaba',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(data);
+  const valores = Object.fromEntries(partes.map((parte) => [parte.type, parte.value]));
+  return `${valores.year}-${valores.month}-${valores.day}`;
+}
+
+function dataAtualContagemEstoque() {
+  return dataFormatadaNoFusoContagemEstoque(new Date());
 }
 
 function contagensFiltradasHistorico() {
@@ -1761,12 +1782,13 @@ async function carregarListaContagensEstoque() {
 function itensVisiveisContagemEstoque() {
   if (!estoqueContagemAtual) return [];
   const recontagem = estoqueContagemAtual.status === 'EM_RECONTAGEM';
+  const auditoriaAtiva = !['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(estoqueContagemAtual.status);
   return estoqueContagemAtual.itens.filter((item) => {
     if (recontagem && !item.podeContar) return false;
     if (estoqueContagemChavesLocalizadas && !estoqueContagemChavesLocalizadas.has(item.chave)) return false;
-    if (estoqueContagemFiltroAuditoria === 'DIVERGENTES' && item.divergente !== true) return false;
-    if (estoqueContagemFiltroAuditoria === 'CONTADOS' && item.contagemAtual === null) return false;
-    if (estoqueContagemFiltroAuditoria === 'PENDENTES' && item.contagemAtual !== null) return false;
+    if (auditoriaAtiva && estoqueContagemFiltroAuditoria === 'DIVERGENTES' && item.divergente !== true) return false;
+    if (auditoriaAtiva && estoqueContagemFiltroAuditoria === 'CONTADOS' && item.contagemAtual === null) return false;
+    if (auditoriaAtiva && estoqueContagemFiltroAuditoria === 'PENDENTES' && item.contagemAtual !== null) return false;
     if (
       estoqueContagemFiltroStatus !== 'TODOS'
       && statusItemContagemEstoque(item) !== estoqueContagemFiltroStatus
@@ -1777,6 +1799,8 @@ function itensVisiveisContagemEstoque() {
 
 function statusItemContagemEstoque(item) {
   if (item.contagemAtual === null) return 'PENDENTE';
+  if (item.divergenteDaContagem === true) return 'DIVERGENTE_CONTAGEM';
+  if (item.divergenteDaContagem === false) return 'OK_RECONTAGEM';
   if (Number(item.contagemAtual) === 0 && Number(item.estoqueSistema) !== 0) return 'ZERADO';
   return item.divergente === false ? 'CONFERIDO' : 'DIVERGENTE';
 }
@@ -1903,17 +1927,16 @@ function agruparItensContagemEstoque() {
 }
 
 function renderizarItensContagemEstoque() {
-  estoqueColunaSistema.textContent = 'Estoque sistema';
   const grupos = agruparItensContagemEstoque();
   if (!grupos.length) {
-    estoqueContagemItens.innerHTML = '<tr><td colspan="7" class="empty-state">Nenhuma linha encontrada para esta contagem.</td></tr>';
+    estoqueContagemItens.innerHTML = '<tr><td colspan="6" class="empty-state">Nenhuma linha encontrada para esta contagem.</td></tr>';
     return;
   }
 
   estoqueContagemItens.innerHTML = grupos.map((grupo) => {
     const cabecalho = `
       <tr class="separacao-group-row">
-        <td colspan="7">${grupo.codigo ? `Grupo ${escaparHtml(grupo.codigo)} - ` : ''}${escaparHtml(grupo.descricao)}</td>
+        <td colspan="6">${grupo.codigo ? `Grupo ${escaparHtml(grupo.codigo)} - ` : ''}${escaparHtml(grupo.descricao)}</td>
       </tr>
     `;
     const linhas = grupo.itens.map((item) => {
@@ -1922,16 +1945,22 @@ function renderizarItensContagemEstoque() {
       const statusChave = statusItemContagemEstoque(item);
       const classe = statusChave === 'ZERADO'
         ? ' is-zero'
-        : statusChave === 'CONFERIDO' ? ' is-complete' : contado ? ' is-partial' : '';
+        : ['CONFERIDO', 'OK_RECONTAGEM'].includes(statusChave)
+          ? ' is-complete'
+          : contado ? ' is-partial' : '';
       const status = {
         ZERADO: 'Zerado',
         CONFERIDO: 'Conferido',
         DIVERGENTE: 'Divergente',
+        DIVERGENTE_CONTAGEM: 'Divergente da contagem',
+        OK_RECONTAGEM: 'OK recontagem',
         PENDENTE: 'Pendente'
       }[statusChave];
       const badgeClasse = statusChave === 'ZERADO'
         ? ' zero'
-        : statusChave === 'CONFERIDO' ? '' : ' pending';
+        : statusChave === 'DIVERGENTE_CONTAGEM'
+          ? ' recount-divergent'
+          : ['CONFERIDO', 'OK_RECONTAGEM'].includes(statusChave) ? '' : ' pending';
       const contagemTexto = contado
         ? `${formatarQuantidade(contagem)} ${escaparHtml(item.codVol)}`
         : '—';
@@ -1947,7 +1976,6 @@ function renderizarItensContagemEstoque() {
           <td class="separacao-description" title="${escaparAtributo(item.descrProd)}">${escaparHtml(item.descrProd || '-')}</td>
           <td class="estoque-lista-lote" data-label="Lote" title="${escaparAtributo(item.controle || 'Sem controle')}">${escaparHtml(item.controle || 'Sem controle')}</td>
           <td class="estoque-lista-validade" data-label="Validade">${escaparHtml(validadeTexto)}</td>
-          <td class="estoque-lista-sistema" data-label="Estoque">${formatarQuantidade(item.estoqueSistema)} ${escaparHtml(item.codVol)}</td>
           <td class="estoque-lista-contagem" data-label="Contagem">${contagemTexto}</td>
           <td class="estoque-lista-status"><span class="separacao-badge${badgeClasse}">${status}</span></td>
         </tr>
@@ -1997,20 +2025,24 @@ function renderizarContagemEstoque() {
     <i data-lucide="circle-check-big" aria-hidden="true"></i>
     ${sessao.status === 'EM_RECONTAGEM' ? 'Concluir recontagem' : 'Concluir contagem'}
   `;
+  const recontagemPendente = sessao.status === 'EM_RECONTAGEM'
+    && Number(resumo.itensContados || 0) < Number(resumo.totalItens || 0);
+  botaoFinalizarContagemEstoque.disabled = recontagemPendente;
+  botaoFinalizarContagemEstoque.title = recontagemPendente
+    ? 'Confira todos os itens antes de concluir a recontagem.'
+    : '';
   botaoRecontarEstoque.hidden = !(analise && sessao.rodadaAtual === 1 && resumo.itensDivergentes > 0);
-  botaoConcluirAnaliseEstoque.hidden = !analise;
+  botaoConcluirAnaliseEstoque.hidden = !(analise && Number(sessao.rodadaAtual) >= 2);
   renderizarItensContagemEstoque();
   atualizarIcones();
 }
 
 function fecharConfirmacaoContagemEstoque() {
   estoqueContagemItemSelecionado = null;
-  estoqueContagemQuantidadeProposta = 0;
   estoqueContagemConfirmModal.hidden = true;
-  estoqueContagemAjustePainel.hidden = true;
   estoqueContagemConfirmMensagem.textContent = '';
-  estoqueContagemConfirmQtd.textContent = '-';
   estoqueContagemQuantidade.value = '';
+  estoqueContagemUnidade.textContent = '-';
 }
 
 function abrirConfirmacaoContagemEstoque(item) {
@@ -2020,41 +2052,26 @@ function abrirConfirmacaoContagemEstoque(item) {
   }
 
   estoqueContagemItemSelecionado = item;
-  estoqueContagemConfirmTitulo.textContent = item.contagemAtual === null
-    ? 'Confirmar contagem'
-    : 'Atualizar contagem';
+  const recontagem = estoqueContagemAtual?.status === 'EM_RECONTAGEM';
+  estoqueContagemConfirmTitulo.textContent = recontagem
+    ? 'Confirmar recontagem'
+    : item.contagemAtual === null ? 'Confirmar contagem' : 'Atualizar contagem';
   estoqueContagemConfirmProduto.innerHTML = `
     ${escaparHtml(item.codProd)} - ${escaparHtml(item.descrProd || '-')}
     <div class="separacao-confirm-meta">Local: ${escaparHtml(item.codLocal)} - ${escaparHtml(item.descrLocal)}</div>
     <div class="separacao-confirm-meta">Lote: ${escaparHtml(item.controle || 'Sem controle')}</div>
-    <div class="separacao-confirm-meta">Validade: ${escaparHtml(item.dtVal ? formatarData(item.dtVal) : 'Sem validade')} | Estoque sistema: ${formatarQuantidade(item.estoqueSistema)} ${escaparHtml(item.codVol)}</div>
+    <div class="separacao-confirm-meta">Validade: ${escaparHtml(item.dtVal ? formatarData(item.dtVal) : 'Sem validade')}</div>
   `;
-  estoqueContagemQuantidadeProposta = item.contagemAtual === null
-    ? Number(item.estoqueSistema)
-    : Number(item.contagemAtual);
-  estoqueContagemConfirmQtd.textContent = `${formatarQuantidade(estoqueContagemQuantidadeProposta)} ${item.codVol}`;
-  estoqueContagemQuantidade.value = String(estoqueContagemQuantidadeProposta);
-  estoqueContagemAjustePainel.hidden = true;
-  estoqueContagemConfirmMensagem.textContent = 'Confirme a quantidade encontrada ou use Ajustar quantidade.';
+  estoqueContagemQuantidade.value = recontagem || item.contagemAtual === null
+    ? ''
+    : String(item.contagemAtual);
+  estoqueContagemUnidade.textContent = item.codVol || 'UN';
+  estoqueContagemConfirmMensagem.textContent = 'Digite a quantidade física encontrada.';
   estoqueContagemConfirmModal.hidden = false;
-  setTimeout(() => botaoConfirmarItemEstoque.focus(), 0);
-}
-
-function abrirAjusteQuantidadeContagemEstoque() {
-  if (!estoqueContagemItemSelecionado) return;
-  estoqueContagemQuantidade.value = String(estoqueContagemQuantidadeProposta);
-  estoqueContagemAjustePainel.hidden = false;
-  estoqueContagemConfirmMensagem.textContent = 'Informe a quantidade encontrada e toque em Confirmar item.';
   setTimeout(() => {
     estoqueContagemQuantidade.focus();
     estoqueContagemQuantidade.select();
   }, 0);
-}
-
-function cancelarAjusteQuantidadeContagemEstoque() {
-  estoqueContagemAjustePainel.hidden = true;
-  estoqueContagemQuantidade.value = String(estoqueContagemQuantidadeProposta);
-  estoqueContagemConfirmMensagem.textContent = 'Ajuste cancelado. Confirme a quantidade exibida.';
 }
 
 async function abrirSessaoContagemEstoque(id) {
@@ -2147,15 +2164,12 @@ async function salvarItemContagemEstoque(chave, quantidade) {
 async function confirmarItemContagemEstoque() {
   if (!estoqueContagemItemSelecionado) return;
 
-  let quantidade = estoqueContagemQuantidadeProposta;
-  if (!estoqueContagemAjustePainel.hidden) {
-    quantidade = Number(String(estoqueContagemQuantidade.value || '').replace(',', '.'));
-    if (!Number.isFinite(quantidade) || quantidade < 0) {
-      estoqueContagemConfirmMensagem.textContent = 'Informe uma quantidade válida, igual ou maior que zero.';
-      estoqueContagemQuantidade.focus();
-      return;
-    }
-    estoqueContagemQuantidadeProposta = quantidade;
+  const quantidade = Number(String(estoqueContagemQuantidade.value || '').replace(',', '.'));
+  if (!Number.isFinite(quantidade) || quantidade < 0 || estoqueContagemQuantidade.value === '') {
+    estoqueContagemConfirmMensagem.textContent = 'Informe uma quantidade válida, igual ou maior que zero.';
+    estoqueContagemQuantidade.focus();
+    estoqueContagemQuantidade.select();
+    return;
   }
 
   await salvarItemContagemEstoque(
@@ -2250,7 +2264,11 @@ async function executarAcaoContagemEstoque(acao, confirmacao) {
     const payload = await resposta.json();
     if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível concluir a ação.');
     estoqueContagemAtual = payload.sessao;
-    if (!['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(estoqueContagemAtual.status)) {
+    if (estoqueContagemAtual.status === 'EM_RECONTAGEM') {
+      estoqueContagemFiltroAuditoria = 'TODOS';
+      estoqueContagemFiltroStatus = 'TODOS';
+      estoqueContagemStatusFiltro.value = 'TODOS';
+    } else if (!['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(estoqueContagemAtual.status)) {
       estoqueContagemFiltroAuditoria = estoqueContagemAtual.resumo?.itensDivergentes > 0
         ? 'DIVERGENTES'
         : 'TODOS';
@@ -8306,7 +8324,7 @@ estoqueContagemGrupo.addEventListener('change', () => {
   agendarPreviaContagemEstoque();
 });
 estoqueContagemSubgrupos.addEventListener('change', () => agendarPreviaContagemEstoque());
-estoqueContagemMarca.addEventListener('change', () => agendarPreviaContagemEstoque());
+estoqueContagemMarca.addEventListener('change', carregarOpcoesFiltrosContagemEstoque);
 estoqueContagemSituacao.addEventListener('change', () => agendarPreviaContagemEstoque());
 estoqueContagemControle.addEventListener('change', () => agendarPreviaContagemEstoque());
 estoqueContagemSaldo.addEventListener('change', () => agendarPreviaContagemEstoque());
@@ -8443,8 +8461,6 @@ estoqueContagemQuantidade.addEventListener('keydown', (event) => {
     confirmarItemContagemEstoque();
   }
 });
-botaoAjustarQuantidadeEstoque.addEventListener('click', abrirAjusteQuantidadeContagemEstoque);
-botaoCancelarAjusteEstoque.addEventListener('click', cancelarAjusteQuantidadeContagemEstoque);
 botaoCancelarConfirmacaoEstoque.addEventListener('click', fecharConfirmacaoContagemEstoque);
 botaoConfirmarItemEstoque.addEventListener('click', confirmarItemContagemEstoque);
 estoqueContagemConfirmModal.addEventListener('click', (event) => {
@@ -8481,6 +8497,13 @@ document.addEventListener('keydown', (event) => {
   }
 });
 botaoFinalizarContagemEstoque.addEventListener('click', () => {
+  if (estoqueContagemAtual?.status === 'EM_RECONTAGEM') {
+    executarAcaoContagemEstoque(
+      'finalizar',
+      'Concluir a recontagem após conferir todos os itens?'
+    );
+    return;
+  }
   const pendentes = Number(estoqueContagemAtual?.resumo?.itensPendentes || 0);
   const avisoPendentes = pendentes
     ? ` ${pendentes} ${pendentes === 1 ? 'item pendente será ignorado' : 'itens pendentes serão ignorados'} e não terão o estoque alterado.`

@@ -94,6 +94,25 @@ test('preserva primeira contagem e permite recontar somente divergencias', () =>
   assert.equal(concluida.itens[0].contagens['2'], 5);
 });
 
+test('exige a conferencia de todos os itens da recontagem antes de concluir', () => {
+  const store = criarStore();
+  const sessao = store.criar({ empresa: 1, usuario: 7, itens });
+
+  store.registrar({ id: sessao.id, chave: sessao.itens[0].chave, quantidade: 4 });
+  store.registrar({ id: sessao.id, chave: sessao.itens[1].chave, quantidade: 7 });
+  store.finalizarRodada({ id: sessao.id });
+  store.iniciarRecontagem({ id: sessao.id, usuario: 9 });
+  store.registrar({ id: sessao.id, chave: sessao.itens[0].chave, quantidade: 4 });
+
+  assert.throws(
+    () => store.finalizarRodada({ id: sessao.id }),
+    /Confira todos os itens/
+  );
+
+  store.registrar({ id: sessao.id, chave: sessao.itens[1].chave, quantidade: 7 });
+  assert.equal(store.finalizarRodada({ id: sessao.id }).status, 'EM_ANALISE');
+});
+
 test('conclui com pendentes sem transformar itens nao contados em ajuste', () => {
   const store = criarStore();
   const sessao = store.criar({ empresa: 1, itens });
@@ -112,6 +131,13 @@ test('conclui com pendentes sem transformar itens nao contados em ajuste', () =>
     unidadesContadas: 4,
     diferencaUnidades: -1
   });
+  assert.throws(
+    () => store.concluirAnalise({ id: sessao.id }),
+    /Conclua a recontagem/
+  );
+  store.iniciarRecontagem({ id: sessao.id });
+  store.registrar({ id: sessao.id, chave: sessao.itens[0].chave, quantidade: 4 });
+  store.finalizarRodada({ id: sessao.id });
   const prontaParaAjuste = store.concluirAnalise({ id: sessao.id });
   assert.equal(prontaParaAjuste.status, 'PRONTA_PARA_AJUSTE');
   assert.equal(prontaParaAjuste.itens[1].contagens['1'], undefined);
@@ -134,6 +160,9 @@ test('conclui contagem parcial correta mantendo o restante pendente', () => {
 test('registra notas pendentes e impede nova aplicacao do mesmo ajuste', () => {
   const store = criarStore();
   const sessao = store.criar({ empresa: 1, itens });
+  store.registrar({ id: sessao.id, chave: sessao.itens[0].chave, quantidade: 4 });
+  store.finalizarRodada({ id: sessao.id });
+  store.iniciarRecontagem({ id: sessao.id });
   store.registrar({ id: sessao.id, chave: sessao.itens[0].chave, quantidade: 4 });
   store.finalizarRodada({ id: sessao.id });
   store.concluirAnalise({ id: sessao.id });
