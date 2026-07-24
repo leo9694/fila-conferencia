@@ -7,7 +7,11 @@
   <link rel="icon" type="image/png" href="/favicon.png">
   <link rel="apple-touch-icon" href="/favicon.png">
 
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="/home-dashboard.css?v=20260724-23">
 
   <style>
     :root {
@@ -33,7 +37,7 @@
         linear-gradient(180deg, #eff9f7 0%, var(--bg-page) 100%);
       min-height: 100vh;
       color: var(--text-main);
-      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      font-family: "Inter", "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     }
 
     .app-boot-screen {
@@ -101,11 +105,46 @@
     }
 
     .login-screen {
-      padding: 18px;
+      position: relative;
+      isolation: isolate;
+      overflow: hidden;
+      padding: clamp(22px, 4vw, 58px);
       background:
-        radial-gradient(circle at top right, rgba(13, 138, 106, 0.18), transparent 24%),
-        linear-gradient(180deg, #eff9f7 0%, #e7f2ef 100%);
+        radial-gradient(circle at 17% 16%, rgba(8, 127, 109, 0.09), transparent 26%),
+        radial-gradient(circle at 88% 78%, rgba(151, 190, 158, 0.12), transparent 27%),
+        linear-gradient(145deg, #f7faf8 0%, #f4f8f6 48%, #edf5f1 100%);
       place-items: center;
+    }
+
+    .login-screen::before,
+    .login-screen::after {
+      content: "";
+      position: absolute;
+      z-index: -1;
+      pointer-events: none;
+    }
+
+    .login-screen::before {
+      inset: auto -12vw -28vh -12vw;
+      height: 68vh;
+      border-radius: 50% 50% 0 0;
+      background:
+        repeating-radial-gradient(ellipse at 50% 115%, transparent 0 25px, rgba(8, 127, 109, 0.045) 27px 29px, transparent 31px 52px);
+      transform: rotate(-3deg);
+    }
+
+    .login-screen::after {
+      right: -74px;
+      bottom: -36px;
+      width: 310px;
+      height: 260px;
+      opacity: 0.28;
+      background:
+        radial-gradient(ellipse at 25% 75%, rgba(88, 146, 102, 0.34) 0 16%, transparent 17%),
+        radial-gradient(ellipse at 48% 58%, rgba(88, 146, 102, 0.25) 0 14%, transparent 15%),
+        radial-gradient(ellipse at 69% 38%, rgba(88, 146, 102, 0.2) 0 12%, transparent 13%);
+      transform: rotate(-28deg);
+      filter: blur(0.2px);
     }
 
     .login-screen.active {
@@ -113,96 +152,181 @@
     }
 
     .login-card {
-      width: min(430px, 100%);
-      background: rgba(255, 255, 255, 0.88);
-      border: 1px solid rgba(18, 66, 75, 0.12);
-      border-radius: 24px;
-      padding: 24px;
-      box-shadow: 0 24px 48px rgba(16, 57, 66, 0.12);
-      backdrop-filter: blur(10px);
+      display: grid;
+      width: min(920px, 100%);
+      min-height: min(570px, calc(100dvh - 64px));
+      grid-template-columns: minmax(310px, 0.86fr) minmax(410px, 1.34fr);
+      overflow: hidden;
+      border: 1px solid rgba(28, 59, 61, 0.13);
+      border-radius: 22px;
+      padding: 0;
+      background: #fff;
+      box-shadow: 0 28px 70px rgba(24, 55, 52, 0.14);
+    }
+
+    .login-visual {
+      position: relative;
+      min-width: 0;
+      min-height: 100%;
+      overflow: hidden;
+      background: #064f3d;
+    }
+
+    .login-visual img {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: center center;
+    }
+
+    .login-panel {
+      display: flex;
+      min-width: 0;
+      flex-direction: column;
+      justify-content: center;
+      padding: clamp(34px, 4vw, 50px);
+      background: #fff;
+    }
+
+    .login-panel-content {
+      width: min(100%, 540px);
+      margin: auto;
+    }
+
+    .login-panel .home-kicker {
+      margin-bottom: 10px;
+      color: #087f6d;
+      font-size: 0.74rem;
+      font-weight: 800;
+      letter-spacing: 0.18em;
     }
 
     .login-card h1 {
-      font-size: 2rem;
-      font-weight: 900;
-      margin: 0 0 4px;
-      line-height: 1.05;
+      margin: 0 0 9px;
+      color: #172735;
+      font-size: clamp(1.9rem, 2.6vw, 2.35rem);
+      font-weight: 800;
+      letter-spacing: -0.035em;
+      line-height: 1.04;
     }
 
     .login-card p {
+      max-width: 490px;
+      margin: 0 0 28px;
       color: var(--text-soft);
-      font-weight: 700;
-      margin: 0 0 20px;
-      line-height: 1.35;
+      font-size: 0.9rem;
+      font-weight: 500;
+      line-height: 1.5;
     }
 
     .login-form {
       display: grid;
-      gap: 12px;
+      gap: 14px;
     }
 
     .login-field label {
       display: block;
-      color: var(--text-soft);
-      font-size: 0.72rem;
-      font-weight: 900;
+      margin-bottom: 8px;
+      color: #3b5261;
+      font-size: 0.7rem;
+      font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
-      margin-bottom: 6px;
+      letter-spacing: 0.035em;
+    }
+
+    .login-input-shell {
+      position: relative;
+      display: flex;
+      min-height: 52px;
+      align-items: center;
+      border: 1px solid #ccd6dc;
+      border-radius: 12px;
+      color: #5d7480;
+      background: #fff;
+      transition: border-color 160ms ease, box-shadow 160ms ease;
+    }
+
+    .login-input-shell:focus-within {
+      border-color: rgba(8, 127, 109, 0.68);
+      box-shadow: 0 0 0 3px rgba(8, 127, 109, 0.1);
+    }
+
+    .login-input-shell > svg {
+      width: 22px;
+      height: 22px;
+      flex: 0 0 auto;
+      margin-left: 18px;
+      stroke-width: 1.8;
     }
 
     .login-field input {
       width: 100%;
-      min-height: 44px;
-      border-radius: 13px;
-      border: 1px solid #bfd0e3;
-      padding: 0 13px;
-      font-size: 0.98rem;
-      font-weight: 800;
-      color: var(--text-main);
-      background: rgba(255, 255, 255, 0.96);
+      min-width: 0;
+      min-height: 50px;
+      border: 0;
+      outline: 0;
+      padding: 0 17px;
+      color: #192a37;
+      background: transparent;
+      font-size: 0.95rem;
+      font-weight: 700;
+    }
+
+    .login-field input:-webkit-autofill,
+    .login-field input:-webkit-autofill:hover,
+    .login-field input:-webkit-autofill:focus {
+      -webkit-text-fill-color: #192a37;
+      box-shadow: 0 0 0 1000px #fff inset;
+      transition: background-color 9999s ease-out;
     }
 
     .password-field {
-      position: relative;
+      position: static;
     }
 
     .password-field input {
-      padding-right: 48px;
+      padding-right: 50px;
     }
 
     .password-toggle {
       position: absolute;
-      right: 8px;
-      bottom: 6px;
-      width: 34px;
-      height: 34px;
-      border: none;
-      border-radius: 10px;
+      top: 50%;
+      right: 10px;
+      bottom: auto;
+      width: 38px;
+      height: 38px;
+      border: 0;
+      border-radius: 9px;
       display: inline-grid;
       place-items: center;
+      color: #58707c;
       background: transparent;
-      color: var(--text-soft);
+      transform: translateY(-50%);
+      transition: color 160ms ease, background-color 160ms ease;
     }
 
     .password-toggle:hover,
     .password-toggle:focus-visible {
-      background: rgba(13, 138, 106, 0.10);
-      color: var(--accent);
+      color: #087f6d;
+      background: rgba(8, 127, 109, 0.09);
       outline: none;
     }
 
     .password-toggle svg {
       width: 20px;
       height: 20px;
-      stroke: currentColor;
-      stroke-width: 2.2;
       fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
       stroke-linecap: round;
       stroke-linejoin: round;
     }
 
-    .login-field input:focus,
+    .login-field input:focus {
+      box-shadow: none;
+    }
+
     .fila-field input:focus,
     .fila-field select:focus {
       border-color: rgba(13, 138, 106, 0.55);
@@ -210,11 +334,171 @@
       outline: none;
     }
 
+    .login-submit {
+      width: 100%;
+      min-width: 0;
+      min-height: 52px;
+      margin-top: 4px;
+      border-radius: 11px;
+      color: #fff;
+      background: linear-gradient(135deg, #0a8d75, #087f6d);
+      font-size: 0.98rem;
+      font-weight: 800;
+      box-shadow: 0 9px 20px rgba(8, 127, 109, 0.17);
+      transition: transform 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+    }
+
+    .login-submit:hover:not(:disabled) {
+      transform: translateY(-1px);
+      background: linear-gradient(135deg, #087f6d, #066b5c);
+      box-shadow: 0 12px 25px rgba(8, 127, 109, 0.23);
+    }
+
+    .login-submit:disabled {
+      cursor: wait;
+      opacity: 0.72;
+    }
+
     .login-status {
-      min-height: 18px;
+      min-height: 20px;
+      margin-top: -5px;
       color: #b42318;
-      font-size: 0.84rem;
-      font-weight: 900;
+      font-size: 0.78rem;
+      font-weight: 700;
+      line-height: 1.35;
+    }
+
+    .login-help {
+      display: flex;
+      width: min(100%, 540px);
+      align-items: center;
+      gap: 12px;
+      margin: 18px auto 0;
+      border-top: 1px solid #dfe5e7;
+      padding-top: 16px;
+      color: #2e4452;
+    }
+
+    .login-help-icon {
+      display: grid;
+      width: 32px;
+      height: 32px;
+      flex: 0 0 auto;
+      place-items: center;
+      border-radius: 50%;
+      color: #fff;
+      background: #0a8d75;
+    }
+
+    .login-help-icon svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    .login-help strong,
+    .login-help small {
+      display: block;
+    }
+
+    .login-help strong {
+      font-size: 0.8rem;
+      font-weight: 800;
+    }
+
+    .login-help small {
+      margin-top: 2px;
+      color: #687c87;
+      font-size: 0.72rem;
+      font-weight: 500;
+    }
+
+    @media (max-width: 900px) {
+      .login-screen {
+        overflow-y: auto;
+        padding: 20px;
+      }
+
+      .login-card {
+        width: min(620px, 100%);
+        min-height: 0;
+        grid-template-columns: minmax(0, 1fr);
+      }
+
+      .login-visual {
+        height: 200px;
+        min-height: 0;
+      }
+
+      .login-visual img {
+        object-position: center 38%;
+      }
+
+      .login-panel {
+        padding: 34px clamp(24px, 7vw, 48px) 30px;
+      }
+
+      .login-card p {
+        margin-bottom: 28px;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .login-screen {
+        align-items: start;
+        padding: 10px;
+      }
+
+      .login-card {
+        border-radius: 17px;
+      }
+
+      .login-visual {
+        height: 240px;
+      }
+
+      .login-visual img {
+        object-position: center 17%;
+      }
+
+      .login-panel {
+        padding: 28px 20px 22px;
+      }
+
+      .login-panel .home-kicker {
+        margin-bottom: 10px;
+        font-size: 0.64rem;
+      }
+
+      .login-card h1 {
+        margin-bottom: 8px;
+        font-size: 1.75rem;
+      }
+
+      .login-card p {
+        margin-bottom: 24px;
+        font-size: 0.84rem;
+      }
+
+      .login-form {
+        gap: 14px;
+      }
+
+      .login-input-shell {
+        min-height: 52px;
+      }
+
+      .login-field input {
+        min-height: 50px;
+      }
+
+      .login-submit {
+        min-height: 52px;
+      }
+
+      .login-help {
+        margin-top: 20px;
+        padding-top: 18px;
+      }
     }
 
     .home-user {
@@ -8576,17 +8860,17 @@
         align-items: stretch;
       }
 
-      .screen {
+      .screen:not(.login-screen) {
         padding: 8px;
       }
 
       .login-card {
-        padding: 18px;
+        padding: 0;
         border-radius: 18px;
       }
 
       .login-card h1 {
-        font-size: 1.55rem;
+        font-size: clamp(1.75rem, 5vw, 2.1rem);
       }
 
       .home-topbar,
@@ -9907,76 +10191,185 @@
 
   <section class="screen login-screen" id="login-screen">
     <div class="login-card">
-      <div class="home-kicker">Conferência operacional</div>
-      <h1>Entrar no sistema</h1>
-      <p>Use o mesmo usuário e senha do Sankhya para acessar a fila de conferência.</p>
+      <div class="login-visual" aria-hidden="true">
+        <img src="/login-campo-norte-sul.png?v=20260724-1" alt="">
+      </div>
 
-      <form class="login-form" id="login-form" autocomplete="on">
-        <div class="login-field">
-          <label for="login-usuario">Usuário Sankhya</label>
-          <input id="login-usuario" name="usuario" autocomplete="username" required>
+      <div class="login-panel">
+        <div class="login-panel-content">
+          <div class="home-kicker">Conferência operacional</div>
+          <h1>Entrar no sistema</h1>
+          <p>Use o mesmo usuário e senha do Sankhya para acessar a fila de conferência.</p>
+
+          <form class="login-form" id="login-form" autocomplete="on">
+            <div class="login-field">
+              <label for="login-usuario">Usuário Sankhya</label>
+              <div class="login-input-shell">
+                <i data-lucide="user-round" aria-hidden="true"></i>
+                <input id="login-usuario" name="usuario" autocomplete="username" required>
+              </div>
+            </div>
+            <div class="login-field password-field">
+              <label for="login-senha">Senha</label>
+              <div class="login-input-shell">
+                <i data-lucide="lock-keyhole" aria-hidden="true"></i>
+                <input id="login-senha" name="senha" type="password" autocomplete="current-password" required>
+                <button class="password-toggle" id="toggle-login-senha" type="button" aria-label="Mostrar senha" title="Mostrar senha">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                  </svg>
+                </button>
+              </div>
+            </div>
+            <button class="btn-start login-submit" id="login-submit" type="submit">Entrar</button>
+            <div class="login-status" id="login-status" role="alert"></div>
+          </form>
         </div>
-        <div class="login-field password-field">
-          <label for="login-senha">Senha</label>
-          <input id="login-senha" name="senha" type="password" autocomplete="current-password" required>
-          <button class="password-toggle" id="toggle-login-senha" type="button" aria-label="Mostrar senha" title="Mostrar senha">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z"></path>
-              <circle cx="12" cy="12" r="3"></circle>
-            </svg>
-          </button>
+
+        <div class="login-help">
+          <span class="login-help-icon"><i data-lucide="circle-help" aria-hidden="true"></i></span>
+          <span><strong>Precisa de ajuda?</strong><small>Fale com o suporte de TI da Norte Sul.</small></span>
         </div>
-        <button class="btn-start" id="login-submit" type="submit">Entrar</button>
-        <div class="login-status" id="login-status" role="alert"></div>
-      </form>
+      </div>
     </div>
   </section>
 
   <section class="screen home-screen" id="home-screen">
-    <div class="home-shell">
-      <div class="home-topbar">
-        <div>
-          <div class="home-kicker">Central de Conferência</div>
-          <h1>Escolha uma tela</h1>
-          <p>Escolha entre a conferência operacional e o acompanhamento visual da fila.</p>
+    <div class="home-dashboard">
+      <aside class="home-dashboard-sidebar" id="home-dashboard-sidebar" aria-label="Navegação principal">
+        <div class="home-dashboard-brand">
+          <span class="home-dashboard-brand-mark">
+            <img class="home-dashboard-brand-icon" src="/favicon.png" alt="" aria-hidden="true">
+            <span class="home-dashboard-brand-name"><strong>Norte Sul</strong><small>Sementes</small></span>
+          </span>
         </div>
-        <div class="home-user">
-          <div class="home-user-name" id="home-usuario-logado">-</div>
-          <button class="btn-logout" id="logout-button" type="button">Sair</button>
+        <nav class="home-dashboard-nav">
+          <button class="home-dashboard-nav-item is-active" type="button" data-home-screen="home" aria-current="page" title="Visão geral">
+            <i data-lucide="house" aria-hidden="true"></i><span>Visão geral</span>
+          </button>
+          <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-conferencia" title="Fila de conferência">
+            <i data-lucide="list-checks" aria-hidden="true"></i><span>Fila de conferência</span>
+          </button>
+          <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-acompanhamento" title="Acompanhamento">
+            <i data-lucide="chart-no-axes-combined" aria-hidden="true"></i><span>Acompanhamento</span>
+          </button>
+          <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-consulta-home" title="Consulta de produtos">
+            <i data-lucide="search" aria-hidden="true"></i><span>Consulta de produtos</span>
+          </button>
+          <button class="home-dashboard-nav-item" id="home-nav-contagem-estoque" type="button" data-home-target="abrir-contagem-estoque" title="Contagem de estoque" hidden>
+            <i data-lucide="package-search" aria-hidden="true"></i><span>Contagem de estoque</span>
+          </button>
+          <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-atualizacao-contato" title="Atualização de contato">
+            <i data-lucide="contact-round" aria-hidden="true"></i><span>Atualização de contato</span>
+          </button>
+        </nav>
+
+        <div class="home-dashboard-sidebar-footer">
+          <div class="home-dashboard-user-card">
+            <span class="home-dashboard-avatar" id="home-sidebar-avatar" aria-hidden="true">-</span>
+            <span class="home-dashboard-user-copy"><strong id="home-usuario-logado">-</strong><small>Operador</small></span>
+          </div>
+          <button class="home-dashboard-logout" id="logout-button" type="button">
+            <i data-lucide="log-out" aria-hidden="true"></i><span>Sair</span>
+          </button>
         </div>
-      </div>
+      </aside>
 
-      <div class="home-menu">
-        <button class="home-menu-button primary" id="abrir-conferencia" type="button">
-          <span class="home-menu-icon">CF</span>
-          <span class="home-menu-title">Fila de Conferência</span>
-          <span class="home-menu-text">Confira pedidos por código de barras ou código do produto.</span>
-        </button>
+      <button class="home-dashboard-overlay" id="home-dashboard-overlay" type="button" aria-label="Fechar menu"></button>
+      <button class="home-dashboard-global-menu-toggle" id="home-dashboard-global-menu-toggle" type="button" aria-label="Abrir menu principal" aria-expanded="false">
+        <i data-lucide="menu" aria-hidden="true"></i>
+      </button>
 
-        <button class="home-menu-button secondary" id="abrir-acompanhamento" type="button">
-          <span class="home-menu-icon">AC</span>
-          <span class="home-menu-title">Acompanhamento de Conferência</span>
-          <span class="home-menu-text">Selecione data e empresa para abrir o painel visual de acompanhamento.</span>
-        </button>
+      <main class="home-dashboard-main">
+        <header class="home-dashboard-header">
+          <button class="home-dashboard-menu-toggle" id="home-dashboard-menu-toggle" type="button" aria-label="Abrir menu" aria-expanded="false">
+            <i data-lucide="menu" aria-hidden="true"></i>
+          </button>
+          <div class="home-dashboard-welcome">
+            <h1><span id="home-greeting">Bom dia</span>, <span id="home-greeting-name">Operador</span> <span aria-hidden="true">👋</span></h1>
+            <p>Gerencie a operação de conferência com mais agilidade.</p>
+          </div>
+          <div class="home-dashboard-header-actions">
+            <label class="home-dashboard-search">
+              <i data-lucide="search" aria-hidden="true"></i>
+              <input id="home-global-search" type="search" placeholder="Pesquisar função ou produto..." autocomplete="off">
+              <kbd>Ctrl K</kbd>
+            </label>
+            <button class="home-dashboard-notification" id="home-notification-button" type="button" aria-label="Ver notificações">
+              <i data-lucide="bell" aria-hidden="true"></i><span id="home-notification-badge" hidden>0</span>
+            </button>
+            <span class="home-dashboard-header-avatar" id="home-header-avatar" aria-hidden="true">-</span>
+          </div>
+        </header>
 
-        <button class="home-menu-button tertiary" id="abrir-consulta-home" type="button">
-          <span class="home-menu-icon">CP</span>
-          <span class="home-menu-title">Consulta de Produtos</span>
-          <span class="home-menu-text">Consulte foto, grupo e estoque positivo por empresa e lote.</span>
-        </button>
+        <section class="home-dashboard-metrics" aria-label="Indicadores de hoje">
+          <button class="home-dashboard-metric" type="button" data-home-target="abrir-conferencia">
+            <span class="home-dashboard-icon is-green"><i data-lucide="users-round" aria-hidden="true"></i></span>
+            <span class="home-dashboard-metric-copy"><small>Na fila</small><strong id="home-metric-fila">—</strong></span>
+            <span class="home-dashboard-metric-footer">Pedidos aguardando<i data-lucide="chevron-right" aria-hidden="true"></i></span>
+          </button>
+          <button class="home-dashboard-metric" type="button" data-home-target="abrir-conferencia">
+            <span class="home-dashboard-icon is-blue"><i data-lucide="clipboard-list" aria-hidden="true"></i></span>
+            <span class="home-dashboard-metric-copy"><small>Em conferência</small><strong id="home-metric-andamento">—</strong></span>
+            <span class="home-dashboard-metric-footer">Em andamento<i data-lucide="chevron-right" aria-hidden="true"></i></span>
+          </button>
+          <button class="home-dashboard-metric" type="button" data-home-target="abrir-conferencia">
+            <span class="home-dashboard-icon is-orange"><i data-lucide="triangle-alert" aria-hidden="true"></i></span>
+            <span class="home-dashboard-metric-copy"><small>Com divergência</small><strong id="home-metric-divergencia">—</strong></span>
+            <span class="home-dashboard-metric-footer">Aguardando tratamento<i data-lucide="chevron-right" aria-hidden="true"></i></span>
+          </button>
+          <button class="home-dashboard-metric" type="button" data-home-target="abrir-acompanhamento">
+            <span class="home-dashboard-icon is-green"><i data-lucide="circle-check-big" aria-hidden="true"></i></span>
+            <span class="home-dashboard-metric-copy"><small>Concluídos hoje</small><strong id="home-metric-concluidos">—</strong></span>
+            <span class="home-dashboard-metric-footer">Pedidos finalizados<i data-lucide="chevron-right" aria-hidden="true"></i></span>
+          </button>
+        </section>
 
-        <button class="home-menu-button quaternary" id="abrir-atualizacao-contato" type="button">
-          <span class="home-menu-icon">AC</span>
-          <span class="home-menu-title">Atualização de Contato</span>
-          <span class="home-menu-text">Atualize dados de contato dos parceiros.</span>
-        </button>
+        <div class="home-dashboard-content">
+          <section class="home-dashboard-quick-section" aria-labelledby="home-quick-title">
+            <h2 id="home-quick-title">Ações rápidas</h2>
+            <div class="home-dashboard-quick-grid" id="home-quick-grid">
+              <button class="home-dashboard-action-card" id="abrir-conferencia" type="button" data-home-search="fila conferencia pedidos produtos">
+                <span class="home-dashboard-icon is-green"><i data-lucide="list-checks" aria-hidden="true"></i></span>
+                <strong>Fila de conferência</strong><p>Confira pedidos e produtos pendentes.</p>
+                <span class="home-dashboard-action-link">Acessar<i data-lucide="arrow-right" aria-hidden="true"></i></span>
+              </button>
+              <button class="home-dashboard-action-card" id="abrir-contagem-estoque" type="button" data-home-search="contagem estoque inventario" hidden>
+                <span class="home-dashboard-icon is-green"><i data-lucide="package-search" aria-hidden="true"></i></span>
+                <strong>Contagem de estoque</strong><p>Inicie contagens e trate divergências.</p>
+                <span class="home-dashboard-action-link">Acessar<i data-lucide="arrow-right" aria-hidden="true"></i></span>
+              </button>
+              <button class="home-dashboard-action-card" id="abrir-acompanhamento" type="button" data-home-search="acompanhamento andamento operacao">
+                <span class="home-dashboard-icon is-green"><i data-lucide="chart-no-axes-combined" aria-hidden="true"></i></span>
+                <strong>Acompanhamento</strong><p>Visualize o andamento da operação.</p>
+                <span class="home-dashboard-action-link">Acessar<i data-lucide="arrow-right" aria-hidden="true"></i></span>
+              </button>
+              <button class="home-dashboard-action-card" id="abrir-consulta-home" type="button" data-home-search="consulta produtos foto grupo estoque lote">
+                <span class="home-dashboard-icon is-green"><i data-lucide="search" aria-hidden="true"></i></span>
+                <strong>Consulta de produtos</strong><p>Consulte foto, grupo e estoque por lote.</p>
+                <span class="home-dashboard-action-link">Acessar<i data-lucide="arrow-right" aria-hidden="true"></i></span>
+              </button>
+              <button class="home-dashboard-action-card" id="abrir-atualizacao-contato" type="button" data-home-search="atualizacao contato parceiros clientes">
+                <span class="home-dashboard-icon is-green"><i data-lucide="contact-round" aria-hidden="true"></i></span>
+                <strong>Atualização de contato</strong><p>Atualize dados de contato de parceiros.</p>
+                <span class="home-dashboard-action-link">Acessar<i data-lucide="arrow-right" aria-hidden="true"></i></span>
+              </button>
+            </div>
+            <p class="home-dashboard-search-empty" id="home-search-empty" hidden>Nenhuma função encontrada.</p>
+          </section>
 
-        <button class="home-menu-button inventory" id="abrir-contagem-estoque" type="button" hidden>
-          <span class="home-menu-icon">CE</span>
-          <span class="home-menu-title">Contagem de Estoque</span>
-          <span class="home-menu-text">Crie uma cópia, conte por produto e trate divergências com recontagem.</span>
-        </button>
-      </div>
+          <aside class="home-dashboard-activity" id="home-activity-panel">
+            <div class="home-dashboard-section-head">
+              <h2>Atividades recentes</h2>
+              <button id="home-view-all-activities" type="button">Ver todas</button>
+            </div>
+            <div class="home-dashboard-activity-list" id="home-activity-list" aria-live="polite">
+              <div class="home-dashboard-activity-loading"><span></span><span></span><span></span></div>
+            </div>
+          </aside>
+        </div>
+      </main>
     </div>
   </section>
 
@@ -10317,16 +10710,51 @@
 
   <section class="screen fila-screen" id="fila-screen">
     <div class="fila-app">
+      <header class="fila-page-header">
+        <div class="fila-page-heading">
+          <div class="home-kicker">Conferência operacional</div>
+          <h1 id="fila-page-title">Fila de conferência</h1>
+          <p>Acompanhe pedidos, filtre por status e inicie a conferência com rapidez.</p>
+        </div>
+        <div class="fila-page-header-actions">
+          <label class="fila-header-search" for="fila-busca-rapida">
+            <i data-lucide="search" aria-hidden="true"></i>
+            <input id="fila-busca-rapida" inputmode="numeric" autocomplete="off" placeholder="Pesquisar pedido ou nota fiscal...">
+          </label>
+          <div class="fila-status-filter fila-header-status-filter">
+            <label class="visually-hidden" for="fila-filtro-status">Filtrar por status</label>
+            <select id="fila-filtro-status">
+              <option value="todos">Todos os status</option>
+              <option value="em-conferencia">Em conferência</option>
+              <option value="finalizado-divergente">Finalizados divergentes</option>
+              <option value="separado">Separados</option>
+              <option value="em-separacao">Em separação</option>
+              <option value="novo">Novos</option>
+              <option value="conferido">Conferidos</option>
+            </select>
+          </div>
+          <button class="fila-header-icon-button" id="fila-notification-button" type="button" aria-label="Notificações da fila" title="Notificações da fila">
+            <i data-lucide="bell" aria-hidden="true"></i>
+            <span id="fila-notification-badge" hidden>0</span>
+          </button>
+          <span class="fila-header-avatar" id="fila-header-avatar" aria-label="Usuário logado">-</span>
+          <button class="fila-mobile-filter-toggle" id="fila-mobile-filter-toggle" type="button" aria-expanded="false" aria-controls="fila-operacao-panel">
+            <i data-lucide="sliders-horizontal" aria-hidden="true"></i>
+            <span>Filtros</span>
+          </button>
+        </div>
+      </header>
+
       <div class="fila-etapa active" id="fila-etapa-pedidos">
         <div class="fila-pedidos-layout">
-          <aside class="fila-operacao-panel">
+          <aside class="fila-operacao-panel" id="fila-operacao-panel">
             <div class="fila-toolbar-top">
-              <div>
-                <div class="home-kicker">Conferência operacional</div>
-                <h2>Fila de Conferência</h2>
-                <div class="fila-contexto" id="fila-contexto">-</div>
-              </div>
+              <h2>Filtros</h2>
+              <button class="fila-filter-close" id="fila-filter-close" type="button" aria-label="Fechar filtros">
+                <i data-lucide="x" aria-hidden="true"></i>
+              </button>
             </div>
+            <div class="fila-contexto" id="fila-contexto">-</div>
 
             <div class="fila-filtros">
               <button class="fila-mode-toggle" id="fila-modo-entrada" type="button" role="switch" aria-checked="false">
@@ -10366,7 +10794,8 @@
               </div>
 
               <button class="btn-start" id="buscar-fila-conferencia" type="button">Buscar pedidos</button>
-              <button class="btn-back" id="voltar-home-fila" type="button">Voltar</button>
+              <button class="btn-back" id="limpar-filtros-fila" type="button">Limpar filtros</button>
+              <button class="btn-back fila-voltar-home" id="voltar-home-fila" type="button">Voltar</button>
             </div>
           </aside>
 
@@ -10377,18 +10806,6 @@
                 <span id="fila-count-pedidos">0</span>
               </div>
               <div class="fila-pedidos-actions">
-                <div class="fila-status-filter">
-                  <label for="fila-filtro-status">Filtrar por status</label>
-                  <select id="fila-filtro-status">
-                    <option value="todos">Todos os status</option>
-                    <option value="em-conferencia">Em conferência</option>
-                    <option value="finalizado-divergente">Finalizados divergentes</option>
-                    <option value="separado">Separados</option>
-                    <option value="em-separacao">Em separação</option>
-                    <option value="novo">Novos</option>
-                    <option value="conferido">Conferidos</option>
-                  </select>
-                </div>
                 <button class="btn-romaneio-cargas" id="abrir-romaneio-cargas" type="button">
                   <i data-lucide="truck" aria-hidden="true"></i>
                   <span>Romaneio de Cargas</span>
@@ -11217,6 +11634,6 @@
 
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <script src="asyncRefresh.js?v=20260601-2"></script>
-  <script src="app.js?v=20260724-7"></script>
+  <script src="app.js?v=20260724-18"></script>
 </body>
 </html>

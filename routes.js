@@ -1901,6 +1901,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         WHEN CONF.STATUS = 'F' THEN 'CONFERIDO'
         ELSE 'STATUS DESCONHECIDO'
         END AS STATUS_CONFERENCIA,
+        CONF.DHINICONF AS DT_INICIO_CONFERENCIA,
         CONF.DHFINCONF AS DT_FIM_CONFERENCIA,
         COUNT(ITE.SEQUENCIA) AS QTD_ITENS,
         SUM(NVL(ITE.QTDNEG, 0)) AS QTD_TOTAL,
@@ -1950,7 +1951,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         ${modo === 'entrada' ? `AND TOP_ATUAL.NUCCO IS NOT NULL
         AND NVL(CCO_ATUAL.EXPLODIRLOTE, 'N') = 'N'` : ''}
       GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.NUMNOTA, CAB.CODEMP, CAB.CODTIPOPER, CAB.TIPMOV, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA, CAB.QTDVOL,
-        CAB.NUCONFATUAL, CONF.STATUS, CONF.DHFINCONF, USU.NOMEUSU
+        CAB.NUCONFATUAL, CONF.STATUS, CONF.DHINICONF, CONF.DHFINCONF, USU.NOMEUSU
       ORDER BY
         CASE
           WHEN CONF.STATUS = 'A' THEN 0
@@ -1974,6 +1975,8 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         return {
           ...row,
           DTNEG: normalizarDataSankhya(row.DTNEG),
+          DT_INICIO_CONFERENCIA: normalizarDataSankhya(row.DT_INICIO_CONFERENCIA),
+          DT_FIM_CONFERENCIA: normalizarDataSankhya(row.DT_FIM_CONFERENCIA),
           NUMNOTA: normalizarNumero(row.NUMNOTA),
           NUCONFATUAL: row.NUCONFATUAL ? Number(row.NUCONFATUAL) : null,
           STATUS_CONF: row.STATUS_CONF || null,

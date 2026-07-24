@@ -16,6 +16,8 @@ let estoqueContagemPreviaTimer = null;
 let estoqueContagemPreviaVersao = 0;
 let confirmacaoAppResolver = null;
 let confirmacaoAppFocoAnterior = null;
+let homeResumoCarregadoEm = 0;
+let homeResumoEmAndamento = null;
 
 const loginScreen = document.getElementById('login-screen');
 const loginForm = document.getElementById('login-form');
@@ -113,13 +115,34 @@ const filaDataInicial = document.getElementById('fila-data-inicial');
 const filaDataFinal = document.getElementById('fila-data-final');
 const filaEmpresa = document.getElementById('fila-empresa');
 const filaUsuarioLogado = document.getElementById('fila-usuario-logado');
-const filaTituloOperacao = document.querySelector('.fila-toolbar-top h2');
+const filaTituloOperacao = document.getElementById('fila-page-title');
 const botaoModoEntrada = document.getElementById('fila-modo-entrada');
 const filaModoIcone = document.getElementById('fila-modo-icone');
 const filaModoTitulo = document.getElementById('fila-modo-titulo');
 const filaModoDescricao = document.getElementById('fila-modo-descricao');
 const filaSidebarTitle = document.getElementById('fila-sidebar-title');
 const homeUsuarioLogado = document.getElementById('home-usuario-logado');
+const homeDashboard = document.querySelector('.home-dashboard');
+const homeDashboardSidebar = document.getElementById('home-dashboard-sidebar');
+const homeDashboardMenuToggle = document.getElementById('home-dashboard-menu-toggle');
+const homeDashboardGlobalMenuToggle = document.getElementById('home-dashboard-global-menu-toggle');
+const homeDashboardOverlay = document.getElementById('home-dashboard-overlay');
+const homeNavContagemEstoque = document.getElementById('home-nav-contagem-estoque');
+const homeGreeting = document.getElementById('home-greeting');
+const homeGreetingName = document.getElementById('home-greeting-name');
+const homeSidebarAvatar = document.getElementById('home-sidebar-avatar');
+const homeHeaderAvatar = document.getElementById('home-header-avatar');
+const homeGlobalSearch = document.getElementById('home-global-search');
+const homeSearchEmpty = document.getElementById('home-search-empty');
+const homeNotificationButton = document.getElementById('home-notification-button');
+const homeNotificationBadge = document.getElementById('home-notification-badge');
+const homeMetricFila = document.getElementById('home-metric-fila');
+const homeMetricAndamento = document.getElementById('home-metric-andamento');
+const homeMetricDivergencia = document.getElementById('home-metric-divergencia');
+const homeMetricConcluidos = document.getElementById('home-metric-concluidos');
+const homeActivityPanel = document.getElementById('home-activity-panel');
+const homeActivityList = document.getElementById('home-activity-list');
+const homeViewAllActivities = document.getElementById('home-view-all-activities');
 const botaoLogout = document.getElementById('logout-button');
 const botaoBuscarFilaConferencia = document.getElementById('buscar-fila-conferencia');
 const filaEtapaPedidos = document.getElementById('fila-etapa-pedidos');
@@ -127,7 +150,15 @@ const filaEtapaConferencia = document.getElementById('fila-etapa-conferencia');
 const filaPedidosLista = document.getElementById('fila-pedidos-lista');
 const filaCountPedidos = document.getElementById('fila-count-pedidos');
 const filaBuscaPedido = document.getElementById('fila-busca-pedido');
+const filaBuscaRapida = document.getElementById('fila-busca-rapida');
 const filaFiltroStatus = document.getElementById('fila-filtro-status');
+const filaPageTitle = document.getElementById('fila-page-title');
+const filaHeaderAvatar = document.getElementById('fila-header-avatar');
+const filaNotificationButton = document.getElementById('fila-notification-button');
+const filaNotificationBadge = document.getElementById('fila-notification-badge');
+const botaoLimparFiltrosFila = document.getElementById('limpar-filtros-fila');
+const botaoAlternarFiltrosFila = document.getElementById('fila-mobile-filter-toggle');
+const botaoFecharFiltrosFila = document.getElementById('fila-filter-close');
 const botaoAbrirRomaneio = document.getElementById('abrir-romaneio-cargas');
 const romaneioModal = document.getElementById('romaneio-modal');
 const botaoFecharRomaneio = document.getElementById('fechar-romaneio-cargas');
@@ -666,12 +697,323 @@ function limparNavegacaoFilaSalva() {
 
 function atualizarUsuarioLogadoNaTela() {
   const texto = formatarUsuarioLogado();
-  homeUsuarioLogado.textContent = texto;
+  const nomeCompleto = String(usuarioLogado?.nome || 'Operador').trim();
+  const primeiroNome = nomeCompleto.split(/\s+/).filter(Boolean)[0] || 'Operador';
+  const iniciais = nomeCompleto
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((parte) => parte.charAt(0))
+    .join('')
+    .toUpperCase() || '-';
+
+  homeUsuarioLogado.textContent = primeiroNome;
+  homeGreetingName.textContent = primeiroNome;
+  homeSidebarAvatar.textContent = iniciais;
+  homeHeaderAvatar.textContent = iniciais;
+  if (filaHeaderAvatar) filaHeaderAvatar.textContent = iniciais;
+  homeGreeting.textContent = obterSaudacaoHome();
   filaUsuarioLogado.textContent = texto;
+}
+
+function obterSaudacaoHome() {
+  const hora = Number(new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Cuiaba',
+    hour: '2-digit',
+    hour12: false
+  }).format(new Date()));
+
+  if (hora < 12) return 'Bom dia';
+  if (hora < 18) return 'Boa tarde';
+  return 'Boa noite';
+}
+
+function fecharSidebarHome() {
+  homeDashboard?.classList.remove('is-sidebar-open');
+  document.body.classList.remove('home-sidebar-open');
+  homeDashboardMenuToggle?.setAttribute('aria-expanded', 'false');
+  homeDashboardGlobalMenuToggle?.setAttribute('aria-expanded', 'false');
+}
+
+function alternarSidebarHome() {
+  const aberta = !document.body.classList.contains('home-sidebar-open');
+  homeDashboard?.classList.toggle('is-sidebar-open', aberta);
+  document.body.classList.toggle('home-sidebar-open', aberta);
+  homeDashboardMenuToggle?.setAttribute('aria-expanded', String(aberta));
+  homeDashboardGlobalMenuToggle?.setAttribute('aria-expanded', String(aberta));
+}
+
+function aplicarEstadoLarguraSidebarHome(recolhida) {
+  homeDashboard?.classList.toggle('is-sidebar-collapsed', recolhida);
+  document.body.classList.toggle('home-sidebar-collapsed', recolhida);
+}
+
+function restaurarLarguraSidebarHome() {
+  aplicarEstadoLarguraSidebarHome(true);
+}
+
+function sidebarHomeAutomaticaDisponivel() {
+  return window.matchMedia('(min-width: 821px) and (hover: hover) and (pointer: fine)').matches;
+}
+
+function expandirSidebarHomeAutomaticamente() {
+  if (!sidebarHomeAutomaticaDisponivel()) return;
+  document.body.classList.add('home-sidebar-auto-expanded');
+}
+
+function recolherSidebarHomeAutomaticamente({ removerFoco = false } = {}) {
+  document.body.classList.remove('home-sidebar-auto-expanded');
+  if (
+    removerFoco
+    && homeDashboardSidebar
+    && document.activeElement instanceof HTMLElement
+    && homeDashboardSidebar.contains(document.activeElement)
+  ) {
+    document.activeElement.blur();
+  }
+}
+
+function aoSairComFocoDaSidebarHome() {
+  window.requestAnimationFrame(() => {
+    if (!homeDashboardSidebar?.contains(document.activeElement) && !homeDashboardSidebar?.matches(':hover')) {
+      recolherSidebarHomeAutomaticamente();
+    }
+  });
+}
+
+function atualizarItemAtivoNavegacaoGlobal(tela) {
+  document.querySelectorAll('.home-dashboard-nav-item').forEach((item) => {
+    const alvo = item.dataset.homeTarget || item.dataset.homeScreen || '';
+    const ativo = alvo === tela
+      || (tela === 'fila' && alvo === 'abrir-conferencia')
+      || (tela === 'acompanhamento' && alvo === 'abrir-acompanhamento')
+      || (tela === 'consulta' && alvo === 'abrir-consulta-home')
+      || (tela === 'contato' && alvo === 'abrir-atualizacao-contato')
+      || (tela === 'contagem' && alvo === 'abrir-contagem-estoque');
+    item.classList.toggle('is-active', ativo);
+    if (ativo) item.setAttribute('aria-current', 'page');
+    else item.removeAttribute('aria-current');
+  });
+}
+
+function mostrarNavegacaoGlobal(tela) {
+  document.body.classList.add('has-global-sidebar');
+  homeDashboardSidebar.hidden = false;
+  atualizarItemAtivoNavegacaoGlobal(tela);
+}
+
+function ocultarNavegacaoGlobal() {
+  fecharSidebarHome();
+  document.body.classList.remove('has-global-sidebar');
+  homeDashboardSidebar.hidden = true;
+}
+
+function abrirVisaoGeralPeloMenu() {
+  mostrarHomeESuspenderRefresh();
+  history.pushState({ tela: 'home' }, '', window.location.pathname + window.location.search);
+}
+
+function executarDestinoHome(id) {
+  fecharSidebarHome();
+  document.getElementById(id)?.click();
+}
+
+function filtrarAcoesHome() {
+  const termo = normalizarTextoBuscaContato(homeGlobalSearch?.value || '');
+  const cards = [...document.querySelectorAll('.home-dashboard-action-card')];
+  let visiveis = 0;
+
+  cards.forEach((card) => {
+    const conteudo = normalizarTextoBuscaContato(`${card.dataset.homeSearch || ''} ${card.textContent || ''}`);
+    const corresponde = !termo || conteudo.includes(termo);
+    card.classList.toggle('is-search-hidden', !corresponde);
+    if (corresponde && !card.hidden) visiveis += 1;
+  });
+
+  if (homeSearchEmpty) homeSearchEmpty.hidden = visiveis > 0;
+}
+
+function dataHome(valor) {
+  if (!valor) return null;
+  const texto = String(valor).trim();
+  const sankhya = texto.match(/^(\d{2})(\d{2})(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+  if (sankhya) {
+    const [, dia, mes, ano, hora = '00', minuto = '00', segundo = '00'] = sankhya;
+    const data = new Date(`${ano}-${mes}-${dia}T${hora}:${minuto}:${segundo}`);
+    return Number.isNaN(data.getTime()) ? null : data;
+  }
+
+  const data = new Date(texto);
+  return Number.isNaN(data.getTime()) ? null : data;
+}
+
+function formatarMomentoHome(valor) {
+  const data = dataHome(valor);
+  if (!data) return '';
+
+  const hoje = dataAtualContagemEstoque();
+  const dia = dataFormatadaNoFusoContagemEstoque(data);
+  const hora = data.toLocaleTimeString('pt-BR', {
+    timeZone: 'America/Cuiaba',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  if (dia === hoje) return `Hoje, ${hora}`;
+
+  const ontem = new Date();
+  ontem.setDate(ontem.getDate() - 1);
+  if (dia === dataFormatadaNoFusoContagemEstoque(ontem)) return `Ontem, ${hora}`;
+
+  return data.toLocaleDateString('pt-BR', {
+    timeZone: 'America/Cuiaba',
+    day: '2-digit',
+    month: '2-digit'
+  });
+}
+
+function criarAtividadeConferenciaHome(item) {
+  const status = String(item.STATUS_CONFERENCIA || '').toUpperCase();
+  const pedido = item.NUNOTA || item.NUMNOTA || '-';
+  const parceiro = String(item.EMPRESA || '').trim();
+  const finalizada = status === 'CONFERIDO';
+  const divergente = status.includes('DIVERGENTE');
+  const andamento = status.includes('ANDAMENTO') || status.includes('CONFERENCIA');
+
+  if (!finalizada && !divergente && !andamento) return null;
+
+  return {
+    titulo: finalizada
+      ? `Pedido #${pedido} finalizado`
+      : divergente
+        ? `Divergência no pedido #${pedido}`
+        : `Pedido #${pedido} em conferência`,
+    descricao: finalizada
+      ? `Conferência concluída${parceiro ? ` para ${parceiro}` : ''}.`
+      : divergente
+        ? `Conferência aguardando tratamento${parceiro ? ` · ${parceiro}` : ''}.`
+        : `Conferência em andamento${parceiro ? ` · ${parceiro}` : ''}.`,
+    rotulo: finalizada ? 'Concluído' : divergente ? 'Atenção' : 'Em andamento',
+    classe: divergente ? 'is-orange' : andamento ? 'is-blue' : '',
+    icone: divergente ? 'triangle-alert' : andamento ? 'clipboard-list' : 'circle-check-big',
+    momento: item.DT_FIM_CONFERENCIA || item.DT_INICIO_CONFERENCIA || item.DTNEG,
+    timestamp: dataHome(item.DT_FIM_CONFERENCIA || item.DT_INICIO_CONFERENCIA || item.DTNEG)?.getTime() || 0
+  };
+}
+
+function criarAtividadeContagemHome(sessao) {
+  const status = String(sessao?.status || '').toUpperCase();
+  if (!sessao?.criadoEm) return null;
+
+  const ajuste = status === 'AJUSTE_GERADO';
+  const finalizada = ['CONCLUIDA', 'PRONTA_PARA_AJUSTE'].includes(status);
+  const empresa = String(sessao.nomeEmpresa || `Empresa ${sessao.empresa || ''}`).trim();
+  return {
+    titulo: ajuste ? 'Ajuste de estoque gerado' : finalizada ? 'Contagem concluída' : 'Contagem iniciada',
+    descricao: `${empresa}${sessao.nomeLocal ? ` · ${sessao.nomeLocal}` : ''}.`,
+    rotulo: ajuste ? 'Ajuste gerado' : finalizada ? 'Concluído' : 'Em andamento',
+    classe: ajuste ? 'is-orange' : finalizada ? '' : 'is-blue',
+    icone: ajuste ? 'file-check-2' : finalizada ? 'circle-check-big' : 'package-search',
+    momento: sessao.atualizadoEm || sessao.criadoEm,
+    timestamp: dataHome(sessao.atualizadoEm || sessao.criadoEm)?.getTime() || 0
+  };
+}
+
+function renderizarAtividadesHome(atividades) {
+  if (!homeActivityList) return;
+
+  if (!atividades.length) {
+    homeActivityList.innerHTML = '<div class="home-dashboard-empty-activity">Nenhuma atividade registrada para o período.</div>';
+    return;
+  }
+
+  homeActivityList.innerHTML = atividades.slice(0, 4).map((atividade) => `
+    <article class="home-dashboard-activity-item">
+      <span class="home-dashboard-icon ${atividade.classe || 'is-green'}"><i data-lucide="${atividade.icone}" aria-hidden="true"></i></span>
+      <div class="home-dashboard-activity-copy">
+        <strong>${escaparHtml(atividade.titulo)}</strong>
+        <p>${escaparHtml(atividade.descricao)}</p>
+        <span class="home-dashboard-status ${atividade.classe}">${escaparHtml(atividade.rotulo)}</span>
+      </div>
+      <time class="home-dashboard-activity-time">${escaparHtml(formatarMomentoHome(atividade.momento))}</time>
+    </article>
+  `).join('');
+  atualizarIcones();
+}
+
+function definirMetricasHome(itens) {
+  const status = (item) => String(item.STATUS_CONFERENCIA || '').toUpperCase();
+  const fila = itens.filter((item) => status(item).includes('AGUARDANDO')).length;
+  const andamento = itens.filter((item) => status(item).includes('ANDAMENTO') || status(item) === 'EM CONFERENCIA').length;
+  const divergencia = itens.filter((item) => status(item).includes('DIVERGENTE')).length;
+  const concluidos = itens.filter((item) => status(item) === 'CONFERIDO').length;
+
+  homeMetricFila.textContent = String(fila);
+  homeMetricAndamento.textContent = String(andamento);
+  homeMetricDivergencia.textContent = String(divergencia);
+  homeMetricConcluidos.textContent = String(concluidos);
+
+  const notificacoes = andamento + divergencia;
+  homeNotificationBadge.textContent = notificacoes > 99 ? '99+' : String(notificacoes);
+  homeNotificationBadge.hidden = notificacoes === 0;
+}
+
+async function carregarResumoHome(forcar = false) {
+  if (!homeScreen.classList.contains('active')) return;
+  if (!forcar && Date.now() - homeResumoCarregadoEm < 60000) return;
+  if (homeResumoEmAndamento) return homeResumoEmAndamento;
+
+  const hoje = obterDataHoje();
+  const urlBase = `/api/fila-conferencia/pedidos?dataInicial=${hoje}&dataFinal=${hoje}`;
+
+  homeResumoEmAndamento = (async () => {
+    try {
+      const requisicoes = [
+        fetch(`${urlBase}&modo=saida`),
+        fetch(`${urlBase}&modo=entrada`)
+      ];
+      if (estoqueContagemDisponivel) requisicoes.push(fetch('/api/estoque-contagem/sessoes'));
+
+      const respostas = await Promise.all(requisicoes);
+      const payloads = await Promise.all(respostas.map(async (resposta) => {
+        const payload = await resposta.json();
+        if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível carregar o resumo.');
+        return payload;
+      }));
+
+      const itens = [...(payloads[0]?.itens || []), ...(payloads[1]?.itens || [])];
+      const contagens = payloads[2]?.itens || [];
+      definirMetricasHome(itens);
+
+      const atividades = [
+        ...itens.map(criarAtividadeConferenciaHome),
+        ...contagens
+          .filter((sessao) => dataCriacaoContagem(sessao) === dataAtualContagemEstoque())
+          .map(criarAtividadeContagemHome)
+      ]
+        .filter(Boolean)
+        .sort((a, b) => b.timestamp - a.timestamp);
+
+      renderizarAtividadesHome(atividades);
+      homeResumoCarregadoEm = Date.now();
+    } catch (error) {
+      console.error('Erro ao carregar resumo da tela inicial:', error);
+      homeMetricFila.textContent = '—';
+      homeMetricAndamento.textContent = '—';
+      homeMetricDivergencia.textContent = '—';
+      homeMetricConcluidos.textContent = '—';
+      homeActivityList.innerHTML = '<div class="home-dashboard-empty-activity">Não foi possível carregar as atividades agora.</div>';
+    } finally {
+      homeResumoEmAndamento = null;
+    }
+  })();
+
+  return homeResumoEmAndamento;
 }
 
 function mostrarLogin(mensagem = '') {
   usuarioLogado = null;
+  ocultarNavegacaoGlobal();
   limparNavegacaoFilaSalva();
   loginScreen.classList.add('active');
   homeScreen.classList.remove('active');
@@ -1208,6 +1550,10 @@ function mostrarHome() {
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
   homeScreen.classList.add('active');
+  mostrarNavegacaoGlobal('home');
+  fecharSidebarHome();
+  homeGreeting.textContent = obterSaudacaoHome();
+  window.setTimeout(() => carregarResumoHome(), 0);
 }
 
 function mostrarConferencia() {
@@ -1224,6 +1570,7 @@ function mostrarConferencia() {
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
   conferenciaScreen.classList.add('active');
+  mostrarNavegacaoGlobal('fila');
 }
 
 function mostrarAcompanhamento() {
@@ -1240,6 +1587,7 @@ function mostrarAcompanhamento() {
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
   acompanhamentoScreen.classList.add('active');
+  mostrarNavegacaoGlobal('acompanhamento');
 }
 
 function mostrarFila() {
@@ -1256,6 +1604,7 @@ function mostrarFila() {
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
   filaScreen.classList.add('active');
+  mostrarNavegacaoGlobal('fila');
 }
 
 function mostrarConsultaProdutos() {
@@ -1272,6 +1621,7 @@ function mostrarConsultaProdutos() {
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
   consultaProdutosScreen.classList.add('active');
+  mostrarNavegacaoGlobal('consulta');
   consultaProdutoCodigo.focus();
 }
 
@@ -1289,6 +1639,7 @@ function mostrarAtualizacaoContato() {
   consultaProdutosScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.add('active');
+  mostrarNavegacaoGlobal('contato');
   contatoPerfil.focus();
 }
 
@@ -1306,6 +1657,7 @@ function mostrarContagemEstoque() {
   consultaProdutosScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.add('active');
+  mostrarNavegacaoGlobal('contagem');
 }
 
 function mostrarSelecaoContagemEstoque() {
@@ -1474,6 +1826,7 @@ async function carregarConfigContagemEstoque() {
 async function verificarDisponibilidadeContagemEstoque() {
   estoqueContagemDisponivel = false;
   botaoAbrirContagemEstoque.hidden = true;
+  homeNavContagemEstoque.hidden = true;
 
   try {
     const resposta = await fetch('/api/estoque-contagem/disponibilidade');
@@ -1484,6 +1837,8 @@ async function verificarDisponibilidadeContagemEstoque() {
   }
 
   botaoAbrirContagemEstoque.hidden = !estoqueContagemDisponivel;
+  homeNavContagemEstoque.hidden = !estoqueContagemDisponivel;
+  filtrarAcoesHome();
   return estoqueContagemDisponivel;
 }
 
@@ -6287,8 +6642,19 @@ async function excluirGuiaFase(id, nome) {
   }
 }
 
+function atualizarNotificacoesFila() {
+  if (!filaNotificationBadge) return;
+  const total = filaPedidos.filter((pedido) => {
+    const status = obterEstadoOperacionalPedido(pedido);
+    return status === 'em-conferencia' || status === 'finalizado-divergente';
+  }).length;
+  filaNotificationBadge.textContent = total > 99 ? '99+' : String(total);
+  filaNotificationBadge.hidden = total === 0;
+}
+
 function renderizarPedidosFila() {
   filaPedidosLista.innerHTML = '';
+  atualizarNotificacoesFila();
   const prioridadeStatus = {
     'em-conferencia': 0,
     'finalizado-divergente': 1,
@@ -7256,6 +7622,7 @@ async function buscarFilaConferencia() {
   filaDataFinal.value = dataInicial <= dataFinal ? dataFinal : dataInicial;
   mostrarEtapaPedidosFila();
   limparPedidoConferencia('Buscando pedidos...');
+  definirFiltrosFilaAbertos(false);
 
   try {
     const params = new URLSearchParams({
@@ -7302,6 +7669,7 @@ async function restaurarConferenciaEmAndamento(estado) {
   filaDataFinal.value = estado.dataFinal || filaDataInicial.value;
   filaEmpresa.value = estado.empresa || '';
   filaBuscaPedido.value = estado.buscaPedido || '';
+  sincronizarBuscaFila(filaBuscaPedido.value, filaBuscaPedido);
   atualizarModoFilaConferencia();
   mostrarHomeESuspenderRefresh();
   mostrarFila();
@@ -7359,6 +7727,7 @@ async function restaurarNavegacaoFilaSalva() {
   filaDataFinal.value = estado.dataFinal || filaDataInicial.value;
   filaEmpresa.value = estado.empresa || '';
   filaBuscaPedido.value = estado.buscaPedido || '';
+  sincronizarBuscaFila(filaBuscaPedido.value, filaBuscaPedido);
   atualizarModoFilaConferencia();
 
   if (estado.etapa === 'conferencia' && estado.pedido?.NUNOTA) {
@@ -8068,6 +8437,31 @@ function abrirFila() {
   history.pushState({ tela: 'fila', etapa: 'pedidos' }, '', '#fila-conferencia');
 }
 
+function definirFiltrosFilaAbertos(abertos) {
+  filaScreen.classList.toggle('fila-filters-open', abertos);
+  botaoAlternarFiltrosFila?.setAttribute('aria-expanded', String(abertos));
+}
+
+function sincronizarBuscaFila(valor, origem) {
+  const busca = String(valor || '').replace(/\D/g, '');
+  if (origem !== filaBuscaPedido) filaBuscaPedido.value = busca;
+  if (filaBuscaRapida && origem !== filaBuscaRapida) filaBuscaRapida.value = busca;
+}
+
+function limparFiltrosFila() {
+  const hoje = obterDataHoje();
+  filaDataInicial.value = hoje;
+  filaDataFinal.value = hoje;
+  filaEmpresa.value = '';
+  filaFiltroStatus.value = 'todos';
+  sincronizarBuscaFila('', null);
+  filaPedidos = [];
+  pedidoSelecionado = null;
+  renderizarPedidosFila();
+  limparPedidoConferencia(textoInicialModoFila());
+  definirFiltrosFilaAbertos(false);
+}
+
 function textoInicialModoFila() {
   return filaModoConferencia === 'entrada'
     ? 'Informe os filtros para buscar notas de entrada.'
@@ -8088,8 +8482,12 @@ function atualizarModoFilaConferencia() {
   filaModoDescricao.textContent = entrada ? 'Recebimento de mercadorias' : 'Separação e expedição de pedidos';
   filaModoIcone.setAttribute('data-lucide', entrada ? 'package-plus' : 'package-check');
   filaTituloOperacao.textContent = entrada ? 'Conferência de Entrada' : 'Fila de Conferência';
+  if (filaPageTitle) filaPageTitle.textContent = entrada ? 'Fila de conferência de entrada' : 'Fila de conferência';
   botaoBuscarFilaConferencia.textContent = entrada ? 'Buscar entradas' : 'Buscar pedidos';
   filaBuscaPedido.placeholder = entrada ? 'Número da nota de entrada' : 'Número do pedido ou nota fiscal';
+  if (filaBuscaRapida) {
+    filaBuscaRapida.placeholder = entrada ? 'Pesquisar nota de entrada...' : 'Pesquisar pedido ou nota fiscal...';
+  }
   filaSidebarTitle.textContent = entrada ? 'Entrada em conferência' : 'Pedido em conferência';
   botaoAbrirRomaneio.hidden = entrada;
   if (entrada && !romaneioModal.hidden) fecharRomaneioCargas();
@@ -8252,6 +8650,7 @@ async function encerrarSessao() {
 async function inicializarApp() {
   iniciarRelogio();
   atualizarIcones();
+  restaurarLarguraSidebarHome();
 
   try {
     const res = await fetch('/api/auth/me');
@@ -8280,6 +8679,38 @@ botaoAbrirAcompanhamento.addEventListener('click', abrirAcompanhamento);
 botaoAbrirConsultaHome.addEventListener('click', abrirConsultaProdutosMesmaTela);
 botaoAbrirAtualizacaoContato.addEventListener('click', abrirAtualizacaoContato);
 botaoAbrirContagemEstoque.addEventListener('click', abrirContagemEstoque);
+document.querySelectorAll('[data-home-target]').forEach((elemento) => {
+  elemento.addEventListener('click', () => executarDestinoHome(elemento.dataset.homeTarget));
+});
+document.querySelector('[data-home-screen="home"]')?.addEventListener('click', abrirVisaoGeralPeloMenu);
+homeDashboardMenuToggle?.addEventListener('click', alternarSidebarHome);
+homeDashboardGlobalMenuToggle?.addEventListener('click', alternarSidebarHome);
+homeDashboardOverlay?.addEventListener('click', fecharSidebarHome);
+homeDashboardSidebar?.addEventListener('pointerenter', expandirSidebarHomeAutomaticamente);
+homeDashboardSidebar?.addEventListener('pointerleave', () => recolherSidebarHomeAutomaticamente({ removerFoco: true }));
+homeDashboardSidebar?.addEventListener('focusin', expandirSidebarHomeAutomaticamente);
+homeDashboardSidebar?.addEventListener('focusout', aoSairComFocoDaSidebarHome);
+homeGlobalSearch?.addEventListener('input', filtrarAcoesHome);
+homeGlobalSearch?.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  const primeiroCard = [...document.querySelectorAll('.home-dashboard-action-card')]
+    .find((card) => !card.hidden && !card.classList.contains('is-search-hidden'));
+  if (primeiroCard) {
+    event.preventDefault();
+    primeiroCard.click();
+  }
+});
+homeNotificationButton?.addEventListener('click', () => {
+  homeActivityPanel?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+homeViewAllActivities?.addEventListener('click', abrirAcompanhamento);
+document.addEventListener('keydown', (event) => {
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && homeScreen.classList.contains('active')) {
+    event.preventDefault();
+    homeGlobalSearch?.focus();
+  }
+  if (event.key === 'Escape') fecharSidebarHome();
+});
 botaoAbrirConsultaProdutos.addEventListener('click', abrirConsultaProdutos);
 botaoConsultaProdutoBuscar.addEventListener('click', buscarConsultaProduto);
 botaoConsultaProdutoEtiqueta.addEventListener('click', abrirSelecaoEtiquetaProduto);
@@ -8559,6 +8990,15 @@ produtoFotoModal.addEventListener('click', (event) => {
   }
 });
 botaoBuscarFilaConferencia.addEventListener('click', buscarFilaConferencia);
+botaoLimparFiltrosFila?.addEventListener('click', limparFiltrosFila);
+botaoAlternarFiltrosFila?.addEventListener('click', () => {
+  definirFiltrosFilaAbertos(!filaScreen.classList.contains('fila-filters-open'));
+});
+botaoFecharFiltrosFila?.addEventListener('click', () => definirFiltrosFilaAbertos(false));
+filaNotificationButton?.addEventListener('click', () => {
+  filaFiltroStatus.value = filaNotificationBadge?.hidden ? 'todos' : 'em-conferencia';
+  renderizarPedidosFila();
+});
 botaoModoEntrada.addEventListener('click', alternarModoFilaConferencia);
 botaoAbrirRomaneio.addEventListener('click', abrirRomaneioCargas);
 botaoFecharRomaneio.addEventListener('click', fecharRomaneioCargas);
@@ -8599,6 +9039,14 @@ romaneioModal.addEventListener('click', (event) => {
   else if (!event.target.closest('#romaneio-transportadora')) definirSeletorTransportadorasAberto(false);
 });
 filaBuscaPedido.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    buscarFilaConferencia();
+  }
+});
+filaBuscaPedido.addEventListener('input', () => sincronizarBuscaFila(filaBuscaPedido.value, filaBuscaPedido));
+filaBuscaRapida?.addEventListener('input', () => sincronizarBuscaFila(filaBuscaRapida.value, filaBuscaRapida));
+filaBuscaRapida?.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
     buscarFilaConferencia();
