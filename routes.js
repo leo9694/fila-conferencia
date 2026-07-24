@@ -3049,7 +3049,10 @@ router.post('/estoque-contagem/sessoes', async (req, res) => {
 
     const [empresaRegistro, grupoRegistro] = await Promise.all([
       executeQuery(`
-        SELECT NVL(NOMEFANTASIA, RAZAOSOCIAL) AS EMPRESA
+        SELECT
+          NVL(NOMEFANTASIA, RAZAOSOCIAL) AS NOMEEMPRESA,
+          NOMEFANTASIA,
+          RAZAOSOCIAL
         FROM TSIEMP
         WHERE CODEMP = ${empresa}
       `),
@@ -3066,7 +3069,10 @@ router.post('/estoque-contagem/sessoes', async (req, res) => {
       : (itens.find((item) => Number(item.CODLOCAL) === local)?.DESCRLOCAL || `Local ${local}`);
     const sessao = estoqueContagemStore.criar({
       empresa,
-      nomeEmpresa: empresaRegistro?.EMPRESA,
+      nomeEmpresa: empresaRegistro?.NOMEEMPRESA
+        || empresaRegistro?.EMPRESA
+        || empresaRegistro?.NOMEFANTASIA
+        || empresaRegistro?.RAZAOSOCIAL,
       nomeGrupo: grupoRegistro?.[0]?.DESCRGRUPOPROD || null,
       local,
       nomeLocal,

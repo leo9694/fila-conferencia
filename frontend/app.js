@@ -4,6 +4,7 @@ let relogioInterval = null;
 let usuarioLogado = null;
 let estoqueContagemAtual = null;
 let estoqueContagemLista = [];
+let estoqueContagemEmpresas = new Map();
 let estoqueContagemDisponivel = false;
 let estoqueContagemItemSelecionado = null;
 let estoqueContagemChavesLocalizadas = null;
@@ -1390,6 +1391,13 @@ function tituloCardContagemEstoque(sessao) {
   return codigo ? `${codigo} - ${nome}` : nome;
 }
 
+function enriquecerNomeEmpresaContagem(sessao) {
+  const nomeAtual = String(sessao?.nomeEmpresa || '').trim();
+  const nomeCadastro = estoqueContagemEmpresas.get(String(sessao?.empresa || '').trim());
+  if (!nomeCadastro || (nomeAtual && !/^Empresa\s+\d+$/i.test(nomeAtual))) return sessao;
+  return { ...sessao, nomeEmpresa: nomeCadastro };
+}
+
 function escopoCardContagemEstoque(sessao) {
   const codigoGrupo = String(sessao?.filtros?.grupo || '').trim();
   const nomeGrupo = String(sessao?.nomeGrupo || '').trim();
@@ -1436,6 +1444,12 @@ async function carregarConfigContagemEstoque() {
     const payload = await resposta.json();
     if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível carregar a configuração.');
 
+    estoqueContagemEmpresas = new Map(
+      (payload.empresas || []).map((empresa) => [
+        String(empresa.codEmp),
+        String(empresa.empresa || '').trim()
+      ])
+    );
     estoqueContagemAmbiente.classList.toggle('is-production', !payload.ambienteTeste);
     estoqueContagemAmbienteTexto.textContent = payload.ambienteTeste ? 'Base de teste' : 'Base de produção';
     estoqueContagemEmpresa.innerHTML = [
@@ -1450,6 +1464,7 @@ async function carregarConfigContagemEstoque() {
     estoqueContagemGrupo.disabled = true;
     estoqueContagemMarca.disabled = true;
     estoqueContagemSubgrupos.disabled = true;
+    renderizarListaContagensEstoque();
   } catch (error) {
     estoqueContagemEmpresa.innerHTML = '<option value="">Base de teste indisponível</option>';
     atualizarMensagemContagemEstoque(error.message, true);
@@ -1631,7 +1646,8 @@ async function atualizarPreviaContagemEstoque() {
 }
 
 function renderizarCardsContagemEstoque(sessoes) {
-  return sessoes.map((sessao) => {
+  return sessoes.map((sessaoOriginal) => {
+    const sessao = enriquecerNomeEmpresaContagem(sessaoOriginal);
     const titulo = tituloCardContagemEstoque(sessao);
     const inicial = String(sessao.nomeEmpresa || titulo || 'E').trim().charAt(0).toUpperCase();
     const resumo = sessao.resumo || {};
@@ -2079,7 +2095,7 @@ async function abrirSessaoContagemEstoque(id) {
     const resposta = await fetch(`/api/estoque-contagem/sessoes/${encodeURIComponent(id)}`);
     const payload = await resposta.json();
     if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível abrir a contagem.');
-    estoqueContagemAtual = payload.sessao;
+    estoqueContagemAtual = enriquecerNomeEmpresaContagem(payload.sessao);
     estoqueContagemChavesLocalizadas = null;
     estoqueContagemFiltroStatus = 'TODOS';
     estoqueContagemStatusFiltro.value = 'TODOS';
@@ -2111,7 +2127,7 @@ async function criarSessaoContagemEstoque() {
     });
     const payload = await resposta.json();
     if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível criar a cópia.');
-    estoqueContagemAtual = payload.sessao;
+    estoqueContagemAtual = enriquecerNomeEmpresaContagem(payload.sessao);
     estoqueContagemFiltroAuditoria = 'TODOS';
     estoqueContagemFiltroStatus = 'TODOS';
     estoqueContagemStatusFiltro.value = 'TODOS';
@@ -2149,7 +2165,7 @@ async function salvarItemContagemEstoque(chave, quantidade) {
     );
     const payload = await resposta.json();
     if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível salvar a contagem.');
-    estoqueContagemAtual = payload.sessao;
+    estoqueContagemAtual = enriquecerNomeEmpresaContagem(payload.sessao);
     fecharConfirmacaoContagemEstoque();
     estoqueContagemChavesLocalizadas = null;
     limparCodigoContagemEstoque();
@@ -2263,7 +2279,7 @@ async function executarAcaoContagemEstoque(acao, confirmacao) {
     );
     const payload = await resposta.json();
     if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível concluir a ação.');
-    estoqueContagemAtual = payload.sessao;
+    estoqueContagemAtual = enriquecerNomeEmpresaContagem(payload.sessao);
     if (estoqueContagemAtual.status === 'EM_RECONTAGEM') {
       estoqueContagemFiltroAuditoria = 'TODOS';
       estoqueContagemFiltroStatus = 'TODOS';
@@ -2310,7 +2326,7 @@ async function aplicarAjusteContagemEstoque() {
     const payload = await resposta.json();
     if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível gerar as notas de ajuste.');
 
-    estoqueContagemAtual = payload.sessao;
+    estoqueContagemAtual = enriquecerNomeEmpresaContagem(payload.sessao);
     await carregarListaContagensEstoque();
     renderizarContagemEstoque();
     const numeros = (payload.notas || []).map((nota) => nota.nunota).join(', ');
