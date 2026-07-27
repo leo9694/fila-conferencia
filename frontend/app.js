@@ -8049,6 +8049,25 @@ function obterAlteracoesConferenciaEntrada() {
       const validadesDiferentes = validadesLidas.filter((valor) => valor !== validadeOriginal);
       const qtdCortada = quantidadeCortadaItem(item);
 
+      if (controlesLidos.length > 1) {
+        const quantidadesPorLote = new Map();
+        leituras.forEach((leitura) => {
+          const lote = normalizarControleEntrada(leitura.controle);
+          if (!lote) return;
+          quantidadesPorLote.set(
+            lote,
+            (quantidadesPorLote.get(lote) || 0) + Number(leitura.quantidadeConvertida || 0)
+          );
+        });
+        const linhasLote = [...quantidadesPorLote.entries()]
+          .map(([lote, quantidade]) => `${lote}: ${formatarQuantidade(quantidade)} ${obterUnidadeExibicaoItem(item)}`);
+        detalhes.push({
+          campo: 'Separação automática por lote',
+          de: 'Uma linha na nota',
+          para: `${linhasLote.join(' | ')}. O app criará uma linha para cada lote.`
+        });
+      }
+
       if (controlesDiferentes.length > 0) {
         detalhes.push({
           campo: 'Lote/controle recebido',

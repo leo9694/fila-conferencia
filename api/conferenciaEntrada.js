@@ -228,6 +228,111 @@ function planejarControlesItensEntrada(itensNota, itensInformados) {
   return alteracoes;
 }
 
+function planejarDesmembramentoLotesEntrada(itensNota, itensInformados) {
+  const porSequencia = new Map(itensNota.map((item) => [Number(item.SEQUENCIA), item]));
+  const planos = [];
+
+  for (const informado of itensInformados) {
+    const item = porSequencia.get(Number(informado.sequencia));
+    if (!item) throw new Error(`Item ${informado.sequencia} nao pertence a nota de entrada.`);
+
+    const leituras = Array.isArray(informado.leituras) ? informado.leituras : [];
+    const gruposPorControle = new Map();
+
+    for (const leitura of leituras) {
+      const controleLeitura = String(leitura?.controle ?? '').trim()
+        || String(item.CONTROLE ?? '').trim();
+      const quantidadeConvertida = Math.max(0, numero(leitura?.quantidadeConvertida));
+      if (!controleLeitura || quantidadeConvertida <= 0) continue;
+
+      const grupo = gruposPorControle.get(controleLeitura) || {
+        controle: controleLeitura,
+        quantidade: 0,
+        leituras: []
+      };
+      grupo.quantidade += quantidadeConvertida;
+      grupo.leituras.push(leitura);
+      gruposPorControle.set(controleLeitura, grupo);
+    }
+
+    const grupos = [...gruposPorControle.values()];
+    if (grupos.length <= 1) continue;
+
+    const quantidadeOriginal = Math.max(0, numero(item.QTDNEG));
+    const quantidadeConferida = Math.max(0, numero(informado.qtdConferida));
+    const quantidadeLotes = grupos.reduce((total, grupo) => total + grupo.quantidade, 0);
+
+    if (Math.abs(quantidadeLotes - quantidadeConferida) > 0.0001) {
+      const erro = new Error(
+        `As leituras por lote do produto ${item.CODPROD} nao correspondem a quantidade conferida.`
+      );
+      erro.tipo = 'LOTES_LEITURAS_DIVERGENTES';
+      throw erro;
+    }
+
+    if (Math.abs(quantidadeLotes - quantidadeOriginal) > 0.0001) {
+      const erro = new Error(
+        `O produto ${item.CODPROD} possui mais de um lote e quantidade divergente. `
+        + 'Ajuste a quantidade conferida antes de concluir.'
+      );
+      erro.tipo = 'LOTES_QUANTIDADE_DIVERGENTE';
+      throw erro;
+    }
+
+    const controleAtual = String(item.CONTROLE ?? '').trim();
+    grupos.sort((a, b) => {
+      if (a.controle === controleAtual) return -1;
+      if (b.controle === controleAtual) return 1;
+      return 0;
+    });
+
+    planos.push({
+      sequencia: Number(item.SEQUENCIA),
+      codProd: Number(item.CODPROD),
+      quantidadeOriginal,
+      grupos
+    });
+  }
+
+  return planos;
+}
+
+function distribuirValorProporcional(valorTotal, quantidades) {
+  const total = numero(valorTotal);
+  const quantidadeTotal = quantidades.reduce((soma, quantidade) => soma + numero(quantidade), 0);
+  let distribuido = 0;
+
+  return quantidades.map((quantidade, indice) => {
+    if (indice === quantidades.length - 1) {
+      return Number((total - distribuido).toFixed(2));
+    }
+
+    const parcela = quantidadeTotal > 0
+      ? Number((total * numero(quantidade) / quantidadeTotal).toFixed(2))
+      : 0;
+    distribuido += parcela;
+    return parcela;
+  });
+}
+
+function distribuirQuantidadeProporcional(quantidadeTotal, quantidades) {
+  const total = numero(quantidadeTotal);
+  const somaQuantidades = quantidades.reduce((soma, quantidade) => soma + numero(quantidade), 0);
+  let distribuido = 0;
+
+  return quantidades.map((quantidade, indice) => {
+    if (indice === quantidades.length - 1) {
+      return Number((total - distribuido).toFixed(10));
+    }
+
+    const parcela = somaQuantidades > 0
+      ? Number((total * numero(quantidade) / somaQuantidades).toFixed(10))
+      : 0;
+    distribuido += parcela;
+    return parcela;
+  });
+}
+
 function deveAplicarDivergenciaEntrada(resultadoFinalizacao) {
   const body = resultadoFinalizacao?.responseBody || {};
   return String(body.status || '').toUpperCase() === 'D'
@@ -268,7 +373,10 @@ function retornoPossuiDocumentosAuxiliares(resultado) {
 
 module.exports = {
   consolidarLeiturasEntrada,
+  distribuirQuantidadeProporcional,
+  distribuirValorProporcional,
   planejarControlesItensEntrada,
+  planejarDesmembramentoLotesEntrada,
   planejarSincronizacaoDetalhesEntrada,
   validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,

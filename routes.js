@@ -15,7 +15,10 @@ const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
 const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
 const {
   consolidarLeiturasEntrada,
+  distribuirQuantidadeProporcional,
+  distribuirValorProporcional,
   planejarControlesItensEntrada,
+  planejarDesmembramentoLotesEntrada,
   planejarSincronizacaoDetalhesEntrada,
   validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,
@@ -48,6 +51,7 @@ const bitrixService = require('./api/bitrixService');
 
 const conferenciaTimerStore = criarConferenciaTimerStore();
 const conferenciaProgressStore = criarConferenciaProgressStore();
+const finalizacoesConferenciaEmAndamento = new Set();
 const contatoStatusStore = criarContatoStatusStore({
   namespace: process.env.SANKHYA_API_BASE_URL || 'padrao'
 });
@@ -1175,6 +1179,490 @@ async function atualizarCorteItemNotaApi(nunota, item, qtdCortada = 0) {
     },
     { modulePath: 'mgecom', forceAccessSession: true }
   );
+}
+
+function numeroApiPreciso(valor) {
+  const numero = normalizarNumero(valor);
+  return numero.toFixed(10).replace(/0+$/, '').replace(/\.$/, '') || '0';
+}
+
+async function salvarQuantidadeLoteItemNotaApi(nunota, item, dados, incluir = false) {
+  return executeService(
+    'CACSP.incluirAlterarItemNota',
+    {
+      nota: {
+        NUNOTA: String(nunota),
+        itens: {
+          item: {
+            CODPROD: campoApi(item.CODPROD),
+            NUNOTA: campoApi(nunota),
+            SEQUENCIA: campoApi(incluir ? '' : item.SEQUENCIA),
+            QTDNEG: campoApi(numeroApiPreciso(dados.quantidade)),
+            VLRUNIT: campoApi(numeroApiPreciso(item.VLRUNIT)),
+            VLRTOT: campoApi(numeroApiPreciso(dados.vlrTot)),
+            CODVOL: campoApi(item.CODVOL || 'UN'),
+            CODLOCALORIG: campoApi(item.CODLOCALORIG || 0),
+            CONTROLE: campoApi(dados.controle || ''),
+            VLRDESC: campoApi(numeroApiPreciso(dados.vlrDesc)),
+            PERCDESC: campoApi(numeroApiPreciso(item.PERCDESC || 0))
+          }
+        }
+      }
+    },
+    { modulePath: 'mgecom', forceAccessSession: true }
+  );
+}
+
+async function excluirItemNotaApi(nunota, sequencia) {
+  return executeService(
+    'CACSP.excluirItemNota',
+    {
+      nota: {
+        itens: {
+          item: {
+            NUNOTA: campoApi(nunota),
+            SEQUENCIA: campoApi(sequencia)
+          }
+        }
+      }
+    },
+    { modulePath: 'mgecom', forceAccessSession: true }
+  );
+}
+
+async function consultarSequenciasNota(nunota) {
+  const linhas = await executeQuery(`
+    SELECT SEQUENCIA
+    FROM TGFITE
+    WHERE NUNOTA = ${nunota}
+    ORDER BY SEQUENCIA
+  `);
+  return new Set(linhas.map((linha) => Number(linha.SEQUENCIA)));
+}
+
+async function consultarVinculosAtendimentoItem(nunota, sequencia) {
+  return executeQuery(`
+    SELECT *
+    FROM TGFVAR
+    WHERE NUNOTA = ${nunota}
+      AND SEQUENCIA = ${sequencia}
+    ORDER BY NUNOTAORIG, SEQUENCIAORIG
+  `);
+}
+
+function chaveVinculoAtendimento(vinculo) {
+  return [
+    Number(vinculo.NUNOTAORIG),
+    Number(vinculo.SEQUENCIAORIG)
+  ].join('|');
+}
+
+async function atualizarQuantidadeVinculoAtendimento(vinculo, quantidade) {
+  await atualizarRegistroApi(
+    'CompraVendavariosPedido',
+    {
+      NUNOTA: vinculo.NUNOTA,
+      SEQUENCIA: vinculo.SEQUENCIA,
+      NUNOTAORIG: vinculo.NUNOTAORIG,
+      SEQUENCIAORIG: vinculo.SEQUENCIAORIG
+    },
+    {
+      QTDATENDIDA: numeroApiPreciso(quantidade),
+      STATUSNOTA: vinculo.STATUSNOTA || 'P'
+    }
+  );
+}
+
+async function aplicarVinculosAtendimentoDesmembramento({
+  nunota,
+  vinculosOriginais,
+  gruposAplicados
+}) {
+  if (vinculosOriginais.length === 0) return;
+
+  const quantidadesLotes = gruposAplicados.map((grupo) => grupo.quantidade);
+  for (const vinculoOriginal of vinculosOriginais) {
+    const quantidadesAtendidas = distribuirQuantidadeProporcional(
+      vinculoOriginal.QTDATENDIDA,
+      quantidadesLotes
+    );
+
+    for (let indice = 0; indice < gruposAplicados.length; indice += 1) {
+      const grupo = gruposAplicados[indice];
+      const quantidadeAtendida = quantidadesAtendidas[indice];
+      if (indice === 0) {
+        await atualizarQuantidadeVinculoAtendimento({
+          ...vinculoOriginal,
+          NUNOTA: nunota,
+          SEQUENCIA: grupo.sequencia
+        }, quantidadeAtendida);
+        continue;
+      }
+
+      const vinculosLinha = await consultarVinculosAtendimentoItem(nunota, grupo.sequencia);
+      const vinculoExistente = vinculosLinha.find(
+        (vinculo) => chaveVinculoAtendimento(vinculo) === chaveVinculoAtendimento(vinculoOriginal)
+      );
+      if (vinculoExistente) {
+        await atualizarQuantidadeVinculoAtendimento(vinculoExistente, quantidadeAtendida);
+      } else {
+        await salvarRegistroApi('CompraVendavariosPedido', {
+          NUNOTA: nunota,
+          SEQUENCIA: grupo.sequencia,
+          NUNOTAORIG: vinculoOriginal.NUNOTAORIG,
+          SEQUENCIAORIG: vinculoOriginal.SEQUENCIAORIG,
+          QTDATENDIDA: numeroApiPreciso(quantidadeAtendida),
+          STATUSNOTA: vinculoOriginal.STATUSNOTA || 'P'
+        });
+      }
+    }
+  }
+}
+
+async function validarVinculosAtendimentoDesmembramento({
+  nunota,
+  itemOriginal,
+  vinculosOriginais,
+  gruposAplicados
+}) {
+  if (vinculosOriginais.length === 0) return;
+
+  const sequencias = gruposAplicados.map((grupo) => Number(grupo.sequencia));
+  const vinculosAtuais = await executeQuery(`
+    SELECT NUNOTA, SEQUENCIA, NUNOTAORIG, SEQUENCIAORIG, QTDATENDIDA, STATUSNOTA
+    FROM TGFVAR
+    WHERE NUNOTA = ${nunota}
+      AND SEQUENCIA IN (${sequencias.join(',')})
+    ORDER BY SEQUENCIA, NUNOTAORIG, SEQUENCIAORIG
+  `);
+  const originaisPorChave = new Map(
+    vinculosOriginais.map((vinculo) => [chaveVinculoAtendimento(vinculo), vinculo])
+  );
+
+  for (const [chave, original] of originaisPorChave) {
+    const totalAtual = vinculosAtuais
+      .filter((vinculo) => chaveVinculoAtendimento(vinculo) === chave)
+      .reduce((total, vinculo) => total + normalizarNumero(vinculo.QTDATENDIDA), 0);
+    if (Math.abs(totalAtual - normalizarNumero(original.QTDATENDIDA)) > 0.0001) {
+      throw new Error(
+        `O atendimento do pedido de origem do produto ${itemOriginal.CODPROD} nao foi preservado.`
+      );
+    }
+  }
+
+  const totalOriginal = vinculosOriginais
+    .reduce((total, vinculo) => total + normalizarNumero(vinculo.QTDATENDIDA), 0);
+  if (Math.abs(totalOriginal - normalizarNumero(itemOriginal.QTDNEG)) <= 0.0001) {
+    for (const grupo of gruposAplicados) {
+      const totalLinha = vinculosAtuais
+        .filter((vinculo) => Number(vinculo.SEQUENCIA) === Number(grupo.sequencia))
+        .reduce((total, vinculo) => total + normalizarNumero(vinculo.QTDATENDIDA), 0);
+      if (Math.abs(totalLinha - normalizarNumero(grupo.quantidade)) > 0.0001) {
+        throw new Error(`A linha do lote ${grupo.controle} ficou sem atendimento completo do pedido.`);
+      }
+    }
+  }
+}
+
+function camposCabecalhoAlteradosPeloDesmembramento(antes, depois) {
+  return Object.keys(antes || {}).filter((campo) => {
+    if (!/^(BASE|VLR)/.test(campo)) return false;
+    const valorAntes = Number(antes[campo]);
+    const valorDepois = Number(depois?.[campo]);
+    return Number.isFinite(valorAntes)
+      && Number.isFinite(valorDepois)
+      && Math.abs(valorAntes - valorDepois) > 0.000001;
+  });
+}
+
+async function reconciliarTotaisDesmembramento({
+  nunota,
+  sequenciaOriginal,
+  itemOriginal,
+  cabecalhoOriginal,
+  sequenciasCriadas
+}) {
+  const [cabecalhoAtual] = await executeQuery(`SELECT * FROM TGFCAB WHERE NUNOTA = ${nunota}`);
+  const [itemAtual] = await executeQuery(`
+    SELECT *
+    FROM TGFITE
+    WHERE NUNOTA = ${nunota}
+      AND SEQUENCIA = ${sequenciaOriginal}
+  `);
+  const camposAlterados = camposCabecalhoAlteradosPeloDesmembramento(cabecalhoOriginal, cabecalhoAtual);
+  const camposItem = {};
+  const camposCabecalho = {};
+
+  for (const campo of camposAlterados) {
+    camposCabecalho[campo] = cabecalhoOriginal[campo];
+    if (!Object.prototype.hasOwnProperty.call(itemOriginal, campo)) continue;
+
+    const valorOriginal = Number(itemOriginal[campo]);
+    const valorAtual = Number(itemAtual?.[campo]);
+    const acrescimoCabecalho = Number(cabecalhoAtual[campo]) - Number(cabecalhoOriginal[campo]);
+    if (Number.isFinite(valorOriginal) && Number.isFinite(valorAtual) && Number.isFinite(acrescimoCabecalho)) {
+      camposItem[campo] = numeroApiPreciso(valorAtual - acrescimoCabecalho);
+    }
+  }
+
+  if (sequenciasCriadas.length > 0 && Object.prototype.hasOwnProperty.call(itemOriginal, 'ALIQICMSRED')) {
+    const [itemCriado] = await executeQuery(`
+      SELECT ALIQICMSRED
+      FROM TGFITE
+      WHERE NUNOTA = ${nunota}
+        AND SEQUENCIA = ${sequenciasCriadas[0]}
+    `);
+    if (itemCriado?.ALIQICMSRED !== null && itemCriado?.ALIQICMSRED !== undefined) {
+      camposItem.ALIQICMSRED = itemCriado.ALIQICMSRED;
+    }
+  }
+
+  if (Object.keys(camposItem).length > 0) {
+    await atualizarRegistroApi(
+      'ItemNota',
+      { NUNOTA: nunota, SEQUENCIA: sequenciaOriginal },
+      camposItem
+    );
+  }
+  if (Object.keys(camposCabecalho).length > 0) {
+    await atualizarRegistroApi('CabecalhoNota', { NUNOTA: nunota }, camposCabecalho);
+  }
+
+  return {
+    camposItem,
+    camposCabecalho
+  };
+}
+
+async function validarDesmembramentoLotes({
+  nunota,
+  itemOriginal,
+  cabecalhoOriginal,
+  gruposAplicados,
+  camposItemCorrigidos = []
+}) {
+  const sequencias = gruposAplicados.map((grupo) => Number(grupo.sequencia));
+  const camposFinanceiros = camposItemCorrigidos.filter(
+    (campo) => /^(BASE|VLR)/.test(campo) && !['VLRTOT', 'VLRDESC'].includes(campo)
+  );
+  const camposExtrasSql = camposFinanceiros.length > 0 ? `, ${camposFinanceiros.join(', ')}` : '';
+  const linhas = await executeQuery(`
+    SELECT SEQUENCIA, CONTROLE, QTDNEG, VLRTOT, VLRDESC${camposExtrasSql}
+    FROM TGFITE
+    WHERE NUNOTA = ${nunota}
+      AND SEQUENCIA IN (${sequencias.join(',')})
+    ORDER BY SEQUENCIA
+  `);
+  const linhasPorSequencia = new Map(linhas.map((linha) => [Number(linha.SEQUENCIA), linha]));
+
+  for (const grupo of gruposAplicados) {
+    const linha = linhasPorSequencia.get(Number(grupo.sequencia));
+    if (!linha) throw new Error(`A linha do lote ${grupo.controle} nao foi gravada no Sankhya.`);
+    if (String(linha.CONTROLE ?? '').trim() !== String(grupo.controle ?? '').trim()) {
+      throw new Error(`O lote ${grupo.controle} nao foi aplicado corretamente na nota.`);
+    }
+    if (Math.abs(normalizarNumero(linha.QTDNEG) - normalizarNumero(grupo.quantidade)) > 0.0001) {
+      throw new Error(`A quantidade do lote ${grupo.controle} nao foi aplicada corretamente na nota.`);
+    }
+  }
+
+  const soma = (campo) => linhas.reduce((total, linha) => total + normalizarNumero(linha[campo]), 0);
+  if (Math.abs(soma('QTDNEG') - normalizarNumero(itemOriginal.QTDNEG)) > 0.0001) {
+    throw new Error(`A quantidade total do produto ${itemOriginal.CODPROD} mudou ao separar os lotes.`);
+  }
+  if (Math.abs(soma('VLRTOT') - normalizarNumero(itemOriginal.VLRTOT)) > 0.01) {
+    throw new Error(`O valor total do produto ${itemOriginal.CODPROD} mudou ao separar os lotes.`);
+  }
+  if (Math.abs(soma('VLRDESC') - normalizarNumero(itemOriginal.VLRDESC)) > 0.01) {
+    throw new Error(`O desconto do produto ${itemOriginal.CODPROD} mudou ao separar os lotes.`);
+  }
+  for (const campo of camposFinanceiros) {
+    if (Math.abs(soma(campo) - normalizarNumero(itemOriginal[campo])) > 0.01) {
+      throw new Error(`O total ${campo} do produto ${itemOriginal.CODPROD} mudou ao separar os lotes.`);
+    }
+  }
+
+  const [cabecalhoAtual] = await executeQuery(`SELECT * FROM TGFCAB WHERE NUNOTA = ${nunota}`);
+  const totaisAlterados = camposCabecalhoAlteradosPeloDesmembramento(cabecalhoOriginal, cabecalhoAtual);
+  if (totaisAlterados.length > 0) {
+    throw new Error(
+      `Os totalizadores da nota mudaram ao separar os lotes (${totaisAlterados.slice(0, 5).join(', ')}).`
+    );
+  }
+}
+
+async function desmembrarItensEntradaPorLote({ nunota, itensPedido, itensInformados }) {
+  const planos = planejarDesmembramentoLotesEntrada(itensPedido, itensInformados);
+  if (planos.length === 0) {
+    return { separacoes: [], itensPedido };
+  }
+
+  const operacoes = [];
+
+  try {
+    for (const plano of planos) {
+      const itemOriginal = itensPedido.find(
+        (item) => Number(item.SEQUENCIA) === Number(plano.sequencia)
+      );
+      if (!itemOriginal) throw new Error(`Item ${plano.sequencia} nao encontrado para separar os lotes.`);
+
+      const [cabecalhoOriginal] = await executeQuery(`SELECT * FROM TGFCAB WHERE NUNOTA = ${nunota}`);
+      const vinculosOriginais = await consultarVinculosAtendimentoItem(
+        nunota,
+        Number(itemOriginal.SEQUENCIA)
+      );
+      const quantidades = plano.grupos.map((grupo) => grupo.quantidade);
+      const totais = distribuirValorProporcional(itemOriginal.VLRTOT, quantidades);
+      const descontos = distribuirValorProporcional(itemOriginal.VLRDESC, quantidades);
+      const sequenciasCriadas = [];
+      const gruposAplicados = [];
+      const operacao = {
+        itemOriginal: { ...itemOriginal },
+        cabecalhoOriginal: { ...cabecalhoOriginal },
+        vinculosOriginais: vinculosOriginais.map((vinculo) => ({ ...vinculo })),
+        sequenciasCriadas,
+        camposItemCorrigidos: []
+      };
+      operacoes.push(operacao);
+
+      for (let indice = 0; indice < plano.grupos.length; indice += 1) {
+        const grupo = plano.grupos[indice];
+        const dados = {
+          quantidade: grupo.quantidade,
+          controle: grupo.controle,
+          vlrTot: totais[indice],
+          vlrDesc: descontos[indice]
+        };
+
+        if (indice === 0) {
+          await salvarQuantidadeLoteItemNotaApi(nunota, itemOriginal, dados, false);
+          gruposAplicados.push({ ...grupo, sequencia: Number(itemOriginal.SEQUENCIA) });
+          continue;
+        }
+
+        const antesInclusao = await consultarSequenciasNota(nunota);
+        await salvarQuantidadeLoteItemNotaApi(nunota, itemOriginal, dados, true);
+        const depoisInclusao = await consultarSequenciasNota(nunota);
+        const novas = [...depoisInclusao].filter((sequencia) => !antesInclusao.has(sequencia));
+        if (novas.length !== 1) {
+          throw new Error(`O Sankhya nao retornou uma nova linha unica para o lote ${grupo.controle}.`);
+        }
+        sequenciasCriadas.push(novas[0]);
+        gruposAplicados.push({ ...grupo, sequencia: novas[0] });
+      }
+
+      const reconciliacao = await reconciliarTotaisDesmembramento({
+        nunota,
+        sequenciaOriginal: Number(itemOriginal.SEQUENCIA),
+        itemOriginal,
+        cabecalhoOriginal,
+        sequenciasCriadas
+      });
+      operacao.camposItemCorrigidos = Object.keys(reconciliacao.camposItem);
+      await aplicarVinculosAtendimentoDesmembramento({
+        nunota,
+        vinculosOriginais,
+        gruposAplicados
+      });
+      await validarDesmembramentoLotes({
+        nunota,
+        itemOriginal,
+        cabecalhoOriginal,
+        gruposAplicados,
+        camposItemCorrigidos: Object.keys(reconciliacao.camposItem)
+      });
+      await validarVinculosAtendimentoDesmembramento({
+        nunota,
+        itemOriginal,
+        vinculosOriginais,
+        gruposAplicados
+      });
+
+      const indiceInformado = itensInformados.findIndex(
+        (item) => Number(item.sequencia) === Number(plano.sequencia)
+      );
+      const itemInformado = itensInformados[indiceInformado];
+      const itensDesmembrados = gruposAplicados.map((grupo) => ({
+        ...itemInformado,
+        sequencia: grupo.sequencia,
+        qtdConferida: grupo.quantidade,
+        qtdCortada: 0,
+        leituras: grupo.leituras
+      }));
+      itensInformados.splice(indiceInformado, 1, ...itensDesmembrados);
+
+      operacao.resultado = {
+        sequenciaOriginal: Number(itemOriginal.SEQUENCIA),
+        codProd: Number(itemOriginal.CODPROD),
+        lotes: gruposAplicados.map((grupo) => ({
+          sequencia: grupo.sequencia,
+          controle: grupo.controle,
+          quantidade: grupo.quantidade
+        }))
+      };
+    }
+  } catch (erro) {
+    for (const operacao of [...operacoes].reverse()) {
+      for (const sequencia of [...operacao.sequenciasCriadas].reverse()) {
+        try {
+          await excluirItemNotaApi(nunota, sequencia);
+        } catch (erroExclusao) {
+          console.error('Falha ao desfazer item criado na separacao por lote:', erroExclusao);
+        }
+      }
+
+      try {
+        await salvarQuantidadeLoteItemNotaApi(nunota, operacao.itemOriginal, {
+          quantidade: operacao.itemOriginal.QTDNEG,
+          controle: operacao.itemOriginal.CONTROLE,
+          vlrTot: operacao.itemOriginal.VLRTOT,
+          vlrDesc: operacao.itemOriginal.VLRDESC
+        }, false);
+
+        const camposItem = Object.fromEntries(
+          operacao.camposItemCorrigidos
+            .filter((campo) => Object.prototype.hasOwnProperty.call(operacao.itemOriginal, campo))
+            .map((campo) => [campo, operacao.itemOriginal[campo]])
+        );
+        if (Object.keys(camposItem).length > 0) {
+          await atualizarRegistroApi(
+            'ItemNota',
+            { NUNOTA: nunota, SEQUENCIA: operacao.itemOriginal.SEQUENCIA },
+            camposItem
+          );
+        }
+
+        for (const vinculoOriginal of operacao.vinculosOriginais) {
+          await atualizarQuantidadeVinculoAtendimento(vinculoOriginal, vinculoOriginal.QTDATENDIDA);
+        }
+
+        const [cabecalhoAtual] = await executeQuery(`SELECT * FROM TGFCAB WHERE NUNOTA = ${nunota}`);
+        const camposCabecalho = Object.fromEntries(
+          camposCabecalhoAlteradosPeloDesmembramento(operacao.cabecalhoOriginal, cabecalhoAtual)
+            .map((campo) => [campo, operacao.cabecalhoOriginal[campo]])
+        );
+        if (Object.keys(camposCabecalho).length > 0) {
+          await atualizarRegistroApi('CabecalhoNota', { NUNOTA: nunota }, camposCabecalho);
+        }
+      } catch (erroRestauracao) {
+        console.error('Falha ao restaurar item apos erro na separacao por lote:', erroRestauracao);
+      }
+    }
+    throw erro;
+  }
+
+  const itensAtualizados = await executeQuery(`
+    SELECT CAB.CODEMP, ITE.*
+    FROM TGFITE ITE
+    JOIN TGFCAB CAB ON CAB.NUNOTA = ITE.NUNOTA
+    WHERE ITE.NUNOTA = ${nunota}
+    ORDER BY ITE.SEQUENCIA
+  `);
+
+  return {
+    separacoes: operacoes.map((operacao) => operacao.resultado),
+    itensPedido: itensAtualizados
+  };
 }
 
 async function aplicarCortesNoPedido({ nunota, itensPedido, conferidosPorSequencia, cortadosPorSequencia }) {
@@ -4421,7 +4909,17 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     return;
   }
 
+  let finalizacaoRegistrada = false;
   try {
+    if (finalizacoesConferenciaEmAndamento.has(nunota)) {
+      res.status(409).json({
+        erro: 'Esta conferência já está sendo finalizada. Aguarde a conclusão antes de tentar novamente.'
+      });
+      return;
+    }
+    finalizacoesConferenciaEmAndamento.add(nunota);
+    finalizacaoRegistrada = true;
+
     const pedidoRows = await executeQuery(`
       SELECT
         CAB.NUNOTA,
@@ -4481,20 +4979,10 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       return;
     }
 
-    const itensPedido = await executeQuery(`
+    let itensPedido = await executeQuery(`
       SELECT
         CAB.CODEMP,
-        ITE.SEQUENCIA,
-        ITE.CODPROD,
-        ITE.CODVOL,
-        ITE.CODLOCALORIG,
-        ITE.CONTROLE,
-        NVL(ITE.QTDNEG, 0) AS QTDNEG,
-        NVL(ITE.VLRUNIT, 0) AS VLRUNIT,
-        NVL(ITE.VLRTOT, 0) AS VLRTOT,
-        NVL(ITE.VLRDESC, 0) AS VLRDESC,
-        NVL(ITE.PERCDESC, 0) AS PERCDESC,
-        NVL(ITE.GTINNFE, ITE.PRODUTONFE) AS CODBARRA
+        ITE.*
       FROM TGFITE ITE
       JOIN TGFCAB CAB
         ON CAB.NUNOTA = ITE.NUNOTA
@@ -4633,6 +5121,26 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
           cortadosPorSequencia
         })
       : [];
+
+    let lotesSeparados = [];
+    if (modo === 'entrada') {
+      const desmembramento = await desmembrarItensEntradaPorLote({
+        nunota,
+        itensPedido,
+        itensInformados: itens
+      });
+      lotesSeparados = desmembramento.separacoes;
+      itensPedido = desmembramento.itensPedido;
+
+      if (lotesSeparados.length > 0) {
+        conferenciaProgressStore.salvar({
+          nunota,
+          nuconf,
+          codUsu,
+          itens
+        });
+      }
+    }
 
     const controlesAplicados = modo === 'entrada'
       ? await aplicarControlesEntradaNaNota({
@@ -4783,6 +5291,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       status: 'CONFERIDO',
       fechamentoOperacionalAplicado,
       cortesAplicados,
+      lotesSeparados,
       controlesAplicados,
       documentosAuxiliares: modo === 'entrada'
         ? documentosAuxiliaresConferencia(conferenciaConferida)
@@ -4794,10 +5303,15 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({
-      erro: 'Erro ao confirmar conferência',
+    const erroRevisavel = ['LOTES_LEITURAS_DIVERGENTES', 'LOTES_QUANTIDADE_DIVERGENTE']
+      .includes(err.tipo);
+    res.status(erroRevisavel ? 409 : 500).json({
+      erro: erroRevisavel ? 'Revise os lotes e as quantidades antes de concluir' : 'Erro ao confirmar conferência',
+      codigo: err.tipo || null,
       detalhesSankhya: [err.message].filter(Boolean)
     });
+  } finally {
+    if (finalizacaoRegistrada) finalizacoesConferenciaEmAndamento.delete(nunota);
   }
 });
 

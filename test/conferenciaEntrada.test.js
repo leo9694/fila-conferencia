@@ -2,7 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   consolidarLeiturasEntrada,
+  distribuirQuantidadeProporcional,
+  distribuirValorProporcional,
   planejarControlesItensEntrada,
+  planejarDesmembramentoLotesEntrada,
   planejarSincronizacaoDetalhesEntrada,
   validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,
@@ -248,6 +251,61 @@ test('impede finalizar um item com mais de um lote sem separar a nota', () => {
     sequencia: 1,
     leituras: [{ controle: '004.26' }, { controle: '005.26' }]
   }]), /mais de um lote/);
+});
+
+test('planeja uma linha da nota para cada lote conferido', () => {
+  const planos = planejarDesmembramentoLotesEntrada([{
+    SEQUENCIA: 62,
+    CODPROD: 1087,
+    CONTROLE: '0084802515000171',
+    QTDNEG: 1180
+  }], [{
+    sequencia: 62,
+    qtdConferida: 1180,
+    leituras: [{
+      controle: '0084802515000053',
+      quantidade: 34,
+      quantidadeConvertida: 340
+    }, {
+      controle: '0084802515000171',
+      quantidade: 840,
+      quantidadeConvertida: 840
+    }]
+  }]);
+
+  assert.equal(planos.length, 1);
+  assert.equal(planos[0].sequencia, 62);
+  assert.equal(planos[0].grupos.length, 2);
+  assert.equal(planos[0].grupos[0].controle, '0084802515000171');
+  assert.equal(planos[0].grupos[0].quantidade, 840);
+  assert.equal(planos[0].grupos[1].controle, '0084802515000053');
+  assert.equal(planos[0].grupos[1].quantidade, 340);
+});
+
+test('nao desmembra lote quando a quantidade por controle diverge da nota', () => {
+  assert.throws(() => planejarDesmembramentoLotesEntrada([{
+    SEQUENCIA: 1,
+    CODPROD: 1087,
+    CONTROLE: 'A',
+    QTDNEG: 100
+  }], [{
+    sequencia: 1,
+    qtdConferida: 110,
+    leituras: [
+      { controle: 'A', quantidadeConvertida: 60 },
+      { controle: 'B', quantidadeConvertida: 50 }
+    ]
+  }]), /quantidade divergente/);
+});
+
+test('distribui valores e preserva exatamente o total na ultima linha', () => {
+  assert.deepEqual(distribuirValorProporcional(4425, [840, 340]), [3150, 1275]);
+  assert.deepEqual(distribuirValorProporcional(1039.87, [840, 340]), [740.25, 299.62]);
+});
+
+test('distribui quantidade atendida sem perder residuos de conversao', () => {
+  const partes = distribuirQuantidadeProporcional(18.0000036, [12, 6.0000036]);
+  assert.equal(partes.reduce((total, parte) => total + parte, 0), 18.0000036);
 });
 
 test('elimina residuo tecnico da conversao para nao finalizar a menor', () => {
