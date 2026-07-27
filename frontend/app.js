@@ -44,6 +44,9 @@ const botaoAbrirConsultaHome = document.getElementById('abrir-consulta-home');
 const botaoAbrirAtualizacaoContato = document.getElementById('abrir-atualizacao-contato');
 const botaoAbrirContagemEstoque = document.getElementById('abrir-contagem-estoque');
 const botaoExibirAcompanhamento = document.getElementById('exibir-acompanhamento');
+const botaoLimparFiltrosAcompanhamento = document.getElementById('limpar-filtros-acompanhamento');
+const botaoAlternarFiltrosAcompanhamento = document.getElementById('alternar-filtros-acompanhamento');
+const filtrosAcompanhamento = document.getElementById('filtros-acompanhamento');
 const botaoVoltarHomeAcompanhamento = document.getElementById('voltar-home-acompanhamento');
 const botaoVoltarHomeFila = document.getElementById('voltar-home-fila');
 const botaoVoltarHomeContato = document.getElementById('voltar-home-contato');
@@ -1482,6 +1485,11 @@ function atualizarTituloPainel() {
   }
 }
 
+function atualizarSubtituloAcompanhamento(dataInicial, dataFinal) {
+  const empresaSelecionada = obterNomeEmpresaSelecionada();
+  heroPeriodo.textContent = `Per\u00edodo: ${formatarPeriodo(dataInicial, dataFinal)} \u00b7 Empresa: ${empresaSelecionada}`;
+}
+
 function formatarHoraAtual() {
   return new Date().toLocaleTimeString('pt-BR', {
     hour: '2-digit',
@@ -1570,7 +1578,7 @@ function mostrarConferencia() {
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
   conferenciaScreen.classList.add('active');
-  mostrarNavegacaoGlobal('fila');
+  mostrarNavegacaoGlobal('acompanhamento');
 }
 
 function mostrarAcompanhamento() {
@@ -2734,7 +2742,6 @@ function criarCard(item) {
   let statusClass = 'status-aguardando';
   let mostrarTempo = false;
   let statusLabel = 'AGUARDANDO';
-  let tempoLabel = '';
   let tipoCard = 'aguardando';
 
   if (
@@ -2744,27 +2751,20 @@ function criarCard(item) {
     statusClass = 'status-andamento';
     mostrarTempo = true;
     statusLabel = 'EM ANDAMENTO';
-    tempoLabel = '';
     tipoCard = 'aguardando';
   }
 
   if (item.STATUS_CONFERENCIA === 'CONFERIDO') {
     statusClass = 'status-conferido';
     statusLabel = 'CONFERIDO';
-    tempoLabel = 'Duracao';
     tipoCard = 'conferido';
   }
 
   const dataFormatada = formatarData(item.DTNEG);
-
   const valor = Number(item.VLRNOTA) || 0;
   const minutos = minutosDesdeInicio(item.DT_INICIO_CONFERENCIA);
   const mostrarTempoTotal = item.STATUS_CONFERENCIA === 'CONFERIDO';
-  const resumoPedido = formatarResumoPedidoPainel(item);
   const resumoItensUnidades = formatarResumoItensUnidadesPainel(item);
-  const conclusao = mostrarTempoTotal && item.DT_FIM_CONFERENCIA
-    ? `Concluído: ${formatarDataHora(item.DT_FIM_CONFERENCIA)}`
-    : '';
   const tempo = mostrarTempoTotal
     ? formatarTempoMinutos(item.TEMPO_TOTAL_CONFERENCIA_MIN)
     : mostrarTempo
@@ -2774,94 +2774,74 @@ function criarCard(item) {
   const conclusaoValor = mostrarTempoTotal && item.DT_FIM_CONFERENCIA
     ? formatarDataHora(item.DT_FIM_CONFERENCIA)
     : '-';
-  const metaTempoAguardando = mostrarTempo && operador !== '-'
-    ? `<span class="tempo-operador"><b>${tempo}</b><small>${operador}</small></span>`
-    : `<span>${tempoLabel ? `${tempoLabel}: ` : ''}${tempo}</span>`;
+  const dataExibida = mostrarTempoTotal ? conclusaoValor : dataFormatada;
+  const dataRotulo = mostrarTempoTotal ? 'Concluído' : 'Data';
+  const tempoRotulo = mostrarTempoTotal ? 'Duração' : mostrarTempo ? 'Em conferência' : 'Espera';
+  const valorFormatado = valor.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  });
   const indicadoresStatus = `
     <span class="pedido-status-indicadores">
       ${criarIndicadorStatusPedido('financeiro', item.STATUS_FINANCEIRO)}
       ${criarIndicadorStatusPedido('comercial', item.STATUS_COMERCIAL)}
     </span>
   `;
+  const metaData = `
+    <div class="acompanhamento-meta-item meta-data">
+      <i data-lucide="${mostrarTempoTotal ? 'calendar-check' : 'calendar-days'}" class="meta-icon"></i>
+      <span>
+        <small>${dataRotulo}</small>
+        <strong>${escaparHtml(dataExibida)}</strong>
+        ${mostrarTempoTotal ? `<em>${escaparHtml(operador)}</em>` : ''}
+      </span>
+    </div>
+  `;
+  const metaValor = `
+    <div class="acompanhamento-meta-item meta-valor">
+      <i data-lucide="circle-dollar-sign" class="meta-icon"></i>
+      <span><small>Valor</small><strong>R$ ${valorFormatado}</strong></span>
+    </div>
+  `;
+  const metaItens = `
+    <div class="acompanhamento-meta-item meta-itens">
+      <span class="acompanhamento-itens-resumo">
+        <strong><i data-lucide="package" class="meta-icon"></i>${resumoItensUnidades.itens}</strong>
+        <strong><i data-lucide="boxes" class="meta-icon"></i>${resumoItensUnidades.unidades}</strong>
+      </span>
+    </div>
+  `;
+  const metaTempo = `
+    <div class="acompanhamento-meta-item meta-tempo">
+      <i data-lucide="clock-3" class="meta-icon"></i>
+      <span>
+        <small>${tempoRotulo}</small>
+        <strong>${escaparHtml(tempo)}</strong>
+        ${mostrarTempoTotal ? '' : `<em>${escaparHtml(operador)}</em>`}
+      </span>
+    </div>
+  `;
+  const metas = mostrarTempoTotal
+    ? `${metaValor}${metaItens}${metaData}${metaTempo}`
+    : `${metaData}${metaValor}${metaItens}${metaTempo}`;
 
   div.className = `card-item ${statusClass} card-${tipoCard}`;
+  div.innerHTML = `
+    <div class="acompanhamento-card-head">
+      <div class="acompanhamento-card-identidade">
+        <span class="nota-numero">Nota ${escaparHtml(item.NUNOTA)}</span>
+        <span class="empresa-nome">${escaparHtml(item.EMPRESA || '-')}</span>
+      </div>
+      <div class="pedido-card-status-group">
+        ${tipoCard === 'conferido' ? '' : indicadoresStatus}
+        <div class="status-text">${statusLabel}</div>
+      </div>
+    </div>
 
-  if (tipoCard === 'conferido') {
-    div.innerHTML = `
-      <div class="pedido-card-top">
-        <div>
-          <div class="nota-numero">Nota ${item.NUNOTA}</div>
-          <div class="empresa-nome">${item.EMPRESA || '-'}</div>
-        </div>
-      </div>
-
-      <div class="pedido-meta-row">
-        <div class="pedido-meta-item">
-          <i data-lucide="circle-dollar-sign" class="meta-icon"></i>
-          <span><strong>Valor</strong>R$ ${valor.toLocaleString('pt-BR', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-          })}</span>
-        </div>
-        <div class="pedido-meta-item">
-          <span class="meta-dupla">
-            <span><i data-lucide="package" class="meta-icon"></i>${resumoItensUnidades.itens}</span>
-            <span><i data-lucide="package-open" class="meta-icon"></i>${resumoItensUnidades.unidades}</span>
-          </span>
-        </div>
-        <div class="pedido-meta-item">
-          <i data-lucide="calendar-check" class="meta-icon"></i>
-          <span><strong>Concluido</strong>${conclusaoValor}<br><b>${operador}</b></span>
-        </div>
-        <div class="pedido-meta-item">
-          <i data-lucide="clock" class="meta-icon"></i>
-          <span><strong>${tempoLabel}</strong>${tempo}</span>
-        </div>
-        <div class="pedido-status-cell">
-          <div class="status-text">${statusLabel}</div>
-        </div>
-      </div>
-    `;
-  } else {
-    div.innerHTML = `
-      <div class="pedido-card-top">
-        <div>
-          <div class="nota-cliente-linha">
-            <span class="nota-numero">Nota ${item.NUNOTA}</span>
-            <span class="empresa-nome">${item.EMPRESA || '-'}</span>
-          </div>
-        </div>
-        <div class="pedido-card-status-group">
-          ${indicadoresStatus}
-          <div class="status-text">${statusLabel}</div>
-        </div>
-      </div>
-
-      <div class="pedido-meta-row">
-        <div class="pedido-meta-item">
-          <i data-lucide="calendar-days" class="meta-icon"></i>
-          <span><strong>Data:</strong> ${dataFormatada}</span>
-        </div>
-        <div class="pedido-meta-item">
-          <i data-lucide="circle-dollar-sign" class="meta-icon"></i>
-          <span><strong>Valor:</strong> R$ ${valor.toLocaleString('pt-BR', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-          })}</span>
-        </div>
-        <div class="pedido-meta-item">
-          <span class="meta-dupla">
-            <span><i data-lucide="package" class="meta-icon"></i>${resumoItensUnidades.itens}</span>
-            <span><i data-lucide="package-open" class="meta-icon"></i>${resumoItensUnidades.unidades}</span>
-          </span>
-        </div>
-        <div class="pedido-meta-item">
-          <i data-lucide="clock" class="meta-icon"></i>
-          ${metaTempoAguardando}
-        </div>
-      </div>
-    `;
-  }
+    <div class="acompanhamento-card-meta">
+      ${metas}
+    </div>
+  `;
 
   return div;
 }
@@ -3118,6 +3098,20 @@ function obterClasseItem(item) {
 
 function pedidoPodeIniciarConferencia(pedido) {
   return pedido?.STATUS_CONFERENCIA !== 'CONFERIDO';
+}
+
+function pedidoExigeConfirmacaoSemSeparacao(pedido) {
+  if (filaModoConferencia !== 'saida') return false;
+
+  const statusSeparacao = String(pedido?.STATUS_SEPARACAO || '').trim().toUpperCase();
+  const statusConferencia = String(pedido?.STATUS_CONFERENCIA || '').trim().toUpperCase();
+  const conferenciaJaIniciada = [
+    'EM ANDAMENTO',
+    'EM CONFERENCIA',
+    'FINALIZADO DIVERGENTE'
+  ].includes(statusConferencia);
+
+  return statusSeparacao !== 'SEPARADO' && !conferenciaJaIniciada;
 }
 
 function atualizarControlesConferencia() {
@@ -8376,7 +8370,7 @@ function iniciarAutoRefresh() {
   refreshLoop.start();
 }
 
-function abrirConferencia() {
+function abrirConferencia(opcoes = {}) {
   const dataInicial = inputDataInicial.value || obterDataHoje();
   const dataFinal = inputDataFinal.value || dataInicial;
   const empresa = inputEmpresaFiltro.value.trim();
@@ -8389,20 +8383,24 @@ function abrirConferencia() {
   inputDataFinal.value = periodoSelecionado.dataFinal;
   inputEmpresaFiltro.value = periodoSelecionado.empresa;
   atualizarTituloPainel();
-  heroPeriodo.textContent = `Periodo: ${formatarPeriodo(
+  atualizarSubtituloAcompanhamento(
     periodoSelecionado.dataInicial,
     periodoSelecionado.dataFinal
-  )}`;
+  );
 
   mostrarConferencia();
-  history.pushState(
-    {
-      tela: 'painel-acompanhamento',
-      periodoSelecionado
-    },
-    '',
-    `#acompanhamento-painel`
-  );
+  if (opcoes?.registrarHistorico !== false) {
+    history.pushState(
+      {
+        tela: 'painel-acompanhamento',
+        periodoSelecionado
+      },
+      '',
+      `#acompanhamento-painel`
+    );
+  }
+  const textoBotaoAtualizar = botaoExibirAcompanhamento.querySelector('span');
+  if (textoBotaoAtualizar) textoBotaoAtualizar.textContent = 'Atualizar';
   iniciarAutoRefresh();
 }
 
@@ -8421,8 +8419,31 @@ function abrirAcompanhamento() {
   inputEmpresaFiltro.value = '';
   atualizarTituloPainel();
   mostrarHomeESuspenderRefresh();
-  mostrarAcompanhamento();
-  history.pushState({ tela: 'acompanhamento' }, '', '#acompanhamento');
+  abrirConferencia();
+}
+
+function limparFiltrosAcompanhamento() {
+  const hoje = obterDataHoje();
+  inputDataInicial.value = hoje;
+  inputDataFinal.value = hoje;
+  inputEmpresaFiltro.value = '';
+  abrirConferencia({ registrarHistorico: false });
+}
+
+function definirFiltrosAcompanhamentoVisiveis(visiveis, persistir = true) {
+  filtrosAcompanhamento.hidden = !visiveis;
+  botaoAlternarFiltrosAcompanhamento.setAttribute('aria-expanded', String(visiveis));
+  botaoAlternarFiltrosAcompanhamento.classList.toggle('active', visiveis);
+
+  if (persistir) {
+    localStorage.setItem('acompanhamento-filtros-visiveis', visiveis ? '1' : '0');
+  }
+
+  atualizarIcones();
+}
+
+function alternarFiltrosAcompanhamento() {
+  definirFiltrosAcompanhamentoVisiveis(filtrosAcompanhamento.hidden);
 }
 
 function abrirFila() {
@@ -8543,7 +8564,11 @@ function prepararTelaInicial() {
   filaDataFinal.value = hoje;
   inputEmpresaFiltro.value = '';
   atualizarTituloPainel();
-  heroPeriodo.textContent = `Periodo: ${formatarPeriodo(hoje, hoje)}`;
+  atualizarSubtituloAcompanhamento(hoje, hoje);
+  definirFiltrosAcompanhamentoVisiveis(
+    localStorage.getItem('acompanhamento-filtros-visiveis') === '1',
+    false
+  );
   limparPedidoConferencia();
 }
 
@@ -8765,7 +8790,9 @@ bitrixConfirmModal?.addEventListener('click', (event) => {
   if (event.target === bitrixConfirmModal) fecharConfirmacaoCardBitrix();
 });
 botaoExibirAcompanhamento.addEventListener('click', abrirConferencia);
-botaoVoltarHomeAcompanhamento.addEventListener('click', voltarParaHomeViaHistorico);
+botaoLimparFiltrosAcompanhamento.addEventListener('click', limparFiltrosAcompanhamento);
+botaoAlternarFiltrosAcompanhamento.addEventListener('click', alternarFiltrosAcompanhamento);
+botaoVoltarHomeAcompanhamento?.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeFila.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeContato.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeContagemEstoque.addEventListener('click', voltarParaHomeViaHistorico);
@@ -9172,10 +9199,20 @@ botaoImprimirEntradaCaixa.addEventListener('click', imprimirEtiquetasCaixaEntrad
 entradaCaixaModal.addEventListener('click', (event) => {
   if (event.target === entradaCaixaModal) fecharModalCaixaEntrada();
 });
-botaoConfirmarPreviewPedido.addEventListener('click', () => {
-  if (pedidoPreviewSelecionado) {
-    selecionarPedidoConferencia(pedidoPreviewSelecionado);
+botaoConfirmarPreviewPedido.addEventListener('click', async () => {
+  if (!pedidoPreviewSelecionado) return;
+
+  const pedido = pedidoPreviewSelecionado;
+  if (pedidoExigeConfirmacaoSemSeparacao(pedido)) {
+    const confirmado = await confirmarAcaoApp({
+      titulo: 'Iniciar sem separa\u00e7\u00e3o conclu\u00edda',
+      mensagem: `O pedido ${pedido.NUNOTA} ainda n\u00e3o teve a separa\u00e7\u00e3o conclu\u00edda pelo app. Se continuar, a confer\u00eancia ser\u00e1 iniciada normalmente, mas o pedido permanecer\u00e1 sem o registro de separa\u00e7\u00e3o conclu\u00edda. Deseja prosseguir?`,
+      textoConfirmar: 'Iniciar mesmo assim'
+    });
+    if (!confirmado) return;
   }
+
+  await selecionarPedidoConferencia(pedido);
 });
 pedidoPreview.addEventListener('click', (event) => {
   if (event.target === pedidoPreview) {
@@ -9401,18 +9438,22 @@ window.addEventListener('popstate', (event) => {
     inputDataFinal.value = periodoSelecionado.dataFinal;
     inputEmpresaFiltro.value = periodoSelecionado.empresa || '';
     atualizarTituloPainel();
-    heroPeriodo.textContent = `Periodo: ${formatarPeriodo(
+    atualizarSubtituloAcompanhamento(
       periodoSelecionado.dataInicial,
       periodoSelecionado.dataFinal
-    )}`;
+    );
     mostrarConferencia();
     iniciarAutoRefresh();
     return;
   }
 
   if (state?.tela === 'acompanhamento') {
+    const hoje = obterDataHoje();
+    inputDataInicial.value = hoje;
+    inputDataFinal.value = hoje;
+    inputEmpresaFiltro.value = '';
     mostrarHomeESuspenderRefresh();
-    mostrarAcompanhamento();
+    abrirConferencia({ registrarHistorico: false });
     return;
   }
 
