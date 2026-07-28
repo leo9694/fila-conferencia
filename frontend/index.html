@@ -1839,9 +1839,14 @@
     }
 
     .fila-screen.conferencia-mode .itens-scroll {
-      max-height: none;
-      height: 100%;
+      width: 100%;
+      height: auto;
+      max-height: clamp(180px, calc(100dvh - 400px), 520px);
       min-height: 0;
+      align-self: start;
+      overflow-x: auto;
+      overflow-y: auto;
+      scrollbar-gutter: stable;
     }
 
     .pedido-operacao-card {

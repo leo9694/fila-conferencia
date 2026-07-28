@@ -5564,6 +5564,15 @@ function obterLinhasConferidasEntrada(item) {
 }
 
 function renderizarItensConferencia() {
+  const rolagemPendente = {
+    esquerda: itensPendentesLista.scrollLeft,
+    topo: itensPendentesLista.scrollTop
+  };
+  const rolagemConferidos = {
+    esquerda: itensConferidosLista.scrollLeft,
+    topo: itensConferidosLista.scrollTop
+  };
+
   itensPendentesLista.innerHTML = '';
   itensConferidosLista.innerHTML = '';
 
@@ -5647,6 +5656,11 @@ function renderizarItensConferencia() {
   if (totalConferidos === 0) {
     renderizarEstadoVazio(itensConferidosLista, 'Nenhum item conferido.');
   }
+
+  itensPendentesLista.scrollLeft = rolagemPendente.esquerda;
+  itensPendentesLista.scrollTop = rolagemPendente.topo;
+  itensConferidosLista.scrollLeft = rolagemConferidos.esquerda;
+  itensConferidosLista.scrollTop = rolagemConferidos.topo;
 
   renderizarResumoConferencia();
   atualizarCaixaEntrada();
