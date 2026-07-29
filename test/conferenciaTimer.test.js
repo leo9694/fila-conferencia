@@ -66,3 +66,25 @@ test('remove o registro quando o pedido volta para aguardando', () => {
   assert.equal(aguardando.tempoTotalMinutos, null);
   assert.equal(memoria[789], undefined);
 });
+
+test('corrige timer persistido quando o Sankhya retorna datas normalizadas', () => {
+  const memoria = {
+    3879012: {
+      iniciadoEm: new Date('2026-07-29T05:52:45.000Z'),
+      concluidoEm: new Date('2026-07-29T10:55:58.000Z'),
+      tempoTotalMinutos: 303,
+      status: 'CONFERIDO'
+    }
+  };
+
+  const corrigido = atualizarTempoConferencia(memoria, {
+    NUNOTA: 3879012,
+    STATUS_CONFERENCIA: 'CONFERIDO',
+    DT_INICIO_CONFERENCIA: '2026-07-29T09:52:45.000Z',
+    DT_FIM_CONFERENCIA: '2026-07-29T13:55:58.000Z'
+  });
+
+  assert.equal(corrigido.iniciadoEm.toISOString(), '2026-07-29T09:52:45.000Z');
+  assert.equal(corrigido.concluidoEm.toISOString(), '2026-07-29T13:55:58.000Z');
+  assert.equal(corrigido.tempoTotalMinutos, 243);
+});

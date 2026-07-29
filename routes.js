@@ -68,6 +68,7 @@ const estoqueContagemStore = criarEstoqueContagemStore({
   namespace: process.env.SANKHYA_API_BASE_URL || 'padrao'
 });
 const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Cuiaba';
+const SANKHYA_TIMEZONE = process.env.SANKHYA_TIMEZONE || 'America/Sao_Paulo';
 const TOPS_CONFERENCIA = Object.freeze({
   saida: [5, 6, 237],
   entrada: [13, 21]
@@ -579,9 +580,9 @@ function adicionarCodigoConferencia(lista, codigo, tipo, multiplicador = 1, desc
   }
 }
 
-function obterPartesDataHoraNoFuso(data) {
+function obterPartesDataHoraNoFuso(data, timeZone = APP_TIMEZONE) {
   const partes = new Intl.DateTimeFormat('en-CA', {
-    timeZone: APP_TIMEZONE,
+    timeZone,
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -594,14 +595,43 @@ function obterPartesDataHoraNoFuso(data) {
   return Object.fromEntries(partes.map((parte) => [parte.type, parte.value]));
 }
 
-function formatarDataHoraSankhya(data = new Date()) {
-  const mapa = obterPartesDataHoraNoFuso(data);
+function formatarDataHoraSankhya(data = new Date(), timeZone = APP_TIMEZONE) {
+  const mapa = obterPartesDataHoraNoFuso(data, timeZone);
   return `${mapa.day}/${mapa.month}/${mapa.year} ${mapa.hour}:${mapa.minute}:${mapa.second}`;
 }
 
 function formatarDataHoraLocalISO(data) {
   const mapa = obterPartesDataHoraNoFuso(data);
   return `${mapa.year}-${mapa.month}-${mapa.day}T${mapa.hour}:${mapa.minute}:${mapa.second}`;
+}
+
+function criarDataNoFuso({ ano, mes, dia, hora = '00', minuto = '00', segundo = '00' }, timeZone) {
+  const horarioDesejadoUtc = Date.UTC(
+    Number(ano),
+    Number(mes) - 1,
+    Number(dia),
+    Number(hora),
+    Number(minuto),
+    Number(segundo)
+  );
+  let data = new Date(horarioDesejadoUtc);
+
+  // Converte um horário civil sem offset para o instante real do fuso informado.
+  // A segunda passagem também cobre eventuais transições históricas de horário de verão.
+  for (let tentativa = 0; tentativa < 2; tentativa += 1) {
+    const partes = obterPartesDataHoraNoFuso(data, timeZone);
+    const horarioObtidoUtc = Date.UTC(
+      Number(partes.year),
+      Number(partes.month) - 1,
+      Number(partes.day),
+      Number(partes.hour),
+      Number(partes.minute),
+      Number(partes.second)
+    );
+    data = new Date(data.getTime() + horarioDesejadoUtc - horarioObtidoUtc);
+  }
+
+  return data;
 }
 
 function campoApi(valor) {
@@ -1702,7 +1732,7 @@ async function finalizarConferenciaOperacional(nuconf, nunota, codUsu, qtdVol = 
     { NUCONF: nuconf },
     {
       STATUS: 'F',
-      DHFINCONF: formatarDataHoraSankhya(),
+      DHFINCONF: formatarDataHoraSankhya(new Date(), SANKHYA_TIMEZONE),
       CODUSUCONF: codUsu,
       QTDVOL: Math.max(1, normalizarNumero(qtdVol))
     }
@@ -1733,7 +1763,7 @@ async function preservarConferenteFinalizacao(nuconf, codUsu, dhInicioOriginal =
   }
 
   if (!dataFim || (dataInicio && dataFim.getTime() <= dataInicio.getTime())) {
-    campos.DHFINCONF = formatarDataHoraSankhya();
+    campos.DHFINCONF = formatarDataHoraSankhya(new Date(), SANKHYA_TIMEZONE);
   }
 
   await atualizarRegistroApi(
@@ -1989,6 +2019,59 @@ function normalizarDataSankhya(valor) {
   return texto;
 }
 
+function normalizarDataHoraConferencia(valor, timeZone) {
+  if (!valor) return null;
+
+  const texto = valor instanceof Date
+    ? [
+        String(valor.getUTCDate()).padStart(2, '0'),
+        String(valor.getUTCMonth() + 1).padStart(2, '0'),
+        valor.getUTCFullYear(),
+        String(valor.getUTCHours()).padStart(2, '0'),
+        String(valor.getUTCMinutes()).padStart(2, '0'),
+        String(valor.getUTCSeconds()).padStart(2, '0')
+      ].join('|')
+    : String(valor).trim();
+
+  if (!(valor instanceof Date) && /[zZ]$|[+-]\d{2}:?\d{2}$/.test(texto)) {
+    const dataComFuso = new Date(texto);
+    return Number.isNaN(dataComFuso.getTime()) ? texto : dataComFuso.toISOString();
+  }
+
+  const partesDate = valor instanceof Date ? ['', ...texto.split('|')] : null;
+  const sankhyaMatch = partesDate || texto.match(
+    /^(\d{2})(\d{2})(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/
+  );
+  const brMatch = partesDate ? null : texto.match(
+    /^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?$/
+  );
+  const isoMatch = partesDate ? null : texto.match(
+    /^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?$/
+  );
+
+  let componentes;
+  if (sankhyaMatch || brMatch) {
+    const [, dia, mes, ano, hora = '00', minuto = '00', segundo = '00'] = sankhyaMatch || brMatch;
+    componentes = { ano, mes, dia, hora, minuto, segundo };
+  } else if (isoMatch) {
+    const [, ano, mes, dia, hora, minuto, segundo = '00'] = isoMatch;
+    componentes = { ano, mes, dia, hora, minuto, segundo };
+  } else {
+    return texto;
+  }
+
+  const data = criarDataNoFuso(componentes, timeZone);
+  return Number.isNaN(data.getTime()) ? texto : data.toISOString();
+}
+
+function normalizarInicioConferencia(valor) {
+  return normalizarDataHoraConferencia(valor, APP_TIMEZONE);
+}
+
+function normalizarFimConferencia(valor) {
+  return normalizarDataHoraConferencia(valor, SANKHYA_TIMEZONE);
+}
+
 function formatarDataCampoSankhya(valor) {
   if (!valor) return null;
 
@@ -2089,8 +2172,8 @@ function normalizarLinhaConferencia(row) {
   return {
     ...row,
     DTNEG: normalizarDataSankhya(row.DTNEG),
-    DT_INICIO_CONFERENCIA: normalizarDataSankhya(row.DT_INICIO_CONFERENCIA),
-    DT_FIM_CONFERENCIA: normalizarDataSankhya(row.DT_FIM_CONFERENCIA)
+    DT_INICIO_CONFERENCIA: normalizarInicioConferencia(row.DT_INICIO_CONFERENCIA),
+    DT_FIM_CONFERENCIA: normalizarFimConferencia(row.DT_FIM_CONFERENCIA)
   };
 }
 
@@ -2461,8 +2544,8 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         return {
           ...row,
           DTNEG: normalizarDataSankhya(row.DTNEG),
-          DT_INICIO_CONFERENCIA: normalizarDataSankhya(row.DT_INICIO_CONFERENCIA),
-          DT_FIM_CONFERENCIA: normalizarDataSankhya(row.DT_FIM_CONFERENCIA),
+          DT_INICIO_CONFERENCIA: normalizarInicioConferencia(row.DT_INICIO_CONFERENCIA),
+          DT_FIM_CONFERENCIA: normalizarFimConferencia(row.DT_FIM_CONFERENCIA),
           NUMNOTA: normalizarNumero(row.NUMNOTA),
           NUCONFATUAL: row.NUCONFATUAL ? Number(row.NUCONFATUAL) : null,
           STATUS_CONF: row.STATUS_CONF || null,
@@ -5672,6 +5755,8 @@ router.post('/fila-conferencia/pedidos/:nunota/etiquetas-volume', async (req, re
 
 router._internals = {
   normalizarDataSankhya,
+  normalizarInicioConferencia,
+  normalizarFimConferencia,
   formatarDataHoraSankhya,
   obterIntervaloDatas,
   extrairAvisosDocumento,

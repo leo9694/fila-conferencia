@@ -885,6 +885,18 @@ function criarAtividadeConferenciaHome(item) {
 
   if (!finalizada && !divergente && !andamento) return null;
 
+  const momento = finalizada
+    ? item.DT_FIM_CONFERENCIA
+    : andamento
+      ? item.DT_INICIO_CONFERENCIA
+      : item.DT_FIM_CONFERENCIA || item.DT_INICIO_CONFERENCIA;
+  const dataMomento = dataHome(momento);
+
+  // DTNEG contém somente a data comercial e virava "00:00" quando a
+  // conferência ainda não possuía horário real. Sem timestamp, não há
+  // atividade confiável para exibir.
+  if (!dataMomento) return null;
+
   return {
     titulo: finalizada
       ? `Pedido #${pedido} finalizado`
@@ -899,8 +911,8 @@ function criarAtividadeConferenciaHome(item) {
     rotulo: finalizada ? 'Concluído' : divergente ? 'Atenção' : 'Em andamento',
     classe: divergente ? 'is-orange' : andamento ? 'is-blue' : '',
     icone: divergente ? 'triangle-alert' : andamento ? 'clipboard-list' : 'circle-check-big',
-    momento: item.DT_FIM_CONFERENCIA || item.DT_INICIO_CONFERENCIA || item.DTNEG,
-    timestamp: dataHome(item.DT_FIM_CONFERENCIA || item.DT_INICIO_CONFERENCIA || item.DTNEG)?.getTime() || 0
+    momento,
+    timestamp: dataMomento.getTime()
   };
 }
 
@@ -1492,6 +1504,7 @@ function atualizarSubtituloAcompanhamento(dataInicial, dataFinal) {
 
 function formatarHoraAtual() {
   return new Date().toLocaleTimeString('pt-BR', {
+    timeZone: 'America/Cuiaba',
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit'

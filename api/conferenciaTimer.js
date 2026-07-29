@@ -68,11 +68,9 @@ function atualizarTempoConferencia(memoria, item, agora = new Date()) {
   }
 
   if (status === 'CONFERIDO') {
-    const minutosSankhya = inicioSankhya && fimSankhya ? calcularMinutos(inicioSankhya, fimSankhya) : null;
-    const registroZerado = registroAtual?.tempoTotalMinutos === 0;
-    const iniciadoEm = registroZerado && minutosSankhya > 0
-      ? inicioSankhya
-      : registroAtual?.iniciadoEm || inicioSankhya || null;
+    // Quando o Sankhya fornece as duas datas, elas são a fonte oficial.
+    // Isso também corrige registros persistidos por versões antigas com fuso incorreto.
+    const iniciadoEm = inicioSankhya || registroAtual?.iniciadoEm || null;
 
     if (iniciadoEm) {
       const concluidoEm = fimSankhya || registroAtual?.concluidoEm || agora;
