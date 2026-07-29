@@ -23,6 +23,7 @@ const {
   validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,
   conferenciaEntradaPodeSerReaberta,
+  analisarRecontagemEntrada,
   statusVisualConferencia,
   documentosAuxiliaresConferencia,
   retornoPossuiDocumentosAuxiliares
@@ -1889,6 +1890,53 @@ function criarConferenciaEntradaNativa({ nunota, codUsu, qtdVol }) {
       QTDVOL: Math.max(0, normalizarNumero(qtdVol))
     });
     await atualizarRegistroApi('CabecalhoNota', { NUNOTA: nunota }, { NUCONFATUAL: nuconf });
+    return nuconf;
+  });
+  filaCriacaoConferenciaEntrada = tarefa;
+  return tarefa;
+}
+
+function criarRecontagemEntradaNativa({ nunota, nuconfOrig, codUsu, qtdVol }) {
+  const tarefa = filaCriacaoConferenciaEntrada.catch(() => {}).then(async () => {
+    const [situacaoAtual] = await executeQuery(`
+      SELECT CAB.NUCONFATUAL, C2.STATUS
+      FROM TGFCAB CAB
+      LEFT JOIN TGFCON2 C2 ON C2.NUCONF = CAB.NUCONFATUAL
+      WHERE CAB.NUNOTA = ${nunota}
+    `);
+    const nuconfAtual = Number(situacaoAtual?.NUCONFATUAL || 0);
+
+    if (String(situacaoAtual?.STATUS || '').toUpperCase() === 'A' && nuconfAtual) {
+      return nuconfAtual;
+    }
+    if (nuconfAtual !== Number(nuconfOrig) || String(situacaoAtual?.STATUS || '').toUpperCase() !== 'D') {
+      throw new Error('A conferencia divergente foi alterada no Sankhya. Atualize a fila antes de recontar.');
+    }
+
+    const [proximo] = await executeQuery(`
+      SELECT NVL(MAX(NUCONF), 0) + 1 AS NUCONF
+      FROM (
+        SELECT NUCONF FROM TGFCON2
+        UNION ALL
+        SELECT NUCONF FROM TGFCON
+      )
+    `);
+    const nuconf = Number(proximo.NUCONF);
+    await salvarRegistroApi('CabecalhoConferencia', {
+      NUCONF: nuconf,
+      NUNOTAORIG: nunota,
+      NUCONFORIG: nuconfOrig,
+      STATUS: 'A',
+      DHINICONF: formatarDataHoraSankhya(),
+      CODUSUCONF: codUsu,
+      QTDVOL: Math.max(0, normalizarNumero(qtdVol))
+    });
+    await atualizarRegistroApi('CabecalhoNota', { NUNOTA: nunota }, { NUCONFATUAL: nuconf });
+    await atualizarRegistroApi(
+      'CabecalhoConferencia',
+      { NUCONF: nuconfOrig },
+      { STATUS: 'R' }
+    );
     return nuconf;
   });
   filaCriacaoConferenciaEntrada = tarefa;
@@ -4722,7 +4770,27 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
         && conferenciaEntradaPodeSerReaberta(statusConferenciaAtual)
         && statusConferenciaAtual === 'D';
 
-      if (conferenciaAtual?.STATUS === 'A' || reabrindoDivergente) {
+      if (reabrindoDivergente) {
+        const nuconfRecontagem = await criarRecontagemEntradaNativa({
+          nunota,
+          nuconfOrig: Number(pedido.NUCONFATUAL),
+          codUsu,
+          qtdVol: pedido.QTDVOL
+        });
+
+        res.json({
+          ok: true,
+          nunota,
+          nuconf: nuconfRecontagem,
+          nuconfOrigem: Number(pedido.NUCONFATUAL),
+          status: 'EM ANDAMENTO',
+          reabertaDivergente: true,
+          recontagem: true
+        });
+        return;
+      }
+
+      if (conferenciaAtual?.STATUS === 'A') {
         await atualizarRegistroApi(
           'CabecalhoConferencia',
           { NUCONF: pedido.NUCONFATUAL },
@@ -4730,8 +4798,7 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
             CODUSUCONF: codUsu,
             QTDVOL: modo === 'entrada'
               ? Math.max(0, normalizarNumero(pedido.QTDVOL))
-              : Math.max(1, normalizarNumero(pedido.QTDVOL)),
-            ...(reabrindoDivergente ? { STATUS: 'A', DHFINCONF: '' } : {})
+              : Math.max(1, normalizarNumero(pedido.QTDVOL))
           }
         );
 
@@ -4740,7 +4807,7 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
           nunota,
           nuconf: Number(pedido.NUCONFATUAL),
           status: 'EM ANDAMENTO',
-          reabertaDivergente: reabrindoDivergente
+          reabertaDivergente: false
         });
         return;
       }
@@ -5013,7 +5080,8 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
         NVL(CCO.EXPLODIRLOTE, 'N') AS EXPLODIRLOTE,
         CONF.STATUS,
         NVL(CCO.FATAOCONCLUIR, 'N') AS FATAOCONCLUIR,
-        NVL(CCO.GERARPEDCOMPL, 'N') AS GERARPEDCOMPL
+        NVL(CCO.GERARPEDCOMPL, 'N') AS GERARPEDCOMPL,
+        NVL(CCO.QTDMINRECONT, 0) AS QTDMINRECONT
       FROM TGFCAB CAB
       LEFT JOIN TGFCON2 CONF
         ON CONF.NUCONF = CAB.NUCONFATUAL
@@ -5278,9 +5346,21 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     }
 
     const [conferenciaFinal] = await executeQuery(`
-      SELECT NUCONF, NUNOTAORIG, STATUS, CODUSUCONF, DHFINCONF, NUPEDCOMP, NUNOTADEV
-      FROM TGFCON2
-      WHERE NUCONF = ${nuconf}
+      SELECT
+        C2.NUCONF,
+        C2.NUNOTAORIG,
+        C2.STATUS,
+        C2.CODUSUCONF,
+        C2.DHFINCONF,
+        C2.NUPEDCOMP,
+        C2.NUNOTADEV,
+        (
+          SELECT GREATEST(COUNT(*) - 1, 0)
+          FROM TGFCON2 HIST
+          WHERE HIST.NUNOTAORIG = C2.NUNOTAORIG
+        ) AS QTDRECONTAGENS
+      FROM TGFCON2 C2
+      WHERE C2.NUCONF = ${nuconf}
     `);
 
     let conferenciaConferida = conferenciaFinal;
@@ -5316,7 +5396,20 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
         throw erroFinalizacaoNativa;
       }
 
+      const bodyFinalizacao = resultadoFinalizacao?.responseBody || {};
+      const recontagemEntrada = analisarRecontagemEntrada({
+        status: conferenciaConferida?.STATUS,
+        existeConferenciaHaMenor: bodyFinalizacao.existeConferenciaHaMenor,
+        podeCortar: bodyFinalizacao.podeCortar,
+        recontagensRealizadas: conferenciaConferida?.QTDRECONTAGENS,
+        recontagensMinimas: pedido.QTDMINRECONT
+      });
       const detalhesSankhya = [
+        recontagemEntrada.necessaria
+          ? `O Sankhya exige ${recontagemEntrada.minimas} recontagens antes de gerar a nota de devolucao. `
+            + `${recontagemEntrada.realizadas} realizada(s); ${recontagemEntrada.restantes} restante(s). `
+            + 'Feche este aviso e abra a nota novamente para iniciar a proxima recontagem.'
+          : null,
         traduzirStatusConferencia(conferenciaConferida?.STATUS),
         erroFinalizacaoNativa?.message,
         ...coletarDetalhesSankhya(resultadoFinalizacao)
@@ -5326,6 +5419,9 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
         erro: 'O Sankhya recebeu a conferência, mas não finalizou como conferido',
         statusSankhya: conferenciaConferida?.STATUS || null,
         progressoPreservado: finalizadoDivergente,
+        recontagemNecessaria: recontagemEntrada.necessaria,
+        recontagensRealizadas: recontagemEntrada.realizadas,
+        recontagensMinimas: recontagemEntrada.minimas,
         detalhesSankhya,
         resultadoFinalizacao
       });
