@@ -412,6 +412,24 @@ test('identifica retorno nativo que permite aplicar divergencia de entrada', () 
   assert.equal(deveAplicarDivergenciaEntrada({
     responseBody: { status: 'D', podeCortar: false }
   }), false);
+  assert.equal(deveAplicarDivergenciaEntrada({
+    responseBody: { status: 'D', podeCortar: false }
+  }, {
+    possuiQuantidadeMaior: true,
+    gerarPedidoComplementar: true
+  }), true);
+  assert.equal(deveAplicarDivergenciaEntrada({
+    responseBody: { status: 'D', podeCortar: false }
+  }, {
+    possuiQuantidadeMaior: true,
+    gerarPedidoComplementar: false
+  }), false);
+  assert.equal(deveAplicarDivergenciaEntrada({
+    responseBody: { status: 'F', podeCortar: false }
+  }, {
+    possuiQuantidadeMaior: true,
+    gerarPedidoComplementar: true
+  }), false);
 });
 
 test('normaliza documentos auxiliares vinculados a conferencia', () => {

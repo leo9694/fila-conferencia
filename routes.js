@@ -5012,7 +5012,8 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
         TOP.NUCCO,
         NVL(CCO.EXPLODIRLOTE, 'N') AS EXPLODIRLOTE,
         CONF.STATUS,
-        NVL(CCO.FATAOCONCLUIR, 'N') AS FATAOCONCLUIR
+        NVL(CCO.FATAOCONCLUIR, 'N') AS FATAOCONCLUIR,
+        NVL(CCO.GERARPEDCOMPL, 'N') AS GERARPEDCOMPL
       FROM TGFCAB CAB
       LEFT JOIN TGFCON2 CONF
         ON CONF.NUCONF = CAB.NUCONFATUAL
@@ -5079,6 +5080,11 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     const cortadosPorSequencia = new Map(
       itens.map((item) => [Number(item.sequencia), normalizarNumero(item.qtdCortada)])
     );
+    const possuiQuantidadeMaiorEntrada = modo === 'entrada' && itensPedido.some((item) => {
+      const qtdEsperada = normalizarNumero(item.QTDNEG);
+      const qtdConferida = conferidosPorSequencia.get(Number(item.SEQUENCIA)) ?? 0;
+      return qtdConferida > qtdEsperada + 0.0001;
+    });
 
     const divergencias = itensPedido
       .map((item) => {
@@ -5258,7 +5264,10 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     try {
       resultadoFinalizacao = await finalizarConferenciaNativa(nuconf, nunota);
 
-      if (modo === 'entrada' && deveAplicarDivergenciaEntrada(resultadoFinalizacao)) {
+      if (modo === 'entrada' && deveAplicarDivergenciaEntrada(resultadoFinalizacao, {
+        possuiQuantidadeMaior: possuiQuantidadeMaiorEntrada,
+        gerarPedidoComplementar: String(pedido.GERARPEDCOMPL || '').toUpperCase() === 'S'
+      })) {
         resultadoDivergenciaEntrada = await aplicarDivergenciaEntradaNativa(nunota, pedido.QTDVOL);
         if (!retornoPossuiDocumentosAuxiliares(resultadoDivergenciaEntrada)) {
           resultadoFinalizacao = await finalizarConferenciaNativa(nuconf, nunota);

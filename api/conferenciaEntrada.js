@@ -333,10 +333,16 @@ function distribuirQuantidadeProporcional(quantidadeTotal, quantidades) {
   });
 }
 
-function deveAplicarDivergenciaEntrada(resultadoFinalizacao) {
+function deveAplicarDivergenciaEntrada(
+  resultadoFinalizacao,
+  { possuiQuantidadeMaior = false, gerarPedidoComplementar = false } = {}
+) {
   const body = resultadoFinalizacao?.responseBody || {};
-  return String(body.status || '').toUpperCase() === 'D'
-    && String(body.podeCortar || '').toLowerCase() === 'true';
+  if (String(body.status || '').toUpperCase() !== 'D') return false;
+
+  const possuiCorteNativo = String(body.podeCortar || '').toLowerCase() === 'true';
+  const possuiComplementoNativo = possuiQuantidadeMaior && gerarPedidoComplementar;
+  return possuiCorteNativo || possuiComplementoNativo;
 }
 
 function conferenciaEntradaPodeSerReaberta(status) {
