@@ -6061,15 +6061,11 @@ function exibirErroModalConferencia(payload, error = null) {
 
   posConferenciaModal.classList.remove('is-processing');
   posConferenciaModal.classList.add('has-error');
-  posConferenciaTitulo.textContent = payload?.recontagemNecessaria
-    ? 'Recontagem necessária'
-    : 'Não foi possível concluir';
+  posConferenciaTitulo.textContent = 'Não foi possível concluir';
   posConferenciaTexto.textContent = detalhes.join(' - ') || 'O Sankhya não concluiu a conferência. Tente novamente.';
   posConferenciaDocumentos.hidden = true;
   posConferenciaDocumentos.innerHTML = '';
-  botaoVoltarListaPosConferencia.textContent = payload?.recontagemNecessaria
-    ? 'Fechar e iniciar recontagem'
-    : 'Fechar e revisar';
+  botaoVoltarListaPosConferencia.textContent = 'Fechar e revisar';
 }
 
 function abrirModalEtiquetaPedido(pedido) {

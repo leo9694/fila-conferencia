@@ -10,7 +10,6 @@ const {
   validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,
   conferenciaEntradaPodeSerReaberta,
-  analisarRecontagemEntrada,
   statusVisualConferencia,
   documentosAuxiliaresConferencia,
   retornoPossuiDocumentosAuxiliares
@@ -20,29 +19,6 @@ test('permite reabrir conferencia de entrada finalizada divergente', () => {
   assert.equal(conferenciaEntradaPodeSerReaberta('D'), true);
   assert.equal(conferenciaEntradaPodeSerReaberta('A'), true);
   assert.equal(conferenciaEntradaPodeSerReaberta('F'), false);
-});
-
-test('identifica recontagens pendentes antes do corte nativo da entrada', () => {
-  assert.deepEqual(analisarRecontagemEntrada({
-    status: 'D',
-    existeConferenciaHaMenor: true,
-    podeCortar: false,
-    recontagensRealizadas: 0,
-    recontagensMinimas: 2
-  }), {
-    necessaria: true,
-    realizadas: 0,
-    minimas: 2,
-    restantes: 2
-  });
-
-  assert.equal(analisarRecontagemEntrada({
-    status: 'D',
-    existeConferenciaHaMenor: true,
-    podeCortar: true,
-    recontagensRealizadas: 2,
-    recontagensMinimas: 2
-  }).necessaria, false);
 });
 
 test('identifica o status visual finalizado divergente sem tratar como novo', () => {
@@ -447,6 +423,18 @@ test('identifica retorno nativo que permite aplicar divergencia de entrada', () 
   }, {
     possuiQuantidadeMaior: true,
     gerarPedidoComplementar: false
+  }), false);
+  assert.equal(deveAplicarDivergenciaEntrada({
+    responseBody: { status: 'D', podeCortar: false, existeConferenciaHaMenor: true }
+  }, {
+    possuiQuantidadeMenor: true,
+    gerarNotaDevolucao: true
+  }), true);
+  assert.equal(deveAplicarDivergenciaEntrada({
+    responseBody: { status: 'D', podeCortar: false, existeConferenciaHaMenor: true }
+  }, {
+    possuiQuantidadeMenor: true,
+    gerarNotaDevolucao: false
   }), false);
   assert.equal(deveAplicarDivergenciaEntrada({
     responseBody: { status: 'F', podeCortar: false }

@@ -335,40 +335,24 @@ function distribuirQuantidadeProporcional(quantidadeTotal, quantidades) {
 
 function deveAplicarDivergenciaEntrada(
   resultadoFinalizacao,
-  { possuiQuantidadeMaior = false, gerarPedidoComplementar = false } = {}
+  {
+    possuiQuantidadeMaior = false,
+    gerarPedidoComplementar = false,
+    possuiQuantidadeMenor = false,
+    gerarNotaDevolucao = false
+  } = {}
 ) {
   const body = resultadoFinalizacao?.responseBody || {};
   if (String(body.status || '').toUpperCase() !== 'D') return false;
 
   const possuiCorteNativo = String(body.podeCortar || '').toLowerCase() === 'true';
   const possuiComplementoNativo = possuiQuantidadeMaior && gerarPedidoComplementar;
-  return possuiCorteNativo || possuiComplementoNativo;
+  const possuiDevolucaoNativa = possuiQuantidadeMenor && gerarNotaDevolucao;
+  return possuiCorteNativo || possuiComplementoNativo || possuiDevolucaoNativa;
 }
 
 function conferenciaEntradaPodeSerReaberta(status) {
   return ['A', 'D'].includes(String(status || '').trim().toUpperCase());
-}
-
-function analisarRecontagemEntrada({
-  status,
-  existeConferenciaHaMenor,
-  podeCortar,
-  recontagensRealizadas = 0,
-  recontagensMinimas = 0
-} = {}) {
-  const quantidadeRealizada = Math.max(0, numero(recontagensRealizadas));
-  const quantidadeMinima = Math.max(0, numero(recontagensMinimas));
-  const necessaria = String(status || '').trim().toUpperCase() === 'D'
-    && String(existeConferenciaHaMenor || '').toLowerCase() === 'true'
-    && String(podeCortar || '').toLowerCase() !== 'true'
-    && quantidadeRealizada < quantidadeMinima;
-
-  return {
-    necessaria,
-    realizadas: quantidadeRealizada,
-    minimas: quantidadeMinima,
-    restantes: necessaria ? Math.max(0, quantidadeMinima - quantidadeRealizada) : 0
-  };
 }
 
 function statusVisualConferencia(status, possuiConferencia = true) {
@@ -409,7 +393,6 @@ module.exports = {
   validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,
   conferenciaEntradaPodeSerReaberta,
-  analisarRecontagemEntrada,
   statusVisualConferencia,
   documentosAuxiliaresConferencia,
   retornoPossuiDocumentosAuxiliares
