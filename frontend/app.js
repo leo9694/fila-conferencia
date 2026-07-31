@@ -153,7 +153,6 @@ const filaEtapaConferencia = document.getElementById('fila-etapa-conferencia');
 const filaPedidosLista = document.getElementById('fila-pedidos-lista');
 const filaCountPedidos = document.getElementById('fila-count-pedidos');
 const filaBuscaPedido = document.getElementById('fila-busca-pedido');
-const filaBuscaRapida = document.getElementById('fila-busca-rapida');
 const filaFiltroStatus = document.getElementById('fila-filtro-status');
 const filaPageTitle = document.getElementById('fila-page-title');
 const filaHeaderAvatar = document.getElementById('fila-header-avatar');
@@ -2756,6 +2755,15 @@ function criarCard(item) {
   let mostrarTempo = false;
   let statusLabel = 'AGUARDANDO';
   let tipoCard = 'aguardando';
+
+  const statusSeparacao = String(item.STATUS_SEPARACAO || '').trim().toUpperCase();
+  if (statusSeparacao === 'EM_SEPARACAO') {
+    statusClass = 'status-em-separacao';
+    statusLabel = 'EM SEPARAÇÃO';
+  } else if (statusSeparacao === 'SEPARADO') {
+    statusClass = 'status-separado';
+    statusLabel = 'SEPARADO';
+  }
 
   if (
     item.STATUS_CONFERENCIA === 'EM ANDAMENTO' ||
@@ -8358,9 +8366,18 @@ async function carregarFila() {
         minutosDesdeInicio(a.DT_INICIO_CONFERENCIA)
       );
 
+    const prioridadeSeparacao = {
+      SEPARADO: 0,
+      EM_SEPARACAO: 1
+    };
     const aguardando = dados
       .filter((d) => d.STATUS_CONFERENCIA === 'AGUARDANDO CONFERENCIA')
-      .sort((a, b) => obterTimestamp(a.DTNEG) - obterTimestamp(b.DTNEG));
+      .sort((a, b) => {
+        const prioridadeA = prioridadeSeparacao[String(a.STATUS_SEPARACAO || '').toUpperCase()] ?? 2;
+        const prioridadeB = prioridadeSeparacao[String(b.STATUS_SEPARACAO || '').toUpperCase()] ?? 2;
+        return prioridadeA - prioridadeB
+          || obterTimestamp(a.DTNEG) - obterTimestamp(b.DTNEG);
+      });
 
     const conferidos = dados
       .filter((d) => d.STATUS_CONFERENCIA === 'CONFERIDO')
@@ -8512,7 +8529,6 @@ function definirFiltrosFilaAbertos(abertos) {
 function sincronizarBuscaFila(valor, origem) {
   const busca = String(valor || '').replace(/\D/g, '');
   if (origem !== filaBuscaPedido) filaBuscaPedido.value = busca;
-  if (filaBuscaRapida && origem !== filaBuscaRapida) filaBuscaRapida.value = busca;
 }
 
 function limparFiltrosFila() {
@@ -8552,9 +8568,6 @@ function atualizarModoFilaConferencia() {
   if (filaPageTitle) filaPageTitle.textContent = entrada ? 'Fila de conferência de entrada' : 'Fila de conferência';
   botaoBuscarFilaConferencia.textContent = entrada ? 'Buscar entradas' : 'Buscar pedidos';
   filaBuscaPedido.placeholder = entrada ? 'Número da nota de entrada' : 'Número do pedido ou nota fiscal';
-  if (filaBuscaRapida) {
-    filaBuscaRapida.placeholder = entrada ? 'Pesquisar nota de entrada...' : 'Pesquisar pedido ou nota fiscal...';
-  }
   filaSidebarTitle.textContent = entrada ? 'Entrada em conferência' : 'Pedido em conferência';
   botaoAbrirRomaneio.hidden = entrada;
   if (entrada && !romaneioModal.hidden) fecharRomaneioCargas();
@@ -9118,13 +9131,6 @@ filaBuscaPedido.addEventListener('keydown', (event) => {
   }
 });
 filaBuscaPedido.addEventListener('input', () => sincronizarBuscaFila(filaBuscaPedido.value, filaBuscaPedido));
-filaBuscaRapida?.addEventListener('input', () => sincronizarBuscaFila(filaBuscaRapida.value, filaBuscaRapida));
-filaBuscaRapida?.addEventListener('keydown', (event) => {
-  if (event.key === 'Enter') {
-    event.preventDefault();
-    buscarFilaConferencia();
-  }
-});
 botaoCancelarPreviewPedido.addEventListener('click', fecharPreviewPedido);
 botaoImprimirPreviewPedido.addEventListener('click', abrirPdfPedido);
 botaoAbrirSeparacaoPedido.addEventListener('click', abrirSeparacaoPedido);

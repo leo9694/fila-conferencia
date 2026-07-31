@@ -2256,7 +2256,12 @@ router.get('/conferencias', async (req, res) => {
     const empresa = obterFiltroEmpresa(req.query.empresa);
     const rows = await executeQuery(montarSqlConferencias(intervalo, empresa));
 
-    const resultado = conferenciaTimerStore.atualizarComItens(rows.map(normalizarLinhaConferencia));
+    const resultado = conferenciaTimerStore
+      .atualizarComItens(rows.map(normalizarLinhaConferencia))
+      .map((item) => ({
+        ...item,
+        STATUS_SEPARACAO: separacaoStore.obter(item.NUNOTA)?.status || null
+      }));
 
     res.json({
       dataInicial: intervalo.inicio,
