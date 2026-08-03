@@ -56,6 +56,7 @@ const {
   validarPeriodo
 } = require('./api/relatorioCtes');
 const {
+  TOP_FATURAMENTO_VENDAS,
   consolidarDashboardVendas,
   montarSqlDimensoesVendas,
   montarSqlGruposVendas,
@@ -2328,8 +2329,9 @@ router.get('/vendas-gerais/empresas', exigirGerenciaOuDiretoria, async (req, res
         NVL(EMP.NOMEFANTASIA, EMP.RAZAOSOCIAL) AS EMPRESA
       FROM TGFCAB CAB
       INNER JOIN TSIEMP EMP ON EMP.CODEMP = CAB.CODEMP
-      WHERE CAB.TIPMOV = 'P'
-        AND CAB.STATUSNOTA IN ('A', 'P', 'L')
+      WHERE CAB.CODTIPOPER = ${TOP_FATURAMENTO_VENDAS}
+        AND CAB.TIPMOV = 'V'
+        AND CAB.STATUSNOTA = 'L'
       ORDER BY CAB.CODEMP
     `);
     res.json({

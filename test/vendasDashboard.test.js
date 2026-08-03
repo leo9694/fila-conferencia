@@ -24,14 +24,17 @@ test('normaliza empresa sem permitir entrada SQL', () => {
   assert.throws(() => normalizarEmpresa('1 OR 1=1'), /invalida/);
 });
 
-test('SQL usa pedidos, periodo inclusivo e filtro seguro por empresa', () => {
+test('SQL usa somente faturamentos confirmados da TOP 35, periodo inclusivo e empresa segura', () => {
   const periodo = validarPeriodoVendas('2026-01-01', '2026-06-30');
   for (const sql of [
     montarSqlDimensoesVendas(periodo, 2),
     montarSqlTotaisVendas(periodo, 2),
     montarSqlGruposVendas(periodo, 2)
   ]) {
-    assert.match(sql, /CAB\.TIPMOV = 'P'/);
+    assert.match(sql, /CAB\.CODTIPOPER = 35/);
+    assert.match(sql, /CAB\.TIPMOV = 'V'/);
+    assert.match(sql, /CAB\.STATUSNOTA = 'L'/);
+    assert.doesNotMatch(sql, /CAB\.TIPMOV = 'P'/);
     assert.match(sql, /CAB\.DTNEG < TO_DATE\('2026-06-30'/);
     assert.match(sql, /CAB\.CODEMP = 2/);
   }

@@ -1,4 +1,5 @@
 const LIMITE_PERIODO_DIAS = 731;
+const TOP_FATURAMENTO_VENDAS = 35;
 
 function dataIsoValida(valor) {
   const texto = String(valor || '').trim();
@@ -37,14 +38,7 @@ function filtroEmpresaSql(empresa, alias = 'CAB') {
 
 function cteBaseVendas(periodo, empresa) {
   return `
-    WITH FATURADOS AS (
-      SELECT DISTINCT VAR.NUNOTAORIG
-      FROM TGFVAR VAR
-      INNER JOIN TGFCAB DEST ON DEST.NUNOTA = VAR.NUNOTA
-      WHERE DEST.TIPMOV <> 'P'
-        AND DEST.STATUSNOTA = 'L'
-    ),
-    BASE_VENDAS AS (
+    WITH BASE_VENDAS AS (
       SELECT
         CAB.NUNOTA,
         CAB.CODEMP,
@@ -54,19 +48,13 @@ function cteBaseVendas(periodo, empresa) {
         NVL(CAB.VLRNOTA, 0) AS VLRNOTA,
         NVL(EMP.NOMEFANTASIA, EMP.RAZAOSOCIAL) AS EMPRESA,
         NVL(VEN.APELIDO, 'SEM VENDEDOR') AS VENDEDOR,
-        CASE
-          WHEN FAT.NUNOTAORIG IS NOT NULL THEN 'FATURADO'
-          WHEN CAB.STATUSNOTA = 'L' THEN 'LIBERADO'
-          WHEN CAB.STATUSNOTA = 'A' THEN 'EM_ATENDIMENTO'
-          WHEN CAB.STATUSNOTA = 'P' THEN 'PENDENTE'
-          ELSE 'OUTROS'
-        END AS STATUS_VENDA
+        'FATURADO' AS STATUS_VENDA
       FROM TGFCAB CAB
       INNER JOIN TSIEMP EMP ON EMP.CODEMP = CAB.CODEMP
       LEFT JOIN TGFVEN VEN ON VEN.CODVEND = CAB.CODVEND
-      LEFT JOIN FATURADOS FAT ON FAT.NUNOTAORIG = CAB.NUNOTA
-      WHERE CAB.TIPMOV = 'P'
-        AND CAB.STATUSNOTA IN ('A', 'P', 'L')
+      WHERE CAB.CODTIPOPER = ${TOP_FATURAMENTO_VENDAS}
+        AND CAB.TIPMOV = 'V'
+        AND CAB.STATUSNOTA = 'L'
         AND CAB.DTNEG >= TO_DATE('${periodo.inicio}', 'YYYY-MM-DD')
         AND CAB.DTNEG < TO_DATE('${periodo.fim}', 'YYYY-MM-DD') + 1
         ${filtroEmpresaSql(empresa)}
@@ -119,8 +107,9 @@ function montarSqlGruposVendas(periodo, empresa) {
     INNER JOIN TGFPRO PRO ON PRO.CODPROD = ITE.CODPROD
     LEFT JOIN TGFGRU GRU ON GRU.CODGRUPOPROD = PRO.CODGRUPOPROD
     INNER JOIN TSIEMP EMP ON EMP.CODEMP = CAB.CODEMP
-    WHERE CAB.TIPMOV = 'P'
-      AND CAB.STATUSNOTA IN ('A', 'P', 'L')
+    WHERE CAB.CODTIPOPER = ${TOP_FATURAMENTO_VENDAS}
+      AND CAB.TIPMOV = 'V'
+      AND CAB.STATUSNOTA = 'L'
       AND CAB.DTNEG >= TO_DATE('${periodo.inicio}', 'YYYY-MM-DD')
       AND CAB.DTNEG < TO_DATE('${periodo.fim}', 'YYYY-MM-DD') + 1
       ${filtroEmpresaSql(empresa)}
@@ -201,6 +190,7 @@ function consolidarDashboardVendas({ dimensoes = [], totais = [], grupos = [] } 
 
 module.exports = {
   LIMITE_PERIODO_DIAS,
+  TOP_FATURAMENTO_VENDAS,
   consolidarDashboardVendas,
   montarSqlDimensoesVendas,
   montarSqlGruposVendas,
