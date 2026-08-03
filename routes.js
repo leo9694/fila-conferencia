@@ -85,8 +85,9 @@ const estoqueContagemStore = criarEstoqueContagemStore({
   namespace: process.env.SANKHYA_API_BASE_URL || 'padrao'
 });
 const autorizacaoGrupos = criarAutorizacaoGrupos({ executeQuery, cacheTtlMs: 0 });
+const autorizacaoVendas = criarAutorizacaoGrupos({ executeQuery, cacheTtlMs: 8 * 60 * 60 * 1000 });
 const exigirDiretoria = autorizacaoGrupos.exigirGrupo('Diretoria');
-const exigirGerenciaOuDiretoria = autorizacaoGrupos.exigirAlgumGrupo(['Gerente', 'Diretoria']);
+const exigirGerenciaOuDiretoria = autorizacaoVendas.exigirAlgumGrupo(['Gerente', 'Diretoria']);
 const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Cuiaba';
 const SANKHYA_TIMEZONE = process.env.SANKHYA_TIMEZONE || 'America/Sao_Paulo';
 const TOPS_CONFERENCIA = Object.freeze({

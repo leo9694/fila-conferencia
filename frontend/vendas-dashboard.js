@@ -59,6 +59,17 @@
     }
   }
 
+  function limparPermissoesArmazenadas() {
+    try {
+      for (let indice = sessionStorage.length - 1; indice >= 0; indice -= 1) {
+        const chave = sessionStorage.key(indice);
+        if (chave?.startsWith('vendas-gerais-permitido:')) sessionStorage.removeItem(chave);
+      }
+    } catch {
+      // O logout continua valido mesmo quando o armazenamento do navegador falha.
+    }
+  }
+
   function html(valor) {
     return String(valor ?? '')
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -195,10 +206,21 @@
   }
 
   async function verificarAcesso(codUsu = codigoUsuarioAtual) {
+    const codigoAnterior = codigoUsuarioAtual;
     codigoUsuarioAtual = normalizarCodigoUsuario(codUsu);
+    const mesmoUsuario = codigoUsuarioAtual !== null && codigoUsuarioAtual === codigoAnterior;
     const permissaoRestaurada = lerPermissaoDaSessao(codigoUsuarioAtual);
-    permitido = permissaoRestaurada;
-    elementos.menu.hidden = !permitido;
+
+    // Depois da primeira validacao positiva, a permissao visual permanece durante
+    // toda a sessao deste usuario. As APIs continuam protegidas pelo backend.
+    if (permissaoRestaurada || (mesmoUsuario && permitido)) {
+      permitido = true;
+      elementos.menu.hidden = false;
+      return true;
+    }
+
+    permitido = false;
+    elementos.menu.hidden = true;
     try {
       const resposta = await fetch('/api/vendas-gerais/acesso', { cache: 'no-store' });
       permitido = resposta.ok;
@@ -206,8 +228,8 @@
       elementos.menu.hidden = !permitido;
     } catch (erro) {
       console.error('Falha ao verificar acesso ao painel de vendas:', erro);
-      permitido = permissaoRestaurada;
-      elementos.menu.hidden = !permitido;
+      permitido = false;
+      elementos.menu.hidden = true;
     }
     return permitido;
   }
@@ -255,7 +277,7 @@
   }
 
   function limparSessao() {
-    gravarPermissaoDaSessao(codigoUsuarioAtual, false);
+    limparPermissoesArmazenadas();
     permitido = false;
     empresasCarregadas = false;
     codigoUsuarioAtual = null;

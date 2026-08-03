@@ -1049,6 +1049,7 @@ async function carregarResumoHome(forcar = false) {
 }
 
 function mostrarLogin(mensagem = '') {
+  window.vendasDashboardController?.limparSessao();
   usuarioLogado = null;
   ocultarNavegacaoGlobal();
   limparNavegacaoFilaSalva();

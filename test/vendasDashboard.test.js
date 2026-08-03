@@ -38,6 +38,16 @@ test('SQL usa somente faturamentos confirmados da TOP 35, periodo inclusivo e em
     assert.match(sql, /CAB\.DTNEG < TO_DATE\('2026-06-30'/);
     assert.match(sql, /CAB\.CODEMP = 2/);
   }
+
+  const sqlDimensoes = montarSqlDimensoesVendas(periodo, 2);
+  const sqlTotais = montarSqlTotaisVendas(periodo, 2);
+  const sqlGrupos = montarSqlGruposVendas(periodo, 2);
+  assert.match(sqlDimensoes, /SUM\(NVL\(ITE\.VLRTOT, 0\)\)/);
+  assert.match(sqlDimensoes, /COUNT\(DISTINCT NUNOTA\) AS PEDIDOS/);
+  assert.match(sqlTotais, /COUNT\(DISTINCT NUNOTA\) AS PEDIDOS/);
+  assert.match(sqlTotais, /SUM\(VLRNOTA\) \/ NULLIF\(COUNT\(DISTINCT NUNOTA\), 0\)/);
+  assert.match(sqlGrupos, /SUM\(NVL\(ITE\.VLRTOT, 0\)\)/);
+  assert.doesNotMatch(sqlGrupos, /VLRUNIT/);
 });
 
 test('consolida indicadores, ranking e empresas com totais exatos', () => {
