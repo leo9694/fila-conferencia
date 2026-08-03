@@ -25,6 +25,39 @@
 
   let permitido = false;
   let empresasCarregadas = false;
+  let codigoUsuarioAtual = null;
+
+  function normalizarCodigoUsuario(codUsu) {
+    if (codUsu === null || codUsu === undefined || codUsu === '') return null;
+    const codigo = Number(codUsu);
+    return Number.isInteger(codigo) && codigo >= 0 ? codigo : null;
+  }
+
+  function chavePermissao(codUsu) {
+    const codigo = normalizarCodigoUsuario(codUsu);
+    return codigo === null ? null : `vendas-gerais-permitido:${codigo}`;
+  }
+
+  function lerPermissaoDaSessao(codUsu) {
+    const chave = chavePermissao(codUsu);
+    if (!chave) return false;
+    try {
+      return sessionStorage.getItem(chave) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  function gravarPermissaoDaSessao(codUsu, possuiAcesso) {
+    const chave = chavePermissao(codUsu);
+    if (!chave) return;
+    try {
+      if (possuiAcesso) sessionStorage.setItem(chave, '1');
+      else sessionStorage.removeItem(chave);
+    } catch {
+      // A indisponibilidade do sessionStorage nao pode impedir a validacao no backend.
+    }
+  }
 
   function html(valor) {
     return String(valor ?? '')
@@ -161,15 +194,20 @@
     elementos.status.classList.remove('is-error');
   }
 
-  async function verificarAcesso() {
-    permitido = false;
-    elementos.menu.hidden = true;
+  async function verificarAcesso(codUsu = codigoUsuarioAtual) {
+    codigoUsuarioAtual = normalizarCodigoUsuario(codUsu);
+    const permissaoRestaurada = lerPermissaoDaSessao(codigoUsuarioAtual);
+    permitido = permissaoRestaurada;
+    elementos.menu.hidden = !permitido;
     try {
       const resposta = await fetch('/api/vendas-gerais/acesso', { cache: 'no-store' });
       permitido = resposta.ok;
+      gravarPermissaoDaSessao(codigoUsuarioAtual, permitido);
       elementos.menu.hidden = !permitido;
     } catch (erro) {
       console.error('Falha ao verificar acesso ao painel de vendas:', erro);
+      permitido = permissaoRestaurada;
+      elementos.menu.hidden = !permitido;
     }
     return permitido;
   }
@@ -217,8 +255,10 @@
   }
 
   function limparSessao() {
+    gravarPermissaoDaSessao(codigoUsuarioAtual, false);
     permitido = false;
     empresasCarregadas = false;
+    codigoUsuarioAtual = null;
     elementos.menu.hidden = true;
   }
 

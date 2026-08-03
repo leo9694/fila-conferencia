@@ -8843,7 +8843,7 @@ async function prepararSessaoAutenticada(usuario) {
     carregarEmpresas(),
     verificarDisponibilidadeContagemEstoque(),
     verificarAcessoRelatorios(),
-    window.vendasDashboardController?.verificarAcesso()
+    window.vendasDashboardController?.verificarAcesso(usuario?.codUsu)
   ]);
 
   if (window.location.hash === '#fila-conferencia') {
