@@ -55,6 +55,14 @@ const {
   nomeArquivoRelatorio,
   validarPeriodo
 } = require('./api/relatorioCtes');
+const {
+  consolidarDashboardVendas,
+  montarSqlDimensoesVendas,
+  montarSqlGruposVendas,
+  montarSqlTotaisVendas,
+  normalizarEmpresa,
+  validarPeriodoVendas
+} = require('./api/vendasDashboard');
 const bitrixService = require('./api/bitrixService');
 
 const conferenciaTimerStore = criarConferenciaTimerStore();
@@ -77,6 +85,7 @@ const estoqueContagemStore = criarEstoqueContagemStore({
 });
 const autorizacaoGrupos = criarAutorizacaoGrupos({ executeQuery, cacheTtlMs: 0 });
 const exigirDiretoria = autorizacaoGrupos.exigirGrupo('Diretoria');
+const exigirGerenciaOuDiretoria = autorizacaoGrupos.exigirAlgumGrupo(['Gerente', 'Diretoria']);
 const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Cuiaba';
 const SANKHYA_TIMEZONE = process.env.SANKHYA_TIMEZONE || 'America/Sao_Paulo';
 const TOPS_CONFERENCIA = Object.freeze({
@@ -2304,6 +2313,61 @@ router.get('/fila-conferencia/conferentes', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: 'Erro ao buscar conferentes' });
+  }
+});
+
+router.get('/vendas-gerais/acesso', exigirGerenciaOuDiretoria, (req, res) => {
+  res.json({ permitido: true });
+});
+
+router.get('/vendas-gerais/empresas', exigirGerenciaOuDiretoria, async (req, res) => {
+  try {
+    const rows = await executeQuery(`
+      SELECT DISTINCT
+        CAB.CODEMP,
+        NVL(EMP.NOMEFANTASIA, EMP.RAZAOSOCIAL) AS EMPRESA
+      FROM TGFCAB CAB
+      INNER JOIN TSIEMP EMP ON EMP.CODEMP = CAB.CODEMP
+      WHERE CAB.TIPMOV = 'P'
+        AND CAB.STATUSNOTA IN ('A', 'P', 'L')
+      ORDER BY CAB.CODEMP
+    `);
+    res.json({
+      itens: rows.map((item) => ({
+        codEmp: Number(item.CODEMP),
+        nome: item.EMPRESA || `Empresa ${item.CODEMP}`
+      }))
+    });
+  } catch (err) {
+    console.error('Erro ao carregar empresas do painel de vendas:', err);
+    res.status(500).json({ erro: 'Nao foi possivel carregar as empresas.' });
+  }
+});
+
+router.get('/vendas-gerais/dashboard', exigirGerenciaOuDiretoria, async (req, res) => {
+  try {
+    const periodo = validarPeriodoVendas(req.query.dataInicial, req.query.dataFinal);
+    const empresa = normalizarEmpresa(req.query.empresa);
+    const inicio = process.hrtime.bigint();
+    const [dimensoes, totais, grupos] = await Promise.all([
+      executeQuery(montarSqlDimensoesVendas(periodo, empresa)),
+      executeQuery(montarSqlTotaisVendas(periodo, empresa)),
+      executeQuery(montarSqlGruposVendas(periodo, empresa))
+    ]);
+    const consultaMs = Number(process.hrtime.bigint() - inicio) / 1e6;
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({
+      periodo,
+      empresa,
+      consultaMs: Number(consultaMs.toFixed(1)),
+      ...consolidarDashboardVendas({ dimensoes, totais, grupos })
+    });
+  } catch (err) {
+    const validacao = /data|periodo|empresa/i.test(String(err.message || ''));
+    console.error('Erro ao carregar painel de vendas:', err);
+    res.status(validacao ? 400 : 500).json({
+      erro: validacao ? err.message : 'Nao foi possivel carregar o painel de vendas.'
+    });
   }
 });
 

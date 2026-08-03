@@ -43,6 +43,17 @@ function criarAutorizacaoGrupos({ executeQuery, cacheTtlMs = 5 * 60 * 1000 } = {
     return grupos.some((grupo) => grupo.toLocaleUpperCase('pt-BR') === esperado);
   }
 
+  async function pertenceAAlgumGrupo(codUsu, nomesGrupos) {
+    const esperados = new Set(
+      (Array.isArray(nomesGrupos) ? nomesGrupos : [nomesGrupos])
+        .map((nome) => String(nome || '').trim().toLocaleUpperCase('pt-BR'))
+        .filter(Boolean)
+    );
+    if (!esperados.size) return false;
+    const grupos = await consultarGrupos(codUsu);
+    return grupos.some((grupo) => esperados.has(grupo.toLocaleUpperCase('pt-BR')));
+  }
+
   function exigirGrupo(nomeGrupo) {
     const nomeSeguro = String(nomeGrupo || '').trim();
     return async (req, res, next) => {
@@ -59,11 +70,31 @@ function criarAutorizacaoGrupos({ executeQuery, cacheTtlMs = 5 * 60 * 1000 } = {
     };
   }
 
+  function exigirAlgumGrupo(nomesGrupos) {
+    const nomesSeguros = (Array.isArray(nomesGrupos) ? nomesGrupos : [nomesGrupos])
+      .map((nome) => String(nome || '').trim())
+      .filter(Boolean);
+    return async (req, res, next) => {
+      try {
+        if (!await pertenceAAlgumGrupo(req.usuario?.codUsu, nomesSeguros)) {
+          res.status(403).json({ erro: `Acesso restrito aos grupos ${nomesSeguros.join(' ou ')}.` });
+          return;
+        }
+        next();
+      } catch (error) {
+        console.error(`Falha ao validar os grupos Sankhya ${nomesSeguros.map(textoSql).join(', ')}:`, error.message);
+        res.status(503).json({ erro: 'Nao foi possivel validar a permissao do usuario.' });
+      }
+    };
+  }
+
   return {
     cache,
     consultarGrupos,
     pertenceAoGrupo,
-    exigirGrupo
+    pertenceAAlgumGrupo,
+    exigirGrupo,
+    exigirAlgumGrupo
   };
 }
 

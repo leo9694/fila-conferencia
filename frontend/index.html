@@ -12,6 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/home-dashboard.css?v=20260727-5">
+  <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
 
   <style>
     :root {
@@ -10306,6 +10307,9 @@
           <button class="home-dashboard-nav-item is-active" type="button" data-home-screen="home" aria-current="page" title="Visão geral">
             <i data-lucide="house" aria-hidden="true"></i><span>Visão geral</span>
           </button>
+          <button class="home-dashboard-nav-item" id="home-nav-vendas-gerais" type="button" data-home-target="abrir-vendas-gerais" title="Vendas gerais" hidden>
+            <i data-lucide="badge-dollar-sign" aria-hidden="true"></i><span>Vendas gerais</span>
+          </button>
           <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-conferencia" title="Fila de conferência">
             <i data-lucide="list-checks" aria-hidden="true"></i><span>Fila de conferência</span>
           </button>
@@ -11532,6 +11536,72 @@
     </div>
   </section>
 
+  <section class="screen vendas-dashboard-screen" id="vendas-gerais-screen">
+    <main class="vendas-dashboard-page">
+      <header class="vendas-dashboard-header">
+        <div>
+          <div class="home-kicker">Visão comercial</div>
+          <h1>Vendas gerais</h1>
+          <p id="vendas-dashboard-periodo">Acompanhe o desempenho consolidado das empresas.</p>
+        </div>
+        <div class="vendas-dashboard-header-actions">
+          <span class="vendas-dashboard-secure"><i data-lucide="shield-check" aria-hidden="true"></i>Gerência e Diretoria</span>
+          <button class="btn-back" id="voltar-home-vendas-gerais" type="button">
+            <i data-lucide="arrow-left" aria-hidden="true"></i><span>Voltar</span>
+          </button>
+        </div>
+      </header>
+
+      <form class="vendas-dashboard-filters" id="vendas-dashboard-form">
+        <label><span>Data inicial</span><input id="vendas-data-inicial" type="date" required></label>
+        <label><span>Data final</span><input id="vendas-data-final" type="date" required></label>
+        <label class="vendas-dashboard-filter-company"><span>Empresa</span><select id="vendas-empresa"><option value="">Todas as empresas</option></select></label>
+        <button class="vendas-dashboard-refresh" id="vendas-atualizar" type="submit"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>Atualizar painel</span></button>
+      </form>
+
+      <div class="vendas-dashboard-status" id="vendas-dashboard-status" role="status" aria-live="polite"></div>
+
+      <section class="vendas-dashboard-kpis" aria-label="Indicadores de vendas">
+        <article class="vendas-kpi"><span class="vendas-kpi-icon is-green"><i data-lucide="circle-dollar-sign"></i></span><div><small>Vendas no período</small><strong id="vendas-kpi-valor">—</strong><span id="vendas-kpi-pedidos">— pedidos</span></div></article>
+        <article class="vendas-kpi"><span class="vendas-kpi-icon is-blue"><i data-lucide="receipt-text"></i></span><div><small>Ticket médio</small><strong id="vendas-kpi-ticket">—</strong><span>por pedido</span></div></article>
+        <article class="vendas-kpi"><span class="vendas-kpi-icon is-purple"><i data-lucide="users-round"></i></span><div><small>Clientes atendidos</small><strong id="vendas-kpi-clientes">—</strong><span id="vendas-kpi-vendedores">— vendedores</span></div></article>
+        <article class="vendas-kpi"><span class="vendas-kpi-icon is-orange"><i data-lucide="file-check-2"></i></span><div><small>Pedidos faturados</small><strong id="vendas-kpi-faturados">—</strong><span id="vendas-kpi-conversao">— do total</span></div></article>
+      </section>
+
+      <section class="vendas-dashboard-grid">
+        <article class="vendas-panel vendas-panel-monthly">
+          <div class="vendas-panel-head"><div><span>Evolução</span><h2>Vendas por mês</h2></div><span class="vendas-panel-legend"><i></i>Valor vendido</span></div>
+          <div class="vendas-chart" id="vendas-grafico-mensal"></div>
+        </article>
+
+        <article class="vendas-panel vendas-panel-status">
+          <div class="vendas-panel-head"><div><span>Pipeline</span><h2>Status dos pedidos</h2></div></div>
+          <div class="vendas-status-chart" id="vendas-grafico-status"></div>
+        </article>
+
+        <article class="vendas-panel vendas-panel-sellers">
+          <div class="vendas-panel-head"><div><span>Desempenho</span><h2>Ranking de vendedores</h2></div><span class="vendas-panel-caption">Top 10</span></div>
+          <div class="vendas-ranking" id="vendas-ranking-vendedores"></div>
+        </article>
+
+        <article class="vendas-panel vendas-panel-groups">
+          <div class="vendas-panel-head"><div><span>Mix de produtos</span><h2>Grupos mais vendidos</h2></div><span class="vendas-panel-caption">Por valor</span></div>
+          <div class="vendas-groups" id="vendas-grafico-grupos"></div>
+        </article>
+
+        <article class="vendas-panel vendas-panel-companies">
+          <div class="vendas-panel-head"><div><span>Comparativo</span><h2>Desempenho por empresa</h2></div></div>
+          <div class="vendas-companies-table-wrap">
+            <table class="vendas-companies-table">
+              <thead><tr><th>Empresa</th><th>Pedidos</th><th>Clientes</th><th>Ticket médio</th><th>Vendas</th><th>Participação</th></tr></thead>
+              <tbody id="vendas-tabela-empresas"></tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </main>
+  </section>
+
   <section class="screen relatorios-screen" id="relatorios-screen">
     <main class="relatorios-page">
       <header class="relatorios-heading">
@@ -11749,6 +11819,7 @@
 
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <script src="asyncRefresh.js?v=20260601-2"></script>
-  <script src="app.js?v=20260727-5"></script>
+  <script src="vendas-dashboard.js?v=20260803-1"></script>
+  <script src="app.js?v=20260803-1"></script>
 </body>
 </html>

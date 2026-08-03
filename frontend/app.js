@@ -37,6 +37,7 @@ const consultaProdutosScreen = document.getElementById('consulta-produtos-screen
 const atualizacaoContatoScreen = document.getElementById('atualizacao-contato-screen');
 const estoqueContagemScreen = document.getElementById('estoque-contagem-screen');
 const relatoriosScreen = document.getElementById('relatorios-screen');
+const vendasGeraisScreen = document.getElementById('vendas-gerais-screen');
 const filaContexto = document.getElementById('fila-contexto');
 const inputDataInicial = document.getElementById('data-inicial');
 const inputDataFinal = document.getElementById('data-final');
@@ -56,6 +57,8 @@ const botaoVoltarHomeContato = document.getElementById('voltar-home-contato');
 const botaoVoltarHomeContagemEstoque = document.getElementById('voltar-home-contagem-estoque');
 const botaoVoltarHomeRelatorios = document.getElementById('voltar-home-relatorios');
 const botaoMenuRelatorios = document.getElementById('home-nav-relatorios');
+const botaoMenuVendasGerais = document.getElementById('home-nav-vendas-gerais');
+const botaoVoltarHomeVendasGerais = document.getElementById('voltar-home-vendas-gerais');
 const relatorioCtesForm = document.getElementById('relatorio-ctes-form');
 const relatorioCtesDataInicial = document.getElementById('relatorio-ctes-data-inicial');
 const relatorioCtesDataFinal = document.getElementById('relatorio-ctes-data-final');
@@ -802,6 +805,7 @@ function atualizarItemAtivoNavegacaoGlobal(tela) {
       || (tela === 'consulta' && alvo === 'abrir-consulta-home')
       || (tela === 'contato' && alvo === 'abrir-atualizacao-contato')
       || (tela === 'contagem' && alvo === 'abrir-contagem-estoque')
+      || (tela === 'vendas' && alvo === 'abrir-vendas-gerais')
       || (tela === 'relatorios' && alvo === 'abrir-relatorios');
     item.classList.toggle('is-active', ativo);
     if (ativo) item.setAttribute('aria-current', 'page');
@@ -828,6 +832,10 @@ function abrirVisaoGeralPeloMenu() {
 
 function executarDestinoHome(id) {
   fecharSidebarHome();
+  if (id === 'abrir-vendas-gerais') {
+    abrirVendasGerais();
+    return;
+  }
   if (id === 'abrir-relatorios') {
     abrirRelatorios();
     return;
@@ -1053,6 +1061,7 @@ function mostrarLogin(mensagem = '') {
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
   relatoriosScreen.classList.remove('active');
+  vendasGeraisScreen.classList.remove('active');
   loginStatus.textContent = mensagem;
   atualizarUsuarioLogadoNaTela();
 
@@ -1586,6 +1595,7 @@ function mostrarHome() {
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
   relatoriosScreen.classList.remove('active');
+  vendasGeraisScreen.classList.remove('active');
   homeScreen.classList.add('active');
   mostrarNavegacaoGlobal('home');
   fecharSidebarHome();
@@ -1607,6 +1617,7 @@ function mostrarConferencia() {
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
   relatoriosScreen.classList.remove('active');
+  vendasGeraisScreen.classList.remove('active');
   conferenciaScreen.classList.add('active');
   mostrarNavegacaoGlobal('acompanhamento');
 }
@@ -1625,6 +1636,7 @@ function mostrarAcompanhamento() {
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
   relatoriosScreen.classList.remove('active');
+  vendasGeraisScreen.classList.remove('active');
   acompanhamentoScreen.classList.add('active');
   mostrarNavegacaoGlobal('acompanhamento');
 }
@@ -1643,6 +1655,7 @@ function mostrarFila() {
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
   relatoriosScreen.classList.remove('active');
+  vendasGeraisScreen.classList.remove('active');
   filaScreen.classList.add('active');
   mostrarNavegacaoGlobal('fila');
 }
@@ -1661,6 +1674,7 @@ function mostrarConsultaProdutos() {
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
   relatoriosScreen.classList.remove('active');
+  vendasGeraisScreen.classList.remove('active');
   consultaProdutosScreen.classList.add('active');
   mostrarNavegacaoGlobal('consulta');
   consultaProdutoCodigo.focus();
@@ -1680,6 +1694,7 @@ function mostrarAtualizacaoContato() {
   consultaProdutosScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
   relatoriosScreen.classList.remove('active');
+  vendasGeraisScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.add('active');
   mostrarNavegacaoGlobal('contato');
   contatoPerfil.focus();
@@ -1699,6 +1714,7 @@ function mostrarContagemEstoque() {
   consultaProdutosScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.remove('active');
   relatoriosScreen.classList.remove('active');
+  vendasGeraisScreen.classList.remove('active');
   estoqueContagemScreen.classList.add('active');
   mostrarNavegacaoGlobal('contagem');
 }
@@ -1717,8 +1733,46 @@ function mostrarRelatorios() {
   consultaProdutosScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
+  vendasGeraisScreen.classList.remove('active');
   relatoriosScreen.classList.add('active');
   mostrarNavegacaoGlobal('relatorios');
+}
+
+function mostrarVendasGerais() {
+  if (!usuarioLogado || !window.vendasDashboardController?.permitido) {
+    mostrarHome();
+    return;
+  }
+
+  loginScreen.classList.remove('active');
+  homeScreen.classList.remove('active');
+  conferenciaScreen.classList.remove('active');
+  acompanhamentoScreen.classList.remove('active');
+  filaScreen.classList.remove('active');
+  consultaProdutosScreen.classList.remove('active');
+  atualizacaoContatoScreen.classList.remove('active');
+  estoqueContagemScreen.classList.remove('active');
+  relatoriosScreen.classList.remove('active');
+  vendasGeraisScreen.classList.add('active');
+  mostrarNavegacaoGlobal('vendas');
+}
+
+async function abrirVendasGerais() {
+  const controller = window.vendasDashboardController;
+  if (!controller) return;
+  if (!controller.permitido && !await controller.verificarAcesso()) {
+    fecharSidebarHome();
+    return;
+  }
+
+  mostrarHomeESuspenderRefresh();
+  mostrarVendasGerais();
+  history.pushState({ tela: 'vendas-gerais' }, '', '#vendas-gerais');
+  try {
+    await controller.preparar();
+  } catch (error) {
+    console.error('Erro ao abrir vendas gerais:', error);
+  }
 }
 
 function definirStatusRelatorio(mensagem = '', tipo = '') {
@@ -8788,7 +8842,8 @@ async function prepararSessaoAutenticada(usuario) {
   await Promise.all([
     carregarEmpresas(),
     verificarDisponibilidadeContagemEstoque(),
-    verificarAcessoRelatorios()
+    verificarAcessoRelatorios(),
+    window.vendasDashboardController?.verificarAcesso()
   ]);
 
   if (window.location.hash === '#fila-conferencia') {
@@ -8827,6 +8882,18 @@ async function prepararSessaoAutenticada(usuario) {
     }
     mostrarRelatorios();
     history.replaceState({ tela: 'relatorios' }, '', '#relatorios');
+    return;
+  }
+
+  if (window.location.hash === '#vendas-gerais') {
+    if (!window.vendasDashboardController?.permitido) {
+      mostrarHome();
+      history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);
+      return;
+    }
+    mostrarVendasGerais();
+    await window.vendasDashboardController.preparar().catch((error) => console.error('Erro ao restaurar vendas gerais:', error));
+    history.replaceState({ tela: 'vendas-gerais' }, '', '#vendas-gerais');
     return;
   }
 
@@ -8888,6 +8955,7 @@ async function encerrarSessao() {
   }
 
   filaPedidos = [];
+  window.vendasDashboardController?.limparSessao();
   limparPedidoConferencia();
   mostrarLogin('Sessao encerrada.');
   history.replaceState({ tela: 'login' }, '', window.location.pathname + window.location.search);
@@ -9019,6 +9087,7 @@ botaoVoltarHomeFila.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeContato.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeContagemEstoque.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeRelatorios?.addEventListener('click', voltarParaHomeViaHistorico);
+botaoVoltarHomeVendasGerais?.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarCopiasEstoque.addEventListener('click', () => {
   mostrarSelecaoContagemEstoque();
   carregarListaContagensEstoque();
@@ -9690,6 +9759,18 @@ window.addEventListener('popstate', (event) => {
     mostrarHomeESuspenderRefresh();
     mostrarAtualizacaoContato();
     carregarPerfisContato();
+    return;
+  }
+
+  if (state?.tela === 'vendas-gerais' || window.location.hash === '#vendas-gerais') {
+    if (!window.vendasDashboardController?.permitido) {
+      mostrarHomeESuspenderRefresh();
+      history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);
+      return;
+    }
+    mostrarHomeESuspenderRefresh();
+    mostrarVendasGerais();
+    window.vendasDashboardController.preparar().catch((error) => console.error('Erro ao restaurar vendas gerais:', error));
     return;
   }
 

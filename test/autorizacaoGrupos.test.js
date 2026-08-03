@@ -45,3 +45,44 @@ test('middleware bloqueia quem nao pertence ao grupo', async () => {
   assert.equal(chamouNext, false);
   assert.equal(resposta.statusCode, 403);
 });
+
+test('permite acesso quando o usuario pertence a qualquer grupo autorizado', async () => {
+  const autorizacao = criarAutorizacaoGrupos({ executeQuery: async () => [{ NOMEGRUPO: 'Gerente' }] });
+  const resposta = {
+    statusCode: null,
+    payload: null,
+    status(codigo) { this.statusCode = codigo; return this; },
+    json(payload) { this.payload = payload; return this; }
+  };
+  let chamouNext = false;
+
+  await autorizacao.exigirAlgumGrupo(['Gerente', 'Diretoria'])(
+    { usuario: { codUsu: 18 } },
+    resposta,
+    () => { chamouNext = true; }
+  );
+
+  assert.equal(chamouNext, true);
+  assert.equal(resposta.statusCode, null);
+});
+
+test('bloqueia usuario fora dos grupos autorizados', async () => {
+  const autorizacao = criarAutorizacaoGrupos({ executeQuery: async () => [{ NOMEGRUPO: 'Operadores' }] });
+  const resposta = {
+    statusCode: null,
+    payload: null,
+    status(codigo) { this.statusCode = codigo; return this; },
+    json(payload) { this.payload = payload; return this; }
+  };
+  let chamouNext = false;
+
+  await autorizacao.exigirAlgumGrupo(['Gerente', 'Diretoria'])(
+    { usuario: { codUsu: 72 } },
+    resposta,
+    () => { chamouNext = true; }
+  );
+
+  assert.equal(chamouNext, false);
+  assert.equal(resposta.statusCode, 403);
+  assert.match(resposta.payload.erro, /Gerente ou Diretoria/);
+});
