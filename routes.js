@@ -47,6 +47,14 @@ const {
   montarPayloadNotaAjuste,
   planejarAjustesEstoque
 } = require('./api/estoqueAjuste');
+const { criarAutorizacaoGrupos } = require('./api/autorizacaoGrupos');
+const {
+  dividirPeriodoMensal,
+  gerarPlanilhaCtes,
+  montarSqlRelatorioCtes,
+  nomeArquivoRelatorio,
+  validarPeriodo
+} = require('./api/relatorioCtes');
 const bitrixService = require('./api/bitrixService');
 
 const conferenciaTimerStore = criarConferenciaTimerStore();
@@ -67,6 +75,8 @@ const separacaoStore = criarSeparacaoStore({
 const estoqueContagemStore = criarEstoqueContagemStore({
   namespace: process.env.SANKHYA_API_BASE_URL || 'padrao'
 });
+const autorizacaoGrupos = criarAutorizacaoGrupos({ executeQuery, cacheTtlMs: 0 });
+const exigirDiretoria = autorizacaoGrupos.exigirGrupo('Diretoria');
 const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Cuiaba';
 const SANKHYA_TIMEZONE = process.env.SANKHYA_TIMEZONE || 'America/Sao_Paulo';
 const TOPS_CONFERENCIA = Object.freeze({
@@ -2294,6 +2304,52 @@ router.get('/fila-conferencia/conferentes', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ erro: 'Erro ao buscar conferentes' });
+  }
+});
+
+router.get('/relatorios/disponiveis', exigirDiretoria, (req, res) => {
+  res.json({
+    itens: [{
+      id: 'ctes-importados-periodo',
+      nome: 'CT-es Importados por Período',
+      descricao: 'Uma linha para cada NF-e referenciada nos CT-es importados do período.'
+    }]
+  });
+});
+
+router.post('/relatorios/ctes-importados-periodo', exigirDiretoria, async (req, res) => {
+  try {
+    const periodo = validarPeriodo(req.body?.dataInicial, req.body?.dataFinal);
+    const inicioConsulta = process.hrtime.bigint();
+    const blocos = dividirPeriodoMensal(periodo.dataInicial, periodo.dataFinal);
+    const rows = [];
+    for (const bloco of blocos) {
+      const linhasBloco = await executeQuery(montarSqlRelatorioCtes(bloco.dataInicial, bloco.dataFinal));
+      rows.push(...linhasBloco);
+    }
+    const consultaMs = Number(process.hrtime.bigint() - inicioConsulta) / 1e6;
+
+    const inicioExcel = process.hrtime.bigint();
+    const arquivo = gerarPlanilhaCtes(rows);
+    const excelMs = Number(process.hrtime.bigint() - inicioExcel) / 1e6;
+    const nomeArquivo = nomeArquivoRelatorio();
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(nomeArquivo)}`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('X-Report-Rows', String(rows.length));
+    res.setHeader('X-Report-Query-Ms', consultaMs.toFixed(1));
+    res.setHeader('X-Report-Excel-Ms', excelMs.toFixed(1));
+    res.setHeader('X-Report-Queries', String(blocos.length));
+    res.send(arquivo);
+  } catch (err) {
+    const status = err.statusCode || 500;
+    if (status >= 500) console.error('Erro ao gerar relatório de CT-es importados:', err);
+    res.status(status).json({
+      erro: status >= 500
+        ? 'Nao foi possivel gerar o relatorio de CT-es importados.'
+        : err.message
+    });
   }
 });
 
@@ -5785,7 +5841,9 @@ router._internals = {
   extrairChaveDocumento,
   gerarDocumentoFiscalSankhya,
   obterDanfeArmazenado,
-  obterSituacaoDocumentosPedido
+  obterSituacaoDocumentosPedido,
+  montarSqlRelatorioCtes,
+  validarPeriodo
 };
 
 module.exports = router;

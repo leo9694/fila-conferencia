@@ -10321,6 +10321,9 @@
           <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-atualizacao-contato" title="Atualização de contato">
             <i data-lucide="contact-round" aria-hidden="true"></i><span>Atualização de contato</span>
           </button>
+          <button class="home-dashboard-nav-item" id="home-nav-relatorios" type="button" data-home-target="abrir-relatorios" title="Relatórios" hidden>
+            <i data-lucide="file-spreadsheet" aria-hidden="true"></i><span>Relatórios</span>
+          </button>
         </nav>
 
         <div class="home-dashboard-sidebar-footer">
@@ -11527,6 +11530,51 @@
         </div>
       </section>
     </div>
+  </section>
+
+  <section class="screen relatorios-screen" id="relatorios-screen">
+    <main class="relatorios-page">
+      <header class="relatorios-heading">
+        <div>
+          <div class="home-kicker">Diretoria</div>
+          <h1>Relatórios</h1>
+          <p>Selecione um relatório, informe o período e gere o arquivo em Excel.</p>
+        </div>
+        <button class="btn-back relatorios-voltar" id="voltar-home-relatorios" type="button">
+          <i data-lucide="arrow-left" aria-hidden="true"></i><span>Voltar</span>
+        </button>
+      </header>
+
+      <section class="relatorios-lista" aria-label="Relatórios disponíveis">
+        <article class="relatorio-card">
+          <div class="relatorio-card-icon" aria-hidden="true"><i data-lucide="file-spreadsheet"></i></div>
+          <div class="relatorio-card-conteudo">
+            <div class="relatorio-card-titulo">
+              <div>
+                <span class="relatorio-card-tipo">Excel</span>
+                <h2>CT-es Importados por Período</h2>
+              </div>
+              <span class="relatorio-card-acesso"><i data-lucide="shield-check" aria-hidden="true"></i>Diretoria</span>
+            </div>
+            <p>Lista uma linha para cada NF-e referenciada nos CT-es importados, considerando a data de emissão.</p>
+            <form class="relatorio-form" id="relatorio-ctes-form">
+              <label for="relatorio-ctes-data-inicial">
+                <span>Data Inicial</span>
+                <input id="relatorio-ctes-data-inicial" name="dataInicial" type="date" required>
+              </label>
+              <label for="relatorio-ctes-data-final">
+                <span>Data Final</span>
+                <input id="relatorio-ctes-data-final" name="dataFinal" type="date" required>
+              </label>
+              <button class="relatorio-gerar" id="relatorio-ctes-gerar" type="submit">
+                <i data-lucide="download" aria-hidden="true"></i><span>Gerar Excel</span>
+              </button>
+            </form>
+            <div class="relatorio-status" id="relatorio-ctes-status" role="status" aria-live="polite"></div>
+          </div>
+        </article>
+      </section>
+    </main>
   </section>
 
   <section class="screen acompanhamento-screen" id="acompanhamento-screen" aria-hidden="true"></section>

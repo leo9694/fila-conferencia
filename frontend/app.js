@@ -18,6 +18,8 @@ let confirmacaoAppResolver = null;
 let confirmacaoAppFocoAnterior = null;
 let homeResumoCarregadoEm = 0;
 let homeResumoEmAndamento = null;
+let relatoriosDisponiveis = [];
+let relatoriosPermitidos = false;
 
 const loginScreen = document.getElementById('login-screen');
 const loginForm = document.getElementById('login-form');
@@ -34,6 +36,7 @@ const filaScreen = document.getElementById('fila-screen');
 const consultaProdutosScreen = document.getElementById('consulta-produtos-screen');
 const atualizacaoContatoScreen = document.getElementById('atualizacao-contato-screen');
 const estoqueContagemScreen = document.getElementById('estoque-contagem-screen');
+const relatoriosScreen = document.getElementById('relatorios-screen');
 const filaContexto = document.getElementById('fila-contexto');
 const inputDataInicial = document.getElementById('data-inicial');
 const inputDataFinal = document.getElementById('data-final');
@@ -51,6 +54,13 @@ const botaoVoltarHomeAcompanhamento = document.getElementById('voltar-home-acomp
 const botaoVoltarHomeFila = document.getElementById('voltar-home-fila');
 const botaoVoltarHomeContato = document.getElementById('voltar-home-contato');
 const botaoVoltarHomeContagemEstoque = document.getElementById('voltar-home-contagem-estoque');
+const botaoVoltarHomeRelatorios = document.getElementById('voltar-home-relatorios');
+const botaoMenuRelatorios = document.getElementById('home-nav-relatorios');
+const relatorioCtesForm = document.getElementById('relatorio-ctes-form');
+const relatorioCtesDataInicial = document.getElementById('relatorio-ctes-data-inicial');
+const relatorioCtesDataFinal = document.getElementById('relatorio-ctes-data-final');
+const relatorioCtesGerar = document.getElementById('relatorio-ctes-gerar');
+const relatorioCtesStatus = document.getElementById('relatorio-ctes-status');
 const estoqueContagemAmbiente = document.getElementById('estoque-contagem-ambiente');
 const estoqueContagemAmbienteTexto = document.getElementById('estoque-contagem-ambiente-texto');
 const estoqueContagemEmpresa = document.getElementById('estoque-contagem-empresa');
@@ -791,7 +801,8 @@ function atualizarItemAtivoNavegacaoGlobal(tela) {
       || (tela === 'acompanhamento' && alvo === 'abrir-acompanhamento')
       || (tela === 'consulta' && alvo === 'abrir-consulta-home')
       || (tela === 'contato' && alvo === 'abrir-atualizacao-contato')
-      || (tela === 'contagem' && alvo === 'abrir-contagem-estoque');
+      || (tela === 'contagem' && alvo === 'abrir-contagem-estoque')
+      || (tela === 'relatorios' && alvo === 'abrir-relatorios');
     item.classList.toggle('is-active', ativo);
     if (ativo) item.setAttribute('aria-current', 'page');
     else item.removeAttribute('aria-current');
@@ -817,6 +828,10 @@ function abrirVisaoGeralPeloMenu() {
 
 function executarDestinoHome(id) {
   fecharSidebarHome();
+  if (id === 'abrir-relatorios') {
+    abrirRelatorios();
+    return;
+  }
   document.getElementById(id)?.click();
 }
 
@@ -1037,6 +1052,7 @@ function mostrarLogin(mensagem = '') {
   consultaProdutosScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
+  relatoriosScreen.classList.remove('active');
   loginStatus.textContent = mensagem;
   atualizarUsuarioLogadoNaTela();
 
@@ -1569,6 +1585,7 @@ function mostrarHome() {
   consultaProdutosScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
+  relatoriosScreen.classList.remove('active');
   homeScreen.classList.add('active');
   mostrarNavegacaoGlobal('home');
   fecharSidebarHome();
@@ -1589,6 +1606,7 @@ function mostrarConferencia() {
   consultaProdutosScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
+  relatoriosScreen.classList.remove('active');
   conferenciaScreen.classList.add('active');
   mostrarNavegacaoGlobal('acompanhamento');
 }
@@ -1606,6 +1624,7 @@ function mostrarAcompanhamento() {
   consultaProdutosScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
+  relatoriosScreen.classList.remove('active');
   acompanhamentoScreen.classList.add('active');
   mostrarNavegacaoGlobal('acompanhamento');
 }
@@ -1623,6 +1642,7 @@ function mostrarFila() {
   consultaProdutosScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
+  relatoriosScreen.classList.remove('active');
   filaScreen.classList.add('active');
   mostrarNavegacaoGlobal('fila');
 }
@@ -1640,6 +1660,7 @@ function mostrarConsultaProdutos() {
   filaScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
+  relatoriosScreen.classList.remove('active');
   consultaProdutosScreen.classList.add('active');
   mostrarNavegacaoGlobal('consulta');
   consultaProdutoCodigo.focus();
@@ -1658,6 +1679,7 @@ function mostrarAtualizacaoContato() {
   filaScreen.classList.remove('active');
   consultaProdutosScreen.classList.remove('active');
   estoqueContagemScreen.classList.remove('active');
+  relatoriosScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.add('active');
   mostrarNavegacaoGlobal('contato');
   contatoPerfil.focus();
@@ -1676,8 +1698,136 @@ function mostrarContagemEstoque() {
   filaScreen.classList.remove('active');
   consultaProdutosScreen.classList.remove('active');
   atualizacaoContatoScreen.classList.remove('active');
+  relatoriosScreen.classList.remove('active');
   estoqueContagemScreen.classList.add('active');
   mostrarNavegacaoGlobal('contagem');
+}
+
+function mostrarRelatorios() {
+  if (!usuarioLogado || !relatoriosPermitidos) {
+    mostrarHome();
+    return;
+  }
+
+  loginScreen.classList.remove('active');
+  homeScreen.classList.remove('active');
+  conferenciaScreen.classList.remove('active');
+  acompanhamentoScreen.classList.remove('active');
+  filaScreen.classList.remove('active');
+  consultaProdutosScreen.classList.remove('active');
+  atualizacaoContatoScreen.classList.remove('active');
+  estoqueContagemScreen.classList.remove('active');
+  relatoriosScreen.classList.add('active');
+  mostrarNavegacaoGlobal('relatorios');
+}
+
+function definirStatusRelatorio(mensagem = '', tipo = '') {
+  if (!relatorioCtesStatus) return;
+  relatorioCtesStatus.textContent = mensagem;
+  relatorioCtesStatus.classList.toggle('is-error', tipo === 'erro');
+  relatorioCtesStatus.classList.toggle('is-success', tipo === 'sucesso');
+}
+
+async function verificarAcessoRelatorios() {
+  relatoriosPermitidos = false;
+  relatoriosDisponiveis = [];
+  if (botaoMenuRelatorios) botaoMenuRelatorios.hidden = true;
+
+  try {
+    const resposta = await fetch('/api/relatorios/disponiveis', { cache: 'no-store' });
+    if (resposta.status === 401 || resposta.status === 403) return false;
+    if (!resposta.ok) throw new Error('Falha ao verificar acesso aos relatórios.');
+
+    const payload = await resposta.json();
+    relatoriosDisponiveis = Array.isArray(payload.itens) ? payload.itens : [];
+    relatoriosPermitidos = relatoriosDisponiveis.some((item) => item.id === 'ctes-importados-periodo');
+    if (botaoMenuRelatorios) botaoMenuRelatorios.hidden = !relatoriosPermitidos;
+    return relatoriosPermitidos;
+  } catch (error) {
+    console.error('Erro ao verificar acesso aos relatórios:', error);
+    return false;
+  }
+}
+
+async function abrirRelatorios() {
+  if (!relatoriosPermitidos && !await verificarAcessoRelatorios()) {
+    fecharSidebarHome();
+    return;
+  }
+
+  const hoje = obterDataHoje();
+  if (!relatorioCtesDataFinal.value) relatorioCtesDataFinal.value = hoje;
+  if (!relatorioCtesDataInicial.value) relatorioCtesDataInicial.value = `${hoje.slice(0, 8)}01`;
+  definirStatusRelatorio();
+  mostrarHomeESuspenderRefresh();
+  mostrarRelatorios();
+  history.pushState({ tela: 'relatorios' }, '', '#relatorios');
+}
+
+function obterNomeArquivoDownload(disposicao) {
+  const utf8 = String(disposicao || '').match(/filename\*=UTF-8''([^;]+)/i);
+  if (utf8) {
+    try {
+      return decodeURIComponent(utf8[1].replace(/^"|"$/g, ''));
+    } catch (_) {
+      return utf8[1];
+    }
+  }
+  const simples = String(disposicao || '').match(/filename="?([^";]+)"?/i);
+  return simples?.[1] || 'CT-es Importados por Periodo.xlsx';
+}
+
+async function gerarRelatorioCtes(event) {
+  event.preventDefault();
+  definirStatusRelatorio();
+  relatorioCtesGerar.disabled = true;
+  relatorioCtesGerar.innerHTML = '<span class="relatorio-loading" aria-hidden="true"></span><span>Gerando...</span>';
+
+  try {
+    const resposta = await fetch('/api/relatorios/ctes-importados-periodo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        dataInicial: relatorioCtesDataInicial.value,
+        dataFinal: relatorioCtesDataFinal.value
+      })
+    });
+
+    if (!resposta.ok) {
+      const tipo = resposta.headers.get('content-type') || '';
+      const payload = tipo.includes('application/json') ? await resposta.json() : null;
+      if (resposta.status === 401) mostrarLogin('Sessão encerrada. Entre novamente.');
+      if (resposta.status === 403) {
+        relatoriosPermitidos = false;
+        if (botaoMenuRelatorios) botaoMenuRelatorios.hidden = true;
+      }
+      throw new Error(payload?.erro || 'Não foi possível gerar o relatório.');
+    }
+
+    const arquivo = await resposta.blob();
+    const url = URL.createObjectURL(arquivo);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = obterNomeArquivoDownload(resposta.headers.get('content-disposition'));
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+
+    const linhas = Number(resposta.headers.get('x-report-rows') || 0);
+    const consultaMs = Number(resposta.headers.get('x-report-query-ms') || 0);
+    const excelMs = Number(resposta.headers.get('x-report-excel-ms') || 0);
+    definirStatusRelatorio(
+      `${linhas.toLocaleString('pt-BR')} linha(s) gerada(s). Consulta: ${(consultaMs / 1000).toFixed(2)} s · Excel: ${(excelMs / 1000).toFixed(2)} s.`,
+      'sucesso'
+    );
+  } catch (error) {
+    definirStatusRelatorio(error.message, 'erro');
+  } finally {
+    relatorioCtesGerar.disabled = false;
+    relatorioCtesGerar.innerHTML = '<i data-lucide="download" aria-hidden="true"></i><span>Gerar Excel</span>';
+    atualizarIcones();
+  }
 }
 
 function mostrarSelecaoContagemEstoque() {
@@ -8637,7 +8787,8 @@ async function prepararSessaoAutenticada(usuario) {
   prepararTelaInicial();
   await Promise.all([
     carregarEmpresas(),
-    verificarDisponibilidadeContagemEstoque()
+    verificarDisponibilidadeContagemEstoque(),
+    verificarAcessoRelatorios()
   ]);
 
   if (window.location.hash === '#fila-conferencia') {
@@ -8665,6 +8816,17 @@ async function prepararSessaoAutenticada(usuario) {
     mostrarAtualizacaoContato();
     carregarPerfisContato();
     history.replaceState({ tela: 'atualizacao-contato' }, '', '#atualizacao-contato');
+    return;
+  }
+
+  if (window.location.hash === '#relatorios') {
+    if (!relatoriosPermitidos) {
+      mostrarHome();
+      history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);
+      return;
+    }
+    mostrarRelatorios();
+    history.replaceState({ tela: 'relatorios' }, '', '#relatorios');
     return;
   }
 
@@ -8763,6 +8925,7 @@ botaoAbrirAcompanhamento.addEventListener('click', abrirAcompanhamento);
 botaoAbrirConsultaHome.addEventListener('click', abrirConsultaProdutosMesmaTela);
 botaoAbrirAtualizacaoContato.addEventListener('click', abrirAtualizacaoContato);
 botaoAbrirContagemEstoque.addEventListener('click', abrirContagemEstoque);
+relatorioCtesForm?.addEventListener('submit', gerarRelatorioCtes);
 document.querySelectorAll('[data-home-target]').forEach((elemento) => {
   elemento.addEventListener('click', () => executarDestinoHome(elemento.dataset.homeTarget));
 });
@@ -8855,6 +9018,7 @@ botaoVoltarHomeAcompanhamento?.addEventListener('click', voltarParaHomeViaHistor
 botaoVoltarHomeFila.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeContato.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeContagemEstoque.addEventListener('click', voltarParaHomeViaHistorico);
+botaoVoltarHomeRelatorios?.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarCopiasEstoque.addEventListener('click', () => {
   mostrarSelecaoContagemEstoque();
   carregarListaContagensEstoque();
@@ -9526,6 +9690,17 @@ window.addEventListener('popstate', (event) => {
     mostrarHomeESuspenderRefresh();
     mostrarAtualizacaoContato();
     carregarPerfisContato();
+    return;
+  }
+
+  if (state?.tela === 'relatorios' || window.location.hash === '#relatorios') {
+    if (!relatoriosPermitidos) {
+      mostrarHomeESuspenderRefresh();
+      history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);
+      return;
+    }
+    mostrarHomeESuspenderRefresh();
+    mostrarRelatorios();
     return;
   }
 
