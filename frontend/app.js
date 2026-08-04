@@ -20,6 +20,7 @@ let homeResumoCarregadoEm = 0;
 let homeResumoEmAndamento = null;
 let relatoriosDisponiveis = [];
 let relatoriosPermitidos = false;
+let confirmacaoProdutoExtraEntradaEmAndamento = false;
 
 const loginScreen = document.getElementById('login-screen');
 const loginForm = document.getElementById('login-form');
@@ -3296,6 +3297,7 @@ function fecharOpcoesControleEntrada() {
 }
 
 function itemEstaOk(item) {
+  if (item?.extra === true) return normalizarQuantidade(item.qtdConferida) > 0;
   return quantidadeEfetivaItem(item) === item.qtdNeg;
 }
 
@@ -3351,7 +3353,8 @@ function atualizarControlesConferencia() {
 }
 
 function ehMobileConferencia() {
-  return window.matchMedia('(max-width: 900px)').matches && filaScreen.classList.contains('conferencia-mode');
+  return window.matchMedia('(max-width: 900px), (pointer: coarse) and (max-width: 1280px)').matches
+    && filaScreen.classList.contains('conferencia-mode');
 }
 
 function alternarSidebarMobileConferencia(aberto) {
@@ -5224,6 +5227,16 @@ function salvarProgressoConferencia(options = {}) {
     nuconf: pedidoSelecionado.nuconf || pedidoSelecionado.NUCONFATUAL || null,
     itens: itensPedidoSelecionado.map((item) => ({
       sequencia: item.sequencia,
+      extra: item.extra === true,
+      codProd: item.codProd,
+      descrProd: item.descrProd,
+      codGrupoProd: item.codGrupoProd,
+      descrGrupoProd: item.descrGrupoProd,
+      codVol: item.codVol,
+      codVolPadrao: item.codVolPadrao,
+      codigoBarras: item.codigoBarras,
+      codigos: item.codigos,
+      codigosConferencia: item.codigosConferencia,
       qtdConferida: normalizarQuantidade(item.qtdConferida),
       qtdCortada: quantidadeCortadaItem(item),
       leituras: Array.isArray(item.leituras) ? item.leituras.map((leitura) => ({
@@ -5275,6 +5288,20 @@ function aplicarProgressoRemotoCaixa(progresso, resumoCaixas = null) {
 
   const itensPorSequencia = new Map((progresso.itens || []).map((item) => [Number(item.sequencia), item]));
   let alterou = false;
+  (progresso.itens || []).filter((item) => item.extra === true).forEach((remoto) => {
+    if (itensPedidoSelecionado.some((item) => Number(item.sequencia) === Number(remoto.sequencia))) return;
+    itensPedidoSelecionado.push({
+      ...remoto,
+      extra: true,
+      controle: '',
+      qtdNeg: 0,
+      vlrUnit: 0,
+      qtdConferida: normalizarQuantidade(remoto.qtdConferida),
+      qtdCortada: 0,
+      leituras: Array.isArray(remoto.leituras) ? remoto.leituras : []
+    });
+    alterou = true;
+  });
   itensPedidoSelecionado.forEach((item) => {
     const remoto = itensPorSequencia.get(Number(item.sequencia));
     if (!remoto) return;
@@ -5745,6 +5772,46 @@ function criarCabecalhoItens() {
 
 function renderizarItensPlanilha(container, itens, modo = 'preview') {
   container.innerHTML = '';
+
+  const previewEmTelaMovel = window.matchMedia(
+    '(max-width: 900px), (pointer: coarse) and (max-width: 1280px)'
+  ).matches;
+  if (modo === 'preview' && previewEmTelaMovel) {
+    container.classList.add('pedido-preview-items-mobile');
+
+    if (itens.length === 0) {
+      renderizarEstadoVazio(container, 'Nenhum item encontrado para este pedido.');
+      return;
+    }
+
+    ordenarItens(itens).forEach((item) => {
+      const card = document.createElement('article');
+      card.className = 'pedido-preview-item-card';
+      const unidade = obterUnidadeExibicaoItem(item);
+      const controle = String(item.controle || '').trim() || '-';
+      const codigoBarras = String(item.codigoBarras || '').trim() || '-';
+      const quantidade = `${formatarQuantidade(item.qtdNeg)} ${unidade}`;
+      card.innerHTML = `
+        <div class="pedido-preview-item-main">
+          <strong>${escaparHtml(String(item.codProd || '-'))}</strong>
+          <span>${escaparHtml(item.descrProd || 'Produto sem descrição')}</span>
+        </div>
+        <dl class="pedido-preview-item-details">
+          <div><dt>Quantidade</dt><dd>${escaparHtml(quantidade)}</dd></div>
+          <div><dt>Controle/lote</dt><dd>${escaparHtml(controle)}</dd></div>
+          ${filaModoConferencia === 'entrada' ? `
+            <div><dt>Fabricação</dt><dd>${escaparHtml(formatarData(item.dtFabricacao || ''))}</dd></div>
+            <div><dt>Validade</dt><dd>${escaparHtml(formatarData(item.dtValidade || ''))}</dd></div>
+          ` : ''}
+          <div class="pedido-preview-item-barcode"><dt>Cód. barras</dt><dd>${escaparHtml(codigoBarras)}</dd></div>
+        </dl>
+      `;
+      container.appendChild(card);
+    });
+    return;
+  }
+
+  container.classList.remove('pedido-preview-items-mobile');
   container.appendChild(criarCabecalhoItens());
 
   if (itens.length === 0) {
@@ -5855,7 +5922,9 @@ function renderizarItensConferencia() {
             itemLinha,
             quantidade,
             itemTemExcesso(item) ? 'excesso' : (quantidadeCortada > 0 ? 'cortado' : 'ok'),
-            `${formatarQuantidade(quantidade)} / ${formatarQuantidade(item.qtdNeg)}${quantidadeCortada > 0 ? ` | corte ${formatarQuantidade(quantidadeCortada)}` : ''}`,
+            item.extra === true
+              ? `${formatarQuantidade(quantidade)} extra`
+              : `${formatarQuantidade(quantidade)} / ${formatarQuantidade(item.qtdNeg)}${quantidadeCortada > 0 ? ` | corte ${formatarQuantidade(quantidadeCortada)}` : ''}`,
             { desfazer: true }
           ));
         });
@@ -5899,6 +5968,16 @@ function desfazerConferenciaItem(sequencia) {
   }
 
   const quantidadeAnterior = item.qtdConferida;
+  if (item.extra === true) {
+    itensPedidoSelecionado = itensPedidoSelecionado.filter(
+      (candidate) => Number(candidate.sequencia) !== Number(sequencia)
+    );
+    scanStatus.innerHTML = `<span class="success-text">Produto extra ${item.codProd} removido da conferÃªncia.</span>`;
+    renderizarItensConferencia();
+    salvarProgressoConferencia();
+    scanCodigo.focus();
+    return;
+  }
   item.qtdConferida = 0;
   item.leituras = [];
   const corteAnterior = quantidadeCortadaItem(item);
@@ -6959,17 +7038,23 @@ function renderizarPedidosFila() {
     const conferido = estadoOperacional === 'conferido';
     const separacaoFinalizada = !entrada && estadoOperacional === 'separado';
     const separacaoIniciada = !entrada && estadoOperacional === 'em-separacao';
+    const transferenciaFiliais = entrada
+      && (pedido.TRANSFERENCIA_FILIAIS === true || Number(pedido.CODTIPOPER) === 90);
     const bonificacao = Number(pedido.CODTIPOPER) === (entrada ? 21 : 6);
-    const iconeTipoPedido = bonificacao
+    const iconeTipoPedido = transferenciaFiliais
+      ? '<span class="pedido-status-type-icon transferencia" aria-label="Transferencia entre filiais" title="Transferencia entre filiais - TOP 90"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h11"/><path d="m15 3 4 4-4 4"/><path d="M17 17H6"/><path d="m9 13-4 4 4 4"/></svg></span>'
+      : bonificacao
       ? '<span class="pedido-status-type-icon bonificacao"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M12 8v13M3 12h18M7.5 8C5 8 4 6.7 4 5.5S5 3 6.5 3C9 3 12 8 12 8M16.5 8C19 8 20 6.7 20 5.5S19 3 17.5 3C15 3 12 8 12 8"/></svg></span>'
       : entrada
         ? '<span class="pedido-status-type-icon entrada"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 19h14"/></svg></span>'
         : '<span class="pedido-status-type-icon venda"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 8h12l1 13H5L6 8Z"/><path d="M9 10V6a3 3 0 0 1 6 0v4"/></svg></span>';
-    const tituloTipoPedido = bonificacao
+    const tituloTipoPedido = transferenciaFiliais
+      ? 'Transferencia entre filiais - TOP 90'
+      : bonificacao
       ? (entrada ? 'Bonificação de entrada' : 'Pedido de bonificação')
       : (entrada ? 'Compra de produtos' : 'Pedido de venda');
     const numeroNotaFiscal = Number(pedido.NUMNOTA || 0) > 0 ? String(pedido.NUMNOTA) : '-';
-    card.className = `pedido-operacao-card ${estadoOperacional} ${pedidoSelecionado?.NUNOTA === pedido.NUNOTA ? 'active' : ''}`;
+    card.className = `pedido-operacao-card ${estadoOperacional} ${transferenciaFiliais ? 'transferencia-entre-filiais' : ''} ${pedidoSelecionado?.NUNOTA === pedido.NUNOTA ? 'active' : ''}`;
     card.innerHTML = `
       <div class="pedido-list-action">
         ${pedido.PEDIDO_IMPRESSO
@@ -7003,12 +7088,12 @@ function renderizarPedidosFila() {
             : '<button class="pedido-fase-indicator pedido-fase-button is-disabled" type="button" aria-label="Guia FASE aguardando faturamento" title="Guia FASE aguardando faturamento"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v5h5"/><path d="M9 13h6M9 17h4"/><path d="M9 9h2"/></svg></button>'
           : ''}
       </div>
-      ${entrada ? `<div class="pedido-num-nota">${escaparHtml(numeroNotaFiscal)}</div>` : ''}
-      <strong>${entrada ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}</strong>
-      <div class="pedido-meta">${formatarData(pedido.DTNEG)}</div>
+      ${entrada ? `<div class="pedido-num-nota">NF ${escaparHtml(numeroNotaFiscal)}</div>` : ''}
+      <strong class="pedido-numero">${entrada ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}</strong>
+      <div class="pedido-meta pedido-data">${formatarData(pedido.DTNEG)}</div>
       <div class="pedido-cliente" title="${escaparAtributo(`${pedido.CODIGO_PARCEIRO || '-'} - ${pedido.EMPRESA || '-'}`)}">${escaparHtml(`${pedido.CODIGO_PARCEIRO || '-'} - ${pedido.EMPRESA || '-'}`)}</div>
-      <div class="pedido-meta">${formatarMoeda(pedido.VLRNOTA)}</div>
-      <div class="pedido-meta">${pedido.QTD_ITENS} | ${formatarQuantidade(pedido.QTD_TOTAL)} un.</div>
+      <div class="pedido-meta pedido-valor">${formatarMoeda(pedido.VLRNOTA)}</div>
+      <div class="pedido-meta pedido-itens">${pedido.QTD_ITENS} | ${formatarQuantidade(pedido.QTD_TOTAL)} un.</div>
     `;
     const botaoEtiqueta = card.querySelector('.pedido-label-button');
     if (botaoEtiqueta) {
@@ -8140,7 +8225,23 @@ async function selecionarPedidoConferencia(pedido) {
   }
 }
 
-function adicionarConferenciaPorCodigo() {
+async function buscarProdutoExtraEntrada(codigo) {
+  const resposta = await fetch(`/api/fila-conferencia/entrada/produto-extra?codigo=${encodeURIComponent(codigo)}`, {
+    cache: 'no-store'
+  });
+  const payload = await resposta.json().catch(() => ({}));
+  if (!resposta.ok) throw new Error(payload.erro || 'Produto nÃ£o encontrado no Sankhya.');
+  return {
+    ...payload.item,
+    extra: true,
+    qtdNeg: 0,
+    qtdConferida: 0,
+    qtdCortada: 0,
+    leituras: []
+  };
+}
+
+async function adicionarConferenciaPorCodigo() {
   const codigo = normalizarCodigo(scanCodigo.value);
   const controleInformado = filaModoConferencia === 'entrada' ? scanControle.value.trim() : '';
   const dtValidadeInformada = filaModoConferencia === 'entrada' ? formatarDataInput(scanValidade?.value) : '';
@@ -8156,7 +8257,8 @@ function adicionarConferenciaPorCodigo() {
     return;
   }
 
-  const itensCompativeis = obterItensCompativeisCodigo(codigo);
+  let itensCompativeis = obterItensCompativeisCodigo(codigo);
+  let bloqueouConfirmacaoExtra = false;
   const controlesCompativeis = [...new Set(itensCompativeis
     .map((candidate) => String(candidate.item.controle || '').trim())
     .filter(Boolean))];
@@ -8176,15 +8278,55 @@ function adicionarConferenciaPorCodigo() {
       String(candidate.item.controle || '').trim().toUpperCase() === controleInformado.toUpperCase()
     )
     : null;
-  const match = matchControle
+  let match = matchControle
     || itensCompativeis.find((candidate) => quantidadePendenteItem(candidate.item) > 0)
     || itensCompativeis[0];
-  const item = match?.item;
+  let item = match?.item;
 
   if (!item) {
-    scanStatus.innerHTML = `<span class="danger-text">Codigo ${codigo} nao encontrado neste pedido.</span>`;
-    scanCodigo.select();
-    return;
+    if (filaModoConferencia !== 'entrada') {
+      scanStatus.innerHTML = `<span class="danger-text">Codigo ${codigo} nao encontrado neste pedido.</span>`;
+      scanCodigo.select();
+      return;
+    }
+
+    if (confirmacaoProdutoExtraEntradaEmAndamento) return;
+    confirmacaoProdutoExtraEntradaEmAndamento = true;
+    bloqueouConfirmacaoExtra = true;
+
+    botaoScanAdicionar.disabled = true;
+    scanStatus.textContent = 'Consultando produto no Sankhya...';
+    try {
+      const produtoConsultado = await buscarProdutoExtraEntrada(codigo);
+      const extraExistente = itensPedidoSelecionado.find((candidate) => (
+        candidate.extra === true && Number(candidate.codProd) === Number(produtoConsultado.codProd)
+      ));
+      if (extraExistente) {
+        extraExistente.codigosConferencia = Array.isArray(extraExistente.codigosConferencia)
+          ? extraExistente.codigosConferencia
+          : [];
+        const codigosExistentes = new Set(extraExistente.codigosConferencia
+          .map((entrada) => normalizarCodigo(entrada.codigo)));
+        (produtoConsultado.codigosConferencia || []).forEach((entrada) => {
+          if (!codigosExistentes.has(normalizarCodigo(entrada.codigo))) {
+            extraExistente.codigosConferencia.push(entrada);
+          }
+        });
+        extraExistente.codigos = extraExistente.codigosConferencia.map((entrada) => entrada.codigo);
+        item = extraExistente;
+      } else {
+        item = produtoConsultado;
+      }
+      itensCompativeis = [{ item, entrada: obterEntradaCodigoItem(item, codigo) }];
+      match = itensCompativeis[0];
+    } catch (error) {
+      confirmacaoProdutoExtraEntradaEmAndamento = false;
+      scanStatus.innerHTML = `<span class="danger-text">${escaparHtml(error.message)}</span>`;
+      scanCodigo.select();
+      return;
+    } finally {
+      botaoScanAdicionar.disabled = false;
+    }
   }
 
   const multiplicador = Math.max(0, Number(match.entrada.multiplicador) || 1);
@@ -8192,6 +8334,32 @@ function adicionarConferenciaPorCodigo() {
   const pendente = quantidadePendenteItem(item);
   const dtValidadeLeitura = dtValidadeInformada || formatarDataInput(item.dtValidade);
   const dtFabricacaoLeitura = dtFabricacaoInformada || formatarDataInput(item.dtFabricacao);
+
+  if (filaModoConferencia === 'entrada' && item.extra === true) {
+    if (!bloqueouConfirmacaoExtra) {
+      if (confirmacaoProdutoExtraEntradaEmAndamento) return;
+      confirmacaoProdutoExtraEntradaEmAndamento = true;
+    }
+    const loteTexto = controleInformado ? ` Lote/controle: ${controleInformado}.` : '';
+    let confirmado = false;
+    try {
+      confirmado = await confirmarAcaoApp({
+        titulo: 'Produto nÃ£o previsto na nota',
+        mensagem: `O produto ${item.codProd} - ${item.descrProd} nao pertence a nota de entrada. Confirmar ${formatarQuantidade(qtdConvertida)} ${item.codVolPadrao || item.codVol || 'UN'} como quantidade recebida extra?${loteTexto} Ao finalizar, o Sankhya vai gerar o documento complementar conforme a configuracao da TOP.`,
+        textoConfirmar: 'Adicionar produto extra'
+      });
+    } finally {
+      confirmacaoProdutoExtraEntradaEmAndamento = false;
+    }
+    if (!confirmado) {
+      scanStatus.textContent = 'InclusÃ£o do produto extra cancelada.';
+      scanCodigo.select();
+      return;
+    }
+    if (!itensPedidoSelecionado.some((candidate) => Number(candidate.sequencia) === Number(item.sequencia))) {
+      itensPedidoSelecionado.push(item);
+    }
+  }
 
   if (filaModoConferencia !== 'entrada' && qtdConvertida > pendente) {
     scanStatus.innerHTML = `<span class="danger-text">Quantidade maior que o pendente do item. Pendente: ${formatarQuantidade(pendente)}.</span>`;
@@ -8289,6 +8457,14 @@ function obterAlteracoesConferenciaEntrada() {
       const validadesDiferentes = validadesLidas.filter((valor) => valor !== validadeOriginal);
       const qtdCortada = quantidadeCortadaItem(item);
 
+      if (item.extra === true && item.qtdConferida > 0) {
+        detalhes.push({
+          campo: 'Produto nÃ£o previsto na nota',
+          de: 'Produto ausente na nota de entrada',
+          para: `${formatarQuantidade(item.qtdConferida)} ${obterUnidadeExibicaoItem(item)} recebido(s). O Sankhya vai gerar o documento complementar conforme a configuracao da TOP.`
+        });
+      }
+
       if (controlesLidos.length > 1) {
         const quantidadesPorLote = new Map();
         leituras.forEach((leitura) => {
@@ -8340,7 +8516,7 @@ function obterAlteracoesConferenciaEntrada() {
         });
       }
 
-      if (item.qtdConferida > item.qtdNeg) {
+      if (item.extra !== true && item.qtdConferida > item.qtdNeg) {
         const excedente = item.qtdConferida - item.qtdNeg;
         const loteExcesso = controlesDiferentes.length > 0
           ? controlesDiferentes.join(', ')
@@ -8507,6 +8683,15 @@ async function confirmarConferencia(volumes) {
         itens: itensPedidoSelecionado.map((item) => ({
           sequencia: item.sequencia,
           codProd: item.codProd,
+          extra: item.extra === true,
+          descrProd: item.descrProd,
+          codGrupoProd: item.codGrupoProd,
+          descrGrupoProd: item.descrGrupoProd,
+          codVol: item.codVol,
+          codVolPadrao: item.codVolPadrao,
+          codigoBarras: item.codigoBarras,
+          codigos: item.codigos,
+          codigosConferencia: item.codigosConferencia,
           qtdConferida: item.qtdConferida,
           qtdCortada: quantidadeCortadaItem(item),
           leituras: Array.isArray(item.leituras) ? item.leituras : []

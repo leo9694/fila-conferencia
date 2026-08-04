@@ -38,29 +38,53 @@ function criarConferenciaProgressStore(options = {}) {
   }
 
   function normalizarItens(itens) {
-    return (Array.isArray(itens) ? itens : []).map((item) => ({
-      sequencia: Number(item.sequencia),
-      qtdConferida: normalizarNumero(item.qtdConferida),
-      qtdCortada: normalizarNumero(item.qtdCortada),
-      leituras: Array.isArray(item.leituras) ? item.leituras.map((leitura) => {
-        const dtValidade = String(leitura.dtValidade ?? '').trim();
-        const dtFabricacao = String(leitura.dtFabricacao ?? '').trim();
-        const caixaId = normalizarNumero(leitura.caixaId);
-        return {
-          codigo: String(leitura.codigo || '').trim(),
-          tipo: String(leitura.tipo || 'CODIGO_BARRAS').trim(),
-          codVol: String(leitura.codVol || '').trim(),
-          controle: String(leitura.controle ?? '').trim(),
-          ...(dtValidade ? { dtValidade } : {}),
-          ...(dtFabricacao ? { dtFabricacao } : {}),
-          multiplicador: normalizarNumero(leitura.multiplicador) || 1,
-          quantidade: normalizarNumero(leitura.quantidade),
-          quantidadeConvertida: normalizarNumero(leitura.quantidadeConvertida),
-          ...(caixaId > 0 ? { caixaId } : {}),
-          ...(caixaId > 0 ? { caixaFechada: leitura.caixaFechada === true } : {})
-        };
-      }).filter((leitura) => leitura.codigo && leitura.quantidade > 0 && leitura.quantidadeConvertida > 0) : []
-    })).filter((item) => Number.isInteger(item.sequencia) && item.sequencia > 0);
+    return (Array.isArray(itens) ? itens : []).map((item) => {
+      const extra = item.extra === true;
+      return {
+        sequencia: Number(item.sequencia),
+        ...(extra ? {
+          extra: true,
+          codProd: Number(item.codProd),
+          descrProd: String(item.descrProd || '').trim(),
+          codGrupoProd: item.codGrupoProd ?? '',
+          descrGrupoProd: String(item.descrGrupoProd || 'Sem grupo').trim(),
+          codVol: String(item.codVol || 'UN').trim(),
+          codVolPadrao: String(item.codVolPadrao || item.codVol || 'UN').trim(),
+          codigoBarras: String(item.codigoBarras || '').trim(),
+          codigos: Array.isArray(item.codigos) ? item.codigos.map((codigo) => String(codigo || '').trim()).filter(Boolean) : [],
+          codigosConferencia: Array.isArray(item.codigosConferencia)
+            ? item.codigosConferencia.map((entrada) => ({
+                codigo: String(entrada?.codigo || '').trim(),
+                tipo: String(entrada?.tipo || 'CODIGO_BARRAS').trim(),
+                multiplicador: normalizarNumero(entrada?.multiplicador) || 1,
+                descricao: String(entrada?.descricao || '').trim(),
+                codVol: String(entrada?.codVol || item.codVol || 'UN').trim()
+              })).filter((entrada) => entrada.codigo)
+            : []
+        } : {}),
+        qtdConferida: normalizarNumero(item.qtdConferida),
+        qtdCortada: normalizarNumero(item.qtdCortada),
+        leituras: Array.isArray(item.leituras) ? item.leituras.map((leitura) => {
+          const dtValidade = String(leitura.dtValidade ?? '').trim();
+          const dtFabricacao = String(leitura.dtFabricacao ?? '').trim();
+          const caixaId = normalizarNumero(leitura.caixaId);
+          return {
+            codigo: String(leitura.codigo || '').trim(),
+            tipo: String(leitura.tipo || 'CODIGO_BARRAS').trim(),
+            codVol: String(leitura.codVol || '').trim(),
+            controle: String(leitura.controle ?? '').trim(),
+            ...(dtValidade ? { dtValidade } : {}),
+            ...(dtFabricacao ? { dtFabricacao } : {}),
+            multiplicador: normalizarNumero(leitura.multiplicador) || 1,
+            quantidade: normalizarNumero(leitura.quantidade),
+            quantidadeConvertida: normalizarNumero(leitura.quantidadeConvertida),
+            ...(caixaId > 0 ? { caixaId } : {}),
+            ...(caixaId > 0 ? { caixaFechada: leitura.caixaFechada === true } : {})
+          };
+        }).filter((leitura) => leitura.codigo && leitura.quantidade > 0 && leitura.quantidadeConvertida > 0) : []
+      };
+    }).filter((item) => Number.isInteger(item.sequencia)
+      && (item.sequencia > 0 || (item.extra === true && item.sequencia < 0 && item.codProd > 0)));
   }
 
   function caixasEncerradas(progresso) {

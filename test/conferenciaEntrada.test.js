@@ -397,6 +397,52 @@ test('permite quantidade maior para o Sankhya gerar pedido complementar', () => 
   assert.equal(detalhes[0].QTDCONFVOLPAD, 22);
 });
 
+test('inclui produto extra como detalhe nativo para gerar documento complementar', () => {
+  const detalhes = consolidarLeiturasEntrada([itemNota], [{
+    sequencia: 1,
+    qtdConferida: 20,
+    leituras: [{ codigo: '2442', codVol: 'UN', quantidade: 20, quantidadeConvertida: 20 }]
+  }, {
+    extra: true,
+    sequencia: -1789,
+    codProd: 1789,
+    codVol: 'UN',
+    codVolPadrao: 'UN',
+    codigoBarras: '1789',
+    qtdConferida: 16,
+    leituras: [{
+      codigo: '1789',
+      tipo: 'CODIGO_PRODUTO',
+      codVol: 'UN',
+      controle: 'LOTE-EXTRA',
+      quantidade: 16,
+      quantidadeConvertida: 16
+    }]
+  }]);
+
+  assert.deepEqual(detalhes[1], {
+    CODBARRA: '1789',
+    CODPROD: 1789,
+    CODVOL: 'UN',
+    CONTROLE: 'LOTE-EXTRA',
+    QTDCONF: 16,
+    QTDCONFVOLPAD: 16
+  });
+});
+
+test('produto extra nao altera nem desmembra linhas originais da nota', () => {
+  const extra = {
+    extra: true,
+    sequencia: -1789,
+    codProd: 1789,
+    qtdConferida: 16,
+    leituras: [{ controle: 'A' }, { controle: 'B' }]
+  };
+
+  assert.deepEqual(planejarControlesItensEntrada([itemNota], [extra]), []);
+  assert.deepEqual(planejarDesmembramentoLotesEntrada([itemNota], [extra]), []);
+});
+
 test('rejeita leitura cuja conversao nao corresponde ao total conferido', () => {
   assert.throws(() => consolidarLeiturasEntrada([itemNota], [{
     sequencia: 1,

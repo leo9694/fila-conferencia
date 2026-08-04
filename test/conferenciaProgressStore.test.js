@@ -45,6 +45,54 @@ test('preserva leituras com unidade alternativa e quantidade convertida', () => 
   fs.rmSync(diretorio, { recursive: true, force: true });
 });
 
+test('preserva produto extra e seus codigos ao restaurar a conferencia', () => {
+  const diretorio = fs.mkdtempSync(path.join(os.tmpdir(), 'conf-extra-progress-'));
+  const filePath = path.join(diretorio, 'state.json');
+  const store = criarConferenciaProgressStore({ filePath });
+
+  store.salvar({
+    nunota: 123,
+    nuconf: 456,
+    codUsu: 72,
+    itens: [{
+      extra: true,
+      sequencia: -1789,
+      codProd: 1789,
+      descrProd: 'PRODUTO RECEBIDO A MAIS',
+      codGrupoProd: 100,
+      descrGrupoProd: 'VASOS',
+      codVol: 'UN',
+      codVolPadrao: 'UN',
+      codigoBarras: '1789',
+      codigos: ['1789'],
+      codigosConferencia: [{
+        codigo: '1789',
+        tipo: 'CODIGO_PRODUTO',
+        multiplicador: 1,
+        codVol: 'UN'
+      }],
+      qtdConferida: 16,
+      leituras: [{
+        codigo: '1789',
+        tipo: 'CODIGO_PRODUTO',
+        codVol: 'UN',
+        quantidade: 16,
+        quantidadeConvertida: 16
+      }]
+    }]
+  });
+
+  const item = criarConferenciaProgressStore({ filePath }).obter(123).itens[0];
+  assert.equal(item.extra, true);
+  assert.equal(item.sequencia, -1789);
+  assert.equal(item.codProd, 1789);
+  assert.equal(item.descrProd, 'PRODUTO RECEBIDO A MAIS');
+  assert.equal(item.qtdConferida, 16);
+  assert.equal(item.codigosConferencia[0].codigo, '1789');
+
+  fs.rmSync(diretorio, { recursive: true, force: true });
+});
+
 test('preserva o agrupamento e o fechamento das caixas da entrada', () => {
   const diretorio = fs.mkdtempSync(path.join(os.tmpdir(), 'conf-box-progress-'));
   const filePath = path.join(diretorio, 'state.json');

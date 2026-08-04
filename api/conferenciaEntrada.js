@@ -109,8 +109,20 @@ function consolidarLeiturasEntrada(itensNota, itensInformados) {
   const toleranciaResiduoConversao = 0.0001;
 
   for (const informado of itensInformados) {
-    const item = porSequencia.get(Number(informado.sequencia));
+    const item = porSequencia.get(Number(informado.sequencia))
+      || (informado.extra === true ? {
+        SEQUENCIA: Number(informado.sequencia),
+        CODPROD: Number(informado.codProd),
+        CODVOL: String(informado.codVol || informado.codVolPadrao || 'UN'),
+        CODVOLPADRAO: String(informado.codVolPadrao || informado.codVol || 'UN'),
+        CONTROLE: ' ',
+        QTDNEG: 0,
+        CODBARRA: String(informado.codigoBarras || '').trim()
+      } : null);
     if (!item) throw new Error(`Item ${informado.sequencia} nao pertence a nota de entrada.`);
+    if (!Number.isInteger(Number(item.CODPROD)) || Number(item.CODPROD) <= 0) {
+      throw new Error('Produto extra invalido na conferencia de entrada.');
+    }
 
     const qtdConferida = Math.max(0, numero(informado.qtdConferida));
 
@@ -200,6 +212,7 @@ function planejarControlesItensEntrada(itensNota, itensInformados) {
 
   for (const informado of itensInformados) {
     const item = porSequencia.get(Number(informado.sequencia));
+    if (!item && informado.extra === true) continue;
     if (!item) throw new Error(`Item ${informado.sequencia} nao pertence a nota de entrada.`);
 
     const controles = [...new Set((Array.isArray(informado.leituras) ? informado.leituras : [])
@@ -234,6 +247,7 @@ function planejarDesmembramentoLotesEntrada(itensNota, itensInformados) {
 
   for (const informado of itensInformados) {
     const item = porSequencia.get(Number(informado.sequencia));
+    if (!item && informado.extra === true) continue;
     if (!item) throw new Error(`Item ${informado.sequencia} nao pertence a nota de entrada.`);
 
     const leituras = Array.isArray(informado.leituras) ? informado.leituras : [];

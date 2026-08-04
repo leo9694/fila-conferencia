@@ -92,7 +92,7 @@ const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Cuiaba';
 const SANKHYA_TIMEZONE = process.env.SANKHYA_TIMEZONE || 'America/Sao_Paulo';
 const TOPS_CONFERENCIA = Object.freeze({
   saida: [5, 6, 237],
-  entrada: [13, 21]
+  entrada: [13, 21, 90]
 });
 const TOPS_ROMANEIO = Object.freeze([10, 35]);
 const TOPS_AJUSTE_ESTOQUE = Object.freeze({
@@ -1370,6 +1370,186 @@ async function aplicarVinculosAtendimentoDesmembramento({
   }
 }
 
+async function consultarProdutoExtraEntradaPorCodigo(codigo) {
+  const codigoNormalizado = String(codigo || '').trim();
+  if (!codigoNormalizado) return null;
+
+  const codigoSql = textoSql(codigoNormalizado);
+  const codigoNumero = obterNumeroInteiro(codigoNormalizado);
+  const filtroCodigoProduto = codigoNumero ? `OR PRO.CODPROD = ${codigoNumero}` : '';
+  const produtos = await executeQuery(`
+    SELECT
+      PRO.CODPROD,
+      PRO.DESCRPROD,
+      PRO.REFERENCIA,
+      PRO.AD_CODBAR,
+      PRO.AD_CBARANT,
+      PRO.CODVOL,
+      PRO.CODGRUPOPROD,
+      GRU.DESCRGRUPOPROD
+    FROM TGFPRO PRO
+    LEFT JOIN TGFGRU GRU ON GRU.CODGRUPOPROD = PRO.CODGRUPOPROD
+    WHERE NVL(PRO.ATIVO, 'S') = 'S'
+      AND (
+        PRO.REFERENCIA = '${codigoSql}'
+        OR PRO.AD_CODBAR = '${codigoSql}'
+        OR PRO.AD_CBARANT = '${codigoSql}'
+        ${filtroCodigoProduto}
+        OR EXISTS (
+          SELECT 1
+          FROM TGFVOA VOA
+          WHERE VOA.CODPROD = PRO.CODPROD
+            AND VOA.CODBARRA = '${codigoSql}'
+            AND NVL(VOA.ATIVO, 'S') = 'S'
+        )
+        OR EXISTS (
+          SELECT 1
+          FROM TGFEST EST
+          WHERE EST.CODPROD = PRO.CODPROD
+            AND EST.CODBARRA = '${codigoSql}'
+        )
+      )
+    ORDER BY PRO.CODPROD
+  `);
+  const produto = produtos[0];
+  if (!produto) return null;
+
+  const [unidades, codigosEstoque] = await Promise.all([
+    executeQuery(`
+      SELECT
+        CODVOL,
+        CODBARRA,
+        DIVIDEMULTIPLICA,
+        CAST(NVL(QUANTIDADE, 1) AS NUMBER(15,6)) AS QUANTIDADE
+      FROM TGFVOA
+      WHERE CODPROD = ${Number(produto.CODPROD)}
+        AND NVL(ATIVO, 'S') = 'S'
+        AND CODBARRA IS NOT NULL
+    `),
+    executeQuery(`
+      SELECT DISTINCT CODBARRA
+      FROM TGFEST
+      WHERE CODPROD = ${Number(produto.CODPROD)}
+        AND CODBARRA IS NOT NULL
+    `)
+  ]);
+  const codigosConferencia = [];
+  unidades.forEach((unidade) => {
+    const quantidade = normalizarNumero(unidade.QUANTIDADE) || 1;
+    const operacao = String(unidade.DIVIDEMULTIPLICA || '').trim().toUpperCase();
+    const multiplicador = operacao.startsWith('D') && quantidade !== 0 ? 1 / quantidade : quantidade;
+    adicionarCodigoConferencia(
+      codigosConferencia,
+      unidade.CODBARRA,
+      'UNIDADE_ALTERNATIVA',
+      multiplicador,
+      unidade.CODVOL ? `Unidade alternativa ${unidade.CODVOL}` : 'Unidade alternativa',
+      { codVol: unidade.CODVOL || produto.CODVOL || 'UN' }
+    );
+  });
+  const metadadosPadrao = { codVol: produto.CODVOL || 'UN' };
+  adicionarCodigoConferencia(codigosConferencia, produto.REFERENCIA, 'REFERENCIA', 1, 'Referencia', metadadosPadrao);
+  adicionarCodigoConferencia(codigosConferencia, produto.AD_CODBAR, 'CODIGO_BARRAS', 1, 'Codigo de barras adicional', metadadosPadrao);
+  adicionarCodigoConferencia(codigosConferencia, produto.AD_CBARANT, 'CODIGO_BARRAS', 1, 'Codigo de barras anterior', metadadosPadrao);
+  codigosEstoque.forEach((estoque) => {
+    adicionarCodigoConferencia(codigosConferencia, estoque.CODBARRA, 'CODIGO_BARRAS', 1, 'Codigo de barras do estoque', metadadosPadrao);
+  });
+  adicionarCodigoConferencia(codigosConferencia, produto.CODPROD, 'CODIGO_PRODUTO', 1, 'Codigo do produto', metadadosPadrao);
+  adicionarCodigoConferencia(codigosConferencia, codigoNormalizado, 'CODIGO_BARRAS', 1, 'Codigo informado', metadadosPadrao);
+
+  return {
+    extra: true,
+    sequencia: -Number(produto.CODPROD),
+    codProd: Number(produto.CODPROD),
+    descrProd: produto.DESCRPROD || `Produto ${produto.CODPROD}`,
+    codGrupoProd: produto.CODGRUPOPROD || '',
+    descrGrupoProd: produto.DESCRGRUPOPROD || 'Sem grupo',
+    controle: '',
+    codVol: produto.CODVOL || 'UN',
+    codVolPadrao: produto.CODVOL || 'UN',
+    qtdNeg: 0,
+    vlrUnit: 0,
+    codigoBarras: codigoNormalizado,
+    codigos: codigosConferencia.map((entrada) => entrada.codigo),
+    codigosConferencia
+  };
+}
+
+async function normalizarItensExtrasConferenciaEntrada(itens, { nunota, itensNota = [] } = {}) {
+  const resultado = [];
+  const produtosExtras = new Set();
+  let codigosProdutosNota = new Set(
+    itensNota.map((item) => Number(item.CODPROD || item.codProd)).filter(Boolean)
+  );
+  if (itens.some((item) => item?.extra === true) && codigosProdutosNota.size === 0 && nunota) {
+    const produtosNota = await executeQuery(`
+      SELECT DISTINCT CODPROD
+      FROM TGFITE
+      WHERE NUNOTA = ${Number(nunota)}
+    `);
+    codigosProdutosNota = new Set(produtosNota.map((item) => Number(item.CODPROD)).filter(Boolean));
+  }
+
+  for (const item of itens) {
+    if (item?.extra !== true) {
+      resultado.push(item);
+      continue;
+    }
+
+    const codProd = obterNumeroInteiro(item.codProd);
+    if (!codProd || produtosExtras.has(codProd)) {
+      throw new Error('Produto extra duplicado ou invalido na conferencia de entrada.');
+    }
+    if (codigosProdutosNota.has(codProd)) {
+      throw new Error(`O produto ${codProd} ja pertence a nota e nao pode ser incluido como produto extra.`);
+    }
+    produtosExtras.add(codProd);
+
+    const produto = await consultarProdutoExtraEntradaPorCodigo(String(codProd));
+    if (!produto || Number(produto.codProd) !== codProd) {
+      throw new Error(`O produto extra ${codProd} nao esta ativo ou nao foi encontrado no Sankhya.`);
+    }
+
+    const entradasPorCodigo = new Map(
+      produto.codigosConferencia.map((entrada) => [String(entrada.codigo).trim().toUpperCase(), entrada])
+    );
+    const leituras = (Array.isArray(item.leituras) ? item.leituras : []).map((leitura) => {
+      const codigoLeitura = String(leitura?.codigo || '').trim();
+      const entrada = entradasPorCodigo.get(codigoLeitura.toUpperCase());
+      const quantidade = Math.max(0, normalizarNumero(leitura?.quantidade));
+      if (!entrada || quantidade <= 0) {
+        throw new Error(`Leitura invalida para o produto extra ${codProd}.`);
+      }
+      const multiplicador = normalizarNumero(entrada.multiplicador) || 1;
+      return {
+        ...leitura,
+        codigo: codigoLeitura,
+        tipo: entrada.tipo || 'CODIGO_BARRAS',
+        codVol: entrada.codVol || produto.codVol || 'UN',
+        multiplicador,
+        quantidade,
+        quantidadeConvertida: quantidade * multiplicador
+      };
+    });
+    const qtdConferida = leituras.reduce(
+      (total, leitura) => total + normalizarNumero(leitura.quantidadeConvertida),
+      0
+    );
+    if (qtdConferida <= 0) {
+      throw new Error(`Informe uma quantidade valida para o produto extra ${codProd}.`);
+    }
+
+    resultado.push({
+      ...produto,
+      qtdConferida,
+      qtdCortada: 0,
+      leituras
+    });
+  }
+
+  return resultado;
+}
+
 async function validarVinculosAtendimentoDesmembramento({
   nunota,
   itemOriginal,
@@ -2584,6 +2764,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         CAB.CODEMP,
         CAB.CODTIPOPER,
         CAB.TIPMOV,
+        CASE WHEN CAB.CODTIPOPER = 90 THEN 1 ELSE 0 END AS TRANSFERENCIA_FILIAIS,
         PAR.RAZAOSOCIAL AS EMPRESA,
         CAB.CODPARC AS CODIGO_PARCEIRO,
         CAST(NVL(CAB.VLRNOTA, 0) AS NUMBER(15,2)) AS VLRNOTA,
@@ -2677,6 +2858,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
           NUMNOTA: normalizarNumero(row.NUMNOTA),
           NUCONFATUAL: row.NUCONFATUAL ? Number(row.NUCONFATUAL) : null,
           STATUS_CONF: row.STATUS_CONF || null,
+          TRANSFERENCIA_FILIAIS: modo === 'entrada' && Number(row.TRANSFERENCIA_FILIAIS) === 1,
           STATUS_CONFERENCIA: modo === 'entrada'
             ? statusVisualConferencia(row.STATUS_CONF, Boolean(row.NUCONFATUAL))
             : row.STATUS_CONFERENCIA,
@@ -2925,6 +3107,27 @@ router.get('/fila-conferencia/romaneio/:ordemCarga/pdf', async (req, res) => {
   }
 });
 
+router.get('/fila-conferencia/entrada/produto-extra', async (req, res) => {
+  try {
+    const codigo = String(req.query?.codigo || '').trim();
+    if (!codigo) {
+      res.status(400).json({ erro: 'Informe o codigo do produto.' });
+      return;
+    }
+
+    const item = await consultarProdutoExtraEntradaPorCodigo(codigo);
+    if (!item) {
+      res.status(404).json({ erro: 'Produto nao encontrado ou inativo no Sankhya.' });
+      return;
+    }
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({ item });
+  } catch (err) {
+    console.error('Erro ao localizar produto extra da conferencia:', err);
+    res.status(500).json({ erro: 'Nao foi possivel consultar o produto no Sankhya.' });
+  }
+});
+
 router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
   try {
     const nunota = obterNumeroInteiro(req.params.nunota);
@@ -2982,20 +3185,29 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
 
     const codigosProduto = [...new Set(rows.map((row) => Number(row.CODPROD)).filter(Boolean))];
     let unidadesAlternativas = [];
+    let codigosEstoqueNota = [];
 
     if (codigosProduto.length > 0) {
-      unidadesAlternativas = await executeQuery(`
-        SELECT
-          VOA.CODPROD,
-          VOA.CODVOL,
-          VOA.CODBARRA,
-          VOA.DIVIDEMULTIPLICA,
-          CAST(NVL(VOA.QUANTIDADE, 1) AS NUMBER(15,6)) AS QUANTIDADE
-        FROM TGFVOA VOA
-        WHERE VOA.CODPROD IN (${codigosProduto.join(',')})
-          AND NVL(VOA.ATIVO, 'S') = 'S'
-          AND VOA.CODBARRA IS NOT NULL
-      `);
+      [unidadesAlternativas, codigosEstoqueNota] = await Promise.all([
+        executeQuery(`
+          SELECT
+            VOA.CODPROD,
+            VOA.CODVOL,
+            VOA.CODBARRA,
+            VOA.DIVIDEMULTIPLICA,
+            CAST(NVL(VOA.QUANTIDADE, 1) AS NUMBER(15,6)) AS QUANTIDADE
+          FROM TGFVOA VOA
+          WHERE VOA.CODPROD IN (${codigosProduto.join(',')})
+            AND NVL(VOA.ATIVO, 'S') = 'S'
+            AND VOA.CODBARRA IS NOT NULL
+        `),
+        executeQuery(`
+          SELECT DISTINCT CODPROD, CODBARRA
+          FROM TGFEST
+          WHERE CODPROD IN (${codigosProduto.join(',')})
+            AND CODBARRA IS NOT NULL
+        `)
+      ]);
     }
 
     const unidadesPorProduto = new Map();
@@ -3006,6 +3218,12 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
       }
 
       unidadesPorProduto.get(codProd).push(row);
+    });
+    const codigosEstoquePorProduto = new Map();
+    codigosEstoqueNota.forEach((row) => {
+      const codProd = Number(row.CODPROD);
+      if (!codigosEstoquePorProduto.has(codProd)) codigosEstoquePorProduto.set(codProd, []);
+      codigosEstoquePorProduto.get(codProd).push(row.CODBARRA);
     });
 
     const progresso = conferenciaProgressStore.obter(nunota);
@@ -3046,9 +3264,7 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
       return mapa;
     }, new Map());
 
-    res.json({
-      nunota,
-      itens: rows.map((row) => {
+    const itensResposta = rows.map((row) => {
         const codigosConferencia = [];
         const progressoItem = progressoPorSequencia.get(Number(row.SEQUENCIA)) || {};
         const chaveDetalheNativo = `${Number(row.CODPROD)}|${normalizarControleConferencia(row.CONTROLE)}`;
@@ -3092,6 +3308,16 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
         adicionarCodigoConferencia(codigosConferencia, row.PRODUTONFE, 'CODIGO_BARRAS', 1, 'Código do produto na NFe', metadadosUnidadeItem);
         adicionarCodigoConferencia(codigosConferencia, row.AD_CODBAR, 'CODIGO_BARRAS', 1, 'Código de barras adicional', metadadosUnidadeItem);
         adicionarCodigoConferencia(codigosConferencia, row.AD_CBARANT, 'CODIGO_BARRAS', 1, 'Código de barras anterior', metadadosUnidadeItem);
+        (codigosEstoquePorProduto.get(Number(row.CODPROD)) || []).forEach((codigoEstoque) => {
+          adicionarCodigoConferencia(
+            codigosConferencia,
+            codigoEstoque,
+            'CODIGO_BARRAS',
+            1,
+            'Código de barras do estoque',
+            metadadosUnidadeItem
+          );
+        });
         adicionarCodigoConferencia(codigosConferencia, row.CODPROD, 'CODIGO_PRODUTO', 1, 'Código do produto', metadadosUnidadeItem);
 
         return {
@@ -3119,7 +3345,24 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
             ? (Array.isArray(progressoItem.leituras) ? progressoItem.leituras : [])
             : leiturasNativas
         };
-      })
+      });
+    const sequenciasNota = new Set(rows.map((row) => Number(row.SEQUENCIA)));
+    const itensExtras = (progresso?.itens || [])
+      .filter((item) => item.extra === true && !sequenciasNota.has(Number(item.sequencia)))
+      .map((item) => ({
+        ...item,
+        extra: true,
+        controle: '',
+        qtdNeg: 0,
+        vlrUnit: 0,
+        qtdConferida: normalizarNumero(item.qtdConferida),
+        qtdCortada: 0,
+        leituras: Array.isArray(item.leituras) ? item.leituras : []
+      }));
+
+    res.json({
+      nunota,
+      itens: [...itensResposta, ...itensExtras]
     });
   } catch (err) {
     console.error(err);
@@ -4985,7 +5228,7 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
   const nunota = obterNumeroInteiro(req.body?.nunota);
   const nuconf = obterNumeroInteiro(req.body?.nuconf);
   const codUsu = obterCodigoUsuario(req.usuario?.codUsu);
-  const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
+  let itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
   const modo = obterModoConferencia(req.body?.modo);
   // O progresso da caixa precisa ser compartilhado entre dispositivos, mas nao deve
   // reaplicar os detalhes nativos da conferencia a cada impressao ou encerramento.
@@ -5027,6 +5270,10 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
       conferenciaProgressStore.remover(nunota);
       res.status(409).json({ erro: 'Conferência já finalizada ou em outro status no Sankhya' });
       return;
+    }
+
+    if (modo === 'entrada') {
+      itens = await normalizarItensExtrasConferenciaEntrada(itens, { nunota });
     }
 
     const progresso = conferenciaProgressStore.salvar({
@@ -5109,7 +5356,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
   const codUsu = obterCodigoUsuario(req.usuario?.codUsu);
   const numeroVolumes = Number(req.body?.volumes);
   const volumes = Number.isInteger(numeroVolumes) && numeroVolumes >= 0 ? numeroVolumes : null;
-  const itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
+  let itens = Array.isArray(req.body?.itens) ? req.body.itens : [];
   const modo = obterModoConferencia(req.body?.modo);
   const tops = sqlTopsConferencia(modo);
   const tipMov = tipoMovimentoConferencia(modo);
@@ -5203,17 +5450,23 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       ORDER BY ITE.SEQUENCIA
     `);
 
+    if (modo === 'entrada') {
+      itens = await normalizarItensExtrasConferenciaEntrada(itens, { nunota, itensNota: itensPedido });
+    }
+
     const conferidosPorSequencia = new Map(
       itens.map((item) => [Number(item.sequencia), normalizarNumero(item.qtdConferida)])
     );
     const cortadosPorSequencia = new Map(
       itens.map((item) => [Number(item.sequencia), normalizarNumero(item.qtdCortada)])
     );
-    const possuiQuantidadeMaiorEntrada = modo === 'entrada' && itensPedido.some((item) => {
+    const possuiProdutoExtraEntrada = modo === 'entrada'
+      && itens.some((item) => item.extra === true && normalizarNumero(item.qtdConferida) > 0);
+    const possuiQuantidadeMaiorEntrada = modo === 'entrada' && (possuiProdutoExtraEntrada || itensPedido.some((item) => {
       const qtdEsperada = normalizarNumero(item.QTDNEG);
       const qtdConferida = conferidosPorSequencia.get(Number(item.SEQUENCIA)) ?? 0;
       return qtdConferida > qtdEsperada + 0.0001;
-    });
+    }));
     const possuiQuantidadeMenorEntrada = modo === 'entrada' && itensPedido.some((item) => {
       const qtdEsperada = normalizarNumero(item.QTDNEG);
       const qtdConferida = conferidosPorSequencia.get(Number(item.SEQUENCIA)) ?? 0;
