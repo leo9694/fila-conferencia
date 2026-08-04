@@ -17,6 +17,7 @@ let accessSessionPromiseToken = null;
 let directSessionId = null;
 let directSessionPromise = null;
 let directSessionLastUsedAt = 0;
+let gatewayUserLoginQueue = Promise.resolve();
 
 function clearAuthCache() {
   cachedAccessToken = null;
@@ -32,6 +33,7 @@ function clearAuthCache() {
   directSessionId = null;
   directSessionPromise = null;
   directSessionLastUsedAt = 0;
+  gatewayUserLoginQueue = Promise.resolve();
 }
 
 function getConfig() {
@@ -111,6 +113,49 @@ async function logoutDirectSession(sessionId, config = getConfig()) {
       requestBody: {}
     })
   }).catch(() => {});
+}
+
+async function executeDirectUserLogin(requestBody, config = getConfig()) {
+  const baseUrl = getDirectBaseUrl(config);
+  if (!baseUrl) return null;
+
+  const url = `${baseUrl}/service.sbr?serviceName=MobileLoginSP.login&outputType=json`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      serviceName: 'MobileLoginSP.login',
+      requestBody
+    })
+  });
+  const payload = await response.json().catch(() => ({}));
+  const sessionId = extractDirectSessionId(payload);
+
+  if (!response.ok || payload.status === '0' || payload.status === '3' || !sessionId) {
+    const message = payload.statusMessage || `HTTP ${response.status}`;
+    throw new Error(`Falha ao autenticar no Sankhya: ${message}`);
+  }
+
+  try {
+    return payload;
+  } finally {
+    await logoutDirectSession(sessionId, config);
+  }
+}
+
+async function executeUserLogin(requestBody) {
+  const config = getConfig();
+  const directPayload = await executeDirectUserLogin(requestBody, config);
+  if (directPayload) return directPayload;
+
+  const executarGateway = () => executeService('MobileLoginSP.login', requestBody, {
+    authScope: 'login',
+    skipAccessSession: true,
+    logoutAfterService: true
+  });
+  const loginAtual = gatewayUserLoginQueue.then(executarGateway, executarGateway);
+  gatewayUserLoginQueue = loginAtual.catch(() => {});
+  return loginAtual;
 }
 
 async function invalidateDirectSession(sessionId, options = {}) {
@@ -651,6 +696,7 @@ module.exports = {
   executeDirectService,
   executeRest,
   executeService,
+  executeUserLogin,
   executeQuery,
   normalizeQueryRows,
   _internals: {

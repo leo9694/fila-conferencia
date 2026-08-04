@@ -8840,12 +8840,19 @@ async function prepararSessaoAutenticada(usuario) {
   usuarioLogado = usuario;
   atualizarUsuarioLogadoNaTela();
   prepararTelaInicial();
-  await Promise.all([
+  const preparacoesAuxiliares = [
     carregarEmpresas(),
     verificarDisponibilidadeContagemEstoque(),
     verificarAcessoRelatorios(),
     window.vendasDashboardController?.verificarAcesso(usuario?.codUsu)
-  ]);
+  ];
+  void Promise.allSettled(preparacoesAuxiliares).then((resultados) => {
+    resultados.forEach((resultado) => {
+      if (resultado.status === 'rejected') {
+        console.error('Falha em uma preparação auxiliar após o login:', resultado.reason);
+      }
+    });
+  });
 
   if (window.location.hash === '#fila-conferencia') {
     const restaurouFila = await restaurarNavegacaoFilaSalva();

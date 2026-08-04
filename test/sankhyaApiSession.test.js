@@ -67,6 +67,59 @@ test('renova a sessao direta e repete o servico uma vez quando nao autorizado', 
   }
 });
 
+test('valida login de usuario diretamente no OM sem solicitar token OAuth', async () => {
+  const originalFetch = global.fetch;
+  const originalEnv = {
+    baseUrl: process.env.SANKHYA_OM_BASE_URL,
+    apiBaseUrl: process.env.SANKHYA_API_BASE_URL
+  };
+  let logins = 0;
+  let logouts = 0;
+  let oauth = 0;
+
+  process.env.SANKHYA_OM_BASE_URL = 'http://sankhya.test/mge';
+  process.env.SANKHYA_API_BASE_URL = 'https://api.sankhya.test';
+  sankhyaApi.clearAuthCache();
+  global.fetch = async (url, options = {}) => {
+    const value = String(url);
+    if (value.endsWith('/authenticate')) {
+      oauth += 1;
+      return responseJson({ access_token: 'nao-deveria-ser-usado' });
+    }
+    if (value.includes('MobileLoginSP.logout')) {
+      logouts += 1;
+      return responseJson({ status: '1' });
+    }
+    logins += 1;
+    const body = JSON.parse(options.body);
+    assert.equal(body.requestBody.NOMUSU.$, 'LEONARDO');
+    return responseJson({
+      status: '1',
+      responseBody: {
+        jsessionid: { $: `usuario-${logins}` },
+        idusu: { $: 'NzI=' }
+      }
+    });
+  };
+
+  try {
+    const payload = await sankhyaApi.executeUserLogin({
+      NOMUSU: { $: 'LEONARDO' },
+      INTERNO: { $: 'senha' },
+      KEEPCONNECTED: { $: 'N' }
+    });
+    assert.equal(payload.responseBody.idusu.$, 'NzI=');
+    assert.equal(logins, 1);
+    assert.equal(logouts, 1);
+    assert.equal(oauth, 0);
+  } finally {
+    global.fetch = originalFetch;
+    restoreEnv('SANKHYA_OM_BASE_URL', originalEnv.baseUrl);
+    restoreEnv('SANKHYA_API_BASE_URL', originalEnv.apiBaseUrl);
+    sankhyaApi.clearAuthCache();
+  }
+});
+
 function responseJson(payload, status = 200) {
   return {
     ok: status >= 200 && status < 300,
