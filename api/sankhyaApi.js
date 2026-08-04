@@ -583,6 +583,16 @@ function normalizeQueryRows(payload) {
 
 async function executeQuery(sql) {
   const config = getConfig();
+
+  // O DbExplorer tambem esta disponivel no OM. Preferir a sessao tecnica
+  // direta evita solicitar tokens OAuth apenas para carregar telas e
+  // permissoes, o que pode bloquear todos os usuarios quando o gateway
+  // aplica rate limit (HTTP 429).
+  if (getDirectBaseUrl(config)) {
+    const payload = await executeDirectService('DbExplorerSP.executeQuery', { sql });
+    return normalizeQueryRows(payload);
+  }
+
   const accessToken = await authenticate();
   await ensureAccessSession(accessToken, config);
   const url = `${config.baseUrl}/gateway/v1/mge/service.sbr?serviceName=DbExplorerSP.executeQuery&outputType=json`;

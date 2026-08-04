@@ -120,6 +120,59 @@ test('valida login de usuario diretamente no OM sem solicitar token OAuth', asyn
   }
 });
 
+test('executa consultas diretamente no OM sem solicitar token OAuth', async () => {
+  const originalFetch = global.fetch;
+  const originalEnv = {
+    baseUrl: process.env.SANKHYA_OM_BASE_URL,
+    apiBaseUrl: process.env.SANKHYA_API_BASE_URL,
+    user: process.env.SANKHYA_ACCESS_USER,
+    password: process.env.SANKHYA_ACCESS_PASSWORD
+  };
+  let oauth = 0;
+  let consultas = 0;
+
+  process.env.SANKHYA_OM_BASE_URL = 'http://sankhya.test/mge';
+  process.env.SANKHYA_API_BASE_URL = 'https://api.sankhya.test';
+  process.env.SANKHYA_ACCESS_USER = 'tecnico';
+  process.env.SANKHYA_ACCESS_PASSWORD = 'senha';
+  sankhyaApi.clearAuthCache();
+  global.fetch = async (url) => {
+    const value = String(url);
+    if (value.endsWith('/authenticate')) {
+      oauth += 1;
+      return responseJson({ access_token: 'nao-deveria-ser-usado' });
+    }
+    if (value.includes('MobileLoginSP.login')) {
+      return responseJson({
+        status: '1',
+        responseBody: { jsessionid: { $: 'sessao-tecnica' } }
+      });
+    }
+    consultas += 1;
+    return responseJson({
+      status: '1',
+      responseBody: {
+        fieldsMetadata: [{ name: 'VALOR' }],
+        rows: [[1]]
+      }
+    });
+  };
+
+  try {
+    const rows = await sankhyaApi.executeQuery('SELECT 1 AS VALOR FROM DUAL');
+    assert.deepEqual(rows, [{ VALOR: 1 }]);
+    assert.equal(consultas, 1);
+    assert.equal(oauth, 0);
+  } finally {
+    global.fetch = originalFetch;
+    restoreEnv('SANKHYA_OM_BASE_URL', originalEnv.baseUrl);
+    restoreEnv('SANKHYA_API_BASE_URL', originalEnv.apiBaseUrl);
+    restoreEnv('SANKHYA_ACCESS_USER', originalEnv.user);
+    restoreEnv('SANKHYA_ACCESS_PASSWORD', originalEnv.password);
+    sankhyaApi.clearAuthCache();
+  }
+});
+
 function responseJson(payload, status = 200) {
   return {
     ok: status >= 200 && status < 300,
