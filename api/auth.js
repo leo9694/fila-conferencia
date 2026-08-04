@@ -8,6 +8,7 @@ const SESSION_SECRET = process.env.SESSION_SECRET || [
   process.env.SANKHYA_CLIENT_ID,
   'fila-conferencia-session'
 ].filter(Boolean).join(':');
+let filaValidacaoLogin = Promise.resolve();
 
 function campoApi(valor) {
   return { $: valor === null || valor === undefined ? '' : String(valor) };
@@ -110,15 +111,18 @@ async function validarUsuarioSankhya(usuario, senha) {
     throw new Error('Informe usuario e senha');
   }
 
-  const loginPayload = await executeService('MobileLoginSP.login', {
+  const executarLogin = async () => executeService('MobileLoginSP.login', {
     NOMUSU: campoApi(nomeUsuario.toUpperCase()),
     INTERNO: campoApi(senhaUsuario),
     KEEPCONNECTED: campoApi('N')
   }, {
-    isolatedSession: true,
+    authScope: 'login',
     skipAccessSession: true,
     logoutAfterService: true
   });
+  const loginAtual = filaValidacaoLogin.then(executarLogin, executarLogin);
+  filaValidacaoLogin = loginAtual.catch(() => {});
+  const loginPayload = await loginAtual;
 
   const codUsuLogin = extrairIdUsuarioLogin(loginPayload);
 

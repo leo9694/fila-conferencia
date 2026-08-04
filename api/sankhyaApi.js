@@ -1,8 +1,16 @@
 const DEFAULT_BASE_URL = 'https://api.sankhya.com.br';
 const DEFAULT_DIRECT_SESSION_IDLE_MS = 20 * 60 * 1000;
+const DEFAULT_AUTH_RETRY_LIMIT = 3;
+const DEFAULT_AUTH_RETRY_BASE_MS = 1000;
+const DEFAULT_AUTH_RETRY_MAX_MS = 10000;
 
 let cachedAccessToken = null;
 let cachedAccessTokenExpiresAt = 0;
+let cachedLoginAccessToken = null;
+let cachedLoginAccessTokenExpiresAt = 0;
+let accessTokenPromise = null;
+let loginAccessTokenPromise = null;
+let oauthAuthenticationQueue = Promise.resolve();
 let accessSessionToken = null;
 let accessSessionPromise = null;
 let accessSessionPromiseToken = null;
@@ -13,6 +21,11 @@ let directSessionLastUsedAt = 0;
 function clearAuthCache() {
   cachedAccessToken = null;
   cachedAccessTokenExpiresAt = 0;
+  cachedLoginAccessToken = null;
+  cachedLoginAccessTokenExpiresAt = 0;
+  accessTokenPromise = null;
+  loginAccessTokenPromise = null;
+  oauthAuthenticationQueue = Promise.resolve();
   accessSessionToken = null;
   accessSessionPromise = null;
   accessSessionPromiseToken = null;
@@ -246,13 +259,35 @@ function extractAccessToken(payload) {
   return payload.access_token || payload.accessToken || payload.bearerToken || payload.token;
 }
 
-async function authenticate(options = {}) {
-  const config = getConfig();
-  assertConfig(config);
+function numeroConfigurado(nome, fallback) {
+  const valor = Number(process.env[nome]);
+  return Number.isFinite(valor) && valor >= 0 ? valor : fallback;
+}
 
-  if (!options.forceNew && cachedAccessToken && Date.now() < cachedAccessTokenExpiresAt - 60000) {
-    return cachedAccessToken;
+function aguardar(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function tempoEsperaRateLimit(response, tentativa) {
+  const retryAfter = response?.headers?.get?.('retry-after');
+  const segundos = Number(retryAfter);
+  if (retryAfter !== null && retryAfter !== undefined && retryAfter !== '' && Number.isFinite(segundos) && segundos >= 0) {
+    return Math.min(segundos * 1000, numeroConfigurado('SANKHYA_AUTH_RETRY_MAX_MS', DEFAULT_AUTH_RETRY_MAX_MS));
   }
+
+  const base = numeroConfigurado('SANKHYA_AUTH_RETRY_BASE_MS', DEFAULT_AUTH_RETRY_BASE_MS);
+  const maximo = numeroConfigurado('SANKHYA_AUTH_RETRY_MAX_MS', DEFAULT_AUTH_RETRY_MAX_MS);
+  return Math.min(base * (2 ** tentativa), maximo);
+}
+
+function enfileirarAutenticacaoOAuth(tarefa) {
+  const execucao = oauthAuthenticationQueue.then(tarefa, tarefa);
+  oauthAuthenticationQueue = execucao.catch(() => {});
+  return execucao;
+}
+
+async function solicitarAccessToken(config) {
+  const limiteTentativas = numeroConfigurado('SANKHYA_AUTH_RETRY_LIMIT', DEFAULT_AUTH_RETRY_LIMIT);
 
   const params = new URLSearchParams({
     grant_type: 'client_credentials',
@@ -260,37 +295,78 @@ async function authenticate(options = {}) {
     client_secret: config.clientSecret
   });
 
-  const response = await fetch(`${config.baseUrl}/authenticate`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/x-www-form-urlencoded',
-      'X-Token': config.integrationToken
-    },
-    body: params
-  });
+  for (let tentativa = 0; tentativa <= limiteTentativas; tentativa += 1) {
+    const response = await fetch(`${config.baseUrl}/authenticate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-Token': config.integrationToken
+      },
+      body: params
+    });
 
-  const payload = await response.json().catch(() => ({}));
-
-  if (!response.ok) {
-    throw new Error(`Falha ao autenticar na Sankhya API: HTTP ${response.status}`);
-  }
-
-  const accessToken = extractAccessToken(payload);
-  if (!accessToken) {
-    throw new Error('Falha ao autenticar na Sankhya API: token de acesso nao retornado');
-  }
-
-  if (!options.skipCache) {
-    const previousAccessToken = cachedAccessToken;
-    cachedAccessToken = accessToken;
-    cachedAccessTokenExpiresAt = getJwtExpiration(accessToken) || Date.now() + 25 * 60 * 1000;
-
-    if (previousAccessToken && previousAccessToken !== accessToken) {
-      await logoutAccessSession(previousAccessToken, config);
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok) {
+      const accessToken = extractAccessToken(payload);
+      if (!accessToken) {
+        throw new Error('Falha ao autenticar na Sankhya API: token de acesso nao retornado');
+      }
+      return accessToken;
     }
+
+    if (response.status !== 429 || tentativa >= limiteTentativas) {
+      if (response.status === 429) {
+        throw new Error('A Sankhya limitou temporariamente as autenticacoes. Aguarde alguns instantes e tente novamente.');
+      }
+      throw new Error(`Falha ao autenticar na Sankhya API: HTTP ${response.status}`);
+    }
+
+    await aguardar(tempoEsperaRateLimit(response, tentativa));
+  }
+  throw new Error('Falha ao autenticar na Sankhya API.');
+}
+
+async function authenticate(options = {}) {
+  const config = getConfig();
+  assertConfig(config);
+  const escopoLogin = options.scope === 'login';
+  const tokenAtual = escopoLogin ? cachedLoginAccessToken : cachedAccessToken;
+  const expiraEm = escopoLogin ? cachedLoginAccessTokenExpiresAt : cachedAccessTokenExpiresAt;
+
+  if (!options.forceNew && tokenAtual && Date.now() < expiraEm - 60000) {
+    return tokenAtual;
   }
 
-  return accessToken;
+  const promessaAtual = escopoLogin ? loginAccessTokenPromise : accessTokenPromise;
+  if (!options.forceNew && promessaAtual) return promessaAtual;
+
+  const autenticacao = enfileirarAutenticacaoOAuth(() => solicitarAccessToken(config));
+  if (escopoLogin) loginAccessTokenPromise = autenticacao;
+  else accessTokenPromise = autenticacao;
+
+  try {
+    const accessToken = await autenticacao;
+    const expiresAt = getJwtExpiration(accessToken) || Date.now() + 25 * 60 * 1000;
+
+    if (!options.skipCache) {
+      if (escopoLogin) {
+        cachedLoginAccessToken = accessToken;
+        cachedLoginAccessTokenExpiresAt = expiresAt;
+      } else {
+        const previousAccessToken = cachedAccessToken;
+        cachedAccessToken = accessToken;
+        cachedAccessTokenExpiresAt = expiresAt;
+
+        if (previousAccessToken && previousAccessToken !== accessToken) {
+          await logoutAccessSession(previousAccessToken, config);
+        }
+      }
+    }
+    return accessToken;
+  } finally {
+    if (escopoLogin && loginAccessTokenPromise === autenticacao) loginAccessTokenPromise = null;
+    if (!escopoLogin && accessTokenPromise === autenticacao) accessTokenPromise = null;
+  }
 }
 
 function mensagemErroRest(payload, fallback) {
@@ -491,6 +567,7 @@ async function executeQuery(sql) {
 async function executeService(serviceName, requestBody, options = {}) {
   const config = getConfig();
   const accessToken = await authenticate({
+    scope: options.authScope,
     forceNew: Boolean(options.isolatedSession),
     skipCache: Boolean(options.isolatedSession)
   });
