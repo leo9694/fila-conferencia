@@ -86,3 +86,23 @@ test('bloqueia usuario fora dos grupos autorizados', async () => {
   assert.equal(resposta.statusCode, 403);
   assert.match(resposta.payload.erro, /Gerente ou Diretoria/);
 });
+
+test('mantem acesso usando os grupos confirmados da sessao assinada', async () => {
+  let consultas = 0;
+  const autorizacao = criarAutorizacaoGrupos({ executeQuery: async () => { consultas += 1; return []; } });
+  const resposta = {
+    statusCode: null,
+    status(codigo) { this.statusCode = codigo; return this; },
+    json() { return this; }
+  };
+  let chamouNext = false;
+
+  await autorizacao.exigirAlgumGrupo(['Gerente', 'Diretoria'])(
+    { usuario: { codUsu: 72, gruposConfirmados: true, grupos: ['Diretoria'] } },
+    resposta,
+    () => { chamouNext = true; }
+  );
+
+  assert.equal(chamouNext, true);
+  assert.equal(consultas, 0);
+});

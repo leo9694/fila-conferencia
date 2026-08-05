@@ -5,6 +5,7 @@ const routes = require('./routes');
 const {
   cookieLogout,
   cookieSessao,
+  enriquecerUsuarioComPermissoes,
   exigirAutenticacao,
   lerSessao,
   serializarSessao,
@@ -64,8 +65,16 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/auth/me', (req, res) => {
-  const usuario = lerSessao(req);
+app.get('/api/auth/me', async (req, res) => {
+  let usuario = lerSessao(req);
+  if (usuario && usuario.gruposConfirmados !== true) {
+    try {
+      usuario = await enriquecerUsuarioComPermissoes(usuario);
+      res.setHeader('Set-Cookie', cookieSessao(serializarSessao(usuario)));
+    } catch (error) {
+      console.error('Nao foi possivel atualizar as permissoes da sessao existente:', error.message);
+    }
+  }
   res.json({ autenticado: Boolean(usuario), usuario });
 });
 

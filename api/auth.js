@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { executeUserLogin } = require('./sankhyaApi');
+const { executeQuery, executeUserLogin } = require('./sankhyaApi');
 
 const SESSION_COOKIE = 'fila_conf_session';
 const SESSION_DURATION_MS = 8 * 60 * 60 * 1000;
@@ -102,6 +102,36 @@ function lerCampoResposta(payload, nomes) {
   return null;
 }
 
+function montarPermissoesGrupos(grupos = []) {
+  const normalizados = new Set(
+    grupos.map((grupo) => String(grupo || '').trim().toLocaleUpperCase('pt-BR')).filter(Boolean)
+  );
+  return {
+    vendasGerais: normalizados.has('GERENTE') || normalizados.has('DIRETORIA'),
+    relatorios: normalizados.has('DIRETORIA')
+  };
+}
+
+async function enriquecerUsuarioComPermissoes(usuario, executarConsulta = executeQuery) {
+  const codUsu = Number(usuario?.codUsu);
+  if (!Number.isInteger(codUsu) || codUsu < 0) return usuario;
+
+  const rows = await executarConsulta(`
+    SELECT DISTINCT TRIM(GRU.NOMEGRUPO) AS NOMEGRUPO
+    FROM TSIUSU USU
+    INNER JOIN TSIGRU GRU ON GRU.CODGRUPO = USU.CODGRUPO
+    WHERE USU.CODUSU = ${codUsu}
+      AND GRU.NOMEGRUPO IS NOT NULL
+  `);
+  const grupos = rows.map((row) => String(row.NOMEGRUPO || '').trim()).filter(Boolean);
+  return {
+    ...usuario,
+    grupos,
+    gruposConfirmados: true,
+    permissoes: montarPermissoesGrupos(grupos)
+  };
+}
+
 async function validarUsuarioSankhya(usuario, senha) {
   const nomeUsuario = String(usuario || '').trim();
   const senhaUsuario = String(senha || '');
@@ -131,10 +161,16 @@ async function validarUsuarioSankhya(usuario, senha) {
     'NOMEUSUARIO'
   ]);
 
-  return {
+  const usuarioAutenticado = {
     codUsu: codUsuLogin,
     nome: nomeRetornado || nomeUsuario.toUpperCase()
   };
+  try {
+    return await enriquecerUsuarioComPermissoes(usuarioAutenticado);
+  } catch (error) {
+    console.error('Usuario autenticado, mas nao foi possivel carregar os grupos do Sankhya:', error.message);
+    return { ...usuarioAutenticado, gruposConfirmados: false };
+  }
 }
 
 function exigirAutenticacao(req, res, next) {
@@ -153,7 +189,9 @@ module.exports = {
   cookieLogout,
   cookieSessao,
   exigirAutenticacao,
+  enriquecerUsuarioComPermissoes,
   lerSessao,
+  montarPermissoesGrupos,
   serializarSessao,
   validarUsuarioSankhya
 };

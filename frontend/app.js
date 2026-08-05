@@ -9138,7 +9138,7 @@ async function prepararSessaoAutenticada(usuario) {
     carregarEmpresas(),
     verificarDisponibilidadeContagemEstoque(),
     verificarAcessoRelatorios(),
-    window.vendasDashboardController?.verificarAcesso(usuario?.codUsu)
+    window.vendasDashboardController?.verificarAcesso(usuario)
   ];
   void Promise.allSettled(preparacoesAuxiliares).then((resultados) => {
     resultados.forEach((resultado) => {

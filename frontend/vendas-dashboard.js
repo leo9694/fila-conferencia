@@ -205,11 +205,23 @@
     elementos.status.classList.remove('is-error');
   }
 
-  async function verificarAcesso(codUsu = codigoUsuarioAtual) {
+  async function verificarAcesso(usuarioOuCodigo = codigoUsuarioAtual) {
+    const usuario = usuarioOuCodigo && typeof usuarioOuCodigo === 'object' ? usuarioOuCodigo : null;
+    const codUsu = usuario ? usuario.codUsu : usuarioOuCodigo;
     const codigoAnterior = codigoUsuarioAtual;
     codigoUsuarioAtual = normalizarCodigoUsuario(codUsu);
     const mesmoUsuario = codigoUsuarioAtual !== null && codigoUsuarioAtual === codigoAnterior;
     const permissaoRestaurada = lerPermissaoDaSessao(codigoUsuarioAtual);
+    const permissaoAssinada = usuario?.gruposConfirmados === true
+      ? usuario?.permissoes?.vendasGerais === true
+      : null;
+
+    if (permissaoAssinada !== null) {
+      permitido = permissaoAssinada;
+      gravarPermissaoDaSessao(codigoUsuarioAtual, permitido);
+      elementos.menu.hidden = !permitido;
+      return permitido;
+    }
 
     // Depois da primeira validacao positiva, a permissao visual permanece durante
     // toda a sessao deste usuario. As APIs continuam protegidas pelo backend.

@@ -7,6 +7,20 @@ function textoSql(valor) {
   return String(valor ?? '').replace(/'/g, "''");
 }
 
+function gruposConfirmadosSessao(req) {
+  if (req?.usuario?.gruposConfirmados !== true || !Array.isArray(req.usuario.grupos)) return null;
+  return req.usuario.grupos.map((grupo) => String(grupo || '').trim()).filter(Boolean);
+}
+
+function gruposIncluem(grupos, nomesEsperados) {
+  const esperados = new Set(
+    (Array.isArray(nomesEsperados) ? nomesEsperados : [nomesEsperados])
+      .map((nome) => String(nome || '').trim().toLocaleUpperCase('pt-BR'))
+      .filter(Boolean)
+  );
+  return grupos.some((grupo) => esperados.has(grupo.toLocaleUpperCase('pt-BR')));
+}
+
 function criarAutorizacaoGrupos({ executeQuery, cacheTtlMs = 5 * 60 * 1000 } = {}) {
   if (typeof executeQuery !== 'function') {
     throw new TypeError('executeQuery e obrigatorio para validar grupos Sankhya.');
@@ -58,7 +72,11 @@ function criarAutorizacaoGrupos({ executeQuery, cacheTtlMs = 5 * 60 * 1000 } = {
     const nomeSeguro = String(nomeGrupo || '').trim();
     return async (req, res, next) => {
       try {
-        if (!await pertenceAoGrupo(req.usuario?.codUsu, nomeSeguro)) {
+        const gruposSessao = gruposConfirmadosSessao(req);
+        const permitido = gruposSessao
+          ? gruposIncluem(gruposSessao, nomeSeguro)
+          : await pertenceAoGrupo(req.usuario?.codUsu, nomeSeguro);
+        if (!permitido) {
           res.status(403).json({ erro: 'Acesso restrito ao grupo Diretoria.' });
           return;
         }
@@ -76,7 +94,11 @@ function criarAutorizacaoGrupos({ executeQuery, cacheTtlMs = 5 * 60 * 1000 } = {
       .filter(Boolean);
     return async (req, res, next) => {
       try {
-        if (!await pertenceAAlgumGrupo(req.usuario?.codUsu, nomesSeguros)) {
+        const gruposSessao = gruposConfirmadosSessao(req);
+        const permitido = gruposSessao
+          ? gruposIncluem(gruposSessao, nomesSeguros)
+          : await pertenceAAlgumGrupo(req.usuario?.codUsu, nomesSeguros);
+        if (!permitido) {
           res.status(403).json({ erro: `Acesso restrito aos grupos ${nomesSeguros.join(' ou ')}.` });
           return;
         }
