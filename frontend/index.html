@@ -7527,6 +7527,40 @@
       line-height: 1.35;
     }
 
+    .estoque-contagem-novo-produto-resumo {
+      display: grid;
+      gap: 3px;
+      min-height: 54px;
+      padding: 10px 12px;
+      border: 1px solid #d7e8e4;
+      border-left: 4px solid #009879;
+      border-radius: 9px;
+      color: #073047;
+      background: #fff;
+    }
+
+    .estoque-contagem-novo-produto-resumo[hidden] {
+      display: none;
+    }
+
+    .estoque-contagem-novo-produto-resumo strong {
+      font-size: 0.88rem;
+      line-height: 1.3;
+    }
+
+    .estoque-contagem-novo-produto-resumo span {
+      color: #64748b;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+
+    .estoque-contagem-novo-produto-resumo[data-status="erro"] {
+      border-color: #fecaca;
+      border-left-color: #dc2626;
+      color: #b42318;
+      background: #fff7f7;
+    }
+
     .estoque-contagem-quantidade-direta input {
       width: 100%;
       min-width: 0;
@@ -7565,7 +7599,8 @@
         grid-template-columns: 1fr;
       }
 
-      .estoque-contagem-confirm-modal .separacao-confirm-card {
+      #estoque-contagem-confirm-modal .separacao-confirm-card,
+      #estoque-contagem-novo-item-modal .separacao-confirm-card {
         max-height: calc(100dvh - 24px);
         overflow-y: auto;
       }
@@ -10788,6 +10823,10 @@
                 <button class="estoque-action-warning" id="estoque-contagem-concluir-analise" type="button" hidden>
                   Preparar ajuste
                 </button>
+                <button class="estoque-action-secondary" id="estoque-contagem-adicionar-item" type="button">
+                  <i data-lucide="package-plus" aria-hidden="true"></i>
+                  Adicionar item
+                </button>
                 <button class="separacao-finish-button" id="estoque-contagem-finalizar" type="button">
                   <i data-lucide="circle-check-big" aria-hidden="true"></i>
                   Concluir contagem
@@ -10899,6 +10938,53 @@
             <div class="separacao-confirm-actions">
               <button class="btn-back" id="estoque-contagem-confirm-cancelar" type="button">Cancelar</button>
               <button class="btn-start" id="estoque-contagem-confirmar" type="button">Confirmar item</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="separacao-confirm-modal" id="estoque-contagem-novo-item-modal" hidden>
+          <div class="separacao-confirm-card" role="dialog" aria-modal="true" aria-labelledby="estoque-contagem-novo-item-titulo">
+            <h3 id="estoque-contagem-novo-item-titulo">Adicionar produto ou lote</h3>
+            <div class="separacao-confirm-product">
+              Cadastre uma posição encontrada fisicamente que não aparece na foto do estoque.
+            </div>
+            <div class="estoque-contagem-rastreabilidade">
+              <div class="separacao-confirm-field">
+                <label for="estoque-contagem-novo-codigo">Código do produto ou código de barras</label>
+                <input id="estoque-contagem-novo-codigo" type="text" maxlength="100" autocomplete="off" placeholder="Bipe ou digite o código">
+              </div>
+              <div class="estoque-contagem-novo-produto-resumo" id="estoque-contagem-novo-produto-resumo" hidden aria-live="polite">
+                <strong id="estoque-contagem-novo-produto-descricao"></strong>
+                <span id="estoque-contagem-novo-produto-meta"></span>
+              </div>
+              <div class="separacao-confirm-field" id="estoque-contagem-novo-local-field">
+                <label for="estoque-contagem-novo-local">Código do local</label>
+                <input id="estoque-contagem-novo-local" type="number" min="1" step="1" inputmode="numeric" autocomplete="off" placeholder="Local do estoque">
+              </div>
+              <div class="separacao-confirm-field">
+                <label for="estoque-contagem-novo-lote">Lote/controle</label>
+                <input id="estoque-contagem-novo-lote" type="text" maxlength="100" autocomplete="off" placeholder="Informe o lote">
+              </div>
+              <div class="estoque-contagem-datas">
+                <div class="separacao-confirm-field">
+                  <label for="estoque-contagem-novo-fabricacao">Fabricação</label>
+                  <input id="estoque-contagem-novo-fabricacao" type="date">
+                </div>
+                <div class="separacao-confirm-field">
+                  <label for="estoque-contagem-novo-validade">Validade</label>
+                  <input id="estoque-contagem-novo-validade" type="date">
+                </div>
+              </div>
+              <small>O item entrará com o saldo atual do Sankhya como base. Se a posição não existir, a base será zero e a diferença seguirá para a nota de ajuste.</small>
+            </div>
+            <div class="separacao-confirm-field">
+              <label for="estoque-contagem-novo-quantidade">Quantidade física encontrada</label>
+              <input id="estoque-contagem-novo-quantidade" type="number" min="0" step="any" inputmode="decimal" autocomplete="off" placeholder="0">
+            </div>
+            <div class="separacao-confirm-message" id="estoque-contagem-novo-item-mensagem" aria-live="polite"></div>
+            <div class="separacao-confirm-actions">
+              <button class="btn-back" id="estoque-contagem-novo-item-cancelar" type="button">Cancelar</button>
+              <button class="btn-start" id="estoque-contagem-novo-item-confirmar" type="button">Adicionar à contagem</button>
             </div>
           </div>
         </section>
@@ -11953,6 +12039,6 @@
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <script src="asyncRefresh.js?v=20260601-2"></script>
   <script src="vendas-dashboard.js?v=20260805-1"></script>
-  <script src="app.js?v=20260805-2"></script>
+  <script src="app.js?v=20260805-4"></script>
 </body>
 </html>

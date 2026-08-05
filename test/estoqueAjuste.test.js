@@ -81,6 +81,34 @@ test('ajusta somente a diferenca mesmo quando o lote informado muda', () => {
   assert.equal(plano.entrada[0].quantidadeAjuste, 29);
 });
 
+test('gera ajuste de entrada para produto e lote adicionados fora da foto', () => {
+  const plano = planejarAjustesEstoque({
+    empresa: 1,
+    rodadaAtual: 1,
+    itens: [{
+      chave: '30|1|LOTE-NOVO',
+      codProd: 30,
+      descrProd: 'Produto novo',
+      codVol: 'UN',
+      codLocal: 1,
+      controle: 'LOTE-NOVO',
+      dtFabricacao: '2026-08-05',
+      dtVal: '2028-08-05',
+      estoqueSistema: 0,
+      adicionadoManualmente: true,
+      contagens: { 1: 12 }
+    }]
+  });
+
+  assert.equal(plano.entrada.length, 1);
+  assert.equal(plano.saida.length, 0);
+  assert.equal(plano.entrada[0].quantidadeAjuste, 12);
+  assert.equal(plano.entrada[0].adicionadoManualmente, true);
+  assert.equal(plano.entrada[0].controle, 'LOTE-NOVO');
+  assert.equal(plano.entrada[0].dtFabricacao, '2026-08-05');
+  assert.equal(plano.entrada[0].dtValidade, '2028-08-05');
+});
+
 test('divide notas em lotes de no maximo vinte itens', () => {
   const lotes = dividirEmLotes(Array.from({ length: 41 }, (_, indice) => indice));
   assert.deepEqual(lotes.map((lote) => lote.length), [20, 20, 1]);

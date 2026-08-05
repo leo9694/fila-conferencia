@@ -3635,6 +3635,7 @@ function serializarSessaoContagemEstoque(sessao) {
         controle: item.controle,
         dtFabricacao: item.dtFabricacao,
         dtVal: item.dtVal,
+        adicionadoManualmente: item.adicionadoManualmente === true,
         atualizadoEm: item.atualizadoEm || null,
         atualizadoPor: item.atualizadoPor ?? null,
         contagemAtual: !possuiContagemAtual
@@ -3841,17 +3842,18 @@ async function atualizarRastreabilidadeItemEstoque({ sessao, item, dados }) {
 
   let registroOrigem = posicoesOriginais[0] || posicoesAtuais[0] || null;
   let registroDestino = posicoesDestino[0] || null;
-  if (!registroOrigem && !registroDestino) {
+  if (!item.adicionadoManualmente && !registroOrigem && !registroDestino) {
     const posicoesComSaldo = registros.filter(
       (registroEstoque) => Math.abs(Number(registroEstoque.ESTOQUE || 0)) > 0.000001
     );
     if (posicoesComSaldo.length === 1) registroOrigem = posicoesComSaldo[0];
   }
-  if (!registroOrigem && !registroDestino) {
+  if (!item.adicionadoManualmente && !registroOrigem && !registroDestino) {
     const posicoesSemControle = registrosPorControle('');
     if (posicoesSemControle.length === 1) registroOrigem = posicoesSemControle[0];
   }
-  if (!registroOrigem && !registroDestino) {
+  const permiteNovaPosicao = item.adicionadoManualmente === true && Boolean(controleNovo);
+  if (!registroOrigem && !registroDestino && !permiteNovaPosicao) {
     const lotesDisponiveis = registros
       .map((itemEstoque) => String(itemEstoque.CONTROLE || '').trim() || 'Sem controle')
       .join(', ');
@@ -4263,6 +4265,144 @@ async function sincronizarDatasNotasAjuste(sessao) {
   return sincronizarDatasEstoqueAjuste(sessao, plano.itens);
 }
 
+async function localizarProdutoParaContagem(codigo) {
+  const valor = String(codigo || '').trim().slice(0, 100);
+  if (!valor) throw new Error('Informe o codigo ou codigo de barras do produto.');
+  const codigoSql = textoSql(valor);
+  const codigoNumerico = obterNumeroInteiro(valor);
+  const filtroCodigo = codigoNumerico ? `OR PRO.CODPROD = ${codigoNumerico}` : '';
+  const produtos = await executeQuery(`
+    SELECT * FROM (
+      SELECT
+        PRO.CODPROD,
+        PRO.DESCRPROD,
+        PRO.REFERENCIA,
+        PRO.CODVOL,
+        PRO.CODGRUPOPROD,
+        NVL(GRU.DESCRGRUPOPROD, 'Sem grupo') AS DESCRGRUPOPROD
+      FROM TGFPRO PRO
+      LEFT JOIN TGFGRU GRU ON GRU.CODGRUPOPROD = PRO.CODGRUPOPROD
+      WHERE NVL(PRO.ATIVO, 'S') = 'S'
+        AND (
+          PRO.REFERENCIA = '${codigoSql}'
+          OR PRO.AD_CODBAR = '${codigoSql}'
+          OR PRO.AD_CBARANT = '${codigoSql}'
+          ${filtroCodigo}
+          OR EXISTS (
+            SELECT 1 FROM TGFVOA VOA
+            WHERE VOA.CODPROD = PRO.CODPROD
+              AND VOA.CODBARRA = '${codigoSql}'
+              AND NVL(VOA.ATIVO, 'S') = 'S'
+          )
+          OR EXISTS (
+            SELECT 1 FROM TGFEST EST
+            WHERE EST.CODPROD = PRO.CODPROD
+              AND EST.CODBARRA = '${codigoSql}'
+          )
+        )
+      ORDER BY CASE WHEN PRO.CODPROD = ${codigoNumerico || -1} THEN 0 ELSE 1 END, PRO.CODPROD
+    )
+    WHERE ROWNUM <= 10
+  `);
+  const produtoExato = codigoNumerico
+    ? produtos.find((produto) => Number(produto.CODPROD) === codigoNumerico)
+    : null;
+  if (produtoExato) return produtoExato;
+  if (!produtos.length) throw new Error('Produto nao encontrado no cadastro do Sankhya.');
+  if (produtos.length > 1) {
+    throw new Error('O codigo informado corresponde a mais de um produto. Informe o CODPROD do Sankhya.');
+  }
+  return produtos[0];
+}
+
+async function prepararNovoItemContagem(sessao, dados) {
+  const produto = await localizarProdutoParaContagem(dados?.codigo);
+  const codLocal = sessao.local === null || sessao.local === undefined
+    ? obterNumeroInteiro(dados?.codLocal)
+    : Number(sessao.local);
+  if (!codLocal) throw new Error('Informe o local onde o novo lote foi encontrado.');
+
+  const controle = String(dados?.controle || '').trim();
+  if (!controle) throw new Error('Informe o lote/controle do novo item.');
+  if (controle.length > 100) throw new Error('O lote/controle deve ter no maximo 100 caracteres.');
+  const dtFabricacao = normalizarDataIsoRastreabilidade(dados?.dtFabricacao, 'A data de fabricacao');
+  const dtValidade = normalizarDataIsoRastreabilidade(dados?.dtValidade, 'A data de validade');
+  if (!dtFabricacao || !dtValidade) {
+    throw new Error('Informe a data de fabricacao e a data de validade do novo lote.');
+  }
+  if (dtValidade < dtFabricacao) {
+    throw new Error('A validade nao pode ser anterior a data de fabricacao.');
+  }
+  const quantidade = Number(dados?.quantidade);
+  if (!Number.isFinite(quantidade) || quantidade < 0) {
+    throw new Error('Informe uma quantidade valida, igual ou maior que zero.');
+  }
+
+  const [local] = await executeQuery(`
+    SELECT CODLOCAL, NVL(DESCRLOCAL, 'Local ' || CODLOCAL) AS DESCRLOCAL
+    FROM TGFLOC
+    WHERE CODLOCAL = ${codLocal}
+  `);
+  if (!local) throw new Error('O local informado nao existe no Sankhya.');
+
+  const posicoes = await executeQuery(`
+    SELECT
+      NVL(ESTOQUE, 0) AS ESTOQUE,
+      TO_CHAR(DTFABRICACAO, 'YYYY-MM-DD') AS DTFABRICACAO,
+      TO_CHAR(DTVAL, 'YYYY-MM-DD') AS DTVAL
+    FROM TGFEST
+    WHERE CODEMP = ${Number(sessao.empresa)}
+      AND CODPROD = ${Number(produto.CODPROD)}
+      AND CODLOCAL = ${codLocal}
+      AND NVL(TRIM(CONTROLE), ' ') = '${textoSql(normalizarControleConferencia(controle))}'
+      AND NVL(CODPARC, 0) = 0
+      AND NVL(TIPO, 'P') = 'P'
+      AND NVL(ATIVO, 'S') = 'S'
+  `);
+  if (posicoes.length > 1) {
+    throw new Error('Mais de uma posicao de estoque corresponde ao produto e lote informados.');
+  }
+
+  return {
+    quantidade,
+    item: {
+      codProd: Number(produto.CODPROD),
+      descrProd: produto.DESCRPROD,
+      referencia: produto.REFERENCIA,
+      codVol: produto.CODVOL || 'UN',
+      codGrupoProd: produto.CODGRUPOPROD,
+      descrGrupoProd: produto.DESCRGRUPOPROD,
+      codLocal,
+      descrLocal: local.DESCRLOCAL,
+      controle,
+      dtFabricacao,
+      dtVal: dtValidade,
+      estoqueSistema: Number(posicoes[0]?.ESTOQUE || 0),
+      adicionadoManualmente: true
+    }
+  };
+}
+
+router.get('/estoque-contagem/produtos/localizar', async (req, res) => {
+  try {
+    const produto = await localizarProdutoParaContagem(req.query?.codigo);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({
+      produto: {
+        codProd: Number(produto.CODPROD),
+        descricao: String(produto.DESCRPROD || 'Produto sem descrição').trim(),
+        referencia: String(produto.REFERENCIA || '').trim(),
+        codVol: String(produto.CODVOL || 'UN').trim(),
+        codGrupoProd: Number(produto.CODGRUPOPROD) || null,
+        grupo: String(produto.DESCRGRUPOPROD || 'Sem grupo').trim()
+      }
+    });
+  } catch (err) {
+    console.error('Falha ao localizar produto para a contagem de estoque:', err);
+    res.status(422).json({ erro: err.message });
+  }
+});
+
 router.get('/estoque-contagem/disponibilidade', (req, res) => {
   const ambienteTeste = ambienteSankhyaTeste();
   res.json({
@@ -4562,6 +4702,31 @@ router.get('/estoque-contagem/sessoes/:id/sincronizacao', (req, res) => {
     versao: versaoAtual,
     sessao: serializarSessaoContagemEstoque(sessao)
   });
+});
+
+router.post('/estoque-contagem/sessoes/:id/itens', async (req, res) => {
+  try {
+    const id = req.params.id;
+    const sessao = await executarEmFilaContagemEstoque(id, async () => {
+      const sessaoAtual = estoqueContagemStore.obter(id);
+      if (!sessaoAtual) {
+        const erro = new Error('Contagem de estoque nao encontrada.');
+        erro.status = 404;
+        throw erro;
+      }
+      const preparado = await prepararNovoItemContagem(sessaoAtual, req.body);
+      return estoqueContagemStore.adicionarItem({
+        id,
+        item: preparado.item,
+        quantidade: preparado.quantidade,
+        usuario: req.usuario
+      });
+    });
+    res.status(201).json({ sessao: serializarSessaoContagemEstoque(sessao) });
+  } catch (err) {
+    console.error('Falha ao adicionar item manual na contagem de estoque:', err);
+    res.status(err.status || 422).json({ erro: err.message });
+  }
 });
 
 router.get('/estoque-contagem/sessoes/:id/localizar', async (req, res) => {

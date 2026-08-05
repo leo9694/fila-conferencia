@@ -36,6 +36,7 @@ function planejarAjustesEstoque(sessao) {
       controle: texto(item.controle),
       dtFabricacao: texto(item.dtFabricacao),
       dtValidade: texto(item.dtVal || item.dtValidade),
+      adicionadoManualmente: item.adicionadoManualmente === true,
       estoqueSistema,
       contagem,
       diferenca,

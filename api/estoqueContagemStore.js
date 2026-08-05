@@ -61,6 +61,7 @@ function normalizarItem(item = {}) {
     dtFabricacao: texto(item.dtFabricacao || item.DTFABRICACAO) || null,
     dtVal: texto(item.dtVal || item.DTVAL) || null,
     estoqueSistema: numero(item.estoqueSistema ?? item.ESTOQUE),
+    adicionadoManualmente: item.adicionadoManualmente === true,
     contagens: item.contagens && typeof item.contagens === 'object' ? { ...item.contagens } : {},
     atualizadoEm: item.atualizadoEm || null,
     atualizadoPor: item.atualizadoPor ?? null
@@ -271,6 +272,38 @@ function criarEstoqueContagemStore(options = {}) {
     return sessao;
   }
 
+  function adicionarItem({ id, item, quantidade, usuario = null }) {
+    const sessao = exigir(id);
+    if (sessao.status !== 'EM_CONTAGEM' || numero(sessao.rodadaAtual) !== 1) {
+      throw new Error('Novos itens somente podem ser adicionados durante a primeira contagem.');
+    }
+
+    const novoItem = normalizarItem({
+      ...item,
+      adicionadoManualmente: true
+    });
+    if (!novoItem.codProd || !novoItem.codLocal) {
+      throw new Error('Informe um produto e um local validos.');
+    }
+    if (!novoItem.controle) {
+      throw new Error('Informe o lote/controle do novo item.');
+    }
+    if (sessao.itens.some((registro) => registro.chave === novoItem.chave)) {
+      throw new Error('Este produto e lote ja fazem parte da foto. Abra a linha existente para informar a contagem.');
+    }
+
+    const valor = Number(quantidade);
+    if (!Number.isFinite(valor) || valor < 0) throw new Error('Informe uma quantidade valida.');
+    const agora = new Date().toISOString();
+    novoItem.contagens[String(sessao.rodadaAtual)] = valor;
+    novoItem.atualizadoEm = agora;
+    novoItem.atualizadoPor = usuario;
+    sessao.itens.push(novoItem);
+    atualizarSessao(sessao, agora, usuario);
+    persistir();
+    return sessao;
+  }
+
   function finalizarRodada({ id, usuario = null }) {
     const sessao = exigir(id);
     if (!['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(sessao.status)) {
@@ -362,6 +395,7 @@ function criarEstoqueContagemStore(options = {}) {
     criar,
     validarLancamento,
     registrar,
+    adicionarItem,
     finalizarRodada,
     iniciarRecontagem,
     concluirAnalise,

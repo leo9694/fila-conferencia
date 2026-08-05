@@ -129,6 +129,43 @@ test('versiona a sessao e impede sobrescrever o mesmo item com uma tela desatual
   assert.equal(outroItem.versao, 3);
 });
 
+test('adiciona produto e lote ausentes da foto com saldo base zero', () => {
+  const store = criarStore();
+  const sessao = store.criar({ empresa: 1, usuario: 7, itens });
+  const atualizada = store.adicionarItem({
+    id: sessao.id,
+    usuario: 9,
+    quantidade: 12,
+    item: {
+      codProd: 30,
+      descrProd: 'Produto novo',
+      codVol: 'UN',
+      codGrupoProd: 300,
+      descrGrupoProd: 'Vasos',
+      codLocal: 1,
+      descrLocal: 'Deposito',
+      controle: 'LOTE-NOVO',
+      dtFabricacao: '2026-08-05',
+      dtVal: '2028-08-05',
+      estoqueSistema: 0
+    }
+  });
+
+  const novoItem = atualizada.itens.find((item) => item.codProd === 30);
+  assert.equal(novoItem.adicionadoManualmente, true);
+  assert.equal(novoItem.estoqueSistema, 0);
+  assert.equal(novoItem.contagens['1'], 12);
+  assert.equal(store.resumir(atualizada).itensDivergentes, 1);
+  assert.throws(
+    () => store.adicionarItem({
+      id: sessao.id,
+      quantidade: 12,
+      item: novoItem
+    }),
+    /ja fazem parte da foto/
+  );
+});
+
 test('preserva primeira contagem e permite recontar somente divergencias', () => {
   const store = criarStore();
   const sessao = store.criar({ empresa: 1, usuario: 7, itens });

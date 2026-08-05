@@ -17,6 +17,9 @@ let estoqueContagemPreviaVersao = 0;
 let estoqueContagemSyncTimer = null;
 let estoqueContagemSyncEmAndamento = false;
 let estoqueContagemItemVersaoAberta = null;
+let estoqueContagemNovoProduto = null;
+let estoqueContagemNovoProdutoTimer = null;
+let estoqueContagemNovoProdutoConsulta = 0;
 let confirmacaoAppResolver = null;
 let confirmacaoAppFocoAnterior = null;
 let homeResumoCarregadoEm = 0;
@@ -126,6 +129,21 @@ const estoqueContagemValidade = document.getElementById('estoque-contagem-valida
 const estoqueContagemUnidade = document.getElementById('estoque-contagem-unidade');
 const botaoCancelarConfirmacaoEstoque = document.getElementById('estoque-contagem-confirm-cancelar');
 const botaoConfirmarItemEstoque = document.getElementById('estoque-contagem-confirmar');
+const botaoAdicionarItemContagemEstoque = document.getElementById('estoque-contagem-adicionar-item');
+const estoqueContagemNovoItemModal = document.getElementById('estoque-contagem-novo-item-modal');
+const estoqueContagemNovoCodigo = document.getElementById('estoque-contagem-novo-codigo');
+const estoqueContagemNovoProdutoResumo = document.getElementById('estoque-contagem-novo-produto-resumo');
+const estoqueContagemNovoProdutoDescricao = document.getElementById('estoque-contagem-novo-produto-descricao');
+const estoqueContagemNovoProdutoMeta = document.getElementById('estoque-contagem-novo-produto-meta');
+const estoqueContagemNovoLocalField = document.getElementById('estoque-contagem-novo-local-field');
+const estoqueContagemNovoLocal = document.getElementById('estoque-contagem-novo-local');
+const estoqueContagemNovoLote = document.getElementById('estoque-contagem-novo-lote');
+const estoqueContagemNovoFabricacao = document.getElementById('estoque-contagem-novo-fabricacao');
+const estoqueContagemNovoValidade = document.getElementById('estoque-contagem-novo-validade');
+const estoqueContagemNovoQuantidade = document.getElementById('estoque-contagem-novo-quantidade');
+const estoqueContagemNovoItemMensagem = document.getElementById('estoque-contagem-novo-item-mensagem');
+const botaoCancelarNovoItemEstoque = document.getElementById('estoque-contagem-novo-item-cancelar');
+const botaoConfirmarNovoItemEstoque = document.getElementById('estoque-contagem-novo-item-confirmar');
 const botaoRecontarEstoque = document.getElementById('estoque-contagem-recontar');
 const botaoConcluirAnaliseEstoque = document.getElementById('estoque-contagem-concluir-analise');
 const botaoFinalizarContagemEstoque = document.getElementById('estoque-contagem-finalizar');
@@ -1897,6 +1915,7 @@ async function gerarRelatorioCtes(event) {
 function mostrarSelecaoContagemEstoque() {
   pararSincronizacaoContagemEstoque();
   if (estoqueContagemConfirmModal) fecharConfirmacaoContagemEstoque();
+  if (estoqueContagemNovoItemModal) fecharNovoItemContagemEstoque();
   cancelarToqueLongoContagemEstoque();
   estoqueContagemAtual = null;
   estoqueContagemChavesLocalizadas = null;
@@ -2690,6 +2709,7 @@ function renderizarContagemEstoque() {
   const quantidadeVisivel = itensVisiveisContagemEstoque().length;
   estoqueContagemFiltroResumo.textContent = `${quantidadeVisivel} ${quantidadeVisivel === 1 ? 'item exibido' : 'itens exibidos'}`;
   botaoFinalizarContagemEstoque.hidden = !aberta;
+  botaoAdicionarItemContagemEstoque.hidden = sessao.status !== 'EM_CONTAGEM';
   botaoFinalizarContagemEstoque.innerHTML = `
     <i data-lucide="circle-check-big" aria-hidden="true"></i>
     ${sessao.status === 'EM_RECONTAGEM' ? 'Concluir recontagem' : 'Concluir contagem'}
@@ -2716,6 +2736,161 @@ function fecharConfirmacaoContagemEstoque() {
   estoqueContagemValidade.value = '';
   estoqueContagemQuantidade.value = '';
   estoqueContagemUnidade.textContent = '-';
+}
+
+function fecharNovoItemContagemEstoque() {
+  if (estoqueContagemNovoProdutoTimer) clearTimeout(estoqueContagemNovoProdutoTimer);
+  estoqueContagemNovoProdutoTimer = null;
+  estoqueContagemNovoProdutoConsulta += 1;
+  estoqueContagemNovoProduto = null;
+  estoqueContagemNovoItemModal.hidden = true;
+  estoqueContagemNovoCodigo.value = '';
+  estoqueContagemNovoLocal.value = '';
+  estoqueContagemNovoLote.value = '';
+  estoqueContagemNovoFabricacao.value = '';
+  estoqueContagemNovoValidade.value = '';
+  estoqueContagemNovoQuantidade.value = '';
+  estoqueContagemNovoItemMensagem.textContent = '';
+  estoqueContagemNovoProdutoResumo.hidden = true;
+  estoqueContagemNovoProdutoResumo.removeAttribute('data-status');
+  estoqueContagemNovoProdutoDescricao.textContent = '';
+  estoqueContagemNovoProdutoMeta.textContent = '';
+}
+
+function exibirResumoNovoProdutoContagem(titulo, detalhe = '', status = '') {
+  estoqueContagemNovoProdutoResumo.hidden = false;
+  estoqueContagemNovoProdutoDescricao.textContent = titulo;
+  estoqueContagemNovoProdutoMeta.textContent = detalhe;
+  if (status) estoqueContagemNovoProdutoResumo.dataset.status = status;
+  else estoqueContagemNovoProdutoResumo.removeAttribute('data-status');
+}
+
+async function consultarNovoProdutoContagem({ exibirErro = true } = {}) {
+  if (estoqueContagemNovoProdutoTimer) clearTimeout(estoqueContagemNovoProdutoTimer);
+  estoqueContagemNovoProdutoTimer = null;
+  const codigo = estoqueContagemNovoCodigo.value.trim();
+  if (!codigo) {
+    estoqueContagemNovoProduto = null;
+    estoqueContagemNovoProdutoResumo.hidden = true;
+    return null;
+  }
+  if (estoqueContagemNovoProduto?.codigoConsultado === codigo) {
+    return estoqueContagemNovoProduto;
+  }
+
+  const consulta = ++estoqueContagemNovoProdutoConsulta;
+  exibirResumoNovoProdutoContagem('Consultando produto...', 'Aguarde a confirmação do cadastro no Sankhya.');
+  try {
+    const resposta = await fetch(
+      `/api/estoque-contagem/produtos/localizar?codigo=${encodeURIComponent(codigo)}`,
+      { cache: 'no-store' }
+    );
+    const payload = await resposta.json().catch(() => ({}));
+    if (consulta !== estoqueContagemNovoProdutoConsulta || estoqueContagemNovoCodigo.value.trim() !== codigo) {
+      return null;
+    }
+    if (!resposta.ok) throw new Error(payload.erro || 'Produto não encontrado no Sankhya.');
+
+    estoqueContagemNovoProduto = { ...payload.produto, codigoConsultado: codigo };
+    const unidade = estoqueContagemNovoProduto.codVol || 'UN';
+    const grupo = estoqueContagemNovoProduto.grupo || 'Sem grupo';
+    exibirResumoNovoProdutoContagem(
+      `${estoqueContagemNovoProduto.codProd} - ${estoqueContagemNovoProduto.descricao}`,
+      `Unidade: ${unidade} · Grupo: ${grupo}`
+    );
+    estoqueContagemNovoItemMensagem.textContent = '';
+    return estoqueContagemNovoProduto;
+  } catch (error) {
+    if (consulta !== estoqueContagemNovoProdutoConsulta) return null;
+    estoqueContagemNovoProduto = null;
+    exibirResumoNovoProdutoContagem('Produto não localizado', error.message, 'erro');
+    if (exibirErro) estoqueContagemNovoItemMensagem.textContent = error.message;
+    return null;
+  }
+}
+
+function agendarConsultaNovoProdutoContagem() {
+  if (estoqueContagemNovoProdutoTimer) clearTimeout(estoqueContagemNovoProdutoTimer);
+  estoqueContagemNovoProduto = null;
+  estoqueContagemNovoProdutoConsulta += 1;
+  const codigo = estoqueContagemNovoCodigo.value.trim();
+  if (!codigo) {
+    estoqueContagemNovoProdutoResumo.hidden = true;
+    estoqueContagemNovoItemMensagem.textContent = '';
+    return;
+  }
+  exibirResumoNovoProdutoContagem('Identificando produto...', 'A descrição será carregada automaticamente.');
+  estoqueContagemNovoProdutoTimer = setTimeout(() => {
+    estoqueContagemNovoProdutoTimer = null;
+    consultarNovoProdutoContagem({ exibirErro: false });
+  }, 350);
+}
+
+function abrirNovoItemContagemEstoque() {
+  if (!estoqueContagemAtual || estoqueContagemAtual.status !== 'EM_CONTAGEM') {
+    atualizarMensagemContagemEstoque('Novos itens somente podem ser adicionados durante a primeira contagem.', true);
+    return;
+  }
+  fecharNovoItemContagemEstoque();
+  const localFixo = estoqueContagemAtual.local !== null && estoqueContagemAtual.local !== undefined;
+  estoqueContagemNovoLocalField.hidden = localFixo;
+  estoqueContagemNovoLocal.value = localFixo ? String(estoqueContagemAtual.local) : '';
+  estoqueContagemNovoItemModal.hidden = false;
+  setTimeout(() => estoqueContagemNovoCodigo.focus(), 0);
+}
+
+async function adicionarNovoItemContagemEstoque() {
+  if (!estoqueContagemAtual) return;
+  const quantidadeTexto = String(estoqueContagemNovoQuantidade.value || '').replace(',', '.');
+  const quantidade = Number(quantidadeTexto);
+  if (
+    !estoqueContagemNovoCodigo.value.trim()
+    || !estoqueContagemNovoLote.value.trim()
+    || !estoqueContagemNovoFabricacao.value
+    || !estoqueContagemNovoValidade.value
+    || quantidadeTexto === ''
+    || !Number.isFinite(quantidade)
+    || quantidade < 0
+  ) {
+    estoqueContagemNovoItemMensagem.textContent = 'Preencha produto, lote, fabricação, validade e quantidade.';
+    return;
+  }
+
+  const produtoConsultado = await consultarNovoProdutoContagem();
+  if (!produtoConsultado) return;
+
+  botaoConfirmarNovoItemEstoque.disabled = true;
+  botaoConfirmarNovoItemEstoque.textContent = 'Adicionando...';
+  try {
+    const resposta = await fetch(
+      `/api/estoque-contagem/sessoes/${encodeURIComponent(estoqueContagemAtual.id)}/itens`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          codigo: produtoConsultado.codProd,
+          codLocal: estoqueContagemNovoLocal.value,
+          controle: estoqueContagemNovoLote.value.trim(),
+          dtFabricacao: estoqueContagemNovoFabricacao.value,
+          dtValidade: estoqueContagemNovoValidade.value,
+          quantidade
+        })
+      }
+    );
+    const payload = await resposta.json();
+    if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível adicionar o item à contagem.');
+    estoqueContagemAtual = enriquecerNomeEmpresaContagem(payload.sessao);
+    mesclarSessaoListaContagemEstoque(estoqueContagemAtual);
+    estoqueContagemChavesLocalizadas = null;
+    fecharNovoItemContagemEstoque();
+    renderizarContagemEstoque();
+    atualizarMensagemContagemEstoque('Novo produto/lote adicionado à contagem e compartilhado com os demais dispositivos.');
+  } catch (error) {
+    estoqueContagemNovoItemMensagem.textContent = error.message;
+  } finally {
+    botaoConfirmarNovoItemEstoque.disabled = false;
+    botaoConfirmarNovoItemEstoque.textContent = 'Adicionar à contagem';
+  }
 }
 
 function abrirConfirmacaoContagemEstoque(item) {
@@ -2821,6 +2996,9 @@ async function sincronizarContagemEstoqueAberta() {
     const continuaAberta = ['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(estoqueContagemAtual.status);
     if (estavaAberta && !continuaAberta && !estoqueContagemConfirmModal.hidden) {
       fecharConfirmacaoContagemEstoque();
+    }
+    if (estoqueContagemAtual.status !== 'EM_CONTAGEM' && !estoqueContagemNovoItemModal.hidden) {
+      fecharNovoItemContagemEstoque();
     }
     renderizarContagemEstoque();
   } catch (error) {
@@ -2999,6 +3177,7 @@ function capturarTeclaLeitorContagemEstoque(event) {
     || estoqueContagemItensView.hidden
     || estoqueContagemScan.hidden
     || !estoqueContagemConfirmModal.hidden
+    || !estoqueContagemNovoItemModal.hidden
     || event.ctrlKey
     || event.altKey
     || event.metaKey
@@ -9651,6 +9830,27 @@ botaoCancelarConfirmacaoEstoque.addEventListener('click', fecharConfirmacaoConta
 botaoConfirmarItemEstoque.addEventListener('click', confirmarItemContagemEstoque);
 estoqueContagemConfirmModal.addEventListener('click', (event) => {
   if (event.target === estoqueContagemConfirmModal) fecharConfirmacaoContagemEstoque();
+});
+botaoAdicionarItemContagemEstoque.addEventListener('click', abrirNovoItemContagemEstoque);
+botaoCancelarNovoItemEstoque.addEventListener('click', fecharNovoItemContagemEstoque);
+botaoConfirmarNovoItemEstoque.addEventListener('click', adicionarNovoItemContagemEstoque);
+estoqueContagemNovoCodigo.addEventListener('input', agendarConsultaNovoProdutoContagem);
+estoqueContagemNovoCodigo.addEventListener('keydown', async (event) => {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  if (estoqueContagemNovoProdutoTimer) clearTimeout(estoqueContagemNovoProdutoTimer);
+  estoqueContagemNovoProdutoTimer = null;
+  const produto = await consultarNovoProdutoContagem();
+  if (produto) estoqueContagemNovoLote.focus();
+});
+estoqueContagemNovoItemModal.addEventListener('click', (event) => {
+  if (event.target === estoqueContagemNovoItemModal) fecharNovoItemContagemEstoque();
+});
+estoqueContagemNovoQuantidade.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    adicionarNovoItemContagemEstoque();
+  }
 });
 estoqueContagemAuditoria.addEventListener('click', (event) => {
   const botao = event.target.closest('[data-estoque-auditoria-filtro]');
