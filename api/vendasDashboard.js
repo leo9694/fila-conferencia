@@ -137,6 +137,7 @@ function consolidarDashboardVendas({ dimensoes = [], totais = [], grupos = [] } 
   const meses = new Map();
   const vendedores = new Map();
   const status = new Map();
+  const gruposConsolidados = new Map();
 
   dimensoes.forEach((linha) => {
     somarEmMapa(meses, linha.MES, { mes: linha.MES }, linha);
@@ -145,6 +146,20 @@ function consolidarDashboardVendas({ dimensoes = [], totais = [], grupos = [] } 
       nome: linha.VENDEDOR || 'SEM VENDEDOR'
     }, linha);
     somarEmMapa(status, linha.STATUS_VENDA, { status: linha.STATUS_VENDA }, linha);
+  });
+
+  grupos.forEach((linha) => {
+    const codGrupo = numero(linha.CODGRUPOPROD);
+    const chave = String(codGrupo || linha.GRUPO || 'SEM_GRUPO');
+    const atual = gruposConsolidados.get(chave) || {
+      codGrupo,
+      nome: linha.GRUPO || `Grupo ${linha.CODGRUPOPROD}`,
+      quantidade: 0,
+      valor: 0
+    };
+    atual.quantidade += numero(linha.QUANTIDADE);
+    atual.valor += numero(linha.VALOR);
+    gruposConsolidados.set(chave, atual);
   });
 
   const total = totais.find((item) => item.CODEMP === null || item.CODEMP === undefined || item.CODEMP === '') || totais[0] || {};
@@ -160,7 +175,8 @@ function consolidarDashboardVendas({ dimensoes = [], totais = [], grupos = [] } 
       ticketMedio: numero(item.TICKET_MEDIO)
     }))
     .sort((a, b) => b.valor - a.valor);
-  const totalGrupos = grupos.reduce((soma, item) => soma + numero(item.VALOR), 0);
+  const totalGrupos = [...gruposConsolidados.values()]
+    .reduce((soma, item) => soma + item.valor, 0);
   return {
     resumo: {
       pedidos: numero(total.PEDIDOS),
@@ -176,15 +192,10 @@ function consolidarDashboardVendas({ dimensoes = [], totais = [], grupos = [] } 
       .map((item, indice) => ({ ...item, posicao: indice + 1, ticketMedio: item.pedidos ? item.valor / item.pedidos : 0 })),
     empresas,
     status: [...status.values()].sort((a, b) => b.valor - a.valor),
-    grupos: grupos
+    grupos: [...gruposConsolidados.values()]
       .map((item) => ({
-        codGrupo: numero(item.CODGRUPOPROD),
-        nome: item.GRUPO || `Grupo ${item.CODGRUPOPROD}`,
-        codEmp: numero(item.CODEMP),
-        empresa: item.EMPRESA,
-        quantidade: numero(item.QUANTIDADE),
-        valor: numero(item.VALOR),
-        percentual: totalGrupos ? numero(item.VALOR) / totalGrupos * 100 : 0
+        ...item,
+        percentual: totalGrupos ? item.valor / totalGrupos * 100 : 0
       }))
       .sort((a, b) => b.valor - a.valor)
       .slice(0, 10)

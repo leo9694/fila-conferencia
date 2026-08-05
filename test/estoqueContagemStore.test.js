@@ -94,6 +94,41 @@ test('persiste lote e datas editados junto com a contagem', () => {
   assert.equal(atualizada.itens[0].contagens['1'], 6);
 });
 
+test('versiona a sessao e impede sobrescrever o mesmo item com uma tela desatualizada', () => {
+  const store = criarStore();
+  const sessao = store.criar({ empresa: 1, usuario: 7, itens });
+
+  assert.equal(sessao.versao, 1);
+  const atualizada = store.registrar({
+    id: sessao.id,
+    chave: sessao.itens[0].chave,
+    quantidade: 5,
+    atualizadoEmEsperado: null,
+    usuario: 7
+  });
+
+  assert.equal(atualizada.versao, 2);
+  assert.throws(
+    () => store.registrar({
+      id: sessao.id,
+      chave: sessao.itens[0].chave,
+      quantidade: 4,
+      atualizadoEmEsperado: null,
+      usuario: 9
+    }),
+    (erro) => erro.codigo === 'ESTOQUE_CONTAGEM_CONFLITO'
+  );
+
+  const outroItem = store.registrar({
+    id: sessao.id,
+    chave: sessao.itens[1].chave,
+    quantidade: 8,
+    atualizadoEmEsperado: null,
+    usuario: 9
+  });
+  assert.equal(outroItem.versao, 3);
+});
+
 test('preserva primeira contagem e permite recontar somente divergencias', () => {
   const store = criarStore();
   const sessao = store.criar({ empresa: 1, usuario: 7, itens });

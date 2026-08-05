@@ -67,6 +67,24 @@ function normalizarItem(item = {}) {
   };
 }
 
+function versaoSessao(sessao) {
+  return Math.max(1, Math.trunc(numero(sessao?.versao)) || 1);
+}
+
+function atualizarSessao(sessao, agora, usuario) {
+  sessao.versao = versaoSessao(sessao) + 1;
+  sessao.atualizadoEm = agora;
+  sessao.atualizadoPor = usuario;
+}
+
+function erroConflitoItem() {
+  const erro = new Error(
+    'Este item foi atualizado em outro dispositivo. A contagem foi sincronizada; revise o valor antes de tentar novamente.'
+  );
+  erro.codigo = 'ESTOQUE_CONTAGEM_CONFLITO';
+  return erro;
+}
+
 function obterContagemRodada(item, rodada) {
   const valor = item?.contagens?.[String(rodada)];
   return valor === null || valor === undefined ? null : numero(valor);
@@ -176,6 +194,7 @@ function criarEstoqueContagemStore(options = {}) {
 
     state.sessoes[id] = {
       id,
+      versao: 1,
       ambiente: namespace,
       empresa: numero(empresa),
       nomeEmpresa: texto(nomeEmpresa) || `Empresa ${numero(empresa)}`,
@@ -197,7 +216,7 @@ function criarEstoqueContagemStore(options = {}) {
     return state.sessoes[id];
   }
 
-  function validarLancamento({ id, chave, quantidade }) {
+  function validarLancamento({ id, chave, quantidade, atualizadoEmEsperado }) {
     const sessao = exigir(id);
     if (!['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(sessao.status)) {
       throw new Error('Esta contagem nao esta aberta para lancamentos.');
@@ -205,6 +224,12 @@ function criarEstoqueContagemStore(options = {}) {
 
     const item = sessao.itens.find((registro) => registro.chave === texto(chave));
     if (!item) throw new Error('Item nao pertence a esta copia de estoque.');
+    if (
+      atualizadoEmEsperado !== undefined
+      && String(item.atualizadoEm || '') !== String(atualizadoEmEsperado || '')
+    ) {
+      throw erroConflitoItem();
+    }
     if (sessao.status === 'EM_RECONTAGEM' && !itemDivergente({ ...sessao, rodadaAtual: 1 }, item)) {
       throw new Error('Na recontagem, somente itens divergentes podem ser alterados.');
     }
@@ -223,9 +248,15 @@ function criarEstoqueContagemStore(options = {}) {
     dtFabricacao,
     dtValidade,
     estoqueSistema,
+    atualizadoEmEsperado,
     usuario = null
   }) {
-    const { sessao, item, valor } = validarLancamento({ id, chave, quantidade });
+    const { sessao, item, valor } = validarLancamento({
+      id,
+      chave,
+      quantidade,
+      atualizadoEmEsperado
+    });
 
     const agora = new Date().toISOString();
     if (controle !== undefined) item.controle = texto(controle);
@@ -235,8 +266,7 @@ function criarEstoqueContagemStore(options = {}) {
     item.contagens[String(sessao.rodadaAtual)] = valor;
     item.atualizadoEm = agora;
     item.atualizadoPor = usuario;
-    sessao.atualizadoEm = agora;
-    sessao.atualizadoPor = usuario;
+    atualizarSessao(sessao, agora, usuario);
     persistir();
     return sessao;
   }
@@ -256,8 +286,7 @@ function criarEstoqueContagemStore(options = {}) {
     const resumo = resumir(sessao);
     const agora = new Date().toISOString();
     sessao.status = resumo.itensDivergentes > 0 ? 'EM_ANALISE' : 'CONCLUIDA';
-    sessao.atualizadoEm = agora;
-    sessao.atualizadoPor = usuario;
+    atualizarSessao(sessao, agora, usuario);
     sessao.finalizadoEm = sessao.status === 'CONCLUIDA' ? agora : null;
     persistir();
     return sessao;
@@ -272,8 +301,7 @@ function criarEstoqueContagemStore(options = {}) {
     const agora = new Date().toISOString();
     sessao.rodadaAtual = 2;
     sessao.status = 'EM_RECONTAGEM';
-    sessao.atualizadoEm = agora;
-    sessao.atualizadoPor = usuario;
+    atualizarSessao(sessao, agora, usuario);
     persistir();
     return sessao;
   }
@@ -288,8 +316,7 @@ function criarEstoqueContagemStore(options = {}) {
     const agora = new Date().toISOString();
     sessao.status = resumir(sessao).itensDivergentes > 0 ? 'PRONTA_PARA_AJUSTE' : 'CONCLUIDA';
     sessao.finalizadoEm = agora;
-    sessao.atualizadoEm = agora;
-    sessao.atualizadoPor = usuario;
+    atualizarSessao(sessao, agora, usuario);
     persistir();
     return sessao;
   }
@@ -320,8 +347,7 @@ function criarEstoqueContagemStore(options = {}) {
       }))
     };
     sessao.status = 'AJUSTE_GERADO';
-    sessao.atualizadoEm = agora;
-    sessao.atualizadoPor = usuario;
+    atualizarSessao(sessao, agora, usuario);
     persistir();
     return sessao;
   }

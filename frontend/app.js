@@ -14,6 +14,9 @@ let leituraContagemEstoqueMobile = '';
 let toqueLongoContagemEstoque = null;
 let estoqueContagemPreviaTimer = null;
 let estoqueContagemPreviaVersao = 0;
+let estoqueContagemSyncTimer = null;
+let estoqueContagemSyncEmAndamento = false;
+let estoqueContagemItemVersaoAberta = null;
 let confirmacaoAppResolver = null;
 let confirmacaoAppFocoAnterior = null;
 let homeResumoCarregadoEm = 0;
@@ -1892,6 +1895,7 @@ async function gerarRelatorioCtes(event) {
 }
 
 function mostrarSelecaoContagemEstoque() {
+  pararSincronizacaoContagemEstoque();
   if (estoqueContagemConfirmModal) fecharConfirmacaoContagemEstoque();
   cancelarToqueLongoContagemEstoque();
   estoqueContagemAtual = null;
@@ -1917,10 +1921,12 @@ function mostrarItensContagemEstoque() {
   estoqueContagemActive.hidden = false;
   estoqueContagemScreen.classList.add('contagem-itens-ativa');
   configurarLeitorContagemEstoque();
+  iniciarSincronizacaoContagemEstoque();
   atualizarIcones();
 }
 
 async function mostrarHistoricoContagemEstoque() {
+  pararSincronizacaoContagemEstoque();
   estoqueContagemAtual = null;
   estoqueContagemChavesLocalizadas = null;
   estoqueContagemScreen.classList.remove('contagem-itens-ativa');
@@ -2702,6 +2708,7 @@ function renderizarContagemEstoque() {
 
 function fecharConfirmacaoContagemEstoque() {
   estoqueContagemItemSelecionado = null;
+  estoqueContagemItemVersaoAberta = null;
   estoqueContagemConfirmModal.hidden = true;
   estoqueContagemConfirmMensagem.textContent = '';
   estoqueContagemLote.value = '';
@@ -2718,6 +2725,7 @@ function abrirConfirmacaoContagemEstoque(item) {
   }
 
   estoqueContagemItemSelecionado = item;
+  estoqueContagemItemVersaoAberta = item.atualizadoEm || null;
   const recontagem = estoqueContagemAtual?.status === 'EM_RECONTAGEM';
   estoqueContagemConfirmTitulo.textContent = recontagem
     ? 'Confirmar recontagem'
@@ -2762,6 +2770,70 @@ async function abrirSessaoContagemEstoque(id) {
   } catch (error) {
     atualizarMensagemContagemEstoque(error.message, true);
   }
+}
+
+function pararSincronizacaoContagemEstoque() {
+  if (estoqueContagemSyncTimer) clearInterval(estoqueContagemSyncTimer);
+  estoqueContagemSyncTimer = null;
+  estoqueContagemSyncEmAndamento = false;
+}
+
+function mesclarSessaoListaContagemEstoque(sessao) {
+  const indice = estoqueContagemLista.findIndex((item) => item.id === sessao.id);
+  if (indice < 0) return;
+  estoqueContagemLista[indice] = {
+    ...estoqueContagemLista[indice],
+    ...sessao,
+    itens: undefined
+  };
+}
+
+async function sincronizarContagemEstoqueAberta() {
+  if (
+    estoqueContagemSyncEmAndamento
+    || !estoqueContagemAtual
+    || estoqueContagemItensView.hidden
+    || !estoqueContagemScreen.classList.contains('active')
+    || document.hidden
+  ) return;
+
+  estoqueContagemSyncEmAndamento = true;
+  const id = estoqueContagemAtual.id;
+  const versao = Number(estoqueContagemAtual.versao || 1);
+  try {
+    const resposta = await fetch(
+      `/api/estoque-contagem/sessoes/${encodeURIComponent(id)}/sincronizacao?versao=${encodeURIComponent(versao)}`,
+      { cache: 'no-store' }
+    );
+    const payload = await resposta.json();
+    if (resposta.status === 404 && estoqueContagemAtual?.id === id) {
+      mostrarSelecaoContagemEstoque();
+      await carregarListaContagensEstoque();
+      atualizarMensagemContagemEstoque('Esta contagem foi excluida em outro dispositivo.', true);
+      return;
+    }
+    if (!resposta.ok) throw new Error(payload.erro || 'Nao foi possivel sincronizar a contagem.');
+    if (!payload.alterada || !payload.sessao || estoqueContagemAtual?.id !== id) return;
+
+    const estavaAberta = ['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(estoqueContagemAtual.status);
+    estoqueContagemAtual = enriquecerNomeEmpresaContagem(payload.sessao);
+    mesclarSessaoListaContagemEstoque(estoqueContagemAtual);
+    const continuaAberta = ['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(estoqueContagemAtual.status);
+    if (estavaAberta && !continuaAberta && !estoqueContagemConfirmModal.hidden) {
+      fecharConfirmacaoContagemEstoque();
+    }
+    renderizarContagemEstoque();
+  } catch (error) {
+    console.warn('Falha temporaria ao sincronizar a contagem de estoque:', error);
+  } finally {
+    estoqueContagemSyncEmAndamento = false;
+  }
+}
+
+function iniciarSincronizacaoContagemEstoque() {
+  pararSincronizacaoContagemEstoque();
+  if (!estoqueContagemAtual) return;
+  estoqueContagemSyncTimer = setInterval(sincronizarContagemEstoqueAberta, 1500);
 }
 
 async function criarSessaoContagemEstoque() {
@@ -2815,11 +2887,21 @@ async function salvarItemContagemEstoque(chave, quantidade, rastreabilidade = {}
           quantidade: valor,
           controle: String(rastreabilidade.controle || '').trim(),
           dtFabricacao: rastreabilidade.dtFabricacao || null,
-          dtValidade: rastreabilidade.dtValidade || null
+          dtValidade: rastreabilidade.dtValidade || null,
+          atualizadoEmEsperado: estoqueContagemItemVersaoAberta
         })
       }
     );
     const payload = await resposta.json();
+    if (resposta.status === 409 && payload.sessao) {
+      estoqueContagemAtual = enriquecerNomeEmpresaContagem(payload.sessao);
+      mesclarSessaoListaContagemEstoque(estoqueContagemAtual);
+      fecharConfirmacaoContagemEstoque();
+      estoqueContagemChavesLocalizadas = null;
+      renderizarContagemEstoque();
+      atualizarMensagemContagemEstoque(payload.erro, true);
+      return;
+    }
     if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível salvar a contagem.');
     estoqueContagemAtual = enriquecerNomeEmpresaContagem(payload.sessao);
     fecharConfirmacaoContagemEstoque();
@@ -8967,6 +9049,7 @@ function abrirConferencia(opcoes = {}) {
 }
 
 function mostrarHomeESuspenderRefresh() {
+  pararSincronizacaoContagemEstoque();
   mostrarHome();
   if (refreshLoop) {
     refreshLoop.stop();

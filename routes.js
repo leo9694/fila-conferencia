@@ -101,6 +101,19 @@ const TOPS_AJUSTE_ESTOQUE = Object.freeze({
   SAIDA: 157
 });
 const ajustesEstoqueEmAndamento = new Set();
+const filasOperacoesContagemEstoque = new Map();
+
+function executarEmFilaContagemEstoque(id, tarefa) {
+  const chave = String(id);
+  const anterior = filasOperacoesContagemEstoque.get(chave) || Promise.resolve();
+  const atual = anterior.catch(() => {}).then(tarefa);
+  filasOperacoesContagemEstoque.set(chave, atual);
+  return atual.finally(() => {
+    if (filasOperacoesContagemEstoque.get(chave) === atual) {
+      filasOperacoesContagemEstoque.delete(chave);
+    }
+  });
+}
 const uploadGuiasFase = multer({
   storage: multer.memoryStorage(),
   limits: {
@@ -3588,6 +3601,7 @@ function serializarSessaoContagemEstoque(sessao) {
 
   return {
     ...sessao,
+    versao: Math.max(1, Number(sessao.versao) || 1),
     resumo,
     itens: (sessao.itens || []).map((item) => {
       const primeiraContagem = item.contagens?.['1'];
@@ -3621,6 +3635,8 @@ function serializarSessaoContagemEstoque(sessao) {
         controle: item.controle,
         dtFabricacao: item.dtFabricacao,
         dtVal: item.dtVal,
+        atualizadoEm: item.atualizadoEm || null,
+        atualizadoPor: item.atualizadoPor ?? null,
         contagemAtual: !possuiContagemAtual
           ? null
           : Number(contagemAtual),
@@ -4527,6 +4543,27 @@ router.get('/estoque-contagem/sessoes/:id', (req, res) => {
   res.json({ sessao: serializarSessaoContagemEstoque(sessao) });
 });
 
+router.get('/estoque-contagem/sessoes/:id/sincronizacao', (req, res) => {
+  const sessao = estoqueContagemStore.obter(req.params.id);
+  if (!sessao) {
+    res.status(404).json({ erro: 'Contagem de estoque nao encontrada.' });
+    return;
+  }
+
+  const versaoAtual = Math.max(1, Number(sessao.versao) || 1);
+  const versaoCliente = Number(req.query.versao);
+  if (Number.isFinite(versaoCliente) && versaoCliente === versaoAtual) {
+    res.json({ alterada: false, versao: versaoAtual });
+    return;
+  }
+
+  res.json({
+    alterada: true,
+    versao: versaoAtual,
+    sessao: serializarSessaoContagemEstoque(sessao)
+  });
+});
+
 router.get('/estoque-contagem/sessoes/:id/localizar', async (req, res) => {
   try {
     const sessao = estoqueContagemStore.obter(req.params.id);
@@ -4579,71 +4616,90 @@ router.put('/estoque-contagem/sessoes/:id/itens/:chave', async (req, res) => {
   try {
     const id = req.params.id;
     const chave = decodeURIComponent(req.params.chave);
-    const sessaoAtual = estoqueContagemStore.obter(id);
-    if (!sessaoAtual) {
-      res.status(404).json({ erro: 'Contagem de estoque nao encontrada.' });
-      return;
-    }
-    const itemAtual = sessaoAtual.itens.find((item) => item.chave === chave);
-    if (!itemAtual) {
-      res.status(404).json({ erro: 'Item nao pertence a esta copia de estoque.' });
-      return;
-    }
-    estoqueContagemStore.validarLancamento({
-      id,
-      chave,
-      quantidade: req.body?.quantidade
-    });
+    const resultado = await executarEmFilaContagemEstoque(id, async () => {
+      const sessaoAtual = estoqueContagemStore.obter(id);
+      if (!sessaoAtual) {
+        const erro = new Error('Contagem de estoque nao encontrada.');
+        erro.status = 404;
+        throw erro;
+      }
+      const itemAtual = sessaoAtual.itens.find((item) => item.chave === chave);
+      if (!itemAtual) {
+        const erro = new Error('Item nao pertence a esta copia de estoque.');
+        erro.status = 404;
+        throw erro;
+      }
+      estoqueContagemStore.validarLancamento({
+        id,
+        chave,
+        quantidade: req.body?.quantidade,
+        atualizadoEmEsperado: req.body?.atualizadoEmEsperado
+      });
 
-    const rastreabilidade = await atualizarRastreabilidadeItemEstoque({
-      sessao: sessaoAtual,
-      item: itemAtual,
-      dados: req.body
-    });
-    const sessao = estoqueContagemStore.registrar({
-      id,
-      chave,
-      quantidade: req.body?.quantidade,
-      controle: rastreabilidade.controle,
-      dtFabricacao: rastreabilidade.dtFabricacao,
-      dtValidade: rastreabilidade.dtValidade,
-      estoqueSistema: rastreabilidade.estoqueSistema,
-      usuario: req.usuario
+      const rastreabilidade = await atualizarRastreabilidadeItemEstoque({
+        sessao: sessaoAtual,
+        item: itemAtual,
+        dados: req.body
+      });
+      const sessao = estoqueContagemStore.registrar({
+        id,
+        chave,
+        quantidade: req.body?.quantidade,
+        controle: rastreabilidade.controle,
+        dtFabricacao: rastreabilidade.dtFabricacao,
+        dtValidade: rastreabilidade.dtValidade,
+        estoqueSistema: rastreabilidade.estoqueSistema,
+        atualizadoEmEsperado: req.body?.atualizadoEmEsperado,
+        usuario: req.usuario
+      });
+      return { sessao, rastreabilidade };
     });
     res.json({
-      sessao: serializarSessaoContagemEstoque(sessao),
+      sessao: serializarSessaoContagemEstoque(resultado.sessao),
       rastreabilidade: {
-        controleAtualizado: rastreabilidade.controleAtualizado === true,
-        datasAtualizadas: rastreabilidade.datasAtualizadas || []
+        controleAtualizado: resultado.rastreabilidade.controleAtualizado === true,
+        datasAtualizadas: resultado.rastreabilidade.datasAtualizadas || []
       }
     });
   } catch (err) {
     console.error('Falha ao atualizar item da contagem de estoque:', err);
-    res.status(422).json({ erro: err.message });
+    const conflito = err.codigo === 'ESTOQUE_CONTAGEM_CONFLITO';
+    const sessaoAtual = conflito ? estoqueContagemStore.obter(req.params.id) : null;
+    res.status(err.status || (conflito ? 409 : 422)).json({
+      erro: err.message,
+      codigo: err.codigo,
+      ...(sessaoAtual ? { sessao: serializarSessaoContagemEstoque(sessaoAtual) } : {})
+    });
   }
 });
 
-router.post('/estoque-contagem/sessoes/:id/finalizar', (req, res) => {
+router.post('/estoque-contagem/sessoes/:id/finalizar', async (req, res) => {
   try {
-    const sessao = estoqueContagemStore.finalizarRodada({ id: req.params.id, usuario: req.usuario });
+    const sessao = await executarEmFilaContagemEstoque(req.params.id, () => (
+      estoqueContagemStore.finalizarRodada({ id: req.params.id, usuario: req.usuario })
+    ));
     res.json({ sessao: serializarSessaoContagemEstoque(sessao) });
   } catch (err) {
     res.status(422).json({ erro: err.message });
   }
 });
 
-router.post('/estoque-contagem/sessoes/:id/recontar', (req, res) => {
+router.post('/estoque-contagem/sessoes/:id/recontar', async (req, res) => {
   try {
-    const sessao = estoqueContagemStore.iniciarRecontagem({ id: req.params.id, usuario: req.usuario });
+    const sessao = await executarEmFilaContagemEstoque(req.params.id, () => (
+      estoqueContagemStore.iniciarRecontagem({ id: req.params.id, usuario: req.usuario })
+    ));
     res.json({ sessao: serializarSessaoContagemEstoque(sessao) });
   } catch (err) {
     res.status(422).json({ erro: err.message });
   }
 });
 
-router.post('/estoque-contagem/sessoes/:id/concluir-analise', (req, res) => {
+router.post('/estoque-contagem/sessoes/:id/concluir-analise', async (req, res) => {
   try {
-    const sessao = estoqueContagemStore.concluirAnalise({ id: req.params.id, usuario: req.usuario });
+    const sessao = await executarEmFilaContagemEstoque(req.params.id, () => (
+      estoqueContagemStore.concluirAnalise({ id: req.params.id, usuario: req.usuario })
+    ));
     res.json({ sessao: serializarSessaoContagemEstoque(sessao) });
   } catch (err) {
     res.status(422).json({ erro: err.message });

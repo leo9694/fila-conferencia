@@ -72,3 +72,23 @@ test('consolida indicadores, ranking e empresas com totais exatos', () => {
   assert.equal(resultado.status.find((item) => item.status === 'FATURADO').pedidos, 2);
   assert.equal(resultado.grupos[0].percentual, 100);
 });
+
+test('consolida o mesmo grupo vendido por empresas diferentes', () => {
+  const resultado = consolidarDashboardVendas({
+    grupos: [
+      { CODEMP: 1, EMPRESA: 'NORTE', CODGRUPOPROD: 100, GRUPO: 'GOLDEN', QUANTIDADE: 10, VALOR: 1000 },
+      { CODEMP: 2, EMPRESA: 'SUL', CODGRUPOPROD: 100, GRUPO: 'GOLDEN', QUANTIDADE: 20, VALOR: 2000 },
+      { CODEMP: 3, EMPRESA: 'LOJA', CODGRUPOPROD: 200, GRUPO: 'WINNERS', QUANTIDADE: 5, VALOR: 500 }
+    ]
+  });
+
+  assert.equal(resultado.grupos.length, 2);
+  assert.deepEqual(resultado.grupos[0], {
+    codGrupo: 100,
+    nome: 'GOLDEN',
+    quantidade: 30,
+    valor: 3000,
+    percentual: 3000 / 3500 * 100
+  });
+  assert.equal(resultado.grupos[1].nome, 'WINNERS');
+});
