@@ -70,6 +70,8 @@ const estoqueContagemAmbienteTexto = document.getElementById('estoque-contagem-a
 const estoqueContagemEmpresa = document.getElementById('estoque-contagem-empresa');
 const estoqueContagemLocal = document.getElementById('estoque-contagem-local');
 const estoqueContagemGrupo = document.getElementById('estoque-contagem-grupo');
+const estoqueContagemGrupoTrigger = document.getElementById('estoque-contagem-grupo-trigger');
+const estoqueContagemGrupoMenu = document.getElementById('estoque-contagem-grupo-menu');
 const estoqueContagemSubgrupos = document.getElementById('estoque-contagem-subgrupos');
 const estoqueContagemMarca = document.getElementById('estoque-contagem-marca');
 const estoqueContagemSituacao = document.getElementById('estoque-contagem-situacao');
@@ -115,6 +117,9 @@ const estoqueContagemConfirmModal = document.getElementById('estoque-contagem-co
 const estoqueContagemConfirmTitulo = document.getElementById('estoque-contagem-confirm-titulo');
 const estoqueContagemConfirmProduto = document.getElementById('estoque-contagem-confirm-produto');
 const estoqueContagemConfirmMensagem = document.getElementById('estoque-contagem-confirm-mensagem');
+const estoqueContagemLote = document.getElementById('estoque-contagem-lote');
+const estoqueContagemFabricacao = document.getElementById('estoque-contagem-fabricacao');
+const estoqueContagemValidade = document.getElementById('estoque-contagem-validade');
 const estoqueContagemUnidade = document.getElementById('estoque-contagem-unidade');
 const botaoCancelarConfirmacaoEstoque = document.getElementById('estoque-contagem-confirm-cancelar');
 const botaoConfirmarItemEstoque = document.getElementById('estoque-contagem-confirmar');
@@ -1977,10 +1982,12 @@ function enriquecerNomeEmpresaContagem(sessao) {
 }
 
 function escopoCardContagemEstoque(sessao) {
-  const codigoGrupo = String(sessao?.filtros?.grupo || '').trim();
+  const codigosGrupos = Array.isArray(sessao?.filtros?.grupos)
+    ? sessao.filtros.grupos.map(String).filter(Boolean)
+    : [String(sessao?.filtros?.grupo || '').trim()].filter(Boolean);
   const nomeGrupo = String(sessao?.nomeGrupo || '').trim();
-  const grupo = codigoGrupo
-    ? `${nomeGrupo || codigoGrupo}${sessao?.filtros?.incluirSubgrupos ? ' + subgrupos' : ''}`
+  const grupo = codigosGrupos.length
+    ? `${nomeGrupo || codigosGrupos.join(', ')}${sessao?.filtros?.incluirSubgrupos ? ' + subgrupos' : ''}`
     : 'Todos os grupos';
   const marca = String(sessao?.filtros?.marca || '').trim() || 'Todas as marcas';
   const local = String(sessao?.nomeLocal || '').trim() || 'Todos os locais';
@@ -1990,12 +1997,59 @@ function escopoCardContagemEstoque(sessao) {
   };
 }
 
+function obterGruposSelecionadosContagemEstoque() {
+  return [...estoqueContagemGrupo.selectedOptions]
+    .map((option) => String(option.value || '').trim())
+    .filter(Boolean);
+}
+
+function fecharMenuGruposContagemEstoque() {
+  estoqueContagemGrupoMenu.hidden = true;
+  estoqueContagemGrupoTrigger.setAttribute('aria-expanded', 'false');
+}
+
+function atualizarSeletorGruposContagemEstoque() {
+  const selecionados = new Set(obterGruposSelecionadosContagemEstoque());
+  const opcoes = [...estoqueContagemGrupo.options].filter((option) => option.value);
+  estoqueContagemGrupoTrigger.disabled = estoqueContagemGrupo.disabled;
+  estoqueContagemGrupoTrigger.textContent = selecionados.size === 0
+    ? 'Todos os grupos'
+    : selecionados.size === 1
+      ? (opcoes.find((option) => selecionados.has(option.value))?.textContent || '1 grupo selecionado')
+      : `${selecionados.size} grupos selecionados`;
+  estoqueContagemGrupoTrigger.title = selecionados.size
+    ? opcoes.filter((option) => selecionados.has(option.value)).map((option) => option.textContent).join('\n')
+    : 'Todos os grupos';
+
+  estoqueContagemGrupoMenu.innerHTML = [
+    `<button class="estoque-group-option${selecionados.size === 0 ? ' is-selected' : ''}" type="button" data-grupo="" role="option" aria-selected="${selecionados.size === 0}">
+      <span class="estoque-group-check" aria-hidden="true"></span><span>Todos os grupos</span>
+    </button>`,
+    ...opcoes.map((option) => {
+      const selecionado = selecionados.has(option.value);
+      return `<button class="estoque-group-option${selecionado ? ' is-selected' : ''}" type="button" data-grupo="${escaparAtributo(option.value)}" role="option" aria-selected="${selecionado}">
+        <span class="estoque-group-check" aria-hidden="true"></span><span>${escaparHtml(option.textContent)}</span>
+      </button>`;
+    })
+  ].join('');
+  estoqueContagemSubgrupos.disabled = selecionados.size === 0;
+}
+
+function selecionarGruposContagemEstoque(valores = []) {
+  const selecionados = new Set(valores.map(String));
+  [...estoqueContagemGrupo.options].forEach((option) => {
+    option.selected = selecionados.has(option.value);
+  });
+  atualizarSeletorGruposContagemEstoque();
+}
+
 function reiniciarFiltrosContagemEstoque() {
   estoqueContagemEmpresa.value = '';
   estoqueContagemLocal.innerHTML = '<option value="">Todos os locais</option>';
   estoqueContagemLocal.disabled = true;
   estoqueContagemGrupo.innerHTML = '<option value="">Todos os grupos</option>';
   estoqueContagemGrupo.disabled = true;
+  atualizarSeletorGruposContagemEstoque();
   estoqueContagemMarca.innerHTML = '<option value="">Todas as marcas</option>';
   estoqueContagemMarca.disabled = true;
   estoqueContagemSubgrupos.checked = true;
@@ -2042,6 +2096,7 @@ async function carregarConfigContagemEstoque() {
     estoqueContagemGrupo.disabled = true;
     estoqueContagemMarca.disabled = true;
     estoqueContagemSubgrupos.disabled = true;
+    atualizarSeletorGruposContagemEstoque();
     renderizarListaContagensEstoque();
   } catch (error) {
     estoqueContagemEmpresa.innerHTML = '<option value="">Base de teste indisponível</option>';
@@ -2077,6 +2132,7 @@ async function carregarLocaisContagemEstoque() {
   estoqueContagemMarca.innerHTML = '<option value="">Todas as marcas</option>';
   estoqueContagemGrupo.disabled = true;
   estoqueContagemMarca.disabled = true;
+  atualizarSeletorGruposContagemEstoque();
   if (!empresa) {
     limparPreviaContagemEstoque();
     return;
@@ -2104,10 +2160,12 @@ async function carregarLocaisContagemEstoque() {
 }
 
 function obterFiltrosCopiaEstoqueTela() {
+  const grupos = obterGruposSelecionadosContagemEstoque();
   return {
     empresa: estoqueContagemEmpresa.value,
     local: estoqueContagemLocal.value,
-    grupo: estoqueContagemGrupo.value,
+    grupo: grupos[0] || '',
+    grupos,
     incluirSubgrupos: estoqueContagemSubgrupos.checked,
     marca: estoqueContagemMarca.value,
     situacao: estoqueContagemSituacao.value,
@@ -2127,7 +2185,7 @@ function limparPreviaContagemEstoque() {
 async function carregarOpcoesFiltrosContagemEstoque() {
   const empresa = estoqueContagemEmpresa.value;
   if (!empresa) return;
-  const grupoAnterior = estoqueContagemGrupo.value;
+  const gruposAnteriores = obterGruposSelecionadosContagemEstoque();
   const marcaAnterior = estoqueContagemMarca.value;
   estoqueContagemGrupo.disabled = true;
   estoqueContagemMarca.disabled = true;
@@ -2154,15 +2212,15 @@ async function carregarOpcoesFiltrosContagemEstoque() {
         `<option value="${escaparAtributo(marca)}">${escaparHtml(marca)}</option>`
       ))
     ].join('');
-    if ([...estoqueContagemGrupo.options].some((item) => item.value === grupoAnterior)) {
-      estoqueContagemGrupo.value = grupoAnterior;
-    }
+    selecionarGruposContagemEstoque(gruposAnteriores.filter((codigo) => (
+      [...estoqueContagemGrupo.options].some((item) => item.value === codigo)
+    )));
     if ([...estoqueContagemMarca.options].some((item) => item.value === marcaAnterior)) {
       estoqueContagemMarca.value = marcaAnterior;
     }
     estoqueContagemGrupo.disabled = false;
     estoqueContagemMarca.disabled = false;
-    estoqueContagemSubgrupos.disabled = !estoqueContagemGrupo.value;
+    atualizarSeletorGruposContagemEstoque();
     agendarPreviaContagemEstoque(0);
   } catch (error) {
     atualizarMensagemContagemEstoque(error.message, true);
@@ -2172,7 +2230,10 @@ async function carregarOpcoesFiltrosContagemEstoque() {
 
 function resumirFiltrosCopiaEstoque(filtros = {}) {
   const partes = [];
-  if (filtros.grupo) partes.push(`grupo ${filtros.grupo}${filtros.incluirSubgrupos ? ' + subgrupos' : ''}`);
+  const grupos = Array.isArray(filtros.grupos) && filtros.grupos.length
+    ? filtros.grupos
+    : (filtros.grupo ? [filtros.grupo] : []);
+  if (grupos.length) partes.push(`${grupos.length > 1 ? 'grupos' : 'grupo'} ${grupos.join(', ')}${filtros.incluirSubgrupos ? ' + subgrupos' : ''}`);
   if (filtros.marca) partes.push(`marca ${filtros.marca}`);
   if (filtros.produtoInicial || filtros.produtoFinal) {
     partes.push(`produtos ${filtros.produtoInicial || 'início'}–${filtros.produtoFinal || 'fim'}`);
@@ -2526,14 +2587,14 @@ function agruparItensContagemEstoque() {
 function renderizarItensContagemEstoque() {
   const grupos = agruparItensContagemEstoque();
   if (!grupos.length) {
-    estoqueContagemItens.innerHTML = '<tr><td colspan="6" class="empty-state">Nenhuma linha encontrada para esta contagem.</td></tr>';
+    estoqueContagemItens.innerHTML = '<tr><td colspan="7" class="empty-state">Nenhuma linha encontrada para esta contagem.</td></tr>';
     return;
   }
 
   estoqueContagemItens.innerHTML = grupos.map((grupo) => {
     const cabecalho = `
       <tr class="separacao-group-row">
-        <td colspan="6">${grupo.codigo ? `Grupo ${escaparHtml(grupo.codigo)} - ` : ''}${escaparHtml(grupo.descricao)}</td>
+        <td colspan="7">${grupo.codigo ? `Grupo ${escaparHtml(grupo.codigo)} - ` : ''}${escaparHtml(grupo.descricao)}</td>
       </tr>
     `;
     const linhas = grupo.itens.map((item) => {
@@ -2561,6 +2622,7 @@ function renderizarItensContagemEstoque() {
       const contagemTexto = contado
         ? `${formatarQuantidade(contagem)} ${escaparHtml(item.codVol)}`
         : '—';
+      const fabricacaoTexto = item.dtFabricacao ? formatarData(item.dtFabricacao) : 'Sem fabricação';
       const validadeTexto = item.dtVal ? formatarData(item.dtVal) : 'Sem validade';
 
       return `
@@ -2572,6 +2634,7 @@ function renderizarItensContagemEstoque() {
           <td><strong class="separacao-product-code">${escaparHtml(item.codProd)}</strong></td>
           <td class="separacao-description" title="${escaparAtributo(item.descrProd)}">${escaparHtml(item.descrProd || '-')}</td>
           <td class="estoque-lista-lote" data-label="Lote" title="${escaparAtributo(item.controle || 'Sem controle')}">${escaparHtml(item.controle || 'Sem controle')}</td>
+          <td class="estoque-lista-fabricacao" data-label="Fabricação">${escaparHtml(fabricacaoTexto)}</td>
           <td class="estoque-lista-validade" data-label="Validade">${escaparHtml(validadeTexto)}</td>
           <td class="estoque-lista-contagem" data-label="Contagem">${contagemTexto}</td>
           <td class="estoque-lista-status"><span class="separacao-badge${badgeClasse}">${status}</span></td>
@@ -2607,8 +2670,11 @@ function renderizarContagemEstoque() {
   estoqueContagemAuditoriaNotas.textContent = notasAjuste.length
     ? `Notas pendentes no Sankhya: ${notasAjuste.map((nota) => `${nota.nunota} (${nota.tipo.toLowerCase()})`).join(', ')}`
     : '';
-  botaoAplicarAjusteEstoque.hidden = sessao.status !== 'PRONTA_PARA_AJUSTE';
+  botaoAplicarAjusteEstoque.hidden = !['PRONTA_PARA_AJUSTE', 'AJUSTE_GERADO'].includes(sessao.status);
   botaoAplicarAjusteEstoque.disabled = false;
+  botaoAplicarAjusteEstoque.textContent = sessao.status === 'AJUSTE_GERADO'
+    ? 'Sincronizar lotes e datas'
+    : 'Aplicar ajuste';
   estoqueContagemAuditoria.querySelectorAll('[data-estoque-auditoria-filtro]').forEach((botao) => {
     botao.classList.toggle(
       'ativo',
@@ -2638,6 +2704,9 @@ function fecharConfirmacaoContagemEstoque() {
   estoqueContagemItemSelecionado = null;
   estoqueContagemConfirmModal.hidden = true;
   estoqueContagemConfirmMensagem.textContent = '';
+  estoqueContagemLote.value = '';
+  estoqueContagemFabricacao.value = '';
+  estoqueContagemValidade.value = '';
   estoqueContagemQuantidade.value = '';
   estoqueContagemUnidade.textContent = '-';
 }
@@ -2656,9 +2725,10 @@ function abrirConfirmacaoContagemEstoque(item) {
   estoqueContagemConfirmProduto.innerHTML = `
     ${escaparHtml(item.codProd)} - ${escaparHtml(item.descrProd || '-')}
     <div class="separacao-confirm-meta">Local: ${escaparHtml(item.codLocal)} - ${escaparHtml(item.descrLocal)}</div>
-    <div class="separacao-confirm-meta">Lote: ${escaparHtml(item.controle || 'Sem controle')}</div>
-    <div class="separacao-confirm-meta">Validade: ${escaparHtml(item.dtVal ? formatarData(item.dtVal) : 'Sem validade')}</div>
   `;
+  estoqueContagemLote.value = item.controle || '';
+  estoqueContagemFabricacao.value = formatarDataInput(item.dtFabricacao);
+  estoqueContagemValidade.value = formatarDataInput(item.dtVal);
   estoqueContagemQuantidade.value = recontagem || item.contagemAtual === null
     ? ''
     : String(item.contagemAtual);
@@ -2727,7 +2797,7 @@ async function criarSessaoContagemEstoque() {
   }
 }
 
-async function salvarItemContagemEstoque(chave, quantidade) {
+async function salvarItemContagemEstoque(chave, quantidade, rastreabilidade = {}) {
   if (!estoqueContagemAtual) return;
   const valor = Number(quantidade);
   if (!Number.isFinite(valor) || valor < 0) {
@@ -2741,7 +2811,12 @@ async function salvarItemContagemEstoque(chave, quantidade) {
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ quantidade: valor })
+        body: JSON.stringify({
+          quantidade: valor,
+          controle: String(rastreabilidade.controle || '').trim(),
+          dtFabricacao: rastreabilidade.dtFabricacao || null,
+          dtValidade: rastreabilidade.dtValidade || null
+        })
       }
     );
     const payload = await resposta.json();
@@ -2750,10 +2825,26 @@ async function salvarItemContagemEstoque(chave, quantidade) {
     fecharConfirmacaoContagemEstoque();
     estoqueContagemChavesLocalizadas = null;
     limparCodigoContagemEstoque();
-    atualizarMensagemContagemEstoque(`Quantidade ${formatarQuantidade(valor)} registrada.`);
+    const datasAtualizadas = Array.isArray(payload.rastreabilidade?.datasAtualizadas)
+      ? payload.rastreabilidade.datasAtualizadas
+      : [];
+    const nomesDatas = datasAtualizadas.map((campo) => (
+      campo === 'fabricacao' ? 'fabricação' : 'validade'
+    ));
+    const resumoDatas = nomesDatas.length === 1
+      ? `${nomesDatas[0]} atualizada no Sankhya`
+      : `datas de ${nomesDatas.join(' e ')} atualizadas no Sankhya`;
+    atualizarMensagemContagemEstoque(
+      nomesDatas.length
+        ? `Quantidade ${formatarQuantidade(valor)} registrada e ${resumoDatas}.`
+        : `Quantidade ${formatarQuantidade(valor)} registrada.`
+    );
     renderizarContagemEstoque();
     focarLeitorContagemEstoqueSemTeclado();
   } catch (error) {
+    if (!estoqueContagemConfirmModal.hidden) {
+      estoqueContagemConfirmMensagem.textContent = error.message;
+    }
     atualizarMensagemContagemEstoque(error.message, true);
   }
 }
@@ -2769,10 +2860,23 @@ async function confirmarItemContagemEstoque() {
     return;
   }
 
-  await salvarItemContagemEstoque(
-    estoqueContagemItemSelecionado.chave,
-    quantidade
-  );
+  botaoConfirmarItemEstoque.disabled = true;
+  const textoOriginalBotao = botaoConfirmarItemEstoque.textContent;
+  botaoConfirmarItemEstoque.textContent = 'Atualizando...';
+  try {
+    await salvarItemContagemEstoque(
+      estoqueContagemItemSelecionado.chave,
+      quantidade,
+      {
+        controle: estoqueContagemLote.value,
+        dtFabricacao: estoqueContagemFabricacao.value,
+        dtValidade: estoqueContagemValidade.value
+      }
+    );
+  } finally {
+    botaoConfirmarItemEstoque.disabled = false;
+    botaoConfirmarItemEstoque.textContent = textoOriginalBotao;
+  }
 }
 
 async function processarCodigoContagemEstoque() {
@@ -2888,17 +2992,20 @@ async function executarAcaoContagemEstoque(acao, confirmacao) {
 }
 
 async function aplicarAjusteContagemEstoque() {
-  if (!estoqueContagemAtual || estoqueContagemAtual.status !== 'PRONTA_PARA_AJUSTE') return;
+  if (!estoqueContagemAtual || !['PRONTA_PARA_AJUSTE', 'AJUSTE_GERADO'].includes(estoqueContagemAtual.status)) return;
+  const ajusteJaGerado = estoqueContagemAtual.status === 'AJUSTE_GERADO';
   const divergentes = Number(estoqueContagemAtual.resumo?.itensDivergentes || 0);
   const confirmado = await confirmarAcaoApp({
-    titulo: 'Gerar notas de ajuste',
-    mensagem: `Gerar no Sankhya as notas pendentes para ${divergentes} ${divergentes === 1 ? 'divergência' : 'divergências'}? As notas não serão confirmadas e ainda não movimentarão o estoque.`,
-    textoConfirmar: 'Gerar notas'
+    titulo: ajusteJaGerado ? 'Sincronizar lotes e datas' : 'Gerar notas de ajuste',
+    mensagem: ajusteJaGerado
+      ? 'Preparar no estoque do Sankhya os lotes, as datas de fabricação e as validades informadas na contagem? As notas de ajuste continuarão pendentes de confirmação.'
+      : `Gerar no Sankhya as notas pendentes para ${divergentes} ${divergentes === 1 ? 'divergência' : 'divergências'}? As notas não serão confirmadas e ainda não movimentarão o estoque.`,
+    textoConfirmar: ajusteJaGerado ? 'Sincronizar dados' : 'Gerar notas'
   });
   if (!confirmado) return;
 
   botaoAplicarAjusteEstoque.disabled = true;
-  botaoAplicarAjusteEstoque.textContent = 'Gerando notas...';
+  botaoAplicarAjusteEstoque.textContent = ajusteJaGerado ? 'Sincronizando...' : 'Gerando notas...';
   try {
     const resposta = await fetch(
       `/api/estoque-contagem/sessoes/${encodeURIComponent(estoqueContagemAtual.id)}/aplicar-ajuste`,
@@ -2911,14 +3018,16 @@ async function aplicarAjusteContagemEstoque() {
     await carregarListaContagensEstoque();
     renderizarContagemEstoque();
     const numeros = (payload.notas || []).map((nota) => nota.nunota).join(', ');
-    atualizarMensagemContagemEstoque(
-      `Notas ${numeros} geradas e pendentes de confirmação no Sankhya. Nenhum estoque foi movimentado pelo app.`
-    );
+    atualizarMensagemContagemEstoque(payload.reutilizada
+      ? `${payload.datasSincronizadas || 0} posição(ões) de estoque preparada(s) para as notas ${numeros}. As notas continuam pendentes de confirmação.`
+      : `Notas ${numeros} geradas e pendentes de confirmação no Sankhya. Nenhum estoque foi movimentado pelo app.`);
   } catch (error) {
     atualizarMensagemContagemEstoque(error.message, true);
   } finally {
     botaoAplicarAjusteEstoque.disabled = false;
-    botaoAplicarAjusteEstoque.textContent = 'Aplicar ajuste';
+    botaoAplicarAjusteEstoque.textContent = estoqueContagemAtual?.status === 'AJUSTE_GERADO'
+      ? 'Sincronizar lotes e datas'
+      : 'Aplicar ajuste';
   }
 }
 
@@ -5972,7 +6081,7 @@ function desfazerConferenciaItem(sequencia) {
     itensPedidoSelecionado = itensPedidoSelecionado.filter(
       (candidate) => Number(candidate.sequencia) !== Number(sequencia)
     );
-    scanStatus.innerHTML = `<span class="success-text">Produto extra ${item.codProd} removido da conferÃªncia.</span>`;
+    scanStatus.innerHTML = `<span class="success-text">Produto extra ${item.codProd} removido da conferência.</span>`;
     renderizarItensConferencia();
     salvarProgressoConferencia();
     scanCodigo.focus();
@@ -8230,7 +8339,7 @@ async function buscarProdutoExtraEntrada(codigo) {
     cache: 'no-store'
   });
   const payload = await resposta.json().catch(() => ({}));
-  if (!resposta.ok) throw new Error(payload.erro || 'Produto nÃ£o encontrado no Sankhya.');
+  if (!resposta.ok) throw new Error(payload.erro || 'Produto não encontrado no Sankhya.');
   return {
     ...payload.item,
     extra: true,
@@ -8344,7 +8453,7 @@ async function adicionarConferenciaPorCodigo() {
     let confirmado = false;
     try {
       confirmado = await confirmarAcaoApp({
-        titulo: 'Produto nÃ£o previsto na nota',
+        titulo: 'Produto não previsto na nota',
         mensagem: `O produto ${item.codProd} - ${item.descrProd} nao pertence a nota de entrada. Confirmar ${formatarQuantidade(qtdConvertida)} ${item.codVolPadrao || item.codVol || 'UN'} como quantidade recebida extra?${loteTexto} Ao finalizar, o Sankhya vai gerar o documento complementar conforme a configuracao da TOP.`,
         textoConfirmar: 'Adicionar produto extra'
       });
@@ -8352,7 +8461,7 @@ async function adicionarConferenciaPorCodigo() {
       confirmacaoProdutoExtraEntradaEmAndamento = false;
     }
     if (!confirmado) {
-      scanStatus.textContent = 'InclusÃ£o do produto extra cancelada.';
+      scanStatus.textContent = 'Inclusão do produto extra cancelada.';
       scanCodigo.select();
       return;
     }
@@ -8459,7 +8568,7 @@ function obterAlteracoesConferenciaEntrada() {
 
       if (item.extra === true && item.qtdConferida > 0) {
         detalhes.push({
-          campo: 'Produto nÃ£o previsto na nota',
+          campo: 'Produto não previsto na nota',
           de: 'Produto ausente na nota de entrada',
           para: `${formatarQuantidade(item.qtdConferida)} ${obterUnidadeExibicaoItem(item)} recebido(s). O Sankhya vai gerar o documento complementar conforme a configuracao da TOP.`
         });
@@ -9288,8 +9397,34 @@ botaoVoltarCopiasEstoque.addEventListener('click', () => {
 estoqueContagemEmpresa.addEventListener('change', carregarLocaisContagemEstoque);
 estoqueContagemLocal.addEventListener('change', carregarOpcoesFiltrosContagemEstoque);
 estoqueContagemGrupo.addEventListener('change', () => {
-  estoqueContagemSubgrupos.disabled = !estoqueContagemGrupo.value;
+  atualizarSeletorGruposContagemEstoque();
   agendarPreviaContagemEstoque();
+});
+estoqueContagemGrupoTrigger.addEventListener('click', () => {
+  if (estoqueContagemGrupoTrigger.disabled) return;
+  const abrir = estoqueContagemGrupoMenu.hidden;
+  estoqueContagemGrupoMenu.hidden = !abrir;
+  estoqueContagemGrupoTrigger.setAttribute('aria-expanded', String(abrir));
+});
+estoqueContagemGrupoMenu.addEventListener('click', (event) => {
+  const opcao = event.target.closest('[data-grupo]');
+  if (!opcao) return;
+  const codigo = String(opcao.dataset.grupo || '');
+  if (!codigo) {
+    selecionarGruposContagemEstoque([]);
+  } else {
+    const selecionados = new Set(obterGruposSelecionadosContagemEstoque());
+    if (selecionados.has(codigo)) selecionados.delete(codigo);
+    else selecionados.add(codigo);
+    selecionarGruposContagemEstoque([...selecionados]);
+  }
+  estoqueContagemGrupo.dispatchEvent(new Event('change'));
+});
+document.addEventListener('click', (event) => {
+  if (!event.target.closest('.estoque-group-multiselect')) fecharMenuGruposContagemEstoque();
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') fecharMenuGruposContagemEstoque();
 });
 estoqueContagemSubgrupos.addEventListener('change', () => agendarPreviaContagemEstoque());
 estoqueContagemMarca.addEventListener('change', carregarOpcoesFiltrosContagemEstoque);

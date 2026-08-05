@@ -18,6 +18,11 @@ function opcao(valor, permitidos, padrao) {
   return permitidos.includes(normalizado) ? normalizado : padrao;
 }
 
+function inteirosPositivosUnicos(valor) {
+  const entradas = Array.isArray(valor) ? valor : [valor];
+  return [...new Set(entradas.map(inteiroPositivo).filter(Boolean))].slice(0, 100);
+}
+
 function normalizarFiltrosCopiaEstoque(payload = {}) {
   let produtoInicial = inteiroPositivo(payload.produtoInicial);
   let produtoFinal = inteiroPositivo(payload.produtoFinal);
@@ -25,10 +30,15 @@ function normalizarFiltrosCopiaEstoque(payload = {}) {
     [produtoInicial, produtoFinal] = [produtoFinal, produtoInicial];
   }
 
+  const grupos = inteirosPositivosUnicos(
+    Array.isArray(payload.grupos) && payload.grupos.length ? payload.grupos : payload.grupo
+  );
+
   return {
     empresa: inteiroPositivo(payload.empresa),
     local: inteiroNaoNegativoOuNulo(payload.local),
-    grupo: inteiroPositivo(payload.grupo),
+    grupo: grupos[0] || null,
+    grupos,
     incluirSubgrupos: payload.incluirSubgrupos !== false,
     marca: String(payload.marca || '').trim().slice(0, 100) || null,
     produtoInicial,
@@ -50,15 +60,19 @@ function montarSqlFiltrosCopiaEstoque(filtros, aliases = {}) {
   ];
 
   if (filtros.local !== null) condicoes.push(`${est}.CODLOCAL = ${filtros.local}`);
-  if (filtros.grupo) {
+  const grupos = inteirosPositivosUnicos(
+    Array.isArray(filtros.grupos) && filtros.grupos.length ? filtros.grupos : filtros.grupo
+  );
+  if (grupos.length) {
+    const listaGrupos = grupos.join(', ');
     condicoes.push(filtros.incluirSubgrupos
       ? `${pro}.CODGRUPOPROD IN (
           SELECT GRU.CODGRUPOPROD
           FROM TGFGRU GRU
-          START WITH GRU.CODGRUPOPROD = ${filtros.grupo}
+          START WITH GRU.CODGRUPOPROD IN (${listaGrupos})
           CONNECT BY PRIOR GRU.CODGRUPOPROD = GRU.CODGRUPAI
         )`
-      : `${pro}.CODGRUPOPROD = ${filtros.grupo}`);
+      : `${pro}.CODGRUPOPROD IN (${listaGrupos})`);
   }
   if (filtros.marca) {
     condicoes.push(`UPPER(TRIM(${pro}.MARCA)) = UPPER('${textoSql(filtros.marca)}')`);

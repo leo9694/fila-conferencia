@@ -34,6 +34,8 @@ function planejarAjustesEstoque(sessao) {
       codVol: texto(item.codVol) || 'UN',
       codLocal: numero(item.codLocal),
       controle: texto(item.controle),
+      dtFabricacao: texto(item.dtFabricacao),
+      dtValidade: texto(item.dtVal || item.dtValidade),
       estoqueSistema,
       contagem,
       diferenca,
@@ -83,8 +85,13 @@ function montarPayloadNotaAjuste({
     if (valorUnitario <= 0) {
       throw new Error(`Produto ${item.codProd} sem custo de reposicao para gerar o ajuste.`);
     }
+    if (texto(item.controle) && (!texto(item.dtFabricacao) || !texto(item.dtValidade))) {
+      throw new Error(
+        `Produto ${item.codProd}, lote ${item.controle}: informe fabricacao e validade antes de gerar o ajuste.`
+      );
+    }
 
-    return {
+    const itemPayload = {
       NUNOTA: {},
       IGNOREDESCPROMOQTD: campoApi('True'),
       CODPROD: campoApi(item.codProd),
@@ -95,6 +102,7 @@ function montarPayloadNotaAjuste({
       PERCDESC: campoApi(0),
       VLRUNIT: campoApi(numeroApi(valorUnitario))
     };
+    return itemPayload;
   });
 
   return {

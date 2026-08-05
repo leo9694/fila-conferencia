@@ -47,6 +47,7 @@ const {
   montarPayloadNotaAjuste,
   planejarAjustesEstoque
 } = require('./api/estoqueAjuste');
+const { planejarDatasRastreabilidade } = require('./api/estoqueRastreabilidade');
 const { criarAutorizacaoGrupos } = require('./api/autorizacaoGrupos');
 const {
   dividirPeriodoMensal,
@@ -706,6 +707,20 @@ async function atualizarRegistroApi(rootEntity, chave, campos) {
           Object.entries(campos).map(([campo, valor]) => [campo, campoApi(valor)])
         )
       }
+    }
+  }, {
+    forceAccessSession: true
+  });
+}
+
+async function removerRegistroApi(rootEntity, chave) {
+  return executeService('CRUDServiceProvider.removeRecord', {
+    entity: {
+      rootEntity,
+      datasetid: `fila-conferencia-${Date.now()}`,
+      id: Object.fromEntries(
+        Object.entries(chave).map(([campo, valor]) => [campo, campoApi(valor)])
+      )
     }
   }, {
     forceAccessSession: true
@@ -3604,6 +3619,7 @@ function serializarSessaoContagemEstoque(sessao) {
         codLocal: item.codLocal,
         descrLocal: item.descrLocal,
         controle: item.controle,
+        dtFabricacao: item.dtFabricacao,
         dtVal: item.dtVal,
         contagemAtual: !possuiContagemAtual
           ? null
@@ -3620,6 +3636,353 @@ function serializarSessaoContagemEstoque(sessao) {
           && (sessao.status !== 'EM_RECONTAGEM' || divergentePrimeira)
       };
     })
+  };
+}
+
+function normalizarDataIsoRastreabilidade(valor, nomeCampo) {
+  const texto = String(valor ?? '').trim();
+  if (!texto) return null;
+
+  const partes = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!partes) throw new Error(`${nomeCampo} deve ser informada em um formato válido.`);
+
+  const [, ano, mes, dia] = partes;
+  const data = new Date(Date.UTC(Number(ano), Number(mes) - 1, Number(dia)));
+  if (
+    data.getUTCFullYear() !== Number(ano)
+    || data.getUTCMonth() + 1 !== Number(mes)
+    || data.getUTCDate() !== Number(dia)
+  ) {
+    throw new Error(`${nomeCampo} é inválida.`);
+  }
+  return `${ano}-${mes}-${dia}`;
+}
+
+function chavePosicaoEstoque(registro, controle = registro.CONTROLE) {
+  return {
+    CODEMP: Number(registro.CODEMP),
+    CODPROD: Number(registro.CODPROD),
+    CODLOCAL: Number(registro.CODLOCAL),
+    CONTROLE: normalizarControleConferencia(controle),
+    CODPARC: Number(registro.CODPARC || 0),
+    TIPO: String(registro.TIPO || 'P')
+  };
+}
+
+function camposCopiaPosicaoEstoque(registro, camposDatas = {}) {
+  const campos = {
+    RESERVADO: Number(registro.RESERVADO || 0),
+    ESTMIN: Number(registro.ESTMIN || 0),
+    ESTMAX: Number(registro.ESTMAX || 0),
+    ATIVO: String(registro.ATIVO || 'S'),
+    ESTOQUE: Number(registro.ESTOQUE || 0),
+    STATUSLOTE: String(registro.STATUSLOTE || 'N'),
+    ...camposDatas
+  };
+  if (registro.CODBARRA) campos.CODBARRA = registro.CODBARRA;
+  if (registro.DTENTRADA) campos.DTENTRADA = formatarDataCampoSankhya(registro.DTENTRADA);
+  return campos;
+}
+
+async function consultarPosicoesRastreabilidade(sessao, item) {
+  return executeQuery(`
+    SELECT
+      CODEMP,
+      CODPROD,
+      CODLOCAL,
+      NVL(TRIM(CONTROLE), ' ') AS CONTROLE,
+      CODPARC,
+      TIPO,
+      NVL(ESTOQUE, 0) AS ESTOQUE,
+      NVL(RESERVADO, 0) AS RESERVADO,
+      NVL(ESTMIN, 0) AS ESTMIN,
+      NVL(ESTMAX, 0) AS ESTMAX,
+      NVL(ATIVO, 'S') AS ATIVO,
+      CODBARRA,
+      NVL(STATUSLOTE, 'N') AS STATUSLOTE,
+      TO_CHAR(DTENTRADA, 'YYYY-MM-DD') AS DTENTRADA,
+      TO_CHAR(DTFABRICACAO, 'YYYY-MM-DD') AS DTFABRICACAO,
+      TO_CHAR(DTVAL, 'YYYY-MM-DD') AS DTVAL
+    FROM TGFEST
+    WHERE CODEMP = ${Number(sessao.empresa)}
+      AND CODPROD = ${Number(item.codProd)}
+      AND CODLOCAL = ${Number(item.codLocal)}
+      AND NVL(CODPARC, 0) = 0
+      AND NVL(TIPO, 'P') = 'P'
+      AND NVL(ATIVO, 'S') = 'S'
+  `);
+}
+
+async function migrarPosicaoSemControle({
+  sessao,
+  item,
+  registroOrigem,
+  registroDestino,
+  controleNovo,
+  camposDatas,
+  dtFabricacaoFinal,
+  dtValidadeFinal
+}) {
+  const chaveOrigem = chavePosicaoEstoque(registroOrigem);
+  const chaveDestino = chavePosicaoEstoque(registroOrigem, controleNovo);
+  const camposDestino = camposCopiaPosicaoEstoque(registroOrigem, camposDatas);
+  let origemRemovida = false;
+
+  try {
+    await removerRegistroApi('Estoque', chaveOrigem);
+    origemRemovida = true;
+
+    if (registroDestino) {
+      await atualizarRegistroApi('Estoque', chaveDestino, camposDestino);
+    } else {
+      await salvarRegistroApi('Estoque', {
+        ...chaveDestino,
+        ...camposDestino
+      });
+    }
+
+    const posicoes = await consultarPosicoesRastreabilidade(sessao, item);
+    const origem = posicoes.filter((registro) => !String(registro.CONTROLE || '').trim());
+    const destino = posicoes.filter(
+      (registro) => String(registro.CONTROLE || '').trim() === controleNovo
+    );
+    if (origem.length || destino.length !== 1) {
+      throw new Error('A migração do controle não deixou uma única posição de estoque válida.');
+    }
+    if (
+      Math.abs(Number(destino[0].ESTOQUE || 0) - Number(registroOrigem.ESTOQUE || 0)) > 0.000001
+      || Math.abs(Number(destino[0].RESERVADO || 0) - Number(registroOrigem.RESERVADO || 0)) > 0.000001
+    ) {
+      throw new Error('O saldo ou a reserva não foram preservados durante a alteração do controle.');
+    }
+    if (
+      (dtFabricacaoFinal && destino[0].DTFABRICACAO !== dtFabricacaoFinal)
+      || (dtValidadeFinal && destino[0].DTVAL !== dtValidadeFinal)
+    ) {
+      throw new Error('As datas de fabricação ou validade não foram preservadas durante a alteração do controle.');
+    }
+    return destino[0];
+  } catch (error) {
+    if (origemRemovida) {
+      try {
+        const atuais = await consultarPosicoesRastreabilidade(sessao, item);
+        const destinoAtual = atuais.find(
+          (registro) => String(registro.CONTROLE || '').trim() === controleNovo
+        );
+        if (destinoAtual) {
+          await atualizarRegistroApi('Estoque', chaveDestino, { ESTOQUE: 0, RESERVADO: 0 });
+        }
+        await salvarRegistroApi('Estoque', {
+          ...chaveOrigem,
+          ...camposCopiaPosicaoEstoque(registroOrigem, {
+            ...(registroOrigem.DTFABRICACAO
+              ? { DTFABRICACAO: formatarDataCampoSankhya(registroOrigem.DTFABRICACAO) }
+              : {}),
+            ...(registroOrigem.DTVAL
+              ? { DTVAL: formatarDataCampoSankhya(registroOrigem.DTVAL) }
+              : {})
+          })
+        });
+      } catch (rollbackError) {
+        console.error('Falha ao restaurar posição de estoque após erro de migração:', rollbackError);
+      }
+    }
+    throw new Error(`Não foi possível alterar a posição sem controle para o lote ${controleNovo}: ${error.message}`);
+  }
+}
+
+async function atualizarRastreabilidadeItemEstoque({ sessao, item, dados }) {
+  const controleAtual = String(item.controle || '').trim();
+  const controleNovo = String(dados?.controle ?? controleAtual).trim();
+  if (controleNovo.length > 100) throw new Error('O lote/controle deve ter no máximo 100 caracteres.');
+
+  const dtFabricacaoInformada = normalizarDataIsoRastreabilidade(
+    dados?.dtFabricacao,
+    'A data de fabricação'
+  );
+  const dtValidadeInformada = normalizarDataIsoRastreabilidade(
+    dados?.dtValidade,
+    'A data de validade'
+  );
+  if (dtFabricacaoInformada && dtValidadeInformada && dtValidadeInformada < dtFabricacaoInformada) {
+    throw new Error('A validade não pode ser anterior à data de fabricação.');
+  }
+
+  const registros = await consultarPosicoesRastreabilidade(sessao, item);
+
+  const controleChave = String(item.chave || '').split('|').slice(2).join('|');
+  const controleOriginal = controleChave === 'SEM_CONTROLE' ? '' : controleChave;
+  const registrosPorControle = (controle) => registros.filter(
+    (registro) => String(registro.CONTROLE || '').trim() === String(controle || '').trim()
+  );
+  const posicoesAtuais = registrosPorControle(controleAtual);
+  const posicoesOriginais = registrosPorControle(controleOriginal);
+  const posicoesDestino = registrosPorControle(controleNovo);
+
+  if (posicoesAtuais.length > 1 || posicoesOriginais.length > 1 || posicoesDestino.length > 1) {
+    throw new Error('Mais de uma posição de estoque corresponde a este item. A alteração foi bloqueada por segurança.');
+  }
+
+  let registroOrigem = posicoesOriginais[0] || posicoesAtuais[0] || null;
+  let registroDestino = posicoesDestino[0] || null;
+  if (!registroOrigem && !registroDestino) {
+    const posicoesComSaldo = registros.filter(
+      (registroEstoque) => Math.abs(Number(registroEstoque.ESTOQUE || 0)) > 0.000001
+    );
+    if (posicoesComSaldo.length === 1) registroOrigem = posicoesComSaldo[0];
+  }
+  if (!registroOrigem && !registroDestino) {
+    const posicoesSemControle = registrosPorControle('');
+    if (posicoesSemControle.length === 1) registroOrigem = posicoesSemControle[0];
+  }
+  if (!registroOrigem && !registroDestino) {
+    const lotesDisponiveis = registros
+      .map((itemEstoque) => String(itemEstoque.CONTROLE || '').trim() || 'Sem controle')
+      .join(', ');
+    throw new Error(
+      lotesDisponiveis
+        ? `A posição original não existe mais. Posições encontradas no Sankhya: ${lotesDisponiveis}. Atualize a cópia da contagem.`
+        : 'Nenhuma posição deste produto foi encontrada no estoque do Sankhya.'
+    );
+  }
+
+  const controleOrigemEfetivo = String(registroOrigem?.CONTROLE || '').trim();
+  const alterouControle = controleNovo !== controleOrigemEfetivo;
+  if (
+    alterouControle
+    && registroDestino
+    && Math.abs(Number(registroDestino.ESTOQUE || 0)) > 0.000001
+  ) {
+    throw new Error(
+      'O lote informado já possui saldo no estoque. Conte esse lote em sua própria linha para não misturar posições diferentes.'
+    );
+  }
+
+  const registroReferencia = registroDestino || registroOrigem;
+  const dtFabricacaoFinal = dtFabricacaoInformada || registroReferencia?.DTFABRICACAO || null;
+  const dtValidadeFinal = dtValidadeInformada || registroReferencia?.DTVAL || null;
+  if (dtFabricacaoFinal && dtValidadeFinal && dtValidadeFinal < dtFabricacaoFinal) {
+    throw new Error('A validade não pode ser anterior à data de fabricação.');
+  }
+
+  // Em uma posicao existente, envie somente as datas que realmente mudaram.
+  // Isso torna explicito o caso em que a quantidade e o lote continuam iguais,
+  // mas fabricacao e/ou validade precisam ser cadastradas no TGFEST.
+  const planoDatas = planejarDatasRastreabilidade({
+    registro: registroReferencia,
+    dtFabricacao: dtFabricacaoFinal,
+    dtValidade: dtValidadeFinal
+  });
+  const formatarCamposDatas = (campos) => Object.fromEntries(
+    Object.entries(campos).map(([campo, valor]) => [campo, formatarDataCampoSankhya(valor)])
+  );
+  const camposDatasCompletos = formatarCamposDatas(planoDatas.camposCompletos);
+  const camposDatasAlteradas = formatarCamposDatas(planoDatas.camposAlterados);
+  const { datasAtualizadas } = planoDatas;
+
+  if (alterouControle && !controleOrigemEfetivo && controleNovo) {
+    const posicaoMigrada = await migrarPosicaoSemControle({
+      sessao,
+      item,
+      registroOrigem,
+      registroDestino,
+      controleNovo,
+      camposDatas: camposDatasCompletos,
+      dtFabricacaoFinal,
+      dtValidadeFinal
+    });
+    return {
+      controle: controleNovo,
+      dtFabricacao: dtFabricacaoFinal,
+      dtValidade: dtValidadeFinal,
+      estoqueSistema: Number(posicaoMigrada.ESTOQUE || 0),
+      datasAtualizadas,
+      controleAtualizado: alterouControle
+    };
+  }
+
+  if (alterouControle && !registroDestino) {
+    if (!controleNovo) {
+      throw new Error('Não é possível criar uma posição de estoque sem informar o lote/controle.');
+    }
+    await salvarRegistroApi('Estoque', {
+      CODEMP: Number(sessao.empresa),
+      CODLOCAL: Number(item.codLocal),
+      CODPROD: Number(item.codProd),
+      CONTROLE: normalizarControleConferencia(controleNovo),
+      RESERVADO: 0,
+      ESTMIN: 0,
+      ESTMAX: 0,
+      ATIVO: 'S',
+      TIPO: 'P',
+      CODPARC: 0,
+      ESTOQUE: 0,
+      STATUSLOTE: 'N',
+      ...camposDatasCompletos
+    });
+  } else if (registroDestino && Object.keys(camposDatasAlteradas).length) {
+    await atualizarRegistroApi(
+      'Estoque',
+      {
+        CODEMP: registroDestino.CODEMP,
+        CODPROD: registroDestino.CODPROD,
+        CODLOCAL: registroDestino.CODLOCAL,
+        CONTROLE: normalizarControleConferencia(registroDestino.CONTROLE),
+        CODPARC: registroDestino.CODPARC,
+        TIPO: registroDestino.TIPO
+      },
+      camposDatasAlteradas
+    );
+  } else if (!alterouControle && registroOrigem && Object.keys(camposDatasAlteradas).length) {
+    await atualizarRegistroApi(
+      'Estoque',
+      {
+        CODEMP: registroOrigem.CODEMP,
+        CODPROD: registroOrigem.CODPROD,
+        CODLOCAL: registroOrigem.CODLOCAL,
+        CONTROLE: normalizarControleConferencia(registroOrigem.CONTROLE),
+        CODPARC: registroOrigem.CODPARC,
+        TIPO: registroOrigem.TIPO
+      },
+      camposDatasAlteradas
+    );
+  }
+
+  const posicaoConfirmada = await executeQuery(`
+    SELECT
+      NVL(ESTOQUE, 0) AS ESTOQUE,
+      TO_CHAR(DTFABRICACAO, 'YYYY-MM-DD') AS DTFABRICACAO,
+      TO_CHAR(DTVAL, 'YYYY-MM-DD') AS DTVAL
+    FROM TGFEST
+    WHERE CODEMP = ${Number(sessao.empresa)}
+      AND CODPROD = ${Number(item.codProd)}
+      AND CODLOCAL = ${Number(item.codLocal)}
+      AND NVL(TRIM(CONTROLE), ' ') = '${textoSql(normalizarControleConferencia(controleNovo))}'
+      AND NVL(CODPARC, 0) = 0
+      AND NVL(TIPO, 'P') = 'P'
+  `);
+  if (posicaoConfirmada.length !== 1) {
+    throw new Error(
+      `O Sankhya não criou corretamente a posição do produto ${item.codProd}, lote ${controleNovo || 'sem controle'}. A nota de ajuste não será gerada.`
+    );
+  }
+  const posicaoFinal = posicaoConfirmada[0];
+  if (
+    (dtFabricacaoFinal && posicaoFinal.DTFABRICACAO !== dtFabricacaoFinal)
+    || (dtValidadeFinal && posicaoFinal.DTVAL !== dtValidadeFinal)
+  ) {
+    throw new Error(
+      `O Sankhya não gravou fabricação/validade do produto ${item.codProd}, lote ${controleNovo}. A nota de ajuste não será gerada.`
+    );
+  }
+
+  return {
+    controle: controleNovo,
+    dtFabricacao: dtFabricacaoFinal,
+    dtValidade: dtValidadeFinal,
+    estoqueSistema: Number(registroOrigem?.ESTOQUE ?? posicaoFinal.ESTOQUE ?? 0),
+    datasAtualizadas,
+    controleAtualizado: alterouControle
   };
 }
 
@@ -3710,6 +4073,88 @@ async function localizarNotaAjustePorObservacao(empresa, codTipOper, observacao)
   return linhas[0] || null;
 }
 
+function chaveItemNotaAjuste(item) {
+  return [
+    Number(item.CODPROD ?? item.codProd),
+    Number(item.CODLOCALORIG ?? item.codLocal),
+    String(item.CONTROLE ?? item.controle ?? '').trim()
+  ].join('|');
+}
+
+async function sincronizarItensNotaAjustePendente(nunota, itensEsperados) {
+  const itensNota = await executeQuery(`
+    SELECT
+      SEQUENCIA,
+      CODPROD,
+      QTDNEG,
+      VLRUNIT,
+      CODVOL,
+      CODLOCALORIG,
+      NVL(TRIM(CONTROLE), ' ') AS CONTROLE,
+      NVL(VLRDESC, 0) AS VLRDESC,
+      NVL(PERCDESC, 0) AS PERCDESC
+    FROM TGFITE
+    WHERE NUNOTA = ${Number(nunota)}
+    ORDER BY SEQUENCIA
+  `);
+  const itensPorChave = new Map();
+  for (const itemNota of itensNota) {
+    const chave = chaveItemNotaAjuste(itemNota);
+    if (itensPorChave.has(chave)) {
+      throw new Error(`A nota pendente ${nunota} possui itens duplicados e não pode ser reutilizada com segurança.`);
+    }
+    itensPorChave.set(chave, itemNota);
+  }
+
+  const chavesEsperadas = new Set(itensEsperados.map(chaveItemNotaAjuste));
+  if (
+    itensPorChave.size !== chavesEsperadas.size
+    || [...itensPorChave.keys()].some((chave) => !chavesEsperadas.has(chave))
+  ) {
+    throw new Error(
+      `A nota pendente ${nunota} não corresponde mais à contagem. Exclua essa nota no Sankhya e aplique o ajuste novamente.`
+    );
+  }
+
+  let alterados = 0;
+  for (const itemEsperado of itensEsperados) {
+    const itemNota = itensPorChave.get(chaveItemNotaAjuste(itemEsperado));
+    const quantidade = Number(itemEsperado.quantidadeAjuste || 0);
+    if (Math.abs(Number(itemNota.QTDNEG || 0) - quantidade) <= 0.000001) continue;
+
+    await salvarQuantidadeLoteItemNotaApi(
+      nunota,
+      itemNota,
+      {
+        quantidade,
+        controle: itemEsperado.controle,
+        vlrTot: quantidade * Number(itemNota.VLRUNIT || 0),
+        vlrDesc: 0
+      },
+      false
+    );
+    alterados += 1;
+  }
+
+  const conferidos = await executeQuery(`
+    SELECT CODPROD, QTDNEG, CODLOCALORIG, NVL(TRIM(CONTROLE), ' ') AS CONTROLE
+    FROM TGFITE
+    WHERE NUNOTA = ${Number(nunota)}
+  `);
+  const quantidadePorChave = new Map(
+    conferidos.map((item) => [chaveItemNotaAjuste(item), Number(item.QTDNEG || 0)])
+  );
+  const divergente = itensEsperados.find((item) => {
+    const quantidadeAtual = quantidadePorChave.get(chaveItemNotaAjuste(item));
+    return !Number.isFinite(quantidadeAtual)
+      || Math.abs(quantidadeAtual - Number(item.quantidadeAjuste || 0)) > 0.000001;
+  });
+  if (divergente) {
+    throw new Error(`O Sankhya não atualizou corretamente os itens da nota pendente ${nunota}.`);
+  }
+  return alterados;
+}
+
 async function gerarNotaPendenteAjuste({
   sessao,
   tipo,
@@ -3720,22 +4165,28 @@ async function gerarNotaPendenteAjuste({
   total
 }) {
   const observacao = `Contagem app ${sessao.id} - ${tipo} ${indice}/${total}`;
+  await sincronizarDatasEstoqueAjuste(sessao, itens);
   const existente = await localizarNotaAjustePorObservacao(
     sessao.empresa,
     template.CODTIPOPER,
     observacao
   );
   if (existente) {
+    const confirmada = String(existente.STATUSNOTA || '').toUpperCase() === 'L';
+    const itensSincronizados = confirmada
+      ? 0
+      : await sincronizarItensNotaAjustePendente(Number(existente.NUNOTA), itens);
     return {
       nunota: Number(existente.NUNOTA),
       tipo,
       codTipOper: Number(template.CODTIPOPER),
       quantidadeItens: itens.length,
       observacao,
-      status: String(existente.STATUSNOTA || '').toUpperCase() === 'L'
+      status: confirmada
         ? 'CONFIRMADA_NO_SANKHYA'
         : 'PENDENTE_CONFIRMACAO',
-      reutilizada: true
+      reutilizada: true,
+      itensSincronizados
     };
   }
 
@@ -3752,9 +4203,10 @@ async function gerarNotaPendenteAjuste({
     payload,
     { modulePath: 'mgecom', forceAccessSession: true }
   );
+  const nunota = extrairNunotaAjuste(resposta);
 
   return {
-    nunota: extrairNunotaAjuste(resposta),
+    nunota,
     tipo,
     codTipOper: Number(template.CODTIPOPER),
     quantidadeItens: itens.length,
@@ -3762,6 +4214,37 @@ async function gerarNotaPendenteAjuste({
     status: 'PENDENTE_CONFIRMACAO',
     reutilizada: false
   };
+}
+
+async function sincronizarDatasEstoqueAjuste(sessao, itensContagem) {
+  let total = 0;
+  for (const itemContagem of itensContagem || []) {
+    const dtFabricacao = formatarDataCampoSankhya(itemContagem.dtFabricacao);
+    const dtValidade = formatarDataCampoSankhya(itemContagem.dtVal || itemContagem.dtValidade);
+    if (String(itemContagem.controle || '').trim() && (!dtFabricacao || !dtValidade)) {
+      throw new Error(
+        `Produto ${itemContagem.codProd}, lote ${itemContagem.controle}: informe fabricação e validade na contagem antes de confirmar a nota.`
+      );
+    }
+    if (dtFabricacao || dtValidade || String(itemContagem.controle || '').trim()) {
+      await atualizarRastreabilidadeItemEstoque({
+        sessao,
+        item: itemContagem,
+        dados: {
+          controle: itemContagem.controle,
+          dtFabricacao: itemContagem.dtFabricacao,
+          dtValidade: itemContagem.dtVal || itemContagem.dtValidade
+        }
+      });
+      total += 1;
+    }
+  }
+  return total;
+}
+
+async function sincronizarDatasNotasAjuste(sessao) {
+  const plano = planejarAjustesEstoque(sessao);
+  return sincronizarDatasEstoqueAjuste(sessao, plano.itens);
 }
 
 router.get('/estoque-contagem/disponibilidade', (req, res) => {
@@ -3976,6 +4459,7 @@ router.post('/estoque-contagem/sessoes', async (req, res) => {
         PRO.CODGRUPOPROD,
         NVL(GRU.DESCRGRUPOPROD, 'Sem grupo') AS DESCRGRUPOPROD,
         NVL(TRIM(EST.CONTROLE), '') AS CONTROLE,
+        EST.DTFABRICACAO,
         EST.DTVAL,
         NVL(EST.ESTOQUE, 0) AS ESTOQUE
       FROM TGFEST EST
@@ -4000,11 +4484,11 @@ router.post('/estoque-contagem/sessoes', async (req, res) => {
         FROM TSIEMP
         WHERE CODEMP = ${empresa}
       `),
-      filtros.grupo
+      filtros.grupos.length
         ? executeQuery(`
-            SELECT DESCRGRUPOPROD
+            SELECT CODGRUPOPROD, DESCRGRUPOPROD
             FROM TGFGRU
-            WHERE CODGRUPOPROD = ${filtros.grupo}
+            WHERE CODGRUPOPROD IN (${filtros.grupos.join(', ')})
           `)
         : Promise.resolve([])
     ]);
@@ -4017,7 +4501,9 @@ router.post('/estoque-contagem/sessoes', async (req, res) => {
         || empresaRegistro?.EMPRESA
         || empresaRegistro?.NOMEFANTASIA
         || empresaRegistro?.RAZAOSOCIAL,
-      nomeGrupo: grupoRegistro?.[0]?.DESCRGRUPOPROD || null,
+      nomeGrupo: filtros.grupos
+        .map((codigo) => grupoRegistro.find((grupo) => Number(grupo.CODGRUPOPROD) === Number(codigo))?.DESCRGRUPOPROD || codigo)
+        .join(', ') || null,
       local,
       nomeLocal,
       filtros,
@@ -4089,16 +4575,50 @@ router.get('/estoque-contagem/sessoes/:id/localizar', async (req, res) => {
   }
 });
 
-router.put('/estoque-contagem/sessoes/:id/itens/:chave', (req, res) => {
+router.put('/estoque-contagem/sessoes/:id/itens/:chave', async (req, res) => {
   try {
+    const id = req.params.id;
+    const chave = decodeURIComponent(req.params.chave);
+    const sessaoAtual = estoqueContagemStore.obter(id);
+    if (!sessaoAtual) {
+      res.status(404).json({ erro: 'Contagem de estoque nao encontrada.' });
+      return;
+    }
+    const itemAtual = sessaoAtual.itens.find((item) => item.chave === chave);
+    if (!itemAtual) {
+      res.status(404).json({ erro: 'Item nao pertence a esta copia de estoque.' });
+      return;
+    }
+    estoqueContagemStore.validarLancamento({
+      id,
+      chave,
+      quantidade: req.body?.quantidade
+    });
+
+    const rastreabilidade = await atualizarRastreabilidadeItemEstoque({
+      sessao: sessaoAtual,
+      item: itemAtual,
+      dados: req.body
+    });
     const sessao = estoqueContagemStore.registrar({
-      id: req.params.id,
-      chave: decodeURIComponent(req.params.chave),
+      id,
+      chave,
       quantidade: req.body?.quantidade,
+      controle: rastreabilidade.controle,
+      dtFabricacao: rastreabilidade.dtFabricacao,
+      dtValidade: rastreabilidade.dtValidade,
+      estoqueSistema: rastreabilidade.estoqueSistema,
       usuario: req.usuario
     });
-    res.json({ sessao: serializarSessaoContagemEstoque(sessao) });
+    res.json({
+      sessao: serializarSessaoContagemEstoque(sessao),
+      rastreabilidade: {
+        controleAtualizado: rastreabilidade.controleAtualizado === true,
+        datasAtualizadas: rastreabilidade.datasAtualizadas || []
+      }
+    });
   } catch (err) {
+    console.error('Falha ao atualizar item da contagem de estoque:', err);
     res.status(422).json({ erro: err.message });
   }
 });
@@ -4145,10 +4665,12 @@ router.post('/estoque-contagem/sessoes/:id/aplicar-ajuste', async (req, res) => 
       return;
     }
     if (sessao.status === 'AJUSTE_GERADO' && sessao.ajuste?.notas?.length) {
+      const datasSincronizadas = await sincronizarDatasNotasAjuste(sessao);
       res.json({
         sessao: serializarSessaoContagemEstoque(sessao),
         notas: sessao.ajuste.notas,
-        reutilizada: true
+        reutilizada: true,
+        datasSincronizadas
       });
       return;
     }

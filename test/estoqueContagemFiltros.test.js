@@ -23,6 +23,7 @@ test('normaliza todos os filtros da copia e corrige intervalo invertido', () => 
     empresa: 2,
     local: 0,
     grupo: 101,
+    grupos: [101],
     incluirSubgrupos: false,
     marca: 'Norte Sul',
     produtoInicial: 100,
@@ -31,6 +32,20 @@ test('normaliza todos os filtros da copia e corrige intervalo invertido', () => 
     controle: 'COM_CONTROLE',
     saldo: 'NEGATIVO'
   });
+});
+
+test('normaliza varios grupos sem duplicar e gera filtro seguro', () => {
+  const filtros = normalizarFiltrosCopiaEstoque({
+    empresa: 1,
+    grupos: ['3000300', 3000100, '3000300', 'invalido'],
+    incluirSubgrupos: false
+  });
+
+  assert.deepEqual(filtros.grupos, [3000300, 3000100]);
+  assert.equal(filtros.grupo, 3000300);
+  const sql = montarSqlFiltrosCopiaEstoque(filtros);
+  assert.match(sql, /PRO\.CODGRUPOPROD IN \(3000300, 3000100\)/);
+  assert.doesNotMatch(sql, /invalido/);
 });
 
 test('gera filtro hierarquico e escapa marca para SQL', () => {
@@ -42,7 +57,7 @@ test('gera filtro hierarquico e escapa marca para SQL', () => {
   });
   const sql = montarSqlFiltrosCopiaEstoque(filtros);
 
-  assert.match(sql, /START WITH GRU\.CODGRUPOPROD = 10/);
+  assert.match(sql, /START WITH GRU\.CODGRUPOPROD IN \(10\)/);
   assert.match(sql, /D''Agro/);
   assert.match(sql, /ABS\(NVL\(EST\.ESTOQUE, 0\)\) > 0\.000001/);
   assert.match(sql, /NVL\(PRO\.ATIVO, 'S'\) = 'S'/);

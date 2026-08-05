@@ -62,6 +62,47 @@ function extractDirectSessionId(payload) {
     || null;
 }
 
+function pontuarTextoCorrompido(texto) {
+  const valor = String(texto || '');
+  return (valor.match(/\uFFFD/g) || []).length * 20
+    + (valor.match(/(?:Ã.|Â.|â[\u0080-\u00BF]|ï¿½)/g) || []).length * 6
+    + (valor.match(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g) || []).length * 10;
+}
+
+async function lerRespostaJsonCompat(response) {
+  if (typeof response?.arrayBuffer !== 'function') {
+    return typeof response?.json === 'function' ? response.json().catch(() => ({})) : {};
+  }
+
+  const bytes = Buffer.from(await response.arrayBuffer());
+  if (!bytes.length) return {};
+  const contentType = String(response.headers?.get?.('content-type') || '').toLowerCase();
+  const charsetDeclarado = contentType.match(/charset\s*=\s*["']?([^;"'\s]+)/)?.[1] || '';
+  const codificacoes = charsetDeclarado && !/utf-?8/i.test(charsetDeclarado)
+    ? [charsetDeclarado, 'utf-8', 'windows-1252']
+    : ['utf-8', 'windows-1252'];
+  const candidatos = [];
+
+  for (const codificacao of [...new Set(codificacoes)]) {
+    try {
+      const texto = new TextDecoder(codificacao).decode(bytes);
+      candidatos.push({ texto, pontuacao: pontuarTextoCorrompido(texto) });
+    } catch {
+      // Alguns aliases de charset informados pelo servidor podem não existir no Node.
+    }
+  }
+
+  candidatos.sort((a, b) => a.pontuacao - b.pontuacao);
+  for (const candidato of candidatos) {
+    try {
+      return JSON.parse(candidato.texto.replace(/^\uFEFF/, ''));
+    } catch {
+      // Tenta a próxima codificação disponível.
+    }
+  }
+  return {};
+}
+
 function isDirectSessionError(message, statusCode) {
   if (statusCode === 401 || statusCode === 403) return true;
 
@@ -128,7 +169,7 @@ async function executeDirectUserLogin(requestBody, config = getConfig()) {
       requestBody
     })
   });
-  const payload = await response.json().catch(() => ({}));
+  const payload = await lerRespostaJsonCompat(response);
   const sessionId = extractDirectSessionId(payload);
 
   if (!response.ok || payload.status === '0' || payload.status === '3' || !sessionId) {
@@ -202,7 +243,7 @@ async function loginDirectSession(options = {}) {
         }
       })
     });
-    const payload = await response.json().catch(() => ({}));
+    const payload = await lerRespostaJsonCompat(response);
     const sessionId = extractDirectSessionId(payload);
     if (!response.ok || payload.status === '0' || payload.status === '3' || !sessionId) {
       const message = payload.statusMessage || `HTTP ${response.status}`;
@@ -235,7 +276,7 @@ async function executeDirectService(serviceName, requestBody, options = {}) {
     },
     body: JSON.stringify({ serviceName, requestBody })
   });
-  const payload = await response.json().catch(() => ({}));
+  const payload = await lerRespostaJsonCompat(response);
   if (!response.ok || payload.status === '0' || payload.status === '3') {
     const message = payload.statusMessage || `HTTP ${response.status}`;
     if (!options.__retried && isDirectSessionError(message, response.status)) {
@@ -710,6 +751,8 @@ module.exports = {
   executeQuery,
   normalizeQueryRows,
   _internals: {
-    isDirectSessionError
+    isDirectSessionError,
+    lerRespostaJsonCompat,
+    pontuarTextoCorrompido
   }
 };

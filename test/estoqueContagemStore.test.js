@@ -34,6 +34,7 @@ const itens = [
     CODLOCAL: 1,
     DESCRLOCAL: 'Deposito',
     CONTROLE: 'L1',
+    DTFABRICACAO: '2026-07-23',
     DTVAL: '2028-07-23',
     ESTOQUE: 8
   }
@@ -53,6 +54,7 @@ test('cria copia cega e conclui contagem sem divergencia', () => {
   assert.equal(sessao.itens[0].codGrupoProd, 100);
   assert.equal(sessao.itens[0].descrGrupoProd, 'Defensivos');
   assert.equal(sessao.itens[1].dtVal, '2028-07-23');
+  assert.equal(sessao.itens[1].dtFabricacao, '2026-07-23');
   assert.equal(sessao.nomeGrupo, 'Defensivos agrícolas');
   store.registrar({ id: sessao.id, chave: sessao.itens[0].chave, quantidade: 5, usuario: 7 });
   store.registrar({ id: sessao.id, chave: sessao.itens[1].chave, quantidade: 8, usuario: 7 });
@@ -68,6 +70,28 @@ test('cria copia cega e conclui contagem sem divergencia', () => {
     unidadesContadas: 13,
     diferencaUnidades: 0
   });
+});
+
+test('persiste lote e datas editados junto com a contagem', () => {
+  const store = criarStore();
+  const sessao = store.criar({ empresa: 1, usuario: 7, itens: [itens[0]] });
+
+  const atualizada = store.registrar({
+    id: sessao.id,
+    chave: sessao.itens[0].chave,
+    quantidade: 6,
+    controle: 'LOTE-2026',
+    dtFabricacao: '2026-08-04',
+    dtValidade: '2028-08-04',
+    estoqueSistema: 6,
+    usuario: 7
+  });
+
+  assert.equal(atualizada.itens[0].controle, 'LOTE-2026');
+  assert.equal(atualizada.itens[0].dtFabricacao, '2026-08-04');
+  assert.equal(atualizada.itens[0].dtVal, '2028-08-04');
+  assert.equal(atualizada.itens[0].estoqueSistema, 6);
+  assert.equal(atualizada.itens[0].contagens['1'], 6);
 });
 
 test('preserva primeira contagem e permite recontar somente divergencias', () => {

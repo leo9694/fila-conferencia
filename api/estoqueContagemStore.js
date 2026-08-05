@@ -58,6 +58,7 @@ function normalizarItem(item = {}) {
     codLocal,
     descrLocal: texto(item.descrLocal || item.DESCRLOCAL) || `Local ${codLocal}`,
     controle,
+    dtFabricacao: texto(item.dtFabricacao || item.DTFABRICACAO) || null,
     dtVal: texto(item.dtVal || item.DTVAL) || null,
     estoqueSistema: numero(item.estoqueSistema ?? item.ESTOQUE),
     contagens: item.contagens && typeof item.contagens === 'object' ? { ...item.contagens } : {},
@@ -196,7 +197,7 @@ function criarEstoqueContagemStore(options = {}) {
     return state.sessoes[id];
   }
 
-  function registrar({ id, chave, quantidade, usuario = null }) {
+  function validarLancamento({ id, chave, quantidade }) {
     const sessao = exigir(id);
     if (!['EM_CONTAGEM', 'EM_RECONTAGEM'].includes(sessao.status)) {
       throw new Error('Esta contagem nao esta aberta para lancamentos.');
@@ -211,7 +212,26 @@ function criarEstoqueContagemStore(options = {}) {
     const valor = Number(quantidade);
     if (!Number.isFinite(valor) || valor < 0) throw new Error('Informe uma quantidade valida.');
 
+    return { sessao, item, valor };
+  }
+
+  function registrar({
+    id,
+    chave,
+    quantidade,
+    controle,
+    dtFabricacao,
+    dtValidade,
+    estoqueSistema,
+    usuario = null
+  }) {
+    const { sessao, item, valor } = validarLancamento({ id, chave, quantidade });
+
     const agora = new Date().toISOString();
+    if (controle !== undefined) item.controle = texto(controle);
+    if (dtFabricacao !== undefined) item.dtFabricacao = texto(dtFabricacao) || null;
+    if (dtValidade !== undefined) item.dtVal = texto(dtValidade) || null;
+    if (estoqueSistema !== undefined) item.estoqueSistema = numero(estoqueSistema);
     item.contagens[String(sessao.rodadaAtual)] = valor;
     item.atualizadoEm = agora;
     item.atualizadoPor = usuario;
@@ -314,6 +334,7 @@ function criarEstoqueContagemStore(options = {}) {
     listar,
     excluir,
     criar,
+    validarLancamento,
     registrar,
     finalizarRodada,
     iniciarRecontagem,

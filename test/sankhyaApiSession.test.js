@@ -14,6 +14,20 @@ test('reconhece respostas de sessao direta expirada ou nao autorizada', () => {
   assert.equal(isDirectSessionError('', 403), true);
 });
 
+test('decodifica respostas Sankhya em UTF-8 e Windows-1252 sem corromper acentos', async () => {
+  const { lerRespostaJsonCompat } = sankhyaApi._internals;
+  const payload = { descricao: 'CACHEPÔ DIAMOND - CERÂMICA', mensagem: 'Produto não previsto' };
+
+  for (const codificacao of ['utf8', 'latin1']) {
+    const bytes = Buffer.from(JSON.stringify(payload), codificacao);
+    const resposta = {
+      headers: { get: () => codificacao === 'latin1' ? 'application/json; charset=ISO-8859-1' : 'application/json; charset=UTF-8' },
+      arrayBuffer: async () => bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
+    };
+    assert.deepEqual(await lerRespostaJsonCompat(resposta), payload);
+  }
+});
+
 test('renova a sessao direta e repete o servico uma vez quando nao autorizado', async () => {
   const originalFetch = global.fetch;
   const originalEnv = {

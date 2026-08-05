@@ -19,6 +19,8 @@ const sessao = {
       codVol: 'UN',
       codLocal: 1,
       controle: 'L1',
+      dtFabricacao: '2026-04-21',
+      dtVal: '2027-07-31',
       estoqueSistema: 5,
       contagens: { 1: 8 }
     },
@@ -29,6 +31,8 @@ const sessao = {
       codVol: 'UN',
       codLocal: 1,
       controle: 'L2',
+      dtFabricacao: '2026-05-10',
+      dtVal: '2028-05-10',
       estoqueSistema: 9,
       contagens: { 1: 7, 2: 6 }
     },
@@ -48,7 +52,33 @@ test('planeja somente divergencias contadas e preserva lote e local', () => {
   assert.deepEqual(plano.entrada.map((item) => item.quantidadeAjuste), [3]);
   assert.deepEqual(plano.saida.map((item) => item.quantidadeAjuste), [3]);
   assert.equal(plano.saida[0].controle, 'L2');
+  assert.equal(plano.saida[0].dtFabricacao, '2026-05-10');
+  assert.equal(plano.saida[0].dtValidade, '2028-05-10');
   assert.equal(plano.saida[0].codLocal, 1);
+});
+
+test('ajusta somente a diferenca mesmo quando o lote informado muda', () => {
+  const plano = planejarAjustesEstoque({
+    empresa: 1,
+    rodadaAtual: 1,
+    itens: [{
+      chave: '5040|1010101|SEM_CONTROLE',
+      codProd: 5040,
+      descrProd: 'Produto com novo lote',
+      codVol: 'UN',
+      codLocal: 1010101,
+      controle: '1010',
+      dtFabricacao: '2025-11-05',
+      dtVal: '2027-07-31',
+      estoqueSistema: 1,
+      contagens: { 1: 30 }
+    }]
+  });
+
+  assert.equal(plano.saida.length, 0);
+  assert.equal(plano.entrada.length, 1);
+  assert.equal(plano.entrada[0].controle, '1010');
+  assert.equal(plano.entrada[0].quantidadeAjuste, 29);
 });
 
 test('divide notas em lotes de no maximo vinte itens', () => {
@@ -86,4 +116,20 @@ test('extrai nunota retornado pelo servico de inclusao', () => {
   assert.equal(extrairNunotaAjuste({
     responseBody: { pk: { NUNOTA: { $: '12345' } } }
   }), 12345);
+});
+
+test('bloqueia nota com lote sem fabricacao ou validade', () => {
+  assert.throws(() => montarPayloadNotaAjuste({
+    sessao,
+    itens: [{ ...planejarAjustesEstoque(sessao).entrada[0], dtValidade: '' }],
+    template: {
+      CODPARC: 649,
+      CODTIPOPER: 156,
+      CODTIPVENDA: 53,
+      TIPMOV: 'E'
+    },
+    custos: new Map([[10, 2.5]]),
+    dataNegociacao: '04/08/2026',
+    observacao: 'Contagem sem validade'
+  }), /informe fabricacao e validade/);
 });
