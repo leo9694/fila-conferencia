@@ -1,6 +1,33 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { planejarDatasRastreabilidade } = require('../api/estoqueRastreabilidade');
+const {
+  deveMigrarPosicaoSemControle,
+  planejarDatasRastreabilidade
+} = require('../api/estoqueRastreabilidade');
+
+test('item novo sem registro anterior cria posicao em vez de tentar migrar nulo', () => {
+  assert.equal(deveMigrarPosicaoSemControle({
+    alterouControle: true,
+    registroOrigem: null,
+    controleOrigem: '',
+    controleNovo: 'LOTE-10'
+  }), false);
+});
+
+test('migra somente quando a posicao sem controle realmente existe', () => {
+  assert.equal(deveMigrarPosicaoSemControle({
+    alterouControle: true,
+    registroOrigem: { CONTROLE: '', ESTOQUE: 10 },
+    controleOrigem: '',
+    controleNovo: 'LOTE-10'
+  }), true);
+  assert.equal(deveMigrarPosicaoSemControle({
+    alterouControle: true,
+    registroOrigem: { CONTROLE: 'LOTE-ANTIGO', ESTOQUE: 10 },
+    controleOrigem: 'LOTE-ANTIGO',
+    controleNovo: 'LOTE-10'
+  }), false);
+});
 
 test('aceita item sem posicao anterior durante contagem ou recontagem', () => {
   const plano = planejarDatasRastreabilidade({

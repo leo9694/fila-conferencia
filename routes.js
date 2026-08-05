@@ -51,7 +51,10 @@ const {
   montarPayloadNotaAjuste,
   planejarAjustesEstoque
 } = require('./api/estoqueAjuste');
-const { planejarDatasRastreabilidade } = require('./api/estoqueRastreabilidade');
+const {
+  deveMigrarPosicaoSemControle,
+  planejarDatasRastreabilidade
+} = require('./api/estoqueRastreabilidade');
 const { criarAutorizacaoGrupos } = require('./api/autorizacaoGrupos');
 const {
   dividirPeriodoMensal,
@@ -3759,6 +3762,9 @@ async function migrarPosicaoSemControle({
   dtFabricacaoFinal,
   dtValidadeFinal
 }) {
+  if (!registroOrigem) {
+    throw new Error('A posição original sem controle não foi encontrada para migração.');
+  }
   const chaveOrigem = chavePosicaoEstoque(registroOrigem);
   const chaveDestino = chavePosicaoEstoque(registroOrigem, controleNovo);
   const camposDestino = camposCopiaPosicaoEstoque(registroOrigem, camposDatas);
@@ -3917,7 +3923,12 @@ async function atualizarRastreabilidadeItemEstoque({ sessao, item, dados }) {
   const camposDatasAlteradas = formatarCamposDatas(planoDatas.camposAlterados);
   const { datasAtualizadas } = planoDatas;
 
-  if (alterouControle && !controleOrigemEfetivo && controleNovo) {
+  if (deveMigrarPosicaoSemControle({
+    alterouControle,
+    registroOrigem,
+    controleOrigem: controleOrigemEfetivo,
+    controleNovo
+  })) {
     const posicaoMigrada = await migrarPosicaoSemControle({
       sessao,
       item,

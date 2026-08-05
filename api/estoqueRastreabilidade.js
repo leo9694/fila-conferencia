@@ -27,4 +27,21 @@ function planejarDatasRastreabilidade({ registro = {}, dtFabricacao = null, dtVa
   return { camposCompletos, camposAlterados, datasAtualizadas };
 }
 
-module.exports = { planejarDatasRastreabilidade };
+function deveMigrarPosicaoSemControle({
+  alterouControle = false,
+  registroOrigem = null,
+  controleOrigem = '',
+  controleNovo = ''
+} = {}) {
+  return Boolean(
+    alterouControle
+    && registroOrigem
+    && !String(controleOrigem || '').trim()
+    && String(controleNovo || '').trim()
+  );
+}
+
+module.exports = {
+  deveMigrarPosicaoSemControle,
+  planejarDatasRastreabilidade
+};
