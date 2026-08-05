@@ -92,6 +92,10 @@ test('persiste lote e datas editados junto com a contagem', () => {
   assert.equal(atualizada.itens[0].dtVal, '2028-08-04');
   assert.equal(atualizada.itens[0].estoqueSistema, 6);
   assert.equal(atualizada.itens[0].contagens['1'], 6);
+  assert.equal(atualizada.itens[0].controleFoto, '');
+  assert.equal(atualizada.itens[0].dtFabricacaoFoto, null);
+  assert.equal(atualizada.itens[0].dtValFoto, null);
+  assert.equal(atualizada.itens[0].estoqueFoto, 5);
 });
 
 test('versiona a sessao e impede sobrescrever o mesmo item com uma tela desatualizada', () => {

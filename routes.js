@@ -38,6 +38,10 @@ const {
   obterContagemAtual
 } = require('./api/estoqueContagemStore');
 const {
+  gerarRelatorioContagemEstoque,
+  nomeArquivoRelatorioContagem
+} = require('./api/relatorioContagemEstoque');
+const {
   montarSqlFiltrosCopiaEstoque,
   normalizarFiltrosCopiaEstoque
 } = require('./api/estoqueContagemFiltros');
@@ -4696,6 +4700,32 @@ router.get('/estoque-contagem/sessoes/:id', (req, res) => {
     return;
   }
   res.json({ sessao: serializarSessaoContagemEstoque(sessao) });
+});
+
+router.get('/estoque-contagem/sessoes/:id/relatorio', (req, res) => {
+  try {
+    const sessao = estoqueContagemStore.obter(req.params.id);
+    if (!sessao) {
+      res.status(404).json({ erro: 'Contagem de estoque nao encontrada.' });
+      return;
+    }
+    if (!['CONCLUIDA', 'PRONTA_PARA_AJUSTE', 'AJUSTE_GERADO'].includes(sessao.status)) {
+      res.status(422).json({
+        erro: 'Conclua a contagem e, quando houver divergencias, a analise antes de baixar o relatorio.'
+      });
+      return;
+    }
+
+    const arquivo = gerarRelatorioContagemEstoque(sessao);
+    const nomeArquivo = nomeArquivoRelatorioContagem(sessao);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(nomeArquivo)}`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(arquivo);
+  } catch (err) {
+    console.error('Falha ao gerar relatorio da contagem de estoque:', err);
+    res.status(500).json({ erro: 'Nao foi possivel gerar o relatorio da contagem de estoque.' });
+  }
 });
 
 router.get('/estoque-contagem/sessoes/:id/sincronizacao', (req, res) => {

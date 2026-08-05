@@ -46,6 +46,11 @@ function normalizarItem(item = {}) {
   const codProd = numero(item.codProd || item.CODPROD);
   const codLocal = numero(item.codLocal || item.CODLOCAL);
   const controle = texto(item.controle || item.CONTROLE);
+  const adicionadoManualmente = item.adicionadoManualmente === true;
+  const dtFabricacao = texto(item.dtFabricacao || item.DTFABRICACAO) || null;
+  const dtVal = texto(item.dtVal || item.DTVAL) || null;
+  const estoqueSistema = numero(item.estoqueSistema ?? item.ESTOQUE);
+  const possuiCampo = (campo) => Object.prototype.hasOwnProperty.call(item, campo);
 
   return {
     chave: texto(item.chave) || criarChaveItem({ codProd, codLocal, controle }),
@@ -58,10 +63,16 @@ function normalizarItem(item = {}) {
     codLocal,
     descrLocal: texto(item.descrLocal || item.DESCRLOCAL) || `Local ${codLocal}`,
     controle,
-    dtFabricacao: texto(item.dtFabricacao || item.DTFABRICACAO) || null,
-    dtVal: texto(item.dtVal || item.DTVAL) || null,
-    estoqueSistema: numero(item.estoqueSistema ?? item.ESTOQUE),
-    adicionadoManualmente: item.adicionadoManualmente === true,
+    dtFabricacao,
+    dtVal,
+    estoqueSistema,
+    // Estes campos nunca sao alterados. Eles preservam a foto congelada para
+    // auditoria, mesmo quando lote e datas sao corrigidos durante a contagem.
+    controleFoto: texto(possuiCampo('controleFoto') ? item.controleFoto : (adicionadoManualmente ? '' : controle)),
+    dtFabricacaoFoto: texto(possuiCampo('dtFabricacaoFoto') ? item.dtFabricacaoFoto : (adicionadoManualmente ? '' : dtFabricacao)) || null,
+    dtValFoto: texto(possuiCampo('dtValFoto') ? item.dtValFoto : (adicionadoManualmente ? '' : dtVal)) || null,
+    estoqueFoto: numero(possuiCampo('estoqueFoto') ? item.estoqueFoto : (adicionadoManualmente ? 0 : estoqueSistema)),
+    adicionadoManualmente,
     contagens: item.contagens && typeof item.contagens === 'object' ? { ...item.contagens } : {},
     atualizadoEm: item.atualizadoEm || null,
     atualizadoPor: item.atualizadoPor ?? null

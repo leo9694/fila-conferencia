@@ -147,6 +147,7 @@ const botaoConfirmarNovoItemEstoque = document.getElementById('estoque-contagem-
 const botaoRecontarEstoque = document.getElementById('estoque-contagem-recontar');
 const botaoConcluirAnaliseEstoque = document.getElementById('estoque-contagem-concluir-analise');
 const botaoFinalizarContagemEstoque = document.getElementById('estoque-contagem-finalizar');
+const botaoBaixarRelatorioContagemEstoque = document.getElementById('estoque-contagem-baixar-relatorio');
 const confirmacaoAppModal = document.getElementById('app-confirm-modal');
 const confirmacaoAppDialog = document.querySelector('.app-confirm-dialog');
 const confirmacaoAppTitulo = document.getElementById('app-confirm-title');
@@ -2700,6 +2701,10 @@ function renderizarContagemEstoque() {
   botaoAplicarAjusteEstoque.textContent = sessao.status === 'AJUSTE_GERADO'
     ? 'Sincronizar lotes e datas'
     : 'Aplicar ajuste';
+  botaoBaixarRelatorioContagemEstoque.hidden = ![
+    'CONCLUIDA', 'PRONTA_PARA_AJUSTE', 'AJUSTE_GERADO'
+  ].includes(sessao.status);
+  botaoBaixarRelatorioContagemEstoque.disabled = false;
   estoqueContagemAuditoria.querySelectorAll('[data-estoque-auditoria-filtro]').forEach((botao) => {
     botao.classList.toggle(
       'ativo',
@@ -3289,6 +3294,42 @@ async function aplicarAjusteContagemEstoque() {
     botaoAplicarAjusteEstoque.textContent = estoqueContagemAtual?.status === 'AJUSTE_GERADO'
       ? 'Sincronizar lotes e datas'
       : 'Aplicar ajuste';
+  }
+}
+
+async function baixarRelatorioContagemEstoque() {
+  if (!estoqueContagemAtual?.id || botaoBaixarRelatorioContagemEstoque.disabled) return;
+  botaoBaixarRelatorioContagemEstoque.disabled = true;
+  const conteudoOriginal = botaoBaixarRelatorioContagemEstoque.innerHTML;
+  botaoBaixarRelatorioContagemEstoque.textContent = 'Gerando relatório...';
+  try {
+    const resposta = await fetch(
+      `/api/estoque-contagem/sessoes/${encodeURIComponent(estoqueContagemAtual.id)}/relatorio`,
+      { cache: 'no-store' }
+    );
+    if (!resposta.ok) {
+      const payload = await resposta.json().catch(() => ({}));
+      throw new Error(payload.erro || 'Não foi possível baixar o relatório.');
+    }
+
+    const arquivo = await resposta.blob();
+    const disposicao = resposta.headers.get('Content-Disposition') || '';
+    const nomeUtf8 = disposicao.match(/filename\*=UTF-8''([^;]+)/i);
+    const nome = nomeUtf8 ? decodeURIComponent(nomeUtf8[1]) : 'Relatorio Contagem Estoque.xlsx';
+    const url = URL.createObjectURL(arquivo);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = nome;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  } catch (error) {
+    atualizarMensagemContagemEstoque(error.message, true);
+  } finally {
+    botaoBaixarRelatorioContagemEstoque.innerHTML = conteudoOriginal;
+    botaoBaixarRelatorioContagemEstoque.disabled = false;
+    atualizarIcones();
   }
 }
 
@@ -9866,6 +9907,7 @@ estoqueContagemStatusFiltro.addEventListener('change', () => {
   renderizarContagemEstoque();
 });
 botaoAplicarAjusteEstoque.addEventListener('click', aplicarAjusteContagemEstoque);
+botaoBaixarRelatorioContagemEstoque.addEventListener('click', baixarRelatorioContagemEstoque);
 confirmacaoAppCancelar.addEventListener('click', () => concluirConfirmacaoApp(false));
 confirmacaoAppConfirmar.addEventListener('click', () => concluirConfirmacaoApp(true));
 confirmacaoAppModal.addEventListener('click', (event) => {
