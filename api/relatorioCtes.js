@@ -23,16 +23,6 @@ function dataIsoValida(valor) {
   return data.getUTCFullYear() === ano && data.getUTCMonth() === mes - 1 && data.getUTCDate() === dia;
 }
 
-function adicionarMesesUtc(data, meses) {
-  const resultado = new Date(data.getTime());
-  const diaOriginal = resultado.getUTCDate();
-  resultado.setUTCDate(1);
-  resultado.setUTCMonth(resultado.getUTCMonth() + meses);
-  const ultimoDia = new Date(Date.UTC(resultado.getUTCFullYear(), resultado.getUTCMonth() + 1, 0)).getUTCDate();
-  resultado.setUTCDate(Math.min(diaOriginal, ultimoDia));
-  return resultado;
-}
-
 function validarPeriodo(dataInicial, dataFinal) {
   if (!dataIsoValida(dataInicial) || !dataIsoValida(dataFinal)) {
     throw Object.assign(new Error('Informe Data Inicial e Data Final validas.'), { statusCode: 400 });
@@ -41,11 +31,6 @@ function validarPeriodo(dataInicial, dataFinal) {
     throw Object.assign(new Error('A Data Final deve ser igual ou posterior a Data Inicial.'), { statusCode: 400 });
   }
 
-  const inicio = new Date(`${dataInicial}T00:00:00.000Z`);
-  const fim = new Date(`${dataFinal}T00:00:00.000Z`);
-  if (fim >= adicionarMesesUtc(inicio, 6)) {
-    throw Object.assign(new Error('O periodo maximo permitido e de seis meses.'), { statusCode: 400 });
-  }
   return { dataInicial, dataFinal };
 }
 

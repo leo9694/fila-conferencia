@@ -24,12 +24,15 @@ test('consulta respeita os filtros obrigatorios e a data final inclusiva', () =>
   assert.doesNotMatch(sql, /DTBAIXA|BOLETO|VENCIMENTO/);
 });
 
-test('periodo e limitado a no maximo seis meses', () => {
+test('aceita periodo longo e rejeita somente intervalo invertido', () => {
   assert.deepEqual(validarPeriodo('2026-01-01', '2026-06-30'), {
     dataInicial: '2026-01-01',
     dataFinal: '2026-06-30'
   });
-  assert.throws(() => validarPeriodo('2026-01-01', '2026-07-01'), /seis meses/i);
+  assert.deepEqual(validarPeriodo('2025-01-01', '2026-12-31'), {
+    dataInicial: '2025-01-01',
+    dataFinal: '2026-12-31'
+  });
   assert.throws(() => validarPeriodo('2026-02-02', '2026-02-01'), /igual ou posterior/i);
 });
 
