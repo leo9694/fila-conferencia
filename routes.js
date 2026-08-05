@@ -2592,7 +2592,20 @@ router.get('/relatorios/disponiveis', exigirDiretoria, (req, res) => {
   });
 });
 
+// A consulta usa XMLs fiscais e pode permanecer alguns minutos em execucao em
+// periodos extensos. Mantemos somente uma geracao por processo para que duas
+// exportacoes simultaneas nao disputem memoria/CPU e tornem a API indisponivel.
+let relatorioCtesEmExecucao = false;
+
 router.post('/relatorios/ctes-importados-periodo', exigirDiretoria, async (req, res) => {
+  if (relatorioCtesEmExecucao) {
+    res.status(429).json({
+      erro: 'Ja existe um relatorio de CT-es sendo gerado. Aguarde a conclusao antes de solicitar outro.'
+    });
+    return;
+  }
+
+  relatorioCtesEmExecucao = true;
   try {
     const periodo = validarPeriodo(req.body?.dataInicial, req.body?.dataFinal);
     const inicioConsulta = process.hrtime.bigint();
@@ -2625,6 +2638,8 @@ router.post('/relatorios/ctes-importados-periodo', exigirDiretoria, async (req, 
         ? 'Nao foi possivel gerar o relatorio de CT-es importados.'
         : err.message
     });
+  } finally {
+    relatorioCtesEmExecucao = false;
   }
 });
 

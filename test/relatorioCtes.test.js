@@ -20,10 +20,13 @@ test('consulta respeita os filtros obrigatorios e a data final inclusiva', () =>
   assert.match(sql, /OUTER APPLY/);
   assert.match(sql, /INDEX\(N IDX_TGFNFE_CHAVENFE\)/);
   assert.match(sql, /DENSE_RANK LAST ORDER BY IX\.NUARQUIVO/);
-  assert.match(sql, /NVL\(NULLIF\(CAB\.PESOBRUTO, 0\), NVL\(CAB\.PESO, 0\)\) PESO/);
+  assert.match(sql, /NVL\(NULLIF\(CAB\.PESOBRUTO, 0\), NVL\(NULLIF\(CAB\.PESO, 0\), NVL\(XMLNF\.PESO, 0\)\)\) PESO/);
   assert.match(sql, /CIDCAB\.CODCID = CAB\.CODCID/);
   assert.match(sql, /UFSCAB\.CODUF = CIDCAB\.UF/);
-  assert.match(sql, /NVL\(CIDCAB\.NOMECID, CID\.NOMECID\) CIDADE/);
+  assert.match(sql, /NVL\(CIDCAB\.NOMECID, NVL\(CID\.NOMECID, XMLNF\.CIDADE\)\) CIDADE/);
+  assert.match(sql, /'\/nfeProc\/NFe\/infNFe\/transp\/vol'/);
+  assert.match(sql, /PESO_TEXTO VARCHAR2\(50\) PATH 'pesoB'/);
+  assert.match(sql, /NLS_NUMERIC_CHARACTERS=''\.,''/);
   assert.doesNotMatch(sql, /NF_POR_CHAVE|CHAVES_NFE/);
   assert.doesNotMatch(sql, /DTBAIXA|BOLETO|VENCIMENTO/);
 });
