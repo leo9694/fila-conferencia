@@ -20,6 +20,10 @@ test('consulta respeita os filtros obrigatorios e a data final inclusiva', () =>
   assert.match(sql, /OUTER APPLY/);
   assert.match(sql, /INDEX\(N IDX_TGFNFE_CHAVENFE\)/);
   assert.match(sql, /DENSE_RANK LAST ORDER BY IX\.NUARQUIVO/);
+  assert.match(sql, /NVL\(NULLIF\(CAB\.PESOBRUTO, 0\), NVL\(CAB\.PESO, 0\)\) PESO/);
+  assert.match(sql, /CIDCAB\.CODCID = CAB\.CODCID/);
+  assert.match(sql, /UFSCAB\.CODUF = CIDCAB\.UF/);
+  assert.match(sql, /NVL\(CIDCAB\.NOMECID, CID\.NOMECID\) CIDADE/);
   assert.doesNotMatch(sql, /NF_POR_CHAVE|CHAVES_NFE/);
   assert.doesNotMatch(sql, /DTBAIXA|BOLETO|VENCIMENTO/);
 });
