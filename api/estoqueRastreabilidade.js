@@ -3,13 +3,14 @@ function textoData(valor) {
 }
 
 function planejarDatasRastreabilidade({ registro = {}, dtFabricacao = null, dtValidade = null } = {}) {
+  const registroAtual = registro || {};
   const desejadas = {
     DTFABRICACAO: textoData(dtFabricacao),
     DTVAL: textoData(dtValidade)
   };
   const atuais = {
-    DTFABRICACAO: textoData(registro.DTFABRICACAO),
-    DTVAL: textoData(registro.DTVAL)
+    DTFABRICACAO: textoData(registroAtual.DTFABRICACAO),
+    DTVAL: textoData(registroAtual.DTVAL)
   };
   const camposCompletos = {};
   const camposAlterados = {};

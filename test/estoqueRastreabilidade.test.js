@@ -2,6 +2,23 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { planejarDatasRastreabilidade } = require('../api/estoqueRastreabilidade');
 
+test('aceita item sem posicao anterior durante contagem ou recontagem', () => {
+  const plano = planejarDatasRastreabilidade({
+    registro: null,
+    dtFabricacao: '2026-05-05',
+    dtValidade: '2028-12-31'
+  });
+
+  assert.deepEqual(plano.camposCompletos, {
+    DTFABRICACAO: '2026-05-05',
+    DTVAL: '2028-12-31'
+  });
+  assert.deepEqual(plano.camposAlterados, {
+    DTFABRICACAO: '2026-05-05',
+    DTVAL: '2028-12-31'
+  });
+});
+
 test('detecta cadastro de fabricacao quando lote, quantidade e validade nao mudam', () => {
   const plano = planejarDatasRastreabilidade({
     registro: { DTFABRICACAO: null, DTVAL: '2028-12-31' },
