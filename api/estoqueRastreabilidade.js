@@ -41,7 +41,46 @@ function deveMigrarPosicaoSemControle({
   );
 }
 
+function deveMigrarPosicaoControle({
+  alterouControle = false,
+  registroOrigem = null,
+  controleNovo = ''
+} = {}) {
+  return Boolean(
+    alterouControle
+    && registroOrigem
+    && String(controleNovo || '').trim()
+  );
+}
+
+function planejarSaldosMigracaoControle({
+  saldoOrigem = 0,
+  reservadoOrigem = 0,
+  preservarReservaOrigem = false
+} = {}) {
+  const estoque = Number(saldoOrigem || 0);
+  const reservado = Number(reservadoOrigem || 0);
+  const manterOrigem = Boolean(
+    preservarReservaOrigem
+    && Math.abs(reservado) > 0.000001
+  );
+
+  return {
+    origem: {
+      estoque: 0,
+      reservado: manterOrigem ? reservado : 0,
+      devePermanecer: manterOrigem
+    },
+    destino: {
+      estoque,
+      reservado: preservarReservaOrigem ? 0 : reservado
+    }
+  };
+}
+
 module.exports = {
+  deveMigrarPosicaoControle,
   deveMigrarPosicaoSemControle,
+  planejarSaldosMigracaoControle,
   planejarDatasRastreabilidade
 };

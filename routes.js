@@ -54,7 +54,8 @@ const {
   reconciliarAjustesComEstoqueAtual
 } = require('./api/estoqueAjuste');
 const {
-  deveMigrarPosicaoSemControle,
+  deveMigrarPosicaoControle,
+  planejarSaldosMigracaoControle,
   planejarDatasRastreabilidade
 } = require('./api/estoqueRastreabilidade');
 const { criarAutorizacaoGrupos } = require('./api/autorizacaoGrupos');
@@ -3754,24 +3755,41 @@ async function consultarPosicoesRastreabilidade(sessao, item) {
   `);
 }
 
-async function migrarPosicaoSemControle({
+async function migrarPosicaoControle({
   sessao,
   item,
   registroOrigem,
   registroDestino,
+  controleOrigem,
   controleNovo,
   camposDatas,
   dtFabricacaoFinal,
-  dtValidadeFinal
+  dtValidadeFinal,
+  preservarReservaOrigem = false
 }) {
   if (!registroOrigem) {
-    throw new Error('A posição original sem controle não foi encontrada para migração.');
+    throw new Error('A posição original não foi encontrada para migração.');
   }
   const chaveOrigem = chavePosicaoEstoque(registroOrigem);
   const chaveDestino = chavePosicaoEstoque(registroOrigem, controleNovo);
   const camposDestino = camposCopiaPosicaoEstoque(registroOrigem, camposDatas);
+  const camposDestinoOriginais = registroDestino
+    ? camposCopiaPosicaoEstoque(registroDestino, {
+        DTFABRICACAO: registroDestino.DTFABRICACAO
+          ? formatarDataCampoSankhya(registroDestino.DTFABRICACAO)
+          : '',
+        DTVAL: registroDestino.DTVAL
+          ? formatarDataCampoSankhya(registroDestino.DTVAL)
+          : ''
+      })
+    : null;
   const saldoOrigem = Number(registroOrigem.ESTOQUE || 0);
   const reservadoOrigem = Number(registroOrigem.RESERVADO || 0);
+  const planoSaldos = planejarSaldosMigracaoControle({
+    saldoOrigem,
+    reservadoOrigem,
+    preservarReservaOrigem
+  });
   let destinoCriado = false;
   let origemZerada = false;
   let destinoCarregado = false;
@@ -3795,11 +3813,14 @@ async function migrarPosicaoSemControle({
 
     // O Sankhya pode recusar a exclusao de uma posicao que ainda possui saldo.
     // Mova os valores para o lote tecnico antes de remover a origem ja zerada.
-    await atualizarRegistroApi('Estoque', chaveOrigem, { ESTOQUE: 0, RESERVADO: 0 });
+    await atualizarRegistroApi('Estoque', chaveOrigem, {
+      ESTOQUE: planoSaldos.origem.estoque,
+      RESERVADO: planoSaldos.origem.reservado
+    });
     origemZerada = true;
     await atualizarRegistroApi('Estoque', chaveDestino, {
-      ESTOQUE: saldoOrigem,
-      RESERVADO: reservadoOrigem
+      ESTOQUE: planoSaldos.destino.estoque,
+      RESERVADO: planoSaldos.destino.reservado
     });
     destinoCarregado = true;
 
@@ -3808,31 +3829,34 @@ async function migrarPosicaoSemControle({
     // removeRecord para nao tratar essa remocao automatica como falha.
     const posicoesAntesRemocao = await consultarPosicoesRastreabilidade(sessao, item);
     const origemAindaExiste = posicoesAntesRemocao.some(
-      (registro) => !String(registro.CONTROLE || '').trim()
+      (registro) => String(registro.CONTROLE || '').trim() === controleOrigem
     );
-    if (origemAindaExiste) {
+    if (origemAindaExiste && !planoSaldos.origem.devePermanecer) {
       try {
         await removerRegistroApi('Estoque', chaveOrigem);
       } catch (erroRemocao) {
         const posicoesAposFalha = await consultarPosicoesRastreabilidade(sessao, item);
         const origemPermaneceu = posicoesAposFalha.some(
-          (registro) => !String(registro.CONTROLE || '').trim()
+          (registro) => String(registro.CONTROLE || '').trim() === controleOrigem
         );
         if (origemPermaneceu) throw erroRemocao;
       }
     }
 
     const posicoes = await consultarPosicoesRastreabilidade(sessao, item);
-    const origem = posicoes.filter((registro) => !String(registro.CONTROLE || '').trim());
+    const origem = posicoes.filter(
+      (registro) => String(registro.CONTROLE || '').trim() === controleOrigem
+    );
     const destino = posicoes.filter(
       (registro) => String(registro.CONTROLE || '').trim() === controleNovo
     );
-    if (origem.length || destino.length !== 1) {
+    const quantidadeOrigemEsperada = planoSaldos.origem.devePermanecer ? 1 : 0;
+    if (origem.length !== quantidadeOrigemEsperada || destino.length !== 1) {
       throw new Error('A migração do controle não deixou uma única posição de estoque válida.');
     }
     if (
-      Math.abs(Number(destino[0].ESTOQUE || 0) - Number(registroOrigem.ESTOQUE || 0)) > 0.000001
-      || Math.abs(Number(destino[0].RESERVADO || 0) - Number(registroOrigem.RESERVADO || 0)) > 0.000001
+      Math.abs(Number(destino[0].ESTOQUE || 0) - planoSaldos.destino.estoque) > 0.000001
+      || Math.abs(Number(destino[0].RESERVADO || 0) - planoSaldos.destino.reservado) > 0.000001
     ) {
       throw new Error('O saldo ou a reserva não foram preservados durante a alteração do controle.');
     }
@@ -3855,7 +3879,7 @@ async function migrarPosicaoSemControle({
         }
         if (origemZerada) {
           const origemAtual = atuais.find(
-            (registro) => !String(registro.CONTROLE || '').trim()
+            (registro) => String(registro.CONTROLE || '').trim() === controleOrigem
           );
           const camposRestauracao = camposCopiaPosicaoEstoque(registroOrigem, {
             ...(registroOrigem.DTFABRICACAO
@@ -3871,12 +3895,31 @@ async function migrarPosicaoSemControle({
             await salvarRegistroApi('Estoque', { ...chaveOrigem, ...camposRestauracao });
           }
         }
-        if (destinoCriado) await removerRegistroApi('Estoque', chaveDestino);
+        if (destinoCriado) {
+          const posicoesAntesLimpeza = await consultarPosicoesRastreabilidade(sessao, item);
+          const destinoAindaExiste = posicoesAntesLimpeza.some(
+            (registro) => String(registro.CONTROLE || '').trim() === controleNovo
+          );
+          if (destinoAindaExiste) await removerRegistroApi('Estoque', chaveDestino);
+        } else if (camposDestinoOriginais) {
+          const posicoesAntesRestauracao = await consultarPosicoesRastreabilidade(sessao, item);
+          const destinoOriginalAindaExiste = posicoesAntesRestauracao.some(
+            (registro) => String(registro.CONTROLE || '').trim() === controleNovo
+          );
+          if (destinoOriginalAindaExiste) {
+            await atualizarRegistroApi('Estoque', chaveDestino, camposDestinoOriginais);
+          } else {
+            await salvarRegistroApi('Estoque', {
+              ...chaveDestino,
+              ...camposDestinoOriginais
+            });
+          }
+        }
       } catch (rollbackError) {
         console.error('Falha ao restaurar posição de estoque após erro de migração:', rollbackError);
       }
     }
-    throw new Error(`Não foi possível alterar a posição sem controle para o lote ${controleNovo}: ${error.message}`);
+    throw new Error(`Não foi possível alterar a posição para o lote ${controleNovo}: ${error.message}`);
   }
 }
 
@@ -3971,21 +4014,22 @@ async function atualizarRastreabilidadeItemEstoque({ sessao, item, dados }) {
   const camposDatasAlteradas = formatarCamposDatas(planoDatas.camposAlterados);
   const { datasAtualizadas } = planoDatas;
 
-  if (deveMigrarPosicaoSemControle({
+  if (deveMigrarPosicaoControle({
     alterouControle,
     registroOrigem,
-    controleOrigem: controleOrigemEfetivo,
     controleNovo
   })) {
-    const posicaoMigrada = await migrarPosicaoSemControle({
+    const posicaoMigrada = await migrarPosicaoControle({
       sessao,
       item,
       registroOrigem,
       registroDestino,
+      controleOrigem: controleOrigemEfetivo,
       controleNovo,
       camposDatas: camposDatasCompletos,
       dtFabricacaoFinal,
-      dtValidadeFinal
+      dtValidadeFinal,
+      preservarReservaOrigem: item.loteTecnicoAjuste === true && !controleOrigemEfetivo
     });
     return {
       controle: controleNovo,

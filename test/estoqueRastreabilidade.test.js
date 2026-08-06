@@ -1,7 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
+  deveMigrarPosicaoControle,
   deveMigrarPosicaoSemControle,
+  planejarSaldosMigracaoControle,
   planejarDatasRastreabilidade
 } = require('../api/estoqueRastreabilidade');
 
@@ -27,6 +29,56 @@ test('migra somente quando a posicao sem controle realmente existe', () => {
     controleOrigem: 'LOTE-ANTIGO',
     controleNovo: 'LOTE-10'
   }), false);
+});
+
+test('migra integralmente tambem quando troca um lote existente por outro', () => {
+  assert.equal(deveMigrarPosicaoControle({
+    alterouControle: true,
+    registroOrigem: { CONTROLE: 'LOTE-ANTIGO', ESTOQUE: 2 },
+    controleNovo: 'LOTE-NOVO'
+  }), true);
+  assert.equal(deveMigrarPosicaoControle({
+    alterouControle: false,
+    registroOrigem: { CONTROLE: 'LOTE-ANTIGO', ESTOQUE: 2 },
+    controleNovo: 'LOTE-ANTIGO'
+  }), false);
+  assert.equal(deveMigrarPosicaoControle({
+    alterouControle: true,
+    registroOrigem: null,
+    controleNovo: 'LOTE-NOVO'
+  }), false);
+});
+
+test('migracao comum leva estoque e reserva para o novo controle', () => {
+  assert.deepEqual(planejarSaldosMigracaoControle({
+    saldoOrigem: 8,
+    reservadoOrigem: 8
+  }), {
+    origem: { estoque: 0, reservado: 0, devePermanecer: false },
+    destino: { estoque: 8, reservado: 8 }
+  });
+});
+
+test('lote tecnico recebe saldo fisico e preserva reserva na posicao original', () => {
+  assert.deepEqual(planejarSaldosMigracaoControle({
+    saldoOrigem: 8,
+    reservadoOrigem: 8,
+    preservarReservaOrigem: true
+  }), {
+    origem: { estoque: 0, reservado: 8, devePermanecer: true },
+    destino: { estoque: 8, reservado: 0 }
+  });
+});
+
+test('lote tecnico remove a origem quando nao existe reserva para preservar', () => {
+  assert.deepEqual(planejarSaldosMigracaoControle({
+    saldoOrigem: 8,
+    reservadoOrigem: 0,
+    preservarReservaOrigem: true
+  }), {
+    origem: { estoque: 0, reservado: 0, devePermanecer: false },
+    destino: { estoque: 8, reservado: 0 }
+  });
 });
 
 test('aceita item sem posicao anterior durante contagem ou recontagem', () => {
