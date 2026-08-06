@@ -4,9 +4,10 @@ const {
   DATA_FABRICACAO_TECNICA,
   DATA_VALIDADE_TECNICA,
   agruparItensEmNotaUnica,
+  aplicarLotesTecnicosItensZerados,
   extrairNunotaAjuste,
-  localizarBloqueiosEstoqueComprometido,
   montarPayloadNotaAjuste,
+  loteTecnicoItemZerado,
   planejarAjustesEstoque,
   reconciliarAjustesComEstoqueAtual
 } = require('../api/estoqueAjuste');
@@ -150,6 +151,59 @@ test('preenche datas tecnicas somente quando o lote sera zerado', () => {
   assert.equal(payload.nota.itens.item[0].CONTROLE.$, '049515');
 });
 
+test('atribui lote tecnico ao zerar produto controlado por lote que estava sem controle', () => {
+  const plano = planejarAjustesEstoque({
+    id: 'contagem-zero-sem-lote',
+    rodadaAtual: 1,
+    itens: [{
+      chave: '5040|1010101|SEM_CONTROLE',
+      codProd: 5040,
+      codLocal: 1010101,
+      controle: '',
+      estoqueSistema: 10,
+      contagens: { 1: 0 }
+    }]
+  });
+  const preparado = aplicarLotesTecnicosItensZerados(
+    plano.itens,
+    new Map([[5040, 'L']]),
+    'contagem-zero-sem-lote'
+  )[0];
+
+  assert.equal(preparado.chave, '5040|1010101|SEM_CONTROLE');
+  assert.equal(preparado.controle, loteTecnicoItemZerado('contagem-zero-sem-lote', 5040));
+  assert.equal(preparado.dtFabricacao, DATA_FABRICACAO_TECNICA);
+  assert.equal(preparado.dtValidade, DATA_VALIDADE_TECNICA);
+  assert.equal(preparado.loteTecnicoAjuste, true);
+});
+
+test('lote tecnico de item zerado e estavel em novas tentativas', () => {
+  const item = {
+    tipo: 'SAIDA', codProd: 5040, controle: '', contagem: 0
+  };
+  const tipos = new Map([[5040, 'L']]);
+  const primeira = aplicarLotesTecnicosItensZerados([item], tipos, 'sessao-1')[0];
+  const segunda = aplicarLotesTecnicosItensZerados([item], tipos, 'sessao-1')[0];
+
+  assert.equal(primeira.controle, segunda.controle);
+  assert.notEqual(primeira.controle, loteTecnicoItemZerado('sessao-2', 5040));
+});
+
+test('nao usa lote tecnico quando produto nao exige lote ou continuara com saldo', () => {
+  const itens = [
+    { tipo: 'SAIDA', codProd: 1, controle: '', contagem: 0 },
+    { tipo: 'SAIDA', codProd: 2, controle: '', contagem: 3 },
+    { tipo: 'ENTRADA', codProd: 3, controle: '', contagem: 5 }
+  ];
+  const preparados = aplicarLotesTecnicosItensZerados(
+    itens,
+    new Map([[1, 'N'], [2, 'L'], [3, 'L']]),
+    'sessao-1'
+  );
+
+  assert.deepEqual(preparados.map((item) => item.controle), ['', '', '']);
+});
+
 test('completa somente a data ausente de lote zerado sem inverter o periodo', () => {
   const somenteValidade = planejarAjustesEstoque({
     rodadaAtual: 1,
@@ -216,6 +270,34 @@ test('recalcula a baixa pelo saldo atual em vez da foto congelada', () => {
   assert.equal(planoAtual.saida[0].dtValidade, DATA_VALIDADE_TECNICA);
 });
 
+test('ajuste de estoque usa saldo fisico mesmo quando ha pedido comprometido', () => {
+  const planoFoto = planejarAjustesEstoque({
+    rodadaAtual: 1,
+    itens: [{
+      chave: '5040|1010101|SEM_CONTROLE',
+      codProd: 5040,
+      codLocal: 1010101,
+      codVol: 'UN',
+      controle: '',
+      estoqueSistema: 1,
+      contagens: { 1: 0 }
+    }]
+  });
+
+  const planoAtual = reconciliarAjustesComEstoqueAtual(planoFoto.itens, [{
+    codProd: 5040,
+    codLocal: 1010101,
+    controle: '',
+    estoqueAtual: 1,
+    reservadoAtual: 0,
+    comprometidoAtual: 1
+  }]);
+
+  assert.equal(planoAtual.saida.length, 1);
+  assert.equal(planoAtual.saida[0].quantidadeAjuste, 1);
+  assert.equal(planoAtual.saida[0].contagem, 0);
+});
+
 test('nao gera nota quando o saldo atual ja corresponde a contagem', () => {
   const planoFoto = planejarAjustesEstoque({
     rodadaAtual: 1,
@@ -258,50 +340,6 @@ test('inverte o tipo de ajuste quando o saldo atual cruzou a contagem', () => {
   assert.equal(planoAtual.entrada[0].quantidadeAjuste, 3);
 });
 
-test('bloqueia baixa que deixaria saldo menor que pedidos comprometidos', () => {
-  const planoFoto = planejarAjustesEstoque({
-    rodadaAtual: 1,
-    itens: [{
-      chave: '5040|1010101|SEM_CONTROLE',
-      codProd: 5040,
-      codLocal: 1010101,
-      codVol: 'UN',
-      controle: '',
-      estoqueSistema: 1,
-      contagens: { 1: 0 }
-    }]
-  });
-  const planoAtual = reconciliarAjustesComEstoqueAtual(planoFoto.itens, [{
-    codProd: 5040,
-    codLocal: 1010101,
-    controle: '',
-    estoqueAtual: 1,
-    comprometidoAtual: 1,
-    pedidosComprometidos: [{ nunota: 3855780, numeroNota: 91735, quantidade: 1 }]
-  }]);
-
-  const bloqueios = localizarBloqueiosEstoqueComprometido(planoAtual);
-  assert.equal(bloqueios.length, 1);
-  assert.equal(bloqueios[0].codProd, 5040);
-  assert.equal(bloqueios[0].pedidosComprometidos[0].numeroNota, 91735);
-});
-
-test('permite baixa que preserva a quantidade comprometida', () => {
-  const planoFoto = planejarAjustesEstoque({
-    rodadaAtual: 1,
-    itens: [{
-      chave: '10|1|SEM_CONTROLE', codProd: 10, codLocal: 1, codVol: 'UN',
-      estoqueSistema: 10, contagens: { 1: 3 }
-    }]
-  });
-  const planoAtual = reconciliarAjustesComEstoqueAtual(planoFoto.itens, [{
-    codProd: 10, codLocal: 1, controle: '', estoqueAtual: 10, comprometidoAtual: 3
-  }]);
-
-  assert.equal(localizarBloqueiosEstoqueComprometido(planoAtual).length, 0);
-  assert.equal(planoAtual.saida[0].quantidadeAjuste, 7);
-});
-
 test('mantem todos os itens do mesmo tipo em uma unica nota', () => {
   const lotes = agruparItensEmNotaUnica(Array.from({ length: 48 }, (_, indice) => indice));
   assert.deepEqual(lotes.map((lote) => lote.length), [48]);
@@ -332,6 +370,9 @@ test('monta nota pendente com cabecalho configurado e custo de reposicao', () =>
   assert.equal(payload.nota.itens.item[0].QTDNEG.$, '3');
   assert.equal(payload.nota.itens.item[0].CONTROLE.$, 'L2');
   assert.equal(payload.nota.itens.item[0].VLRUNIT.$, '2.95');
+  assert.equal(payload.nota.itens.item[0].USOPROD.$, 'V');
+  assert.equal(payload.nota.itens.item[0].PENDENTE.$, 'N');
+  assert.equal(payload.nota.itens.item[0].RESERVA.$, 'N');
 });
 
 test('extrai nunota retornado pelo servico de inclusao', () => {

@@ -47,8 +47,8 @@ const {
 } = require('./api/estoqueContagemFiltros');
 const {
   agruparItensEmNotaUnica,
+  aplicarLotesTecnicosItensZerados,
   extrairNunotaAjuste,
-  localizarBloqueiosEstoqueComprometido,
   montarPayloadNotaAjuste,
   planejarAjustesEstoque,
   reconciliarAjustesComEstoqueAtual
@@ -3770,20 +3770,39 @@ async function migrarPosicaoSemControle({
   const chaveOrigem = chavePosicaoEstoque(registroOrigem);
   const chaveDestino = chavePosicaoEstoque(registroOrigem, controleNovo);
   const camposDestino = camposCopiaPosicaoEstoque(registroOrigem, camposDatas);
-  let origemRemovida = false;
+  const saldoOrigem = Number(registroOrigem.ESTOQUE || 0);
+  const reservadoOrigem = Number(registroOrigem.RESERVADO || 0);
+  let destinoCriado = false;
+  let origemZerada = false;
+  let destinoCarregado = false;
 
   try {
-    await removerRegistroApi('Estoque', chaveOrigem);
-    origemRemovida = true;
-
     if (registroDestino) {
-      await atualizarRegistroApi('Estoque', chaveDestino, camposDestino);
+      await atualizarRegistroApi('Estoque', chaveDestino, {
+        ...camposDatas,
+        ESTOQUE: 0,
+        RESERVADO: 0
+      });
     } else {
       await salvarRegistroApi('Estoque', {
         ...chaveDestino,
-        ...camposDestino
+        ...camposDestino,
+        ESTOQUE: 0,
+        RESERVADO: 0
       });
+      destinoCriado = true;
     }
+
+    // O Sankhya pode recusar a exclusao de uma posicao que ainda possui saldo.
+    // Mova os valores para o lote tecnico antes de remover a origem ja zerada.
+    await atualizarRegistroApi('Estoque', chaveOrigem, { ESTOQUE: 0, RESERVADO: 0 });
+    origemZerada = true;
+    await atualizarRegistroApi('Estoque', chaveDestino, {
+      ESTOQUE: saldoOrigem,
+      RESERVADO: reservadoOrigem
+    });
+    destinoCarregado = true;
+    await removerRegistroApi('Estoque', chaveOrigem);
 
     const posicoes = await consultarPosicoesRastreabilidade(sessao, item);
     const origem = posicoes.filter((registro) => !String(registro.CONTROLE || '').trim());
@@ -3807,7 +3826,7 @@ async function migrarPosicaoSemControle({
     }
     return destino[0];
   } catch (error) {
-    if (origemRemovida) {
+    if (origemZerada || destinoCriado) {
       try {
         const atuais = await consultarPosicoesRastreabilidade(sessao, item);
         const destinoAtual = atuais.find(
@@ -3816,17 +3835,25 @@ async function migrarPosicaoSemControle({
         if (destinoAtual) {
           await atualizarRegistroApi('Estoque', chaveDestino, { ESTOQUE: 0, RESERVADO: 0 });
         }
-        await salvarRegistroApi('Estoque', {
-          ...chaveOrigem,
-          ...camposCopiaPosicaoEstoque(registroOrigem, {
+        if (origemZerada) {
+          const origemAtual = atuais.find(
+            (registro) => !String(registro.CONTROLE || '').trim()
+          );
+          const camposRestauracao = camposCopiaPosicaoEstoque(registroOrigem, {
             ...(registroOrigem.DTFABRICACAO
               ? { DTFABRICACAO: formatarDataCampoSankhya(registroOrigem.DTFABRICACAO) }
               : {}),
             ...(registroOrigem.DTVAL
               ? { DTVAL: formatarDataCampoSankhya(registroOrigem.DTVAL) }
               : {})
-          })
-        });
+          });
+          if (origemAtual) {
+            await atualizarRegistroApi('Estoque', chaveOrigem, camposRestauracao);
+          } else {
+            await salvarRegistroApi('Estoque', { ...chaveOrigem, ...camposRestauracao });
+          }
+        }
+        if (destinoCriado) await removerRegistroApi('Estoque', chaveDestino);
       } catch (rollbackError) {
         console.error('Falha ao restaurar posição de estoque após erro de migração:', rollbackError);
       }
@@ -3895,6 +3922,7 @@ async function atualizarRastreabilidadeItemEstoque({ sessao, item, dados }) {
   const alterouControle = controleNovo !== controleOrigemEfetivo;
   if (
     alterouControle
+    && registroOrigem
     && registroDestino
     && Math.abs(Number(registroDestino.ESTOQUE || 0)) > 0.000001
   ) {
@@ -4111,6 +4139,23 @@ async function obterCustosReposicaoAjuste(empresa, itens) {
   return new Map(linhas.map((item) => [Number(item.CODPROD), Number(item.VLRUNIT)]));
 }
 
+async function prepararLotesTecnicosAjuste(sessao, itens) {
+  const produtos = [...new Set(
+    (itens || []).map((item) => Number(item.codProd)).filter((codProd) => codProd > 0)
+  )];
+  if (!produtos.length) return itens || [];
+
+  const linhas = await executeQuery(`
+    SELECT CODPROD, NVL(TIPCONTEST, 'N') AS TIPCONTEST
+    FROM TGFPRO
+    WHERE CODPROD IN (${produtos.join(', ')})
+  `);
+  const tiposControle = new Map(
+    linhas.map((registro) => [Number(registro.CODPROD), String(registro.TIPCONTEST || 'N')])
+  );
+  return aplicarLotesTecnicosItensZerados(itens, tiposControle, sessao.id);
+}
+
 async function obterSaldosAtuaisAjuste(empresa, itens) {
   const produtos = new Set();
   const locais = new Set();
@@ -4142,85 +4187,13 @@ async function obterSaldosAtuaisAjuste(empresa, itens) {
     GROUP BY EST.CODPROD, EST.CODLOCAL, NVL(TRIM(EST.CONTROLE), ' ')
   `);
 
-  const compromissos = await executeQuery(`
-    SELECT
-      ITE.CODPROD,
-      ITE.CODLOCALORIG AS CODLOCAL,
-      NVL(TRIM(ITE.CONTROLE), ' ') AS CONTROLE,
-      CAB.NUNOTA,
-      CAB.NUMNOTA,
-      SUM(GREATEST(NVL(ITE.QTDNEG, 0) - NVL(ITE.QTDENTREGUE, 0), 0)) AS QUANTIDADE
-    FROM TGFCAB CAB
-    JOIN TGFITE ITE ON ITE.NUNOTA = CAB.NUNOTA
-    WHERE CAB.CODEMP = ${Number(empresa)}
-      AND CAB.TIPMOV = 'P'
-      AND CAB.STATUSNOTA = 'L'
-      AND NVL(ITE.PENDENTE, 'N') = 'S'
-      AND ITE.CODPROD IN (${[...produtos].join(', ')})
-      AND ITE.CODLOCALORIG IN (${[...locais].join(', ')})
-      AND NVL(ITE.QTDNEG, 0) > NVL(ITE.QTDENTREGUE, 0)
-    GROUP BY
-      ITE.CODPROD,
-      ITE.CODLOCALORIG,
-      NVL(TRIM(ITE.CONTROLE), ' '),
-      CAB.NUNOTA,
-      CAB.NUMNOTA
-  `);
-
-  const compromissosPorPosicao = new Map();
-  for (const item of compromissos) {
-    const chave = [
-      Number(item.CODPROD),
-      Number(item.CODLOCAL),
-      String(item.CONTROLE || '').trim()
-    ].join('|');
-    const atual = compromissosPorPosicao.get(chave) || {
-      quantidade: 0,
-      pedidos: []
-    };
-    atual.quantidade += Number(item.QUANTIDADE || 0);
-    atual.pedidos.push({
-      nunota: Number(item.NUNOTA),
-      numeroNota: Number(item.NUMNOTA),
-      quantidade: Number(item.QUANTIDADE || 0)
-    });
-    compromissosPorPosicao.set(chave, atual);
-  }
-
   return linhas.map((item) => ({
     codProd: Number(item.CODPROD),
     codLocal: Number(item.CODLOCAL),
     controle: String(item.CONTROLE || '').trim(),
     estoqueAtual: Number(item.ESTOQUE || 0),
-    reservadoAtual: Number(item.RESERVADO || 0),
-    comprometidoAtual: compromissosPorPosicao.get([
-      Number(item.CODPROD),
-      Number(item.CODLOCAL),
-      String(item.CONTROLE || '').trim()
-    ].join('|'))?.quantidade || 0,
-    pedidosComprometidos: compromissosPorPosicao.get([
-      Number(item.CODPROD),
-      Number(item.CODLOCAL),
-      String(item.CONTROLE || '').trim()
-    ].join('|'))?.pedidos || []
+    reservadoAtual: Number(item.RESERVADO || 0)
   }));
-}
-
-function mensagemBloqueiosAjusteEstoque(bloqueios) {
-  const detalhes = bloqueios.slice(0, 5).map((item) => {
-    const pedidos = (item.pedidosComprometidos || [])
-      .map((pedido) => `${pedido.numeroNota || pedido.nunota} (NUNOTA ${pedido.nunota})`)
-      .join(', ');
-    const quantidade = Math.max(
-      Number(item.reservadoAtualAplicacao || 0),
-      Number(item.comprometidoAtualAplicacao || 0)
-    );
-    return `produto ${item.codProd}, lote ${item.controle || 'sem controle'}: ${quantidade} ${item.codVol || 'UN'} comprometida(s)${pedidos ? ` no(s) pedido(s) ${pedidos}` : ''}`;
-  });
-  const restante = bloqueios.length > detalhes.length
-    ? ` e mais ${bloqueios.length - detalhes.length} produto(s)`
-    : '';
-  return `O ajuste nao pode baixar estoque comprometido: ${detalhes.join('; ')}${restante}. Resolva os pedidos/reservas no Sankhya e aplique novamente. Nenhuma nova nota foi criada.`;
 }
 
 async function localizarNotaAjustePorObservacao(empresa, codTipOper, observacao) {
@@ -4422,7 +4395,8 @@ async function sincronizarDatasEstoqueAjuste(sessao, itensContagem) {
 
 async function sincronizarDatasNotasAjuste(sessao) {
   const plano = planejarAjustesEstoque(sessao);
-  return sincronizarDatasEstoqueAjuste(sessao, plano.itens);
+  const itensPreparados = await prepararLotesTecnicosAjuste(sessao, plano.itens);
+  return sincronizarDatasEstoqueAjuste(sessao, itensPreparados);
 }
 
 async function localizarProdutoParaContagem(codigo) {
@@ -5086,11 +5060,17 @@ router.post('/estoque-contagem/sessoes/:id/aplicar-ajuste', async (req, res) => 
       return;
     }
 
-    const planoFoto = planejarAjustesEstoque(sessao);
-    if (!planoFoto.itens.length) {
+    const planoOriginal = planejarAjustesEstoque(sessao);
+    if (!planoOriginal.itens.length) {
       res.status(422).json({ erro: 'Nao existem divergencias contadas para gerar ajuste.' });
       return;
     }
+    const itensPreparados = await prepararLotesTecnicosAjuste(sessao, planoOriginal.itens);
+    const planoFoto = {
+      itens: itensPreparados,
+      entrada: itensPreparados.filter((item) => item.tipo === 'ENTRADA'),
+      saida: itensPreparados.filter((item) => item.tipo === 'SAIDA')
+    };
 
     // Lote e datas podem alterar a chave da posicao. Prepare-os primeiro e so
     // depois leia novamente o saldo que a nota efetivamente movimentara.
@@ -5112,11 +5092,6 @@ router.post('/estoque-contagem/sessoes/:id/aplicar-ajuste', async (req, res) => 
       return;
     }
 
-    const bloqueios = localizarBloqueiosEstoqueComprometido(plano);
-    if (bloqueios.length) {
-      throw new Error(mensagemBloqueiosAjusteEstoque(bloqueios));
-    }
-
     const notasFragmentadas = await localizarNotasFragmentadasAjuste(sessao);
     if (notasFragmentadas.length) {
       const numeros = notasFragmentadas.map((nota) => Number(nota.NUNOTA)).join(', ');
@@ -5125,13 +5100,23 @@ router.post('/estoque-contagem/sessoes/:id/aplicar-ajuste', async (req, res) => 
       );
     }
 
+    // Valide todos os modelos antes de incluir a primeira nota. Se uma TOP
+    // estiver incompatível, nenhuma nota parcial será criada no Sankhya.
+    const templates = new Map();
+    for (const tipo of ['ENTRADA', 'SAIDA']) {
+      const itensTipo = tipo === 'ENTRADA' ? plano.entrada : plano.saida;
+      if (itensTipo.length) {
+        templates.set(tipo, await obterTemplateNotaAjusteEstoque(sessao.empresa, tipo));
+      }
+    }
+
     const custos = await obterCustosReposicaoAjuste(sessao.empresa, plano.itens);
     const notas = [];
     for (const tipo of ['ENTRADA', 'SAIDA']) {
       const itensTipo = tipo === 'ENTRADA' ? plano.entrada : plano.saida;
       if (!itensTipo.length) continue;
 
-      const template = await obterTemplateNotaAjusteEstoque(sessao.empresa, tipo);
+      const template = templates.get(tipo);
       const lotes = agruparItensEmNotaUnica(itensTipo);
       for (let indice = 0; indice < lotes.length; indice += 1) {
         notas.push(await gerarNotaPendenteAjuste({

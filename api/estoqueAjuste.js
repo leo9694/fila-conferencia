@@ -2,6 +2,46 @@ const LIMITE_DIFERENCA = 0.000001;
 const DATA_FABRICACAO_TECNICA = '2000-01-01';
 const DATA_VALIDADE_TECNICA = '2099-12-31';
 
+function hashTexto(valor) {
+  let hash = 2166136261;
+  for (const caractere of texto(valor)) {
+    hash ^= caractere.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36).toUpperCase();
+}
+
+function loteTecnicoItemZerado(idSessao, codProd) {
+  return `AJZ-${numero(codProd)}-${hashTexto(idSessao || 'CONTAGEM')}`.slice(0, 100);
+}
+
+function aplicarLotesTecnicosItensZerados(itens = [], tiposControle = new Map(), idSessao = '') {
+  return itens.map((item) => {
+    const tipoControle = texto(
+      tiposControle instanceof Map
+        ? tiposControle.get(numero(item.codProd))
+        : tiposControle?.[numero(item.codProd)]
+    ).toUpperCase();
+    const precisaLoteTecnico = item.tipo === 'SAIDA'
+      && Math.abs(numero(item.contagem)) <= LIMITE_DIFERENCA
+      && !texto(item.controle)
+      && tipoControle === 'L';
+
+    if (!precisaLoteTecnico) return item;
+
+    return {
+      ...item,
+      // Preserve `chave`: ela identifica a posicao original SEM_CONTROLE que
+      // sera migrada. `controle` identifica a posicao tecnica de destino.
+      controle: loteTecnicoItemZerado(idSessao, item.codProd),
+      dtFabricacao: DATA_FABRICACAO_TECNICA,
+      dtValidade: DATA_VALIDADE_TECNICA,
+      datasTecnicasAjuste: true,
+      loteTecnicoAjuste: true
+    };
+  });
+}
+
 function numero(valor) {
   const resultado = Number(valor);
   return Number.isFinite(resultado) ? resultado : 0;
@@ -73,7 +113,6 @@ function reconciliarAjustesComEstoqueAtual(itens = [], saldos = []) {
     const saldo = saldosPorChave.get(chaveSaldoAjuste(item));
     const estoqueAtual = numero(saldo?.estoqueAtual ?? saldo?.ESTOQUE);
     const reservadoAtual = numero(saldo?.reservadoAtual ?? saldo?.RESERVADO);
-    const comprometidoAtual = numero(saldo?.comprometidoAtual ?? saldo?.COMPROMETIDO);
     const contagem = numero(item.contagem);
     const diferenca = contagem - estoqueAtual;
     if (Math.abs(diferenca) <= LIMITE_DIFERENCA) return [];
@@ -84,10 +123,6 @@ function reconciliarAjustesComEstoqueAtual(itens = [], saldos = []) {
       estoqueSistema: estoqueAtual,
       estoqueAtualAplicacao: estoqueAtual,
       reservadoAtualAplicacao: reservadoAtual,
-      comprometidoAtualAplicacao: comprometidoAtual,
-      pedidosComprometidos: Array.isArray(saldo?.pedidosComprometidos)
-        ? saldo.pedidosComprometidos
-        : [],
       diferenca,
       quantidadeAjuste: Math.abs(diferenca),
       tipo: diferenca > 0 ? 'ENTRADA' : 'SAIDA'
@@ -99,16 +134,6 @@ function reconciliarAjustesComEstoqueAtual(itens = [], saldos = []) {
     entrada: reconciliados.filter((item) => item.tipo === 'ENTRADA'),
     saida: reconciliados.filter((item) => item.tipo === 'SAIDA')
   };
-}
-
-function localizarBloqueiosEstoqueComprometido(plano = {}) {
-  return (plano.saida || []).filter((item) => {
-    const minimoComprometido = Math.max(
-      numero(item.reservadoAtualAplicacao),
-      numero(item.comprometidoAtualAplicacao)
-    );
-    return numero(item.contagem) + LIMITE_DIFERENCA < minimoComprometido;
-  });
 }
 
 function planejarAjustesEstoque(sessao) {
@@ -189,6 +214,14 @@ function montarPayloadNotaAjuste({
       CODLOCALORIG: campoApi(item.codLocal),
       CONTROLE: campoApi(item.controle),
       CODVOL: campoApi(item.codVol),
+      // A rotina nativa de Ajuste de Estoque do Sankhya sempre gera os
+      // itens como Venda/fabricacao propria. Se este campo for omitido, o
+      // CACSP.incluirNota herda o uso do cadastro do produto (por exemplo,
+      // R = revenda) e pode executar a validacao comercial de disponibilidade
+      // mesmo em uma TOP exclusiva de ajuste.
+      USOPROD: campoApi('V'),
+      PENDENTE: campoApi('N'),
+      RESERVA: campoApi('N'),
       PERCDESC: campoApi(0),
       VLRUNIT: campoApi(numeroApi(valorUnitario))
     };
@@ -234,10 +267,11 @@ module.exports = {
   DATA_FABRICACAO_TECNICA,
   DATA_VALIDADE_TECNICA,
   agruparItensEmNotaUnica,
+  aplicarLotesTecnicosItensZerados,
   completarDatasTecnicasItemZerado,
   extrairNunotaAjuste,
   montarPayloadNotaAjuste,
-  localizarBloqueiosEstoqueComprometido,
+  loteTecnicoItemZerado,
   obterContagemFinal,
   planejarAjustesEstoque,
   reconciliarAjustesComEstoqueAtual
