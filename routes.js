@@ -3802,7 +3802,25 @@ async function migrarPosicaoSemControle({
       RESERVADO: reservadoOrigem
     });
     destinoCarregado = true;
-    await removerRegistroApi('Estoque', chaveOrigem);
+
+    // Algumas instalacoes removem automaticamente a linha da TGFEST quando
+    // ESTOQUE e RESERVADO chegam a zero. Consulte novamente antes de chamar o
+    // removeRecord para nao tratar essa remocao automatica como falha.
+    const posicoesAntesRemocao = await consultarPosicoesRastreabilidade(sessao, item);
+    const origemAindaExiste = posicoesAntesRemocao.some(
+      (registro) => !String(registro.CONTROLE || '').trim()
+    );
+    if (origemAindaExiste) {
+      try {
+        await removerRegistroApi('Estoque', chaveOrigem);
+      } catch (erroRemocao) {
+        const posicoesAposFalha = await consultarPosicoesRastreabilidade(sessao, item);
+        const origemPermaneceu = posicoesAposFalha.some(
+          (registro) => !String(registro.CONTROLE || '').trim()
+        );
+        if (origemPermaneceu) throw erroRemocao;
+      }
+    }
 
     const posicoes = await consultarPosicoesRastreabilidade(sessao, item);
     const origem = posicoes.filter((registro) => !String(registro.CONTROLE || '').trim());
