@@ -58,6 +58,45 @@ function completarDatasTecnicasItemZerado(item = {}) {
   };
 }
 
+function chaveSaldoAjuste(item = {}) {
+  return [
+    numero(item.codProd ?? item.CODPROD),
+    numero(item.codLocal ?? item.CODLOCAL),
+    texto(item.controle ?? item.CONTROLE) || 'SEM_CONTROLE'
+  ].join('|');
+}
+
+function reconciliarAjustesComEstoqueAtual(itens = [], saldos = []) {
+  const saldosPorChave = new Map(
+    saldos.map((saldo) => [chaveSaldoAjuste(saldo), saldo])
+  );
+  const reconciliados = itens.flatMap((item) => {
+    const saldo = saldosPorChave.get(chaveSaldoAjuste(item));
+    const estoqueAtual = numero(saldo?.estoqueAtual ?? saldo?.ESTOQUE);
+    const reservadoAtual = numero(saldo?.reservadoAtual ?? saldo?.RESERVADO);
+    const contagem = numero(item.contagem);
+    const diferenca = contagem - estoqueAtual;
+    if (Math.abs(diferenca) <= LIMITE_DIFERENCA) return [];
+
+    return [completarDatasTecnicasItemZerado({
+      ...item,
+      estoqueFoto: numero(item.estoqueFoto ?? item.estoqueSistema),
+      estoqueSistema: estoqueAtual,
+      estoqueAtualAplicacao: estoqueAtual,
+      reservadoAtualAplicacao: reservadoAtual,
+      diferenca,
+      quantidadeAjuste: Math.abs(diferenca),
+      tipo: diferenca > 0 ? 'ENTRADA' : 'SAIDA'
+    })];
+  });
+
+  return {
+    itens: reconciliados,
+    entrada: reconciliados.filter((item) => item.tipo === 'ENTRADA'),
+    saida: reconciliados.filter((item) => item.tipo === 'SAIDA')
+  };
+}
+
 function planejarAjustesEstoque(sessao) {
   const itens = (sessao?.itens || []).flatMap((item) => {
     const contagem = obterContagemFinal(sessao, item);
@@ -190,5 +229,6 @@ module.exports = {
   extrairNunotaAjuste,
   montarPayloadNotaAjuste,
   obterContagemFinal,
-  planejarAjustesEstoque
+  planejarAjustesEstoque,
+  reconciliarAjustesComEstoqueAtual
 };

@@ -284,6 +284,23 @@ test('registra notas pendentes e impede nova aplicacao do mesmo ajuste', () => {
   assert.equal(store.registrarAjustes({ id: sessao.id, notas: [] }).ajuste.notas[0].nunota, 123);
 });
 
+test('conclui sem nota quando o saldo atual ja foi conciliado', () => {
+  const store = criarStore();
+  const sessao = store.criar({ empresa: 1, itens });
+  store.registrar({ id: sessao.id, chave: sessao.itens[0].chave, quantidade: 4 });
+  store.finalizarRodada({ id: sessao.id });
+  store.iniciarRecontagem({ id: sessao.id });
+  store.registrar({ id: sessao.id, chave: sessao.itens[0].chave, quantidade: 4 });
+  store.finalizarRodada({ id: sessao.id });
+  store.concluirAnalise({ id: sessao.id });
+
+  const concluida = store.concluirSemAjuste({ id: sessao.id, usuario: 7 });
+
+  assert.equal(concluida.status, 'CONCLUIDA');
+  assert.equal(concluida.ajuste.motivo, 'SALDO_ATUAL_JA_CONCILIADO');
+  assert.deepEqual(concluida.ajuste.notas, []);
+});
+
 test('exclui somente a copia controlada pelo app', () => {
   const store = criarStore();
   const sessao = store.criar({ empresa: 1, itens });

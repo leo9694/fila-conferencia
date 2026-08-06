@@ -396,6 +396,25 @@ function criarEstoqueContagemStore(options = {}) {
     return sessao;
   }
 
+  function concluirSemAjuste({ id, usuario = null }) {
+    const sessao = exigir(id);
+    if (sessao.status !== 'PRONTA_PARA_AJUSTE') {
+      throw new Error('A contagem precisa estar pronta para ajuste.');
+    }
+    const agora = new Date().toISOString();
+    sessao.status = 'CONCLUIDA';
+    sessao.finalizadoEm = agora;
+    sessao.ajuste = {
+      geradoEm: agora,
+      geradoPor: usuario,
+      notas: [],
+      motivo: 'SALDO_ATUAL_JA_CONCILIADO'
+    };
+    atualizarSessao(sessao, agora, usuario);
+    persistir();
+    return sessao;
+  }
+
   return {
     filePath,
     namespace,
@@ -410,6 +429,7 @@ function criarEstoqueContagemStore(options = {}) {
     finalizarRodada,
     iniciarRecontagem,
     concluirAnalise,
+    concluirSemAjuste,
     registrarAjustes,
     resumir
   };

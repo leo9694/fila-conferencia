@@ -6,7 +6,8 @@ const {
   dividirEmLotes,
   extrairNunotaAjuste,
   montarPayloadNotaAjuste,
-  planejarAjustesEstoque
+  planejarAjustesEstoque,
+  reconciliarAjustesComEstoqueAtual
 } = require('../api/estoqueAjuste');
 
 const sessao = {
@@ -182,6 +183,78 @@ test('nao inventa datas para lote que continuara com saldo', () => {
   assert.equal(parcial.dtFabricacao, '');
   assert.equal(parcial.dtValidade, '');
   assert.equal(parcial.datasTecnicasAjuste, false);
+});
+
+test('recalcula a baixa pelo saldo atual em vez da foto congelada', () => {
+  const planoFoto = planejarAjustesEstoque({
+    rodadaAtual: 1,
+    itens: [{
+      chave: '5040|1010101|1010',
+      codProd: 5040,
+      codLocal: 1010101,
+      codVol: 'UN',
+      controle: '1010',
+      estoqueSistema: 50,
+      contagens: { 1: 0 }
+    }]
+  });
+  const planoAtual = reconciliarAjustesComEstoqueAtual(planoFoto.itens, [{
+    codProd: 5040,
+    codLocal: 1010101,
+    controle: '1010',
+    estoqueAtual: 12,
+    reservadoAtual: 2
+  }]);
+
+  assert.equal(planoAtual.saida.length, 1);
+  assert.equal(planoAtual.saida[0].estoqueFoto, 50);
+  assert.equal(planoAtual.saida[0].estoqueAtualAplicacao, 12);
+  assert.equal(planoAtual.saida[0].reservadoAtualAplicacao, 2);
+  assert.equal(planoAtual.saida[0].quantidadeAjuste, 12);
+  assert.equal(planoAtual.saida[0].dtFabricacao, DATA_FABRICACAO_TECNICA);
+  assert.equal(planoAtual.saida[0].dtValidade, DATA_VALIDADE_TECNICA);
+});
+
+test('nao gera nota quando o saldo atual ja corresponde a contagem', () => {
+  const planoFoto = planejarAjustesEstoque({
+    rodadaAtual: 1,
+    itens: [{
+      chave: '5040|1010101|1010',
+      codProd: 5040,
+      codLocal: 1010101,
+      controle: '1010',
+      estoqueSistema: 50,
+      contagens: { 1: 0 }
+    }]
+  });
+  const planoAtual = reconciliarAjustesComEstoqueAtual(planoFoto.itens, [{
+    codProd: 5040,
+    codLocal: 1010101,
+    controle: '1010',
+    estoqueAtual: 0
+  }]);
+
+  assert.equal(planoAtual.itens.length, 0);
+  assert.equal(planoAtual.entrada.length, 0);
+  assert.equal(planoAtual.saida.length, 0);
+});
+
+test('inverte o tipo de ajuste quando o saldo atual cruzou a contagem', () => {
+  const planoFoto = planejarAjustesEstoque({
+    rodadaAtual: 1,
+    itens: [{
+      chave: '10|1|L1', codProd: 10, codLocal: 1, codVol: 'UN', controle: 'L1',
+      dtFabricacao: '2026-01-01', dtVal: '2028-01-01',
+      estoqueSistema: 20, contagens: { 1: 10 }
+    }]
+  });
+  const planoAtual = reconciliarAjustesComEstoqueAtual(planoFoto.itens, [{
+    codProd: 10, codLocal: 1, controle: 'L1', estoqueAtual: 7
+  }]);
+
+  assert.equal(planoAtual.saida.length, 0);
+  assert.equal(planoAtual.entrada.length, 1);
+  assert.equal(planoAtual.entrada[0].quantidadeAjuste, 3);
 });
 
 test('divide notas em lotes de no maximo vinte itens', () => {

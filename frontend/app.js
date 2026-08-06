@@ -3283,6 +3283,12 @@ async function aplicarAjusteContagemEstoque() {
     estoqueContagemAtual = enriquecerNomeEmpresaContagem(payload.sessao);
     await carregarListaContagensEstoque();
     renderizarContagemEstoque();
+    if (payload.conciliada) {
+      atualizarMensagemContagemEstoque(
+        'O saldo atual do Sankhya já corresponde à contagem. Nenhuma nota de ajuste foi necessária.'
+      );
+      return;
+    }
     const numeros = (payload.notas || []).map((nota) => nota.nunota).join(', ');
     atualizarMensagemContagemEstoque(payload.reutilizada
       ? `${payload.datasSincronizadas || 0} posição(ões) de estoque preparada(s) para as notas ${numeros}. As notas continuam pendentes de confirmação.`

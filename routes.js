@@ -49,7 +49,8 @@ const {
   dividirEmLotes,
   extrairNunotaAjuste,
   montarPayloadNotaAjuste,
-  planejarAjustesEstoque
+  planejarAjustesEstoque,
+  reconciliarAjustesComEstoqueAtual
 } = require('./api/estoqueAjuste');
 const {
   deveMigrarPosicaoSemControle,
@@ -4109,6 +4110,46 @@ async function obterCustosReposicaoAjuste(empresa, itens) {
   return new Map(linhas.map((item) => [Number(item.CODPROD), Number(item.VLRUNIT)]));
 }
 
+async function obterSaldosAtuaisAjuste(empresa, itens) {
+  const produtos = new Set();
+  const locais = new Set();
+  for (const item of itens || []) {
+    const codProd = Number(item.codProd);
+    const codLocal = Number(item.codLocal);
+    if (!Number.isInteger(codProd) || codProd <= 0 || !Number.isInteger(codLocal) || codLocal <= 0) {
+      continue;
+    }
+    produtos.add(codProd);
+    locais.add(codLocal);
+  }
+  if (!produtos.size || !locais.size) return [];
+
+  const linhas = await executeQuery(`
+    SELECT
+      EST.CODPROD,
+      EST.CODLOCAL,
+      NVL(TRIM(EST.CONTROLE), ' ') AS CONTROLE,
+      SUM(NVL(EST.ESTOQUE, 0)) AS ESTOQUE,
+      SUM(NVL(EST.RESERVADO, 0)) AS RESERVADO
+    FROM TGFEST EST
+    WHERE EST.CODEMP = ${Number(empresa)}
+      AND NVL(EST.CODPARC, 0) = 0
+      AND NVL(EST.TIPO, 'P') = 'P'
+      AND NVL(EST.ATIVO, 'S') = 'S'
+      AND EST.CODPROD IN (${[...produtos].join(', ')})
+      AND EST.CODLOCAL IN (${[...locais].join(', ')})
+    GROUP BY EST.CODPROD, EST.CODLOCAL, NVL(TRIM(EST.CONTROLE), ' ')
+  `);
+
+  return linhas.map((item) => ({
+    codProd: Number(item.CODPROD),
+    codLocal: Number(item.CODLOCAL),
+    controle: String(item.CONTROLE || '').trim(),
+    estoqueAtual: Number(item.ESTOQUE || 0),
+    reservadoAtual: Number(item.RESERVADO || 0)
+  }));
+}
+
 async function localizarNotaAjustePorObservacao(empresa, codTipOper, observacao) {
   const linhas = await executeQuery(`
     SELECT NUNOTA, STATUSNOTA
@@ -4956,9 +4997,29 @@ router.post('/estoque-contagem/sessoes/:id/aplicar-ajuste', async (req, res) => 
       return;
     }
 
-    const plano = planejarAjustesEstoque(sessao);
-    if (!plano.itens.length) {
+    const planoFoto = planejarAjustesEstoque(sessao);
+    if (!planoFoto.itens.length) {
       res.status(422).json({ erro: 'Nao existem divergencias contadas para gerar ajuste.' });
+      return;
+    }
+
+    // Lote e datas podem alterar a chave da posicao. Prepare-os primeiro e so
+    // depois leia novamente o saldo que a nota efetivamente movimentara.
+    const dadosSincronizados = await sincronizarDatasEstoqueAjuste(sessao, planoFoto.itens);
+    const saldosAtuais = await obterSaldosAtuaisAjuste(sessao.empresa, planoFoto.itens);
+    const plano = reconciliarAjustesComEstoqueAtual(planoFoto.itens, saldosAtuais);
+    if (!plano.itens.length) {
+      const atualizada = estoqueContagemStore.concluirSemAjuste({
+        id,
+        usuario: req.usuario
+      });
+      res.json({
+        sessao: serializarSessaoContagemEstoque(atualizada),
+        notas: [],
+        reutilizada: false,
+        conciliada: true,
+        dadosSincronizados
+      });
       return;
     }
 
