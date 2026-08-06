@@ -46,8 +46,9 @@ const {
   normalizarFiltrosCopiaEstoque
 } = require('./api/estoqueContagemFiltros');
 const {
-  dividirEmLotes,
+  agruparItensEmNotaUnica,
   extrairNunotaAjuste,
+  localizarBloqueiosEstoqueComprometido,
   montarPayloadNotaAjuste,
   planejarAjustesEstoque,
   reconciliarAjustesComEstoqueAtual
@@ -4141,13 +4142,85 @@ async function obterSaldosAtuaisAjuste(empresa, itens) {
     GROUP BY EST.CODPROD, EST.CODLOCAL, NVL(TRIM(EST.CONTROLE), ' ')
   `);
 
+  const compromissos = await executeQuery(`
+    SELECT
+      ITE.CODPROD,
+      ITE.CODLOCALORIG AS CODLOCAL,
+      NVL(TRIM(ITE.CONTROLE), ' ') AS CONTROLE,
+      CAB.NUNOTA,
+      CAB.NUMNOTA,
+      SUM(GREATEST(NVL(ITE.QTDNEG, 0) - NVL(ITE.QTDENTREGUE, 0), 0)) AS QUANTIDADE
+    FROM TGFCAB CAB
+    JOIN TGFITE ITE ON ITE.NUNOTA = CAB.NUNOTA
+    WHERE CAB.CODEMP = ${Number(empresa)}
+      AND CAB.TIPMOV = 'P'
+      AND CAB.STATUSNOTA = 'L'
+      AND NVL(ITE.PENDENTE, 'N') = 'S'
+      AND ITE.CODPROD IN (${[...produtos].join(', ')})
+      AND ITE.CODLOCALORIG IN (${[...locais].join(', ')})
+      AND NVL(ITE.QTDNEG, 0) > NVL(ITE.QTDENTREGUE, 0)
+    GROUP BY
+      ITE.CODPROD,
+      ITE.CODLOCALORIG,
+      NVL(TRIM(ITE.CONTROLE), ' '),
+      CAB.NUNOTA,
+      CAB.NUMNOTA
+  `);
+
+  const compromissosPorPosicao = new Map();
+  for (const item of compromissos) {
+    const chave = [
+      Number(item.CODPROD),
+      Number(item.CODLOCAL),
+      String(item.CONTROLE || '').trim()
+    ].join('|');
+    const atual = compromissosPorPosicao.get(chave) || {
+      quantidade: 0,
+      pedidos: []
+    };
+    atual.quantidade += Number(item.QUANTIDADE || 0);
+    atual.pedidos.push({
+      nunota: Number(item.NUNOTA),
+      numeroNota: Number(item.NUMNOTA),
+      quantidade: Number(item.QUANTIDADE || 0)
+    });
+    compromissosPorPosicao.set(chave, atual);
+  }
+
   return linhas.map((item) => ({
     codProd: Number(item.CODPROD),
     codLocal: Number(item.CODLOCAL),
     controle: String(item.CONTROLE || '').trim(),
     estoqueAtual: Number(item.ESTOQUE || 0),
-    reservadoAtual: Number(item.RESERVADO || 0)
+    reservadoAtual: Number(item.RESERVADO || 0),
+    comprometidoAtual: compromissosPorPosicao.get([
+      Number(item.CODPROD),
+      Number(item.CODLOCAL),
+      String(item.CONTROLE || '').trim()
+    ].join('|'))?.quantidade || 0,
+    pedidosComprometidos: compromissosPorPosicao.get([
+      Number(item.CODPROD),
+      Number(item.CODLOCAL),
+      String(item.CONTROLE || '').trim()
+    ].join('|'))?.pedidos || []
   }));
+}
+
+function mensagemBloqueiosAjusteEstoque(bloqueios) {
+  const detalhes = bloqueios.slice(0, 5).map((item) => {
+    const pedidos = (item.pedidosComprometidos || [])
+      .map((pedido) => `${pedido.numeroNota || pedido.nunota} (NUNOTA ${pedido.nunota})`)
+      .join(', ');
+    const quantidade = Math.max(
+      Number(item.reservadoAtualAplicacao || 0),
+      Number(item.comprometidoAtualAplicacao || 0)
+    );
+    return `produto ${item.codProd}, lote ${item.controle || 'sem controle'}: ${quantidade} ${item.codVol || 'UN'} comprometida(s)${pedidos ? ` no(s) pedido(s) ${pedidos}` : ''}`;
+  });
+  const restante = bloqueios.length > detalhes.length
+    ? ` e mais ${bloqueios.length - detalhes.length} produto(s)`
+    : '';
+  return `O ajuste nao pode baixar estoque comprometido: ${detalhes.join('; ')}${restante}. Resolva os pedidos/reservas no Sankhya e aplique novamente. Nenhuma nova nota foi criada.`;
 }
 
 async function localizarNotaAjustePorObservacao(empresa, codTipOper, observacao) {
@@ -4160,6 +4233,22 @@ async function localizarNotaAjustePorObservacao(empresa, codTipOper, observacao)
     ORDER BY NUNOTA DESC
   `);
   return linhas[0] || null;
+}
+
+async function localizarNotasFragmentadasAjuste(sessao) {
+  const prefixo = `Contagem app ${sessao.id} - `;
+  const linhas = await executeQuery(`
+    SELECT NUNOTA, STATUSNOTA, OBSERVACAO
+    FROM TGFCAB
+    WHERE CODEMP = ${Number(sessao.empresa)}
+      AND OBSERVACAO LIKE '${textoSql(prefixo)}%'
+    ORDER BY NUNOTA
+  `);
+  return linhas.filter((nota) => {
+    const observacao = String(nota.OBSERVACAO || '').trim();
+    return / - (ENTRADA|SAIDA) \d+\/\d+$/i.test(observacao)
+      && !/ - (ENTRADA|SAIDA) 1\/1$/i.test(observacao);
+  });
 }
 
 function chaveItemNotaAjuste(item) {
@@ -5023,6 +5112,19 @@ router.post('/estoque-contagem/sessoes/:id/aplicar-ajuste', async (req, res) => 
       return;
     }
 
+    const bloqueios = localizarBloqueiosEstoqueComprometido(plano);
+    if (bloqueios.length) {
+      throw new Error(mensagemBloqueiosAjusteEstoque(bloqueios));
+    }
+
+    const notasFragmentadas = await localizarNotasFragmentadasAjuste(sessao);
+    if (notasFragmentadas.length) {
+      const numeros = notasFragmentadas.map((nota) => Number(nota.NUNOTA)).join(', ');
+      throw new Error(
+        `Existem notas fragmentadas de uma tentativa anterior: ${numeros}. Exclua todas essas notas no Sankhya antes de gerar a nota unica da contagem.`
+      );
+    }
+
     const custos = await obterCustosReposicaoAjuste(sessao.empresa, plano.itens);
     const notas = [];
     for (const tipo of ['ENTRADA', 'SAIDA']) {
@@ -5030,7 +5132,7 @@ router.post('/estoque-contagem/sessoes/:id/aplicar-ajuste', async (req, res) => 
       if (!itensTipo.length) continue;
 
       const template = await obterTemplateNotaAjusteEstoque(sessao.empresa, tipo);
-      const lotes = dividirEmLotes(itensTipo);
+      const lotes = agruparItensEmNotaUnica(itensTipo);
       for (let indice = 0; indice < lotes.length; indice += 1) {
         notas.push(await gerarNotaPendenteAjuste({
           sessao,

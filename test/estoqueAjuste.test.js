@@ -3,8 +3,9 @@ const assert = require('node:assert/strict');
 const {
   DATA_FABRICACAO_TECNICA,
   DATA_VALIDADE_TECNICA,
-  dividirEmLotes,
+  agruparItensEmNotaUnica,
   extrairNunotaAjuste,
+  localizarBloqueiosEstoqueComprometido,
   montarPayloadNotaAjuste,
   planejarAjustesEstoque,
   reconciliarAjustesComEstoqueAtual
@@ -257,9 +258,54 @@ test('inverte o tipo de ajuste quando o saldo atual cruzou a contagem', () => {
   assert.equal(planoAtual.entrada[0].quantidadeAjuste, 3);
 });
 
-test('divide notas em lotes de no maximo vinte itens', () => {
-  const lotes = dividirEmLotes(Array.from({ length: 41 }, (_, indice) => indice));
-  assert.deepEqual(lotes.map((lote) => lote.length), [20, 20, 1]);
+test('bloqueia baixa que deixaria saldo menor que pedidos comprometidos', () => {
+  const planoFoto = planejarAjustesEstoque({
+    rodadaAtual: 1,
+    itens: [{
+      chave: '5040|1010101|SEM_CONTROLE',
+      codProd: 5040,
+      codLocal: 1010101,
+      codVol: 'UN',
+      controle: '',
+      estoqueSistema: 1,
+      contagens: { 1: 0 }
+    }]
+  });
+  const planoAtual = reconciliarAjustesComEstoqueAtual(planoFoto.itens, [{
+    codProd: 5040,
+    codLocal: 1010101,
+    controle: '',
+    estoqueAtual: 1,
+    comprometidoAtual: 1,
+    pedidosComprometidos: [{ nunota: 3855780, numeroNota: 91735, quantidade: 1 }]
+  }]);
+
+  const bloqueios = localizarBloqueiosEstoqueComprometido(planoAtual);
+  assert.equal(bloqueios.length, 1);
+  assert.equal(bloqueios[0].codProd, 5040);
+  assert.equal(bloqueios[0].pedidosComprometidos[0].numeroNota, 91735);
+});
+
+test('permite baixa que preserva a quantidade comprometida', () => {
+  const planoFoto = planejarAjustesEstoque({
+    rodadaAtual: 1,
+    itens: [{
+      chave: '10|1|SEM_CONTROLE', codProd: 10, codLocal: 1, codVol: 'UN',
+      estoqueSistema: 10, contagens: { 1: 3 }
+    }]
+  });
+  const planoAtual = reconciliarAjustesComEstoqueAtual(planoFoto.itens, [{
+    codProd: 10, codLocal: 1, controle: '', estoqueAtual: 10, comprometidoAtual: 3
+  }]);
+
+  assert.equal(localizarBloqueiosEstoqueComprometido(planoAtual).length, 0);
+  assert.equal(planoAtual.saida[0].quantidadeAjuste, 7);
+});
+
+test('mantem todos os itens do mesmo tipo em uma unica nota', () => {
+  const lotes = agruparItensEmNotaUnica(Array.from({ length: 48 }, (_, indice) => indice));
+  assert.deepEqual(lotes.map((lote) => lote.length), [48]);
+  assert.deepEqual(agruparItensEmNotaUnica([]), []);
 });
 
 test('monta nota pendente com cabecalho configurado e custo de reposicao', () => {

@@ -1,4 +1,3 @@
-const TAMANHO_LOTE_NOTA = 20;
 const LIMITE_DIFERENCA = 0.000001;
 const DATA_FABRICACAO_TECNICA = '2000-01-01';
 const DATA_VALIDADE_TECNICA = '2099-12-31';
@@ -74,6 +73,7 @@ function reconciliarAjustesComEstoqueAtual(itens = [], saldos = []) {
     const saldo = saldosPorChave.get(chaveSaldoAjuste(item));
     const estoqueAtual = numero(saldo?.estoqueAtual ?? saldo?.ESTOQUE);
     const reservadoAtual = numero(saldo?.reservadoAtual ?? saldo?.RESERVADO);
+    const comprometidoAtual = numero(saldo?.comprometidoAtual ?? saldo?.COMPROMETIDO);
     const contagem = numero(item.contagem);
     const diferenca = contagem - estoqueAtual;
     if (Math.abs(diferenca) <= LIMITE_DIFERENCA) return [];
@@ -84,6 +84,10 @@ function reconciliarAjustesComEstoqueAtual(itens = [], saldos = []) {
       estoqueSistema: estoqueAtual,
       estoqueAtualAplicacao: estoqueAtual,
       reservadoAtualAplicacao: reservadoAtual,
+      comprometidoAtualAplicacao: comprometidoAtual,
+      pedidosComprometidos: Array.isArray(saldo?.pedidosComprometidos)
+        ? saldo.pedidosComprometidos
+        : [],
       diferenca,
       quantidadeAjuste: Math.abs(diferenca),
       tipo: diferenca > 0 ? 'ENTRADA' : 'SAIDA'
@@ -95,6 +99,16 @@ function reconciliarAjustesComEstoqueAtual(itens = [], saldos = []) {
     entrada: reconciliados.filter((item) => item.tipo === 'ENTRADA'),
     saida: reconciliados.filter((item) => item.tipo === 'SAIDA')
   };
+}
+
+function localizarBloqueiosEstoqueComprometido(plano = {}) {
+  return (plano.saida || []).filter((item) => {
+    const minimoComprometido = Math.max(
+      numero(item.reservadoAtualAplicacao),
+      numero(item.comprometidoAtualAplicacao)
+    );
+    return numero(item.contagem) + LIMITE_DIFERENCA < minimoComprometido;
+  });
 }
 
 function planejarAjustesEstoque(sessao) {
@@ -131,12 +145,8 @@ function planejarAjustesEstoque(sessao) {
   };
 }
 
-function dividirEmLotes(itens, tamanho = TAMANHO_LOTE_NOTA) {
-  const lotes = [];
-  for (let indice = 0; indice < itens.length; indice += tamanho) {
-    lotes.push(itens.slice(indice, indice + tamanho));
-  }
-  return lotes;
+function agruparItensEmNotaUnica(itens = []) {
+  return itens.length ? [itens] : [];
 }
 
 function campoApi(valor) {
@@ -223,11 +233,11 @@ function extrairNunotaAjuste(resposta) {
 module.exports = {
   DATA_FABRICACAO_TECNICA,
   DATA_VALIDADE_TECNICA,
-  TAMANHO_LOTE_NOTA,
+  agruparItensEmNotaUnica,
   completarDatasTecnicasItemZerado,
-  dividirEmLotes,
   extrairNunotaAjuste,
   montarPayloadNotaAjuste,
+  localizarBloqueiosEstoqueComprometido,
   obterContagemFinal,
   planejarAjustesEstoque,
   reconciliarAjustesComEstoqueAtual
