@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
+  DATA_FABRICACAO_TECNICA,
+  DATA_VALIDADE_TECNICA,
   dividirEmLotes,
   extrairNunotaAjuste,
   montarPayloadNotaAjuste,
@@ -107,6 +109,79 @@ test('gera ajuste de entrada para produto e lote adicionados fora da foto', () =
   assert.equal(plano.entrada[0].controle, 'LOTE-NOVO');
   assert.equal(plano.entrada[0].dtFabricacao, '2026-08-05');
   assert.equal(plano.entrada[0].dtValidade, '2028-08-05');
+});
+
+test('preenche datas tecnicas somente quando o lote sera zerado', () => {
+  const plano = planejarAjustesEstoque({
+    empresa: 1,
+    rodadaAtual: 1,
+    itens: [{
+      chave: '5070|1|049515',
+      codProd: 5070,
+      descrProd: 'Produto zerado sem datas',
+      codVol: 'UN',
+      codLocal: 1,
+      controle: '049515',
+      estoqueSistema: 10,
+      contagens: { 1: 0 }
+    }]
+  });
+
+  assert.equal(plano.saida[0].contagem, 0);
+  assert.equal(plano.saida[0].dtFabricacao, DATA_FABRICACAO_TECNICA);
+  assert.equal(plano.saida[0].dtValidade, DATA_VALIDADE_TECNICA);
+  assert.equal(plano.saida[0].datasTecnicasAjuste, true);
+
+  const payload = montarPayloadNotaAjuste({
+    sessao: { empresa: 1 },
+    itens: plano.saida,
+    template: {
+      CODPARC: 649,
+      CODTIPOPER: 157,
+      CODTIPVENDA: 53,
+      TIPMOV: 'V'
+    },
+    custos: new Map([[5070, 1]]),
+    dataNegociacao: '06/08/2026',
+    observacao: 'Zerar lote sem datas'
+  });
+  assert.equal(payload.nota.itens.item[0].CONTROLE.$, '049515');
+});
+
+test('completa somente a data ausente de lote zerado sem inverter o periodo', () => {
+  const somenteValidade = planejarAjustesEstoque({
+    rodadaAtual: 1,
+    itens: [{
+      chave: '1|1|L1', codProd: 1, codLocal: 1, controle: 'L1',
+      dtVal: '2027-05-10', estoqueSistema: 5, contagens: { 1: 0 }
+    }]
+  }).saida[0];
+  const somenteFabricacao = planejarAjustesEstoque({
+    rodadaAtual: 1,
+    itens: [{
+      chave: '2|1|L2', codProd: 2, codLocal: 1, controle: 'L2',
+      dtFabricacao: '2026-05-10', estoqueSistema: 5, contagens: { 1: 0 }
+    }]
+  }).saida[0];
+
+  assert.equal(somenteValidade.dtFabricacao, '2027-05-10');
+  assert.equal(somenteValidade.dtValidade, '2027-05-10');
+  assert.equal(somenteFabricacao.dtFabricacao, '2026-05-10');
+  assert.equal(somenteFabricacao.dtValidade, '2026-05-10');
+});
+
+test('nao inventa datas para lote que continuara com saldo', () => {
+  const parcial = planejarAjustesEstoque({
+    rodadaAtual: 1,
+    itens: [{
+      chave: '3|1|L3', codProd: 3, codLocal: 1, controle: 'L3',
+      estoqueSistema: 5, contagens: { 1: 2 }
+    }]
+  }).saida[0];
+
+  assert.equal(parcial.dtFabricacao, '');
+  assert.equal(parcial.dtValidade, '');
+  assert.equal(parcial.datasTecnicasAjuste, false);
 });
 
 test('divide notas em lotes de no maximo vinte itens', () => {

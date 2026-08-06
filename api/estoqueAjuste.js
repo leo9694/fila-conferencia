@@ -1,5 +1,7 @@
 const TAMANHO_LOTE_NOTA = 20;
 const LIMITE_DIFERENCA = 0.000001;
+const DATA_FABRICACAO_TECNICA = '2000-01-01';
+const DATA_VALIDADE_TECNICA = '2099-12-31';
 
 function numero(valor) {
   const resultado = Number(valor);
@@ -18,6 +20,44 @@ function obterContagemFinal(sessao, item) {
   return primeira === null || primeira === undefined ? null : numero(primeira);
 }
 
+function completarDatasTecnicasItemZerado(item = {}) {
+  const controle = texto(item.controle);
+  const zerado = item.tipo === 'SAIDA' && Math.abs(numero(item.contagem)) <= LIMITE_DIFERENCA;
+  let dtFabricacao = texto(item.dtFabricacao);
+  let dtValidade = texto(item.dtValidade || item.dtVal);
+  const precisavaFabricacao = !dtFabricacao;
+  const precisavaValidade = !dtValidade;
+
+  if (!controle || !zerado || (!precisavaFabricacao && !precisavaValidade)) {
+    return {
+      ...item,
+      dtFabricacao,
+      dtValidade,
+      datasTecnicasAjuste: false
+    };
+  }
+
+  if (!dtFabricacao && !dtValidade) {
+    dtFabricacao = DATA_FABRICACAO_TECNICA;
+    dtValidade = DATA_VALIDADE_TECNICA;
+  } else if (!dtFabricacao) {
+    // Igualar à validade existente garante que a fabricação técnica nunca
+    // fique posterior à validade real de um lote antigo que será zerado.
+    dtFabricacao = dtValidade;
+  } else if (!dtValidade) {
+    // Igualar à fabricação existente mantém a ordem cronológica válida sem
+    // inventar vida útil para uma posição que deixará de possuir saldo.
+    dtValidade = dtFabricacao;
+  }
+
+  return {
+    ...item,
+    dtFabricacao,
+    dtValidade,
+    datasTecnicasAjuste: true
+  };
+}
+
 function planejarAjustesEstoque(sessao) {
   const itens = (sessao?.itens || []).flatMap((item) => {
     const contagem = obterContagemFinal(sessao, item);
@@ -27,7 +67,7 @@ function planejarAjustesEstoque(sessao) {
     const diferenca = contagem - estoqueSistema;
     if (Math.abs(diferenca) <= LIMITE_DIFERENCA) return [];
 
-    return [{
+    return [completarDatasTecnicasItemZerado({
       chave: texto(item.chave),
       codProd: numero(item.codProd),
       descrProd: texto(item.descrProd),
@@ -42,7 +82,7 @@ function planejarAjustesEstoque(sessao) {
       diferenca,
       quantidadeAjuste: Math.abs(diferenca),
       tipo: diferenca > 0 ? 'ENTRADA' : 'SAIDA'
-    }];
+    })];
   });
 
   return {
@@ -142,7 +182,10 @@ function extrairNunotaAjuste(resposta) {
 }
 
 module.exports = {
+  DATA_FABRICACAO_TECNICA,
+  DATA_VALIDADE_TECNICA,
   TAMANHO_LOTE_NOTA,
+  completarDatasTecnicasItemZerado,
   dividirEmLotes,
   extrairNunotaAjuste,
   montarPayloadNotaAjuste,
