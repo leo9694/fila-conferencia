@@ -61,6 +61,7 @@ const {
 const { criarAutorizacaoGrupos } = require('./api/autorizacaoGrupos');
 const {
   dividirPeriodoMensal,
+  consolidarLinhasCtes,
   gerarPlanilhaCtes,
   montarSqlRelatorioCtes,
   nomeArquivoRelatorio,
@@ -2597,7 +2598,7 @@ router.get('/relatorios/disponiveis', exigirDiretoria, (req, res) => {
     itens: [{
       id: 'ctes-importados-periodo',
       nome: 'CT-es Importados por Período',
-      descricao: 'Uma linha para cada NF-e referenciada nos CT-es importados do período.'
+      descricao: 'Uma linha por CT-e, consolidando as NF-es referenciadas no período.'
     }]
   });
 });
@@ -2628,14 +2629,15 @@ router.post('/relatorios/ctes-importados-periodo', exigirDiretoria, async (req, 
     const consultaMs = Number(process.hrtime.bigint() - inicioConsulta) / 1e6;
 
     const inicioExcel = process.hrtime.bigint();
-    const arquivo = gerarPlanilhaCtes(rows);
+    const linhasConsolidadas = consolidarLinhasCtes(rows);
+    const arquivo = gerarPlanilhaCtes(linhasConsolidadas);
     const excelMs = Number(process.hrtime.bigint() - inicioExcel) / 1e6;
     const nomeArquivo = nomeArquivoRelatorio();
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(nomeArquivo)}`);
     res.setHeader('Cache-Control', 'private, no-store');
-    res.setHeader('X-Report-Rows', String(rows.length));
+    res.setHeader('X-Report-Rows', String(linhasConsolidadas.length));
     res.setHeader('X-Report-Query-Ms', consultaMs.toFixed(1));
     res.setHeader('X-Report-Excel-Ms', excelMs.toFixed(1));
     res.setHeader('X-Report-Queries', String(blocos.length));

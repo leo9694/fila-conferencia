@@ -61,7 +61,7 @@ function montarSqlRelatorioCtes(dataInicial, dataFinal) {
   const periodo = validarPeriodo(dataInicial, dataFinal);
   return `
 WITH XML_CTE AS (
-  SELECT IX.NUMNOTA, IX.DHEMISS, IX.XNOMEEMIT, IX.CODEMP,
+  SELECT IX.NUMNOTA, IX.DHEMISS, IX.XNOMEEMIT, IX.XNOMEDEST, IX.CODEMP,
          IX.VLRNOTA, IX.CHAVEACESSO, IX.DOCSREF,
          ROW_NUMBER() OVER (
            PARTITION BY IX.CHAVEACESSO ORDER BY IX.NUARQUIVO DESC
@@ -75,9 +75,9 @@ WITH XML_CTE AS (
     AND IX.DOCSREF IS NOT NULL
 ),
 LINHAS_CTE AS (
-  SELECT /*+ MATERIALIZE */
-         IX.NUMNOTA NUM_CTE, IX.DHEMISS DATA_EMISSAO,
-         IX.XNOMEEMIT TRANSPORTADORA, IX.CODEMP,
+  SELECT /*+ MATERIALIZE */ DISTINCT
+         IX.CHAVEACESSO CHAVE_CTE, IX.NUMNOTA NUM_CTE, IX.DHEMISS DATA_EMISSAO,
+         IX.XNOMEEMIT TRANSPORTADORA, IX.XNOMEDEST DESTINATARIO_CTE, IX.CODEMP,
          NVL(IX.VLRNOTA, 0) VALOR_FRETE, X.CHAVENFE
   FROM XML_CTE IX,
        XMLTABLE(
@@ -87,13 +87,26 @@ LINHAS_CTE AS (
        ) X
   WHERE IX.RN = 1
 )
-SELECT L.NUM_CTE,
+SELECT L.CHAVE_CTE,
+       L.NUM_CTE,
        L.DATA_EMISSAO,
        NVL(L.TRANSPORTADORA, 'NAO INFORMADA') TRANSPORTADORA,
        EMP.NOMEFANTASIA EMPRESA,
-       NVL(PAR.NOMEPARC, XMLNF.XNOMEDEST) PARCEIRO,
-       NVL(CIDCAB.NOMECID, NVL(CID.NOMECID, XMLNF.CIDADE)) CIDADE,
-       NVL(UFSCAB.DESCRICAO, NVL(UFSCAB.UF, NVL(UFS.DESCRICAO, NVL(UFS.UF, XMLNF.UF)))) ESTADO,
+       NVL(PAR.NOMEPARC, NVL(XMLNF.XNOMEDEST, L.DESTINATARIO_CTE)) PARCEIRO,
+       NVL(
+         NULLIF(CASE WHEN UPPER(TRIM(CIDCAB.NOMECID)) IN ('<SEM DESCRIÇÃO>', '<SEM DESCRICAO>') THEN NULL ELSE CIDCAB.NOMECID END, ''),
+         NVL(
+           NULLIF(CASE WHEN UPPER(TRIM(CID.NOMECID)) IN ('<SEM DESCRIÇÃO>', '<SEM DESCRICAO>') THEN NULL ELSE CID.NOMECID END, ''),
+           XMLNF.CIDADE
+         )
+       ) CIDADE,
+       NVL(
+         NULLIF(CASE WHEN UPPER(TRIM(UFSCAB.DESCRICAO)) IN ('<SEM DESCRIÇÃO>', '<SEM DESCRICAO>') THEN NULL ELSE UFSCAB.DESCRICAO END, ''),
+         NVL(NULLIF(TRIM(UFSCAB.UF), '0'), NVL(
+           NULLIF(CASE WHEN UPPER(TRIM(UFS.DESCRICAO)) IN ('<SEM DESCRIÇÃO>', '<SEM DESCRICAO>') THEN NULL ELSE UFS.DESCRICAO END, ''),
+           NVL(NULLIF(TRIM(UFS.UF), '0'), XMLNF.UF)
+         ))
+       ) ESTADO,
        NVL(TO_CHAR(CAB.NUMNOTA), TO_CHAR(XMLNF.NUMNOTA)) NUM_NOTA,
        NVL(CAB.VLRNOTA, NVL(XMLNF.VLRNOTA, 0)) VALOR_PEDIDO,
        NVL(NULLIF(CAB.PESOBRUTO, 0), NVL(NULLIF(CAB.PESO, 0), NVL(XMLNF.PESO, 0))) PESO,
@@ -176,7 +189,16 @@ OUTER APPLY (
       NF.NUNOTA IS NULL
       OR CAB.NUMNOTA IS NULL
       OR PAR.CODPARC IS NULL
-      OR (CIDCAB.CODCID IS NULL AND CID.CODCID IS NULL)
+      OR (
+        NULLIF(CASE WHEN UPPER(TRIM(CIDCAB.NOMECID)) IN ('<SEM DESCRIÇÃO>', '<SEM DESCRICAO>') THEN NULL ELSE CIDCAB.NOMECID END, '') IS NULL
+        AND NULLIF(CASE WHEN UPPER(TRIM(CID.NOMECID)) IN ('<SEM DESCRIÇÃO>', '<SEM DESCRICAO>') THEN NULL ELSE CID.NOMECID END, '') IS NULL
+      )
+      OR (
+        NULLIF(CASE WHEN UPPER(TRIM(UFSCAB.DESCRICAO)) IN ('<SEM DESCRIÇÃO>', '<SEM DESCRICAO>') THEN NULL ELSE UFSCAB.DESCRICAO END, '') IS NULL
+        AND NULLIF(TRIM(UFSCAB.UF), '0') IS NULL
+        AND NULLIF(CASE WHEN UPPER(TRIM(UFS.DESCRICAO)) IN ('<SEM DESCRIÇÃO>', '<SEM DESCRICAO>') THEN NULL ELSE UFS.DESCRICAO END, '') IS NULL
+        AND NULLIF(TRIM(UFS.UF), '0') IS NULL
+      )
       OR (NULLIF(CAB.PESOBRUTO, 0) IS NULL AND NULLIF(CAB.PESO, 0) IS NULL)
       OR NULLIF(CAB.QTDVOL, 0) IS NULL
     )
@@ -212,6 +234,49 @@ function numero(valor, inteiro = false) {
   const convertido = Number(valor);
   if (!Number.isFinite(convertido)) return 0;
   return inteiro ? Math.trunc(convertido) : convertido;
+}
+
+function valorTextoUtil(valor) {
+  const texto = String(valor ?? '').trim();
+  return texto && !['0', '<SEM DESCRIÇÃO>', '<SEM DESCRICAO>'].includes(texto.toUpperCase()) ? texto : '';
+}
+
+function consolidarLinhasCtes(rows = []) {
+  const ctes = new Map();
+
+  for (const row of rows) {
+    const chave = String(row.CHAVE_CTE || row.NUM_CTE || '').trim();
+    if (!chave) continue;
+
+    const atual = ctes.get(chave) || {
+      ...row,
+      PARCEIRO: '',
+      CIDADE: '',
+      ESTADO: '',
+      NUM_NOTA: '',
+      VALOR_PEDIDO: 0,
+      PESO: 0,
+      VOLUMES: 0,
+      VALOR_FRETE: 0,
+      notas: new Set()
+    };
+
+    atual.PARCEIRO ||= valorTextoUtil(row.PARCEIRO);
+    atual.CIDADE ||= valorTextoUtil(row.CIDADE);
+    atual.ESTADO ||= valorTextoUtil(row.ESTADO);
+    const nota = String(row.NUM_NOTA ?? '').trim();
+    if (nota) atual.notas.add(nota);
+    atual.VALOR_PEDIDO = Math.round((atual.VALOR_PEDIDO + numero(row.VALOR_PEDIDO)) * 100) / 100;
+    atual.PESO = Math.round((atual.PESO + numero(row.PESO)) * 1000) / 1000;
+    atual.VOLUMES += numero(row.VOLUMES, true);
+    atual.VALOR_FRETE = Math.max(atual.VALOR_FRETE, numero(row.VALOR_FRETE));
+    ctes.set(chave, atual);
+  }
+
+  return [...ctes.values()].map(({ notas, ...row }) => ({
+    ...row,
+    NUM_NOTA: [...notas].join(', ')
+  }));
 }
 
 function letraColuna(indice) {
@@ -381,6 +446,7 @@ function nomeArquivoRelatorio(data = new Date()) {
 
 module.exports = {
   CABECALHOS,
+  consolidarLinhasCtes,
   dividirPeriodoMensal,
   gerarPlanilhaCtes,
   montarSqlRelatorioCtes,

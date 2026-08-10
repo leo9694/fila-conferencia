@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   CABECALHOS,
+  consolidarLinhasCtes,
   dividirPeriodoMensal,
   gerarPlanilhaCtes,
   montarSqlRelatorioCtes,
@@ -16,6 +17,7 @@ test('consulta respeita os filtros obrigatorios e a data final inclusiva', () =>
   assert.match(sql, /DHEMISS >= TRUNC\(TO_DATE\('2026-01-01'/);
   assert.match(sql, /DHEMISS < TRUNC\(TO_DATE\('2026-06-30'[\s\S]*\) \+ 1/);
   assert.match(sql, /XMLTABLE/);
+  assert.match(sql, /L\.CHAVE_CTE/);
   assert.match(sql, /EMP\.NOMEFANTASIA EMPRESA/);
   assert.match(sql, /OUTER APPLY/);
   assert.match(sql, /INDEX\(N IDX_TGFNFE_CHAVENFE\)/);
@@ -23,7 +25,11 @@ test('consulta respeita os filtros obrigatorios e a data final inclusiva', () =>
   assert.match(sql, /NVL\(NULLIF\(CAB\.PESOBRUTO, 0\), NVL\(NULLIF\(CAB\.PESO, 0\), NVL\(XMLNF\.PESO, 0\)\)\) PESO/);
   assert.match(sql, /CIDCAB\.CODCID = CAB\.CODCID/);
   assert.match(sql, /UFSCAB\.CODUF = CIDCAB\.UF/);
-  assert.match(sql, /NVL\(CIDCAB\.NOMECID, NVL\(CID\.NOMECID, XMLNF\.CIDADE\)\) CIDADE/);
+  assert.match(sql, /CIDCAB\.NOMECID\)\) IN \('<SEM DESCRIÇÃO>', '<SEM DESCRICAO>'\)/);
+  assert.match(sql, /CID\.NOMECID\)\) IN \('<SEM DESCRIÇÃO>', '<SEM DESCRICAO>'\)/);
+  assert.match(sql, /NULLIF\(TRIM\(UFSCAB\.UF\), '0'\)/);
+  assert.match(sql, /NULLIF\(TRIM\(UFS\.UF\), '0'\)/);
+  assert.match(sql, /XMLNF\.CIDADE/);
   assert.match(sql, /'\/nfeProc\/NFe\/infNFe\/transp\/vol'/);
   assert.match(sql, /PESO_TEXTO VARCHAR2\(50\) PATH 'pesoB'/);
   assert.match(sql, /NLS_NUMERIC_CHARACTERS=''\.,''/);
@@ -78,6 +84,21 @@ test('gera XLSX com cabecalho, filtros, congelamento e tipos numericos', () => {
   assert.match(conteudo, /<v>1234\.56<\/v>/);
   assert.doesNotMatch(conteudo, /<f>/);
   assert.doesNotMatch(conteudo, /mergeCells/);
+});
+
+test('consolida NF-es por CT-e sem repetir o frete', () => {
+  const [cte] = consolidarLinhasCtes([
+    { CHAVE_CTE: 'cte-1', NUM_CTE: 19986, NUM_NOTA: '100', VALOR_PEDIDO: 10, PESO: 3.6, VOLUMES: 3, VALOR_FRETE: 2079, PARCEIRO: 'Parceiro', CIDADE: 'Dourados', ESTADO: 'MS' },
+    { CHAVE_CTE: 'cte-1', NUM_CTE: 19986, NUM_NOTA: '101', VALOR_PEDIDO: 20, PESO: 2183.738, VOLUMES: 1039, VALOR_FRETE: 2079, PARCEIRO: 'Parceiro', CIDADE: 'Dourados', ESTADO: 'MS' },
+    { CHAVE_CTE: 'cte-1', NUM_CTE: 19986, NUM_NOTA: '102', VALOR_PEDIDO: 30, PESO: 0, VOLUMES: 2, VALOR_FRETE: 2079, PARCEIRO: 'Parceiro', CIDADE: 'Dourados', ESTADO: 'MS' }
+  ]);
+
+  assert.equal(cte.NUM_CTE, 19986);
+  assert.equal(cte.NUM_NOTA, '100, 101, 102');
+  assert.equal(cte.VALOR_PEDIDO, 60);
+  assert.equal(cte.PESO, 2187.338);
+  assert.equal(cte.VOLUMES, 1044);
+  assert.equal(cte.VALOR_FRETE, 2079);
 });
 
 test('nome do arquivo segue o formato solicitado', () => {
