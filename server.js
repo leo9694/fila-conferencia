@@ -14,7 +14,11 @@ const {
 
 const app = express();
 
-app.use(express.json());
+// Conferencias grandes enviam o progresso completo para manter leituras e lotes
+// consistentes entre dispositivos. O limite padrao do Express (100 KB) descartava
+// silenciosamente notas extensas antes de a rota conseguir persistir o progresso.
+// Mantemos um limite finito para proteger a API de cargas indevidas.
+app.use(express.json({ limit: '2mb' }));
 
 app.use((req, res, next) => {
   if (req.method === 'GET' || req.method === 'HEAD') {
