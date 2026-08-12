@@ -67,6 +67,7 @@ const {
   nomeArquivoRelatorio,
   validarPeriodo
 } = require('./api/relatorioCtes');
+const { montarSqlEstimativaFrete, normalizarEstimativaFrete } = require('./api/estimativaFrete');
 const {
   TOP_FATURAMENTO_VENDAS,
   consolidarDashboardVendas,
@@ -76,6 +77,12 @@ const {
   normalizarEmpresa,
   validarPeriodoVendas
 } = require('./api/vendasDashboard');
+const {
+  consolidarDashboardTransporte,
+  normalizarFiltrosTransporte,
+  validarPeriodoTransporte
+} = require('./api/transporteDashboard');
+const { criarServicoMalhasIbge } = require('./api/ibgeMalhas');
 const bitrixService = require('./api/bitrixService');
 
 const conferenciaTimerStore = criarConferenciaTimerStore();
@@ -113,6 +120,40 @@ const TOPS_AJUSTE_ESTOQUE = Object.freeze({
 });
 const ajustesEstoqueEmAndamento = new Set();
 const filasOperacoesContagemEstoque = new Map();
+const cacheTransportePorPeriodo = new Map();
+const CACHE_TRANSPORTE_MS = 5 * 60 * 1000;
+const cacheEstimativaFrete = new Map();
+const CACHE_ESTIMATIVA_FRETE_MS = 10 * 60 * 1000;
+const PERIODO_ESTIMATIVA_FRETE = {
+  inicio: process.env.FRETE_ESTIMATIVA_DATA_INICIAL,
+  fim: process.env.FRETE_ESTIMATIVA_DATA_FINAL
+};
+const malhasIbge = criarServicoMalhasIbge();
+
+async function carregarCtesTransportePorPeriodo(periodo) {
+  const chave = `${periodo.inicio}|${periodo.fim}`;
+  const agora = Date.now();
+  const emCache = cacheTransportePorPeriodo.get(chave);
+  if (emCache && emCache.expiraEm > agora) return emCache.promise;
+
+  const promise = (async () => {
+    const blocos = dividirPeriodoMensal(periodo.inicio, periodo.fim);
+    const linhas = [];
+    for (const bloco of blocos) {
+      const linhasBloco = await executeQuery(montarSqlRelatorioCtes(bloco.dataInicial, bloco.dataFinal));
+      linhas.push(...linhasBloco);
+    }
+    return consolidarLinhasCtes(linhas);
+  })();
+
+  cacheTransportePorPeriodo.set(chave, { promise, expiraEm: agora + CACHE_TRANSPORTE_MS });
+  promise.catch(() => cacheTransportePorPeriodo.delete(chave));
+  if (cacheTransportePorPeriodo.size > 4) {
+    const maisAntigo = cacheTransportePorPeriodo.keys().next().value;
+    if (maisAntigo !== chave) cacheTransportePorPeriodo.delete(maisAntigo);
+  }
+  return promise;
+}
 
 function executarEmFilaContagemEstoque(id, tarefa) {
   const chave = String(id);
@@ -2541,6 +2582,57 @@ router.get('/vendas-gerais/acesso', exigirGerenciaOuDiretoria, (req, res) => {
   res.json({ permitido: true });
 });
 
+router.get('/transporte/acesso', exigirGerenciaOuDiretoria, (req, res) => {
+  res.json({ permitido: true });
+});
+
+router.get('/transporte/malhas/estados', exigirGerenciaOuDiretoria, async (req, res) => {
+  try {
+    const geojson = await malhasIbge.obterEstados();
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.json(geojson);
+  } catch (err) {
+    console.error('Erro ao carregar malha das UFs do IBGE:', err.message);
+    res.status(502).json({ erro: 'Não foi possível carregar a malha das UFs do IBGE.' });
+  }
+});
+
+router.get('/transporte/malhas/estados/:uf/municipios', exigirGerenciaOuDiretoria, async (req, res) => {
+  try {
+    const geojson = await malhasIbge.obterMunicipios(req.params.uf);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    res.json(geojson);
+  } catch (err) {
+    const status = err.statusCode || 502;
+    if (status >= 500) console.error('Erro ao carregar malha municipal do IBGE:', err.message);
+    res.status(status).json({ erro: status === 400 ? err.message : 'Não foi possível carregar a malha municipal do IBGE.' });
+  }
+});
+
+router.get('/transporte/dashboard', exigirGerenciaOuDiretoria, async (req, res) => {
+  try {
+    const periodo = validarPeriodoTransporte(req.query.dataInicial, req.query.dataFinal);
+    const filtros = normalizarFiltrosTransporte(req.query);
+    const ordenacao = String(req.query.ordenacao || 'frete').trim();
+    const inicio = process.hrtime.bigint();
+    const ctes = await carregarCtesTransportePorPeriodo(periodo);
+    const consultaMs = Number(process.hrtime.bigint() - inicio) / 1e6;
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({
+      periodo,
+      filtros,
+      consultaMs: Number(consultaMs.toFixed(1)),
+      ...consolidarDashboardTransporte(ctes, filtros, ordenacao)
+    });
+  } catch (err) {
+    const validacao = /data|periodo|filtro/i.test(String(err.message || ''));
+    console.error('Erro ao carregar painel de transporte:', err);
+    res.status(validacao ? 400 : 500).json({
+      erro: validacao ? err.message : 'Nao foi possivel carregar o painel de transporte.'
+    });
+  }
+});
+
 router.get('/vendas-gerais/empresas', exigirGerenciaOuDiretoria, async (req, res) => {
   try {
     const rows = await executeQuery(`
@@ -2789,19 +2881,25 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
     const intervalo = obterIntervaloDatas(req.query.dataInicial, req.query.dataFinal);
     const empresa = obterFiltroEmpresa(req.query.empresa);
     const pedidoBusca = obterNumeroInteiro(req.query.pedido);
+    const pedidosOrigemBusca = pedidoBusca && modo === 'saida'
+      ? await executeQuery(`
+          SELECT DISTINCT VAR_BUSCA.NUNOTAORIG
+          FROM TGFVAR VAR_BUSCA
+          JOIN TGFCAB NOTA_BUSCA
+            ON NOTA_BUSCA.NUNOTA = VAR_BUSCA.NUNOTA
+          WHERE NOTA_BUSCA.NUMNOTA = ${pedidoBusca}
+            AND NOTA_BUSCA.TIPMOV <> 'P'
+            AND VAR_BUSCA.NUNOTAORIG IS NOT NULL
+        `)
+      : [];
+    const numerosBusca = [...new Set([
+      pedidoBusca,
+      ...pedidosOrigemBusca.map((item) => obterNumeroInteiro(item.NUNOTAORIG)).filter(Boolean)
+    ].filter(Boolean))];
     const filtroBusca = pedidoBusca
       ? (modo === 'entrada'
         ? `(CAB.NUNOTA = ${pedidoBusca} OR CAB.NUMNOTA = ${pedidoBusca})`
-        : `(CAB.NUNOTA = ${pedidoBusca}
-          OR EXISTS (
-            SELECT 1
-            FROM TGFVAR VAR_BUSCA
-            JOIN TGFCAB NOTA_BUSCA
-              ON NOTA_BUSCA.NUNOTA = VAR_BUSCA.NUNOTA
-            WHERE VAR_BUSCA.NUNOTAORIG = CAB.NUNOTA
-              AND NOTA_BUSCA.NUMNOTA = ${pedidoBusca}
-              AND NOTA_BUSCA.TIPMOV <> 'P'
-          ))`)
+        : `(CAB.NUNOTA IN (${numerosBusca.join(', ')}) OR CAB.NUMNOTA = ${pedidoBusca})`)
       : `CAB.DTNEG >= TO_DATE('${intervalo.inicio}', 'YYYY-MM-DD')
         AND CAB.DTNEG < TO_DATE('${intervalo.fim}', 'YYYY-MM-DD') + 1
         AND (CAB.NUCONFATUAL IS NULL OR CONF.STATUS IN (${modo === 'entrada' ? "'A', 'D', 'F'" : "'A', 'F'"}))
@@ -2869,6 +2967,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         INNER JOIN TGFCAB NOTA
           ON NOTA.NUNOTA = VAR.NUNOTA
          AND NOTA.TIPMOV <> 'P'
+        ${pedidoBusca && modo === 'saida' ? `WHERE VAR.NUNOTAORIG IN (${numerosBusca.join(', ')})` : ''}
         GROUP BY VAR.NUNOTAORIG
       ) FAT
         ON FAT.NUNOTAORIG = CAB.NUNOTA
@@ -3180,6 +3279,43 @@ router.get('/fila-conferencia/entrada/produto-extra', async (req, res) => {
   } catch (err) {
     console.error('Erro ao localizar produto extra da conferencia:', err);
     res.status(500).json({ erro: 'Nao foi possivel consultar o produto no Sankhya.' });
+  }
+});
+
+router.get('/fila-conferencia/pedidos/:nunota/estimativa-frete', async (req, res) => {
+  try {
+    const nunota = obterNumeroInteiro(req.params.nunota);
+    if (!nunota) {
+      res.status(400).json({ erro: 'Pedido inválido para estimar o frete.' });
+      return;
+    }
+
+    const agora = Date.now();
+    const chaveCache = `${nunota}|${PERIODO_ESTIMATIVA_FRETE.inicio || 'movel'}|${PERIODO_ESTIMATIVA_FRETE.fim || 'movel'}`;
+    const emCache = cacheEstimativaFrete.get(chaveCache);
+    const promessa = emCache && emCache.expiraEm > agora
+      ? emCache.promessa
+      : executeQuery(montarSqlEstimativaFrete(nunota, PERIODO_ESTIMATIVA_FRETE)).then((linhas) => {
+        if (!linhas[0]) {
+          const erro = new Error('Pedido não encontrado para estimar o frete.');
+          erro.statusCode = 404;
+          throw erro;
+        }
+        return normalizarEstimativaFrete(linhas[0]);
+      });
+
+    if (!emCache || emCache.expiraEm <= agora) {
+      cacheEstimativaFrete.set(chaveCache, { promessa, expiraEm: agora + CACHE_ESTIMATIVA_FRETE_MS });
+      promessa.catch(() => cacheEstimativaFrete.delete(chaveCache));
+      if (cacheEstimativaFrete.size > 40) cacheEstimativaFrete.delete(cacheEstimativaFrete.keys().next().value);
+    }
+
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json(await promessa);
+  } catch (err) {
+    const status = err.statusCode || 500;
+    if (status >= 500) console.error('Erro ao calcular estimativa de frete:', err.message);
+    res.status(status).json({ erro: err.message || 'Não foi possível estimar o frete.' });
   }
 });
 

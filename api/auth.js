@@ -108,6 +108,7 @@ function montarPermissoesGrupos(grupos = []) {
   );
   return {
     vendasGerais: normalizados.has('GERENTE') || normalizados.has('DIRETORIA'),
+    transporte: normalizados.has('GERENTE') || normalizados.has('DIRETORIA'),
     relatorios: normalizados.has('DIRETORIA')
   };
 }

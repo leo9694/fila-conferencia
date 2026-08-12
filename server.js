@@ -52,6 +52,7 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use('/vendor/leaflet', express.static(path.join(__dirname, 'node_modules', 'leaflet', 'dist')));
 app.use(express.static(path.join(__dirname, 'frontend')));
 
 app.post('/api/auth/login', async (req, res) => {

@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   consolidarLeiturasEntrada,
+  consolidarDetalhesNativosEntrada,
   distribuirQuantidadeProporcional,
   distribuirValorProporcional,
   planejarControlesItensEntrada,
@@ -64,6 +65,45 @@ test('atribui sequencias exclusivas em conferencia maior que os detalhes existen
   assert.equal(plano.atribuicoes.length, 137);
   assert.equal(new Set(plano.atribuicoes.map((item) => item.seqConf)).size, 137);
   assert.deepEqual(plano.sequenciasObsoletas, []);
+});
+
+test('consolida linhas repetidas antes de gravar o detalhe nativo da conferencia', () => {
+  const detalhesRepetidos = [
+    {
+      CODPROD: 1066,
+      CONTROLE: '0017702530017070',
+      CODVOL: 'UN',
+      CODBARRA: '7896061734786',
+      QTDCONF: 20,
+      QTDCONFVOLPAD: 20
+    },
+    {
+      CODPROD: 1066,
+      CONTROLE: '0017702530017070',
+      CODVOL: 'UN',
+      CODBARRA: '7896061734786',
+      QTDCONF: 10,
+      QTDCONFVOLPAD: 10
+    }
+  ];
+
+  const consolidados = consolidarDetalhesNativosEntrada(detalhesRepetidos);
+  const plano = planejarSincronizacaoDetalhesEntrada([], detalhesRepetidos);
+
+  assert.deepEqual(consolidados, [{
+    CODPROD: 1066,
+    CONTROLE: '0017702530017070',
+    CODVOL: 'UN',
+    CODBARRA: '7896061734786',
+    QTDCONF: 30,
+    QTDCONFVOLPAD: 30
+  }]);
+  assert.equal(plano.atribuicoes.length, 1);
+  assert.equal(plano.atribuicoes[0].detalhe.QTDCONF, 30);
+  assert.equal(validarDetalhesConferenciaEntrada(detalhesRepetidos, [{
+    ...consolidados[0],
+    SEQCONF: 1
+  }]).valido, true);
 });
 
 test('valida quantidades e linhas gravadas antes da finalizacao', () => {

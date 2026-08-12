@@ -13,6 +13,8 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link rel="stylesheet" href="/home-dashboard.css?v=20260804-8">
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
+  <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/transporte-dashboard.css?v=20260810-3">
 
   <style>
     :root {
@@ -6989,7 +6991,9 @@
       border-radius: 14px;
       background: rgba(255, 255, 255, 0.96);
       box-shadow: 0 24px 70px rgba(16, 57, 66, 0.28);
-      overflow: hidden;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
     }
 
     .pedido-preview[hidden] {
@@ -7051,10 +7055,414 @@
       border-bottom: 1px solid rgba(18, 66, 75, 0.10);
     }
 
+    .pedido-preview-frete-estimado {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 10px 12px;
+      padding: 10px 12px;
+      border: 1px solid rgba(8, 127, 109, 0.20);
+      border-radius: 9px;
+      background: #f1fbf7;
+      color: #087f6d;
+    }
+
+    .pedido-preview-frete-estimado > svg {
+      width: 22px;
+      height: 22px;
+      flex: 0 0 auto;
+    }
+
+    .pedido-preview-frete-estimado span,
+    .pedido-preview-frete-estimado small,
+    .pedido-preview-frete-estimado strong {
+      display: block;
+    }
+
+    .pedido-preview-frete-copy {
+      min-width: 0;
+      flex: 1;
+    }
+
+    .pedido-preview-frete-estimado span {
+      font-size: 0.66rem;
+      font-weight: 900;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+    }
+
+    .pedido-preview-frete-valores {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 24px;
+      margin-top: 3px;
+    }
+
+    .pedido-preview-frete-valor-item small {
+      margin: 0;
+      color: #4b7280;
+      font-size: 0.6rem;
+      font-weight: 800;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .pedido-preview-frete-valor-item strong {
+      margin-top: 1px;
+      font-size: 1rem;
+    }
+
+    .pedido-preview-frete-faixa {
+      margin-top: 3px;
+      color: #4b7280;
+      font-size: 0.68rem;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .pedido-preview-frete-confianca {
+      display: inline-flex !important;
+      align-items: center;
+      width: fit-content;
+      margin-top: 4px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: #fff3d8;
+      color: #8b5900;
+      font-size: 0.58rem !important;
+      font-weight: 900 !important;
+      letter-spacing: 0.01em;
+      text-transform: none !important;
+    }
+
+    .pedido-preview-frete-confianca[data-confianca="alta"] {
+      background: #dff7e9;
+      color: #087f6d;
+    }
+
+    .pedido-preview-frete-confianca[data-confianca="média"] {
+      background: #e7f0ff;
+      color: #245fae;
+    }
+
+    .pedido-preview-frete-contexto {
+      margin-top: 2px;
+      color: var(--text-soft);
+      font-size: 0.73rem;
+      font-weight: 700;
+    }
+
     .pedido-preview-items {
       flex: 1;
       min-height: 220px;
       overflow: auto;
+    }
+
+    /* Painel detalhado de estimativa de frete. */
+    .pedido-preview-frete-estimado {
+      display: block;
+      margin: 10px 12px;
+      padding: 16px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, #fbfffd, #f1fbf7);
+      color: #113948;
+    }
+
+    .pedido-preview-frete-head {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .pedido-preview-frete-head > i,
+    .pedido-preview-frete-head > svg,
+    .pedido-preview-frete-icone,
+    .pedido-preview-frete-dado > i,
+    .pedido-preview-frete-dado > svg {
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      background: #e6f6f0;
+      color: #087f6d;
+    }
+
+    .pedido-preview-frete-head > i,
+    .pedido-preview-frete-head > svg {
+      width: 52px;
+      height: 52px;
+      box-sizing: border-box;
+      padding: 13px;
+    }
+
+    .pedido-preview-frete-icone { box-sizing: border-box; padding: 9px; }
+    .pedido-preview-frete-head > i svg,
+    .pedido-preview-frete-icone svg,
+    .pedido-preview-frete-dado > i svg { width: 23px; height: 23px; }
+
+    .pedido-preview-frete-head h3 {
+      margin: 0;
+      color: #064a43;
+      font-size: 1.3rem;
+      line-height: 1.1;
+    }
+
+    .pedido-preview-frete-head p {
+      margin: 4px 0 0;
+      color: #66778b;
+      font-size: 0.82rem;
+    }
+
+    .pedido-preview-frete-valores {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 14px;
+    }
+
+    .pedido-preview-frete-valor-item {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      column-gap: 12px;
+      align-items: center;
+      min-width: 0;
+      padding: 14px;
+      border: 1px solid rgba(18, 66, 75, 0.12);
+      border-radius: 13px;
+      background: rgba(255, 255, 255, 0.82);
+    }
+
+    .pedido-preview-frete-valor-item > div { min-width: 0; }
+
+    .pedido-preview-frete-valor-item small {
+      display: block;
+      margin: 0;
+      color: #4b7280;
+      font-size: 0.68rem;
+      font-weight: 850;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .pedido-preview-frete-valor-item strong {
+      display: block;
+      margin-top: 4px;
+      color: #087f6d;
+      font-size: clamp(1.25rem, 2.6vw, 1.85rem);
+      line-height: 1;
+    }
+
+    .pedido-preview-frete-faixa {
+      font-size: 0.75rem !important;
+      font-weight: 700 !important;
+      letter-spacing: 0 !important;
+      text-transform: none !important;
+      white-space: normal;
+    }
+
+    .pedido-preview-frete-confianca {
+      margin-top: 7px;
+      font-size: 0.68rem !important;
+    }
+
+    .pedido-preview-frete-contexto {
+      margin: 12px 0 0;
+      padding-top: 10px;
+      border-top: 1px solid rgba(18, 66, 75, 0.10);
+    }
+
+    .pedido-preview-frete-dados {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      margin-top: 12px;
+      border: 1px solid rgba(18, 66, 75, 0.10);
+      border-radius: 13px;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .pedido-preview-frete-dado {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      padding: 10px;
+      border-right: 1px solid rgba(18, 66, 75, 0.10);
+    }
+
+    .pedido-preview-frete-dado:last-child { border-right: 0; }
+    .pedido-preview-frete-dado > i,
+    .pedido-preview-frete-dado > svg {
+      width: 32px;
+      height: 32px;
+      box-sizing: border-box;
+      padding: 7px;
+    }
+    .pedido-preview-frete-dado > i svg { width: 17px; height: 17px; }
+    .pedido-preview-frete-dado strong,
+    .pedido-preview-frete-dado small { display: block; min-width: 0; }
+    .pedido-preview-frete-dado strong {
+      overflow: hidden;
+      color: #23414e;
+      font-size: 0.79rem;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .pedido-preview-frete-dado small {
+      margin-top: 2px;
+      color: #718297;
+      font-size: 0.65rem;
+      font-weight: 700;
+    }
+
+    @media (max-width: 760px) {
+      .pedido-preview-frete-estimado { padding: 12px; }
+      .pedido-preview-frete-head h3 { font-size: 1.08rem; }
+      .pedido-preview-frete-head p { font-size: 0.72rem; }
+      .pedido-preview-frete-valores { grid-template-columns: 1fr; gap: 8px; }
+      .pedido-preview-frete-valor-item { padding: 11px; }
+      .pedido-preview-frete-dados { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .pedido-preview-frete-dado:nth-child(2) { border-right: 0; }
+      .pedido-preview-frete-dado:nth-child(-n + 2) { border-bottom: 1px solid rgba(18, 66, 75, 0.10); }
+    }
+
+    /* O frete e um complemento do pedido: manter o painel compacto. */
+    .pedido-preview-frete-estimado {
+      margin: 8px 12px;
+      padding: 10px 12px;
+      border-radius: 12px;
+    }
+
+    .pedido-preview-frete-head { gap: 8px; }
+    .pedido-preview-frete-head > i,
+    .pedido-preview-frete-head > svg {
+      width: 36px;
+      height: 36px;
+      padding: 9px;
+    }
+    .pedido-preview-frete-head h3 { font-size: 1rem; }
+    .pedido-preview-frete-head p { margin-top: 1px; font-size: 0.69rem; }
+
+    .pedido-preview-frete-valores {
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .pedido-preview-frete-valor-item {
+      display: block;
+      padding: 8px 10px;
+      border-radius: 10px;
+    }
+
+    .pedido-preview-frete-icone { display: none; }
+    .pedido-preview-frete-valor-item small { font-size: 0.59rem; }
+    .pedido-preview-frete-valor-item strong {
+      margin-top: 2px;
+      font-size: 1.3rem;
+    }
+    .pedido-preview-frete-faixa { margin-top: 2px; font-size: 0.67rem !important; }
+    .pedido-preview-frete-confianca {
+      margin-top: 3px;
+      padding: 2px 5px;
+      font-size: 0.6rem !important;
+    }
+
+    .pedido-preview-frete-dados {
+      margin-top: 8px;
+      border-radius: 10px;
+    }
+    .pedido-preview-frete-dado { gap: 5px; padding: 6px; }
+    .pedido-preview-frete-dado > i,
+    .pedido-preview-frete-dado > svg {
+      width: 24px;
+      height: 24px;
+      padding: 5px;
+    }
+    .pedido-preview-frete-dado strong { font-size: 0.68rem; }
+    .pedido-preview-frete-dado small { font-size: 0.56rem; }
+    .pedido-preview-frete-contexto {
+      margin-top: 7px;
+      padding-top: 6px;
+      font-size: 0.64rem;
+    }
+
+    @media (max-width: 520px) {
+      .pedido-preview-frete-head p { display: none; }
+      .pedido-preview-frete-valores { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .pedido-preview-frete-valor-item { min-width: 0; padding: 7px; }
+      .pedido-preview-frete-valor-item strong { font-size: 1.08rem; }
+      .pedido-preview-frete-faixa { font-size: 0.59rem !important; }
+      .pedido-preview-frete-dados { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    /* Versao enxuta: o frete e informacao complementar do pedido. */
+    .pedido-preview-frete-estimado {
+      margin: 6px 12px;
+      padding: 7px 10px;
+      border-radius: 10px;
+    }
+    .pedido-preview-frete-head { gap: 6px; }
+    .pedido-preview-frete-head > i,
+    .pedido-preview-frete-head > svg {
+      width: 28px;
+      height: 28px;
+      padding: 7px;
+    }
+    .pedido-preview-frete-head h3 { font-size: 0.92rem; }
+    .pedido-preview-frete-head p { display: none; }
+    .pedido-preview-frete-valores { gap: 0; margin-top: 5px; }
+    .pedido-preview-frete-valor-item {
+      padding: 3px 8px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .pedido-preview-frete-valor-item + .pedido-preview-frete-valor-item {
+      border-left: 1px solid rgba(18, 66, 75, 0.14);
+    }
+    .pedido-preview-frete-valor-item small { font-size: 0.54rem; }
+    .pedido-preview-frete-valor-item strong {
+      margin-top: 1px;
+      font-size: 1.08rem;
+    }
+    .pedido-preview-frete-faixa {
+      margin-top: 1px;
+      font-size: 0.58rem !important;
+      line-height: 1.1;
+    }
+    .pedido-preview-frete-confianca {
+      margin-top: 2px;
+      padding: 1px 4px;
+      font-size: 0.54rem !important;
+    }
+    .pedido-preview-frete-dados {
+      margin-top: 5px;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+    }
+    .pedido-preview-frete-dado {
+      gap: 0;
+      padding: 2px 6px;
+      border-right: 0;
+    }
+    .pedido-preview-frete-dado > i,
+    .pedido-preview-frete-dado > svg { display: none; }
+    .pedido-preview-frete-dado strong { font-size: 0.62rem; }
+    .pedido-preview-frete-dado small { font-size: 0.52rem; }
+    .pedido-preview-frete-contexto {
+      margin-top: 4px;
+      padding-top: 4px;
+      font-size: 0.57rem;
+      line-height: 1.15;
+    }
+    @media (max-width: 520px) {
+      .pedido-preview-frete-valor-item { padding: 3px 5px; }
+      .pedido-preview-frete-valor-item strong { font-size: 0.94rem; }
+      .pedido-preview-frete-faixa { font-size: 0.53rem !important; }
+      .pedido-preview-frete-dado { padding: 2px 4px; }
     }
 
     .separacao-screen {
@@ -9348,11 +9756,25 @@
       .pedido-preview {
         align-items: stretch;
         padding: 8px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-y;
       }
 
       .pedido-preview-dialog {
-        max-height: calc(100vh - 16px);
+        height: calc(100dvh - 16px);
+        max-height: none;
+        min-height: 0;
         border-radius: 12px;
+        overflow-y: scroll;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-y;
+      }
+
+      .pedido-preview-items {
+        flex: 0 0 auto;
+        min-height: 240px;
+        overflow: visible;
       }
 
       .pedido-preview-head {
@@ -10465,6 +10887,9 @@
           <button class="home-dashboard-nav-item" id="home-nav-relatorios" type="button" data-home-target="abrir-relatorios" title="Relatórios" hidden>
             <i data-lucide="file-spreadsheet" aria-hidden="true"></i><span>Relatórios</span>
           </button>
+          <button class="home-dashboard-nav-item" id="home-nav-transporte" type="button" data-home-target="abrir-transporte" title="Transporte" hidden>
+            <i data-lucide="map-pinned" aria-hidden="true"></i><span>Transporte</span>
+          </button>
         </nav>
 
         <div class="home-dashboard-sidebar-footer">
@@ -11184,6 +11609,43 @@
                 </div>
               </div>
 
+              <div class="pedido-preview-frete-estimado" id="pedido-preview-frete-estimado" hidden>
+                <div class="pedido-preview-frete-head">
+                  <i data-lucide="truck" aria-hidden="true"></i>
+                  <div>
+                    <h3>Frete aproximado</h3>
+                    <p>Estimativa sujeita a variações conforme origem, transportadora e faixa de peso.</p>
+                  </div>
+                </div>
+                <div class="pedido-preview-frete-valores">
+                  <section class="pedido-preview-frete-valor-item">
+                    <i class="pedido-preview-frete-icone" data-lucide="weight" aria-hidden="true"></i>
+                    <div>
+                      <small>Por peso</small>
+                      <strong id="pedido-preview-frete-valor">Consultando histórico…</strong>
+                      <small class="pedido-preview-frete-faixa" id="pedido-preview-frete-faixa-peso"></small>
+                      <span class="pedido-preview-frete-confianca" id="pedido-preview-frete-confianca-peso"></span>
+                    </div>
+                  </section>
+                  <section class="pedido-preview-frete-valor-item">
+                    <i class="pedido-preview-frete-icone" data-lucide="file-text" aria-hidden="true"></i>
+                    <div>
+                      <small>Por valor do pedido</small>
+                      <strong id="pedido-preview-frete-valor-pedido">Consultando histórico…</strong>
+                      <small class="pedido-preview-frete-faixa" id="pedido-preview-frete-faixa-valor"></small>
+                      <span class="pedido-preview-frete-confianca" id="pedido-preview-frete-confianca-valor"></span>
+                    </div>
+                  </section>
+                </div>
+                <div class="pedido-preview-frete-dados">
+                  <div class="pedido-preview-frete-dado"><i data-lucide="tag" aria-hidden="true"></i><div><strong id="pedido-preview-frete-custo-kg">-</strong><small>Custo por kg</small></div></div>
+                  <div class="pedido-preview-frete-dado"><i data-lucide="pie-chart" aria-hidden="true"></i><div><strong id="pedido-preview-frete-percentual">-</strong><small>Representatividade</small></div></div>
+                  <div class="pedido-preview-frete-dado"><i data-lucide="weight" aria-hidden="true"></i><div><strong id="pedido-preview-frete-peso">-</strong><small>Peso total</small></div></div>
+                  <div class="pedido-preview-frete-dado"><i data-lucide="map-pin" aria-hidden="true"></i><div><strong id="pedido-preview-frete-destino">-</strong><small>Local de entrega</small></div></div>
+                </div>
+                <small class="pedido-preview-frete-contexto" id="pedido-preview-frete-meta"></small>
+              </div>
+
               <div class="documentos-fiscais-panel" id="pedido-preview-documentos" hidden></div>
 
               <div class="pedido-preview-items" id="pedido-preview-itens-lista"></div>
@@ -11870,6 +12332,74 @@
     </main>
   </section>
 
+  <section class="screen transporte-dashboard-screen" id="transporte-screen">
+    <main class="transporte-page">
+      <header class="transporte-heading">
+        <div>
+          <div class="home-kicker">Inteligência logística</div>
+          <h1>Transporte</h1>
+          <p id="transporte-periodo">Analise custos de frete por destino e transportadora.</p>
+        </div>
+        <div class="transporte-heading-actions">
+          <span class="transporte-access"><i data-lucide="shield-check" aria-hidden="true"></i>Gerência e Diretoria</span>
+          <button class="btn-back" id="voltar-home-transporte" type="button"><i data-lucide="arrow-left" aria-hidden="true"></i><span>Voltar</span></button>
+        </div>
+      </header>
+
+      <form class="transporte-filters" id="transporte-form">
+        <label><span>Data inicial</span><input id="transporte-data-inicial" type="date" required></label>
+        <label><span>Data final</span><input id="transporte-data-final" type="date" required></label>
+        <label><span>Transportadora</span><select id="transporte-transportadora"><option value="">Todas as transportadoras</option></select></label>
+        <label><span>Empresa</span><select id="transporte-empresa"><option value="">Todas as empresas</option></select></label>
+        <label><span>Estado</span><select id="transporte-estado"><option value="">Todos os estados</option></select></label>
+        <label><span>Cidade</span><select id="transporte-cidade"><option value="">Todas as cidades</option></select></label>
+        <button class="transporte-refresh" id="transporte-atualizar" type="submit"><i data-lucide="refresh-cw" aria-hidden="true"></i><span>Atualizar</span></button>
+      </form>
+      <div class="transporte-status" id="transporte-status" role="status" aria-live="polite"></div>
+
+      <section class="transporte-kpis" aria-label="Indicadores de transporte">
+        <article><i class="is-green" data-lucide="circle-dollar-sign"></i><div><small>Frete total</small><strong id="transporte-kpi-frete">—</strong></div></article>
+        <article><i class="is-blue" data-lucide="file-text"></i><div><small>CT-es</small><strong id="transporte-kpi-ctes">—</strong></div></article>
+        <article><i class="is-purple" data-lucide="receipt-text"></i><div><small>Pedidos transportados</small><strong id="transporte-kpi-pedidos">—</strong></div></article>
+        <article><i class="is-orange" data-lucide="weight"></i><div><small>Peso total</small><strong id="transporte-kpi-peso">—</strong></div></article>
+        <article><i class="is-green" data-lucide="boxes"></i><div><small>Volumes</small><strong id="transporte-kpi-volumes">—</strong></div></article>
+        <article><i class="is-blue" data-lucide="calculator"></i><div><small>Frete médio</small><strong id="transporte-kpi-medio">—</strong></div></article>
+        <article><i class="is-orange" data-lucide="percent"></i><div><small>Frete / pedidos</small><strong id="transporte-kpi-percentual">—</strong></div></article>
+      </section>
+
+      <section class="transporte-grid">
+        <article class="transporte-panel transporte-map-panel">
+          <header><div><span>Mapa de fretes</span><h2>Brasil por estado</h2></div><label class="transporte-metric"><span>Métrica</span><select id="transporte-metrica-mapa"><option value="frete">Valor total do frete</option><option value="percentual">Frete sobre pedidos</option></select></label></header>
+          <div class="transporte-map-legend"><i></i><span>Menor custo</span><b></b><span>Maior custo</span></div>
+          <nav class="transporte-map-breadcrumb" id="transporte-mapa-navegacao" aria-label="Navegação do mapa"></nav>
+          <div class="transporte-map" id="transporte-mapa" aria-label="Mapa do Brasil por estado"></div>
+          <p class="transporte-map-help">Malha territorial do IBGE. Passe o mouse para ver os indicadores e clique em uma UF para detalhar os municípios.</p>
+        </article>
+
+        <aside class="transporte-panel transporte-cities-panel" id="transporte-cidades-painel">
+          <header><div><span>Destinos</span><h2 id="transporte-cidades-titulo">Cidades por estado</h2></div><span class="transporte-panel-badge" id="transporte-cidades-total">—</span></header>
+          <div class="transporte-city-list" id="transporte-lista-cidades"></div>
+        </aside>
+
+        <article class="transporte-panel transporte-ranking-panel">
+          <header><div><span>Parceiros logísticos</span><h2>Ranking de transportadoras</h2></div><label class="transporte-sort"><span>Ordenar</span><select id="transporte-ordenacao"><option value="frete">Maior frete</option><option value="ctes">Mais CT-es</option><option value="peso">Maior peso</option><option value="medio">Maior frete médio</option><option value="percentual">Maior % frete/pedidos</option></select></label></header>
+          <div class="transporte-ranking" id="transporte-ranking"></div>
+        </article>
+
+        <article class="transporte-panel transporte-comparison-panel">
+          <header><div><span>Comparativo</span><h2>Comparar transportadoras</h2></div></header>
+          <label class="transporte-compare-label">Selecione duas ou mais transportadoras<select id="transporte-comparar" multiple size="5" aria-label="Transportadoras para comparar"></select></label>
+          <div class="transporte-comparison" id="transporte-comparacao"></div>
+        </article>
+
+        <article class="transporte-panel transporte-details-panel">
+          <header><div><span>Detalhamento</span><h2 id="transporte-detalhes-titulo">CT-es do período</h2></div><span class="transporte-panel-badge" id="transporte-detalhes-total">—</span></header>
+          <div class="transporte-table-wrap"><table class="transporte-table"><thead><tr><th>CT-e</th><th>Emissão</th><th>Transportadora</th><th>Destinatário</th><th>Notas</th><th>Pedido</th><th>Peso</th><th>Volumes</th><th>Frete</th></tr></thead><tbody id="transporte-tabela-detalhes"></tbody></table></div>
+        </article>
+      </section>
+    </main>
+  </section>
+
   <section class="screen acompanhamento-screen" id="acompanhamento-screen" aria-hidden="true"></section>
 
   <section class="screen conferencia-screen acompanhamento-painel-screen" id="conferencia-screen">
@@ -12043,6 +12573,8 @@
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <script src="asyncRefresh.js?v=20260601-2"></script>
   <script src="vendas-dashboard.js?v=20260805-1"></script>
+  <script src="/vendor/leaflet/leaflet.js"></script>
+  <script src="transporte-dashboard.js?v=20260810-3"></script>
   <script src="app.js?v=20260805-5"></script>
 </body>
 </html>

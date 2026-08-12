@@ -45,6 +45,7 @@ const atualizacaoContatoScreen = document.getElementById('atualizacao-contato-sc
 const estoqueContagemScreen = document.getElementById('estoque-contagem-screen');
 const relatoriosScreen = document.getElementById('relatorios-screen');
 const vendasGeraisScreen = document.getElementById('vendas-gerais-screen');
+const transporteScreen = document.getElementById('transporte-screen');
 const filaContexto = document.getElementById('fila-contexto');
 const inputDataInicial = document.getElementById('data-inicial');
 const inputDataFinal = document.getElementById('data-final');
@@ -65,7 +66,9 @@ const botaoVoltarHomeContagemEstoque = document.getElementById('voltar-home-cont
 const botaoVoltarHomeRelatorios = document.getElementById('voltar-home-relatorios');
 const botaoMenuRelatorios = document.getElementById('home-nav-relatorios');
 const botaoMenuVendasGerais = document.getElementById('home-nav-vendas-gerais');
+const botaoMenuTransporte = document.getElementById('home-nav-transporte');
 const botaoVoltarHomeVendasGerais = document.getElementById('voltar-home-vendas-gerais');
+const botaoVoltarHomeTransporte = document.getElementById('voltar-home-transporte');
 const relatorioCtesForm = document.getElementById('relatorio-ctes-form');
 const relatorioCtesDataInicial = document.getElementById('relatorio-ctes-data-inicial');
 const relatorioCtesDataFinal = document.getElementById('relatorio-ctes-data-final');
@@ -224,6 +227,18 @@ const pedidoPreviewUnidades = document.getElementById('pedido-preview-unidades')
 const pedidoPreviewVolumesCard = document.getElementById('pedido-preview-volumes-card');
 const pedidoPreviewVolumes = document.getElementById('pedido-preview-volumes');
 const pedidoPreviewStatus = document.getElementById('pedido-preview-status');
+const pedidoPreviewFreteEstimado = document.getElementById('pedido-preview-frete-estimado');
+const pedidoPreviewFreteValor = document.getElementById('pedido-preview-frete-valor');
+const pedidoPreviewFreteValorPedido = document.getElementById('pedido-preview-frete-valor-pedido');
+const pedidoPreviewFreteFaixaPeso = document.getElementById('pedido-preview-frete-faixa-peso');
+const pedidoPreviewFreteFaixaValor = document.getElementById('pedido-preview-frete-faixa-valor');
+const pedidoPreviewFreteConfiancaPeso = document.getElementById('pedido-preview-frete-confianca-peso');
+const pedidoPreviewFreteConfiancaValor = document.getElementById('pedido-preview-frete-confianca-valor');
+const pedidoPreviewFreteCustoKg = document.getElementById('pedido-preview-frete-custo-kg');
+const pedidoPreviewFretePercentual = document.getElementById('pedido-preview-frete-percentual');
+const pedidoPreviewFretePeso = document.getElementById('pedido-preview-frete-peso');
+const pedidoPreviewFreteDestino = document.getElementById('pedido-preview-frete-destino');
+const pedidoPreviewFreteMeta = document.getElementById('pedido-preview-frete-meta');
 const pedidoPreviewItensLista = document.getElementById('pedido-preview-itens-lista');
 const pedidoPreviewDocumentos = document.getElementById('pedido-preview-documentos');
 const guiaFaseModal = document.getElementById('guia-fase-modal');
@@ -834,7 +849,8 @@ function atualizarItemAtivoNavegacaoGlobal(tela) {
       || (tela === 'contato' && alvo === 'abrir-atualizacao-contato')
       || (tela === 'contagem' && alvo === 'abrir-contagem-estoque')
       || (tela === 'vendas' && alvo === 'abrir-vendas-gerais')
-      || (tela === 'relatorios' && alvo === 'abrir-relatorios');
+      || (tela === 'relatorios' && alvo === 'abrir-relatorios')
+      || (tela === 'transporte' && alvo === 'abrir-transporte');
     item.classList.toggle('is-active', ativo);
     if (ativo) item.setAttribute('aria-current', 'page');
     else item.removeAttribute('aria-current');
@@ -842,12 +858,14 @@ function atualizarItemAtivoNavegacaoGlobal(tela) {
 }
 
 function mostrarNavegacaoGlobal(tela) {
+  if (tela !== 'transporte') transporteScreen?.classList.remove('active');
   document.body.classList.add('has-global-sidebar');
   homeDashboardSidebar.hidden = false;
   atualizarItemAtivoNavegacaoGlobal(tela);
 }
 
 function ocultarNavegacaoGlobal() {
+  transporteScreen?.classList.remove('active');
   fecharSidebarHome();
   document.body.classList.remove('has-global-sidebar');
   homeDashboardSidebar.hidden = true;
@@ -866,6 +884,10 @@ function executarDestinoHome(id) {
   }
   if (id === 'abrir-relatorios') {
     abrirRelatorios();
+    return;
+  }
+  if (id === 'abrir-transporte') {
+    abrirTransporte();
     return;
   }
   document.getElementById(id)?.click();
@@ -1078,6 +1100,7 @@ async function carregarResumoHome(forcar = false) {
 
 function mostrarLogin(mensagem = '') {
   window.vendasDashboardController?.limparSessao();
+  window.transporteDashboardController?.limparSessao();
   usuarioLogado = null;
   ocultarNavegacaoGlobal();
   limparNavegacaoFilaSalva();
@@ -1091,6 +1114,7 @@ function mostrarLogin(mensagem = '') {
   estoqueContagemScreen.classList.remove('active');
   relatoriosScreen.classList.remove('active');
   vendasGeraisScreen.classList.remove('active');
+  transporteScreen.classList.remove('active');
   loginStatus.textContent = mensagem;
   atualizarUsuarioLogadoNaTela();
 
@@ -1784,6 +1808,44 @@ function mostrarVendasGerais() {
   relatoriosScreen.classList.remove('active');
   vendasGeraisScreen.classList.add('active');
   mostrarNavegacaoGlobal('vendas');
+}
+
+function mostrarTransporte() {
+  if (!usuarioLogado || !window.transporteDashboardController?.permitido) {
+    mostrarHome();
+    return;
+  }
+
+  loginScreen.classList.remove('active');
+  homeScreen.classList.remove('active');
+  conferenciaScreen.classList.remove('active');
+  acompanhamentoScreen.classList.remove('active');
+  filaScreen.classList.remove('active');
+  consultaProdutosScreen.classList.remove('active');
+  atualizacaoContatoScreen.classList.remove('active');
+  estoqueContagemScreen.classList.remove('active');
+  relatoriosScreen.classList.remove('active');
+  vendasGeraisScreen.classList.remove('active');
+  transporteScreen.classList.add('active');
+  mostrarNavegacaoGlobal('transporte');
+}
+
+async function abrirTransporte() {
+  const controller = window.transporteDashboardController;
+  if (!controller) return;
+  if (!controller.permitido && !await controller.verificarAcesso()) {
+    fecharSidebarHome();
+    return;
+  }
+
+  mostrarHomeESuspenderRefresh();
+  mostrarTransporte();
+  history.pushState({ tela: 'transporte' }, '', '#transporte');
+  try {
+    await controller.preparar();
+  } catch (error) {
+    console.error('Erro ao abrir transporte:', error);
+  }
 }
 
 async function abrirVendasGerais() {
@@ -8485,6 +8547,104 @@ async function restaurarNavegacaoFilaSalva() {
   return true;
 }
 
+function exibirFaixaFrete(elemento, intervalo) {
+  if (!elemento) return;
+  elemento.textContent = intervalo
+    ? `Faixa: ${formatarMoeda(intervalo.minimo)} a ${formatarMoeda(intervalo.maximo)} (±${intervalo.margemPercentual}%)`
+    : '';
+}
+
+function exibirConfiancaFrete(elemento, confianca) {
+  if (!elemento) return;
+  if (!confianca || confianca === 'indisponível') {
+    elemento.textContent = '';
+    elemento.removeAttribute('data-confianca');
+    return;
+  }
+  elemento.textContent = `${confianca.charAt(0).toUpperCase()}${confianca.slice(1)} confiança`;
+  elemento.dataset.confianca = confianca;
+}
+
+function preencherDetalhesFrete(estimativa) {
+  if (!estimativa) {
+    if (pedidoPreviewFreteCustoKg) pedidoPreviewFreteCustoKg.textContent = '-';
+    if (pedidoPreviewFretePercentual) pedidoPreviewFretePercentual.textContent = '-';
+    if (pedidoPreviewFretePeso) pedidoPreviewFretePeso.textContent = '-';
+    if (pedidoPreviewFreteDestino) pedidoPreviewFreteDestino.textContent = '-';
+    return;
+  }
+  const percentual = Number(estimativa.percentualFreteSobrePedido);
+  if (pedidoPreviewFreteCustoKg) {
+    pedidoPreviewFreteCustoKg.textContent = estimativa.fretePorKg === null
+      ? 'Sem base'
+      : `${formatarMoeda(estimativa.fretePorKg)}/kg`;
+  }
+  if (pedidoPreviewFretePercentual) {
+    pedidoPreviewFretePercentual.textContent = Number.isFinite(percentual)
+      ? `${(percentual * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% do pedido`
+      : 'Sem base';
+  }
+  if (pedidoPreviewFretePeso) {
+    pedidoPreviewFretePeso.textContent = `${formatarQuantidade(estimativa.pesoPedido)} kg`;
+  }
+  if (pedidoPreviewFreteDestino) {
+    pedidoPreviewFreteDestino.textContent = estimativa.cidade
+      ? `${estimativa.cidade}${estimativa.uf ? ` - ${estimativa.uf}` : ''}`
+      : 'Não informado';
+  }
+}
+
+async function carregarEstimativaFretePedido(pedido) {
+  if (!pedidoPreviewFreteEstimado || !pedidoPreviewFreteValor || !pedidoPreviewFreteValorPedido || !pedidoPreviewFreteMeta) return;
+  if (filaModoConferencia !== 'saida' || !pedido?.NUNOTA) {
+    pedidoPreviewFreteEstimado.hidden = true;
+    return;
+  }
+
+  pedidoPreviewFreteEstimado.hidden = false;
+  pedidoPreviewFreteValor.textContent = 'Calculando…';
+  pedidoPreviewFreteValorPedido.textContent = 'Calculando…';
+  exibirFaixaFrete(pedidoPreviewFreteFaixaPeso, null);
+  exibirFaixaFrete(pedidoPreviewFreteFaixaValor, null);
+  exibirConfiancaFrete(pedidoPreviewFreteConfiancaPeso, null);
+  exibirConfiancaFrete(pedidoPreviewFreteConfiancaValor, null);
+  preencherDetalhesFrete(null);
+  pedidoPreviewFreteMeta.textContent = 'Média dos CT-es importados nos últimos 3 meses.';
+  try {
+    const resposta = await fetch(`/api/fila-conferencia/pedidos/${pedido.NUNOTA}/estimativa-frete`);
+    const estimativa = await resposta.json().catch(() => ({}));
+    if (!resposta.ok) throw new Error(estimativa.erro || 'Não foi possível estimar o frete.');
+    if (Number(pedidoPreviewSelecionado?.NUNOTA) !== Number(pedido.NUNOTA)) return;
+
+    pedidoPreviewFreteValor.textContent = estimativa.freteEstimado === null
+      ? 'Sem base suficiente'
+      : formatarMoeda(estimativa.freteEstimado);
+    pedidoPreviewFreteValorPedido.textContent = estimativa.freteEstimadoPorValor === null
+      ? 'Sem base suficiente'
+      : formatarMoeda(estimativa.freteEstimadoPorValor);
+    exibirFaixaFrete(pedidoPreviewFreteFaixaPeso, estimativa.intervaloFretePorPeso);
+    exibirFaixaFrete(pedidoPreviewFreteFaixaValor, estimativa.intervaloFretePorValor);
+    exibirConfiancaFrete(pedidoPreviewFreteConfiancaPeso, estimativa.confianca);
+    exibirConfiancaFrete(pedidoPreviewFreteConfiancaValor, estimativa.confianca);
+    preencherDetalhesFrete(estimativa);
+
+    const percentualHistorico = estimativa.percentualFreteSobrePedido === null
+      ? 'sem base por valor'
+      : `${(estimativa.percentualFreteSobrePedido * 100).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}% do pedido`;
+    pedidoPreviewFreteMeta.textContent = `${estimativa.fretePorKg === null ? 'sem base por peso' : `${formatarMoeda(estimativa.fretePorKg)}/kg`} · ${percentualHistorico} · ${formatarQuantidade(estimativa.pesoPedido)} kg · Destino: ${estimativa.cidade || '<SEM DESCRIÇÃO>'}${estimativa.uf ? ` - ${estimativa.uf}` : ''} · base de ${formatarQuantidade(estimativa.ctesHistorico)} CT-es (${estimativa.fonteHistorico}; confiança ${estimativa.confianca}).`;
+  } catch (error) {
+    if (Number(pedidoPreviewSelecionado?.NUNOTA) !== Number(pedido.NUNOTA)) return;
+    pedidoPreviewFreteValor.textContent = 'Indisponível';
+    pedidoPreviewFreteValorPedido.textContent = 'Indisponível';
+    exibirFaixaFrete(pedidoPreviewFreteFaixaPeso, null);
+    exibirFaixaFrete(pedidoPreviewFreteFaixaValor, null);
+    exibirConfiancaFrete(pedidoPreviewFreteConfiancaPeso, null);
+    exibirConfiancaFrete(pedidoPreviewFreteConfiancaValor, null);
+    preencherDetalhesFrete(null);
+    pedidoPreviewFreteMeta.textContent = error.message;
+  }
+}
+
 async function abrirPreviewPedido(pedido) {
   if (!temUsuarioLogado()) {
     scanStatus.textContent = 'Entre no sistema antes de visualizar o pedido.';
@@ -8538,6 +8698,7 @@ async function abrirPreviewPedido(pedido) {
   renderizarEstadoVazio(pedidoPreviewItensLista, 'Carregando itens do pedido...');
   atualizarIcones();
   pedidoPreview.hidden = false;
+  carregarEstimativaFretePedido(pedido);
 
   try {
     const res = await fetch(`/api/fila-conferencia/pedidos/${pedido.NUNOTA}/itens`);
@@ -9447,7 +9608,8 @@ async function prepararSessaoAutenticada(usuario) {
     carregarEmpresas(),
     verificarDisponibilidadeContagemEstoque(),
     verificarAcessoRelatorios(),
-    window.vendasDashboardController?.verificarAcesso(usuario)
+    window.vendasDashboardController?.verificarAcesso(usuario),
+    window.transporteDashboardController?.verificarAcesso(usuario)
   ];
   void Promise.allSettled(preparacoesAuxiliares).then((resultados) => {
     resultados.forEach((resultado) => {
@@ -9505,6 +9667,18 @@ async function prepararSessaoAutenticada(usuario) {
     mostrarVendasGerais();
     await window.vendasDashboardController.preparar().catch((error) => console.error('Erro ao restaurar vendas gerais:', error));
     history.replaceState({ tela: 'vendas-gerais' }, '', '#vendas-gerais');
+    return;
+  }
+
+  if (window.location.hash === '#transporte') {
+    if (!window.transporteDashboardController?.permitido) {
+      mostrarHome();
+      history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);
+      return;
+    }
+    mostrarTransporte();
+    await window.transporteDashboardController.preparar().catch((error) => console.error('Erro ao restaurar transporte:', error));
+    history.replaceState({ tela: 'transporte' }, '', '#transporte');
     return;
   }
 
@@ -9567,6 +9741,7 @@ async function encerrarSessao() {
 
   filaPedidos = [];
   window.vendasDashboardController?.limparSessao();
+  window.transporteDashboardController?.limparSessao();
   limparPedidoConferencia();
   mostrarLogin('Sessao encerrada.');
   history.replaceState({ tela: 'login' }, '', window.location.pathname + window.location.search);
@@ -9699,6 +9874,7 @@ botaoVoltarHomeContato.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeContagemEstoque.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeRelatorios?.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarHomeVendasGerais?.addEventListener('click', voltarParaHomeViaHistorico);
+botaoVoltarHomeTransporte?.addEventListener('click', voltarParaHomeViaHistorico);
 botaoVoltarCopiasEstoque.addEventListener('click', () => {
   mostrarSelecaoContagemEstoque();
   carregarListaContagensEstoque();
@@ -10430,6 +10606,18 @@ window.addEventListener('popstate', (event) => {
     mostrarHomeESuspenderRefresh();
     mostrarVendasGerais();
     window.vendasDashboardController.preparar().catch((error) => console.error('Erro ao restaurar vendas gerais:', error));
+    return;
+  }
+
+  if (state?.tela === 'transporte' || window.location.hash === '#transporte') {
+    if (!window.transporteDashboardController?.permitido) {
+      mostrarHomeESuspenderRefresh();
+      history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);
+      return;
+    }
+    mostrarHomeESuspenderRefresh();
+    mostrarTransporte();
+    window.transporteDashboardController.preparar().catch((error) => console.error('Erro ao restaurar transporte:', error));
     return;
   }
 

@@ -16,6 +16,28 @@ function chaveDetalheEntrada(detalhe) {
   ].join('|');
 }
 
+function consolidarDetalhesNativosEntrada(detalhes = []) {
+  const consolidados = new Map();
+
+  for (const detalhe of detalhes) {
+    const chave = chaveDetalheEntrada(detalhe);
+    const existente = consolidados.get(chave);
+    if (existente) {
+      existente.QTDCONF += numero(detalhe?.QTDCONF);
+      existente.QTDCONFVOLPAD += numero(detalhe?.QTDCONFVOLPAD);
+      continue;
+    }
+
+    consolidados.set(chave, {
+      ...detalhe,
+      QTDCONF: numero(detalhe?.QTDCONF),
+      QTDCONFVOLPAD: numero(detalhe?.QTDCONFVOLPAD)
+    });
+  }
+
+  return [...consolidados.values()];
+}
+
 function planejarSincronizacaoDetalhesEntrada(detalhesExistentes, detalhesDesejados) {
   const existentes = [...detalhesExistentes]
     .map((detalhe) => ({ ...detalhe, SEQCONF: numero(detalhe.SEQCONF) }))
@@ -29,8 +51,9 @@ function planejarSincronizacaoDetalhesEntrada(detalhesExistentes, detalhesDeseja
     existentesPorChave.set(chave, lista);
   }
 
+  const desejadosConsolidados = consolidarDetalhesNativosEntrada(detalhesDesejados);
   const sequenciasUsadas = new Set();
-  const atribuicoes = detalhesDesejados.map((detalhe) => {
+  const atribuicoes = desejadosConsolidados.map((detalhe) => {
     const correspondente = (existentesPorChave.get(chaveDetalheEntrada(detalhe)) || [])
       .find((existente) => !sequenciasUsadas.has(existente.SEQCONF));
 
@@ -61,6 +84,7 @@ function planejarSincronizacaoDetalhesEntrada(detalhesExistentes, detalhesDeseja
 
 function validarDetalhesConferenciaEntrada(detalhesDesejados, detalhesGravados) {
   const erros = [];
+  const desejadosConsolidados = consolidarDetalhesNativosEntrada(detalhesDesejados);
   const gravadosPorChave = new Map();
   const detalhesAtivos = detalhesGravados.filter((detalhe) => (
     Math.abs(numero(detalhe?.QTDCONF)) > 0.0001
@@ -74,11 +98,11 @@ function validarDetalhesConferenciaEntrada(detalhesDesejados, detalhesGravados) 
     gravadosPorChave.set(chave, lista);
   }
 
-  if (detalhesAtivos.length !== detalhesDesejados.length) {
-    erros.push(`quantidade de linhas esperada ${detalhesDesejados.length}, gravada ${detalhesAtivos.length}`);
+  if (detalhesAtivos.length !== desejadosConsolidados.length) {
+    erros.push(`quantidade de linhas esperada ${desejadosConsolidados.length}, gravada ${detalhesAtivos.length}`);
   }
 
-  for (const desejado of detalhesDesejados) {
+  for (const desejado of desejadosConsolidados) {
     const chave = chaveDetalheEntrada(desejado);
     const correspondentes = gravadosPorChave.get(chave) || [];
     if (correspondentes.length !== 1) {
@@ -95,7 +119,7 @@ function validarDetalhesConferenciaEntrada(detalhesDesejados, detalhesGravados) 
     }
   }
 
-  const chavesDesejadas = new Set(detalhesDesejados.map(chaveDetalheEntrada));
+  const chavesDesejadas = new Set(desejadosConsolidados.map(chaveDetalheEntrada));
   for (const chave of gravadosPorChave.keys()) {
     if (!chavesDesejadas.has(chave)) erros.push(`detalhe inesperado ${chave}`);
   }
@@ -398,6 +422,7 @@ function retornoPossuiDocumentosAuxiliares(resultado) {
 }
 
 module.exports = {
+  consolidarDetalhesNativosEntrada,
   consolidarLeiturasEntrada,
   distribuirQuantidadeProporcional,
   distribuirValorProporcional,

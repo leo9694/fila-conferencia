@@ -1,0 +1,252 @@
+/*
+  ATENCAO: este script altera TGFPAR.CODTIPPARC.
+
+  Protecoes:
+  1. Considera somente perfis TGFTPP ANALITICO='S' e ATIVO='S'.
+  2. Atualiza somente parceiros cujo CODTIPPARC continua nulo/zero.
+  3. Atualiza somente sugestoes com um unico vencedor na maior prioridade.
+  4. Casos sem correspondencia ou ambiguos permanecem inalterados.
+  5. Aplica todas as sugestoes unicas, inclusive as de prioridade media.
+  6. Nao executa COMMIT automaticamente.
+
+  Antes de executar este MERGE, rode e revise:
+  consulta_sugestao_perfil_parceiros_v2.sql
+*/
+
+MERGE INTO TGFPAR DESTINO
+USING (
+    WITH perfis_validos AS (
+        SELECT CODTIPPARC, DESCRTIPPARC
+        FROM TGFTPP
+        WHERE ANALITICO = 'S'
+          AND ATIVO = 'S'
+          AND CODTIPPARC <> 0
+    ),
+
+    regras_base AS (
+        /* AGROPECUARIAS: raizes encontradas em qualquer trecho. */
+        SELECT 10101009 CODTIPPARC, 180 PRIORIDADE,
+               '(AGROPET|AGRO PET|AGROVET|AGRO VET|AGROVETERINARIA|AGRO VETERINARIA)' EXPRESSAO
+        FROM DUAL
+        UNION ALL
+        SELECT 10101009, 160,
+               '(AGROPEC|AGROBOI|AGROCAMPO|AGRO CAMPO|AGRONEGOC|CASA AGROPECUARIA|CENTRO AGROPECUARIO|CASA DA LAVOURA|CASA DA ROCA|CASA RURAL|CASA DO CAMPO|PRODUTOS AGROPECUARIOS|IMPLEMENTOS AGRICOLAS|MAQUINAS AGRICOLAS)'
+        FROM DUAL
+        UNION ALL
+        SELECT 10101009, 120,
+               '(AGRO|AGRICOL)'
+        FROM DUAL
+
+        /* CACA E PESCA */
+        UNION ALL
+        SELECT 10101012, 160,
+               '(CACA E PESCA|CACAPESCA|CACA PESCA|CASA DE CACA E PESCA|ARTIGOS PARA CACA E PESCA|LOJA DE CACA E PESCA|ARTIGOS DE PESCA|EQUIPAMENTOS DE PESCA|MATERIAL DE PESCA)'
+        FROM DUAL
+
+        /* CONSUMIDOR FINAL */
+        UNION ALL
+        SELECT 10101029, 160,
+               '(CONSUMIDOR FINAL|CONSUMIDORFINAL|CLIENTE FINAL|CLIENTEFINAL|PESSOA FISICA|PESSOAFISICA|CONSUMO PROPRIO|CONSUMOPROPRIO)'
+        FROM DUAL
+
+        /* FLORICULTURAS E VIVEIROS */
+        UNION ALL
+        SELECT 10101024, 160,
+               '(FLORICULT|VIVEIR|ORQUID|HORTO FLORESTAL)'
+        FROM DUAL
+        UNION ALL
+        SELECT 10101024, 135,
+               '(^| )(FLORES|PLANTAS|MUDAS|ORNAMENTAIS|PAISAGISMO|PAISAGISTA|PAISAGISTAS|PLANTAS ORNAMENTAIS|VIVEIRO DE MUDAS|PRODUCAO DE MUDAS)( |$)'
+        FROM DUAL
+        UNION ALL
+        SELECT 10101024, 120,
+               '(GARDEN CENTER|GARDENCENTER|CASA DAS FLORES|JARDINAGEM E PAISAGISMO|COMERCIO DE PLANTAS)'
+        FROM DUAL
+
+        /* FORNECEDORES: distribuidora isolada nao classifica. */
+        UNION ALL
+        SELECT 10101030, 160,
+               '(FORNECEDOR|FABRICANTE)'
+        FROM DUAL
+        UNION ALL
+        SELECT 10101030, 145,
+               '(COMBUSTIV|POSTO DE COMBUSTIVEIS|INFORMAT|GRAFIC|CONCESSION|TELECOM|PLASTIC|HOTEL|LOCACAO)'
+        FROM DUAL
+        UNION ALL
+        SELECT 10101030, 105,
+               '(INDUSTR|FABRIC|TECNOLOG|SISTEM|PNEU|EQUIPAMENT|EMBALAG|REPRESENTA|EDITORA|INTERNET)'
+        FROM DUAL
+
+        /* LOJA DE UTILIDADES */
+        UNION ALL
+        SELECT 10101026, 160,
+               '(UTILIDADES DOMESTICAS|UTILIDADESDOMESTICAS|UTILIDADES DO LAR|COMERCIO DE UTILIDADES|UTENSILIOS DOMESTICOS|ARTIGOS PARA O LAR|CASA E COZINHA)'
+        FROM DUAL
+        UNION ALL
+        SELECT 10101026, 135,
+               '(UTILIDAD|UTILAR|UTILISSIM)'
+        FROM DUAL
+
+        /* MATERIAIS PARA CONSTRUCAO */
+        UNION ALL
+        SELECT 10101011, 160,
+               '(MATERIAL|MATERIAIS).{0,15}(DE |PARA )?CONSTRUCAO'
+               || '|CASA.{0,15}(DA |DO )?CONSTRUCAO'
+               || '|DEPOSITO.{0,25}(MATERIAL|MATERIAIS).{0,15}CONSTRUCAO'
+               || '|MATERIAIS ELETRICOS E HIDRAULICOS'
+               || '|(CONSTRULAR|CONSTRUMAIS|CONSTRUMAT|CONSTRUCASA)'
+        FROM DUAL
+
+        /* PET SHOP: AGROPET/AGROVET possuem prioridade maior em Agropecuarias. */
+        UNION ALL
+        SELECT 10101010, 160,
+               '(PETSHOP|PET SHOP|PETCENTER|PET CENTER|PETSTORE|PET STORE|MUNDO PET|CASA PET|ANIMAL SHOP)'
+        FROM DUAL
+        UNION ALL
+        SELECT 10101010, 150,
+               '(CLINICA VETERINARIA|CLINICAVETERINARIA|HOSPITAL VETERINARIO|HOSPITALVETERINARIO|BANHO E TOSA|BANHO TOSA|BANHOETOSA|ESTETICA ANIMAL)'
+        FROM DUAL
+
+        /* PRODUTOR RURAL */
+        UNION ALL
+        SELECT 10101027, 160,
+               '(PRODUTOR RURAL|PRODUTORA RURAL|PRODUTORRURAL|PRODUTORARURAL|PROPRIEDADE RURAL|PROPRIEDADERURAL)'
+        FROM DUAL
+
+        /* SUPERMERCADO */
+        UNION ALL
+        SELECT 10101001, 170,
+               '(SUPERMERC|HIPERMERC|ATACAREJ|SUPERATAC)'
+        FROM DUAL
+        UNION ALL
+        SELECT 10101001, 160,
+               '(MINIMERC|MINI MERC|MERCADINH|MERCEARIA)'
+        FROM DUAL
+        UNION ALL
+        SELECT 10101001, 150,
+               '(ATACADO|ATACADISTA).{0,25}(ALIMENTOS|ALIMENTICIOS|BEBIDAS|GENEROS|MERCEARIA|SUPERMERCADO)'
+               || '|(ALIMENTOS|ALIMENTICIOS|BEBIDAS|GENEROS|MERCEARIA|SUPERMERCADO).{0,25}(ATACADO|ATACADISTA)'
+               || '|DISTRIBUIDORA.{0,25}(ALIMENTOS|ALIMENTICIOS|BEBIDAS|GENEROS)'
+               || '|DISTRIBUIDOR.{0,25}(ALIMENTOS|ALIMENTICIOS|BEBIDAS|GENEROS)'
+               || '|(COMERCIO|COMERCIAL).{0,25}(ALIMENTOS|ALIMENTICIOS|GENEROS)'
+        FROM DUAL
+        UNION ALL
+        SELECT 10101001, 135,
+               '(GENEROS ALIMENTICIOS|CESTA BASICA|ACOUG|FRUTARIA|SACOLAO|ALIMENT)'
+               || '|(^| )(MERCADO|MERCADOS|MERCANTIL)( |$)'
+        FROM DUAL
+        UNION ALL
+        SELECT 10101001, 95,
+               '(ATACADO|ATACADISTA|CONVENIENC|HORTIFRUT)'
+               || '|(^| )(ARMAZEM|ARMAZENS)( |$)'
+        FROM DUAL
+
+        /* TRANSPORTADORAS */
+        UNION ALL
+        SELECT 10103005, 160,
+               '(TRANSPORTADOR|TRANSPORTE RODOVIARIO|TRANSPORTES RODOVIARIOS|TRANSPORTE DE CARGAS|TRANSPORTES DE CARGAS|OPERADOR LOGISTICO|OPERADORES LOGISTICOS)'
+        FROM DUAL
+        UNION ALL
+        SELECT 10103005, 145,
+               '(^| )(CARGA|CARGAS)( |$)'
+        FROM DUAL
+        UNION ALL
+        SELECT 10103005, 120,
+               '(TRANSPORT|LOGISTIC)'
+        FROM DUAL
+        UNION ALL
+        SELECT 10103005, 95,
+               '(^| )(ENCOMENDA|ENCOMENDAS|ECOMENDA|ECOMENDAS|PASSAGEIRO|PASSAGEIROS)( |$)'
+        FROM DUAL
+    ),
+
+    regras_perfil AS (
+        SELECT
+            P.CODTIPPARC,
+            R.PRIORIDADE,
+            R.EXPRESSAO
+        FROM regras_base R
+        JOIN perfis_validos P
+          ON P.CODTIPPARC = R.CODTIPPARC
+    ),
+
+    parceiros_alvo AS (
+        SELECT
+            P.CODPARC,
+            REGEXP_REPLACE(
+                TRANSLATE(
+                    UPPER(NVL(P.NOMEPARC, '') || ' ' || NVL(P.RAZAOSOCIAL, '')),
+                    'ÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ',
+                    'AAAAAEEEEIIIIOOOOOUUUUC'
+                ),
+                '[^A-Z0-9]+',
+                ' '
+            ) AS TEXTO_BUSCA
+        FROM TGFPAR P
+        WHERE NVL(P.CODTIPPARC, 0) = 0
+    ),
+
+    candidatos_por_perfil AS (
+        SELECT
+            A.CODPARC,
+            R.CODTIPPARC,
+            MAX(R.PRIORIDADE) AS PRIORIDADE
+        FROM parceiros_alvo A
+        JOIN regras_perfil R
+          ON REGEXP_LIKE(A.TEXTO_BUSCA, R.EXPRESSAO)
+         AND NOT (
+             R.CODTIPPARC = 10101009
+             AND R.PRIORIDADE = 120
+             AND REGEXP_LIKE(A.TEXTO_BUSCA, '(^| )MAGRO( |$)')
+             AND NOT REGEXP_LIKE(
+                 A.TEXTO_BUSCA,
+                 '(AGROPEC|AGROPET|AGROVET|AGROBOI|AGROCAMPO|AGRONEGOC|AGRICOL)'
+             )
+         )
+        GROUP BY
+            A.CODPARC,
+            R.CODTIPPARC
+    ),
+
+    melhores_candidatos AS (
+        SELECT
+            C.*,
+            MAX(C.PRIORIDADE) OVER (
+                PARTITION BY C.CODPARC
+            ) AS MELHOR_PRIORIDADE
+        FROM candidatos_por_perfil C
+    ),
+
+    resultado_match AS (
+        SELECT
+            CODPARC,
+            COUNT(*) AS QTD_VENCEDORES,
+            MAX(CODTIPPARC) AS CODTIPPARC_SUGERIDO,
+            MAX(MELHOR_PRIORIDADE) AS PRIORIDADE
+        FROM melhores_candidatos
+        WHERE PRIORIDADE = MELHOR_PRIORIDADE
+        GROUP BY CODPARC
+    )
+
+    SELECT
+        CODPARC,
+        CODTIPPARC_SUGERIDO,
+        PRIORIDADE
+    FROM resultado_match
+    WHERE QTD_VENCEDORES = 1
+      AND CODTIPPARC_SUGERIDO <> 0
+) SUGESTAO
+ON (
+    SUGESTAO.CODPARC = DESTINO.CODPARC
+)
+WHEN MATCHED THEN
+    UPDATE SET
+        DESTINO.CODTIPPARC = SUGESTAO.CODTIPPARC_SUGERIDO
+    WHERE NVL(DESTINO.CODTIPPARC, 0) = 0;
+
+/*
+  Este arquivo nao executa COMMIT.
+
+  Depois de conferir a quantidade afetada, a decisao entre COMMIT e
+  ROLLBACK deve ser feita manualmente na mesma sessao do banco.
+*/
