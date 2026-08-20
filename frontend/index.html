@@ -11,10 +11,11 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="/home-dashboard.css?v=20260804-8">
+  <link rel="stylesheet" href="/home-dashboard.css?v=20260813-1">
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="/transporte-dashboard.css?v=20260810-3">
+  <link rel="stylesheet" href="/chat.css?v=20260819-7">
 
   <style>
     :root {
@@ -30,6 +31,11 @@
       --fila-border: rgba(220, 177, 33, 0.40);
       --conf-bg: linear-gradient(180deg, rgba(223, 243, 229, 0.94) 0%, rgba(207, 235, 216, 0.94) 100%);
       --conf-border: rgba(29, 131, 79, 0.22);
+    }
+
+    body.chat-contingency-mode .home-dashboard-nav-item:not(#home-nav-chat),
+    body.chat-contingency-mode #voltar-home-chat {
+      display: none !important;
     }
 
     body {
@@ -10890,6 +10896,9 @@
           <button class="home-dashboard-nav-item" id="home-nav-transporte" type="button" data-home-target="abrir-transporte" title="Transporte" hidden>
             <i data-lucide="map-pinned" aria-hidden="true"></i><span>Transporte</span>
           </button>
+          <button class="home-dashboard-nav-item" id="home-nav-chat" type="button" data-home-target="abrir-chat" title="Chat" hidden>
+            <i data-lucide="messages-square" aria-hidden="true"></i><span>Chat</span>
+          </button>
         </nav>
 
         <div class="home-dashboard-sidebar-footer">
@@ -12400,6 +12409,230 @@
     </main>
   </section>
 
+  <section class="screen chat-screen" id="chat-screen" aria-label="Atendimento WhatsApp">
+    <main class="chat-page">
+      <header class="chat-page-heading">
+        <div>
+          <span class="chat-eyebrow"><i data-lucide="message-circle-more" aria-hidden="true"></i> ATENDIMENTO</span>
+          <h1>Chat</h1>
+          <p>Conversas do WhatsApp em um só lugar.</p>
+        </div>
+        <div class="chat-heading-actions">
+          <span class="chat-realtime-status" id="chat-realtime-status" data-state="idle">
+            <span aria-hidden="true"></span><strong>Conectando...</strong>
+          </span>
+          <button class="chat-back-button" id="voltar-home-chat" type="button">
+            <i data-lucide="arrow-left" aria-hidden="true"></i><span>Voltar</span>
+          </button>
+        </div>
+      </header>
+
+      <section class="chat-workspace" id="chat-workspace">
+        <aside class="chat-conversations-panel" aria-label="Lista de conversas">
+          <div class="chat-panel-title">
+            <div><strong>Conversas</strong><span id="chat-conversation-count">0</span></div>
+            <div class="chat-panel-actions">
+              <button id="chat-profile-open" type="button" aria-label="Meu perfil de atendimento" title="Meu perfil">
+                <i data-lucide="circle-user-round" aria-hidden="true"></i>
+              </button>
+              <button id="chat-settings-open" type="button" aria-label="Configurar acesso ao chat" title="Configurar atendentes" hidden>
+                <i data-lucide="shield-cog" aria-hidden="true"></i>
+              </button>
+              <button id="chat-new-contact" type="button" aria-label="Adicionar contato" title="Adicionar contato">
+                <i data-lucide="user-plus" aria-hidden="true"></i>
+              </button>
+              <button id="chat-refresh" type="button" aria-label="Atualizar conversas" title="Atualizar">
+                <i data-lucide="refresh-cw" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+          <label class="chat-search" for="chat-search-input">
+            <i data-lucide="search" aria-hidden="true"></i>
+            <input id="chat-search-input" type="search" placeholder="Buscar nome ou telefone..." autocomplete="off">
+          </label>
+          <div class="chat-filters" id="chat-filters" role="group" aria-label="Filtrar conversas">
+            <button type="button" data-chat-assignment="MINE">Meus atendimentos</button>
+            <button type="button" data-chat-assignment="UNASSIGNED">Sem atendente</button>
+            <button class="is-active" type="button" data-chat-assignment="ALL">Todos</button>
+          </div>
+          <div class="chat-conversation-list" id="chat-conversation-list" aria-live="polite"></div>
+          <button class="chat-load-more" id="chat-load-more" type="button" hidden>Carregar mais</button>
+        </aside>
+
+        <section class="chat-main-panel" id="chat-main-panel" aria-label="Conversa selecionada">
+          <div class="chat-empty-state" id="chat-empty-state">
+            <span><i data-lucide="messages-square" aria-hidden="true"></i></span>
+            <strong>Selecione uma conversa para começar</strong>
+            <p>As mensagens aparecerão aqui em tempo real.</p>
+          </div>
+          <div class="chat-active-view" id="chat-active-view" hidden>
+            <header class="chat-active-header">
+              <button class="chat-mobile-back" id="chat-mobile-back" type="button" aria-label="Voltar para conversas">
+                <i data-lucide="arrow-left" aria-hidden="true"></i>
+              </button>
+              <span class="chat-contact-avatar" id="chat-contact-avatar">-</span>
+              <div class="chat-contact-heading">
+                <strong id="chat-contact-name">-</strong>
+                <span><span id="chat-contact-phone">-</span><b id="chat-assignment-label">Sem atendente</b></span>
+              </div>
+              <button class="chat-assignment-button" id="chat-claim" type="button">Assumir</button>
+              <button class="chat-assignment-button" id="chat-transfer" type="button" hidden>Transferir</button>
+              <button class="chat-assignment-button is-light" id="chat-release" type="button" hidden>Liberar</button>
+              <button class="chat-details-toggle" id="chat-details-toggle" type="button" aria-label="Mostrar dados do contato" aria-expanded="true">
+                <i data-lucide="panel-right" aria-hidden="true"></i>
+              </button>
+            </header>
+            <div class="chat-window-notice" id="chat-window-notice" hidden></div>
+            <div class="chat-message-list" id="chat-message-list" tabindex="0" aria-live="polite"></div>
+            <button class="chat-new-message-button" id="chat-new-message-button" type="button" hidden>Nova mensagem <i data-lucide="arrow-down" aria-hidden="true"></i></button>
+            <div class="chat-composer-feedback" id="chat-composer-feedback" role="status"></div>
+            <div class="chat-recording" id="chat-recording" hidden>
+              <span class="chat-recording-dot"></span><strong id="chat-recording-time">00:00</strong>
+              <span>Gravando áudio</span>
+              <button id="chat-recording-cancel" type="button">Cancelar</button>
+              <button id="chat-recording-send" type="button">Enviar</button>
+            </div>
+            <form class="chat-composer" id="chat-composer">
+              <div class="chat-attachment-wrap">
+                <button class="chat-icon-button" id="chat-attachment-toggle" type="button" aria-label="Anexar arquivo" aria-expanded="false">
+                  <i data-lucide="paperclip" aria-hidden="true"></i>
+                </button>
+                <div class="chat-attachment-menu" id="chat-attachment-menu" hidden>
+                  <button type="button" data-chat-file="image"><i data-lucide="image" aria-hidden="true"></i>Imagem</button>
+                  <button type="button" data-chat-file="document"><i data-lucide="file-text" aria-hidden="true"></i>Documento</button>
+                  <button type="button" data-chat-file="video"><i data-lucide="video" aria-hidden="true"></i>Vídeo</button>
+                </div>
+              </div>
+              <button class="chat-template-button" id="chat-template-open" type="button" aria-label="Abrir templates" title="Templates">
+                <i data-lucide="layout-template" aria-hidden="true"></i><span>Templates</span>
+              </button>
+              <div class="chat-emoji-wrap">
+                <button class="chat-icon-button" id="chat-emoji-toggle" type="button" aria-label="Inserir emoji" aria-expanded="false">
+                  <i data-lucide="smile" aria-hidden="true"></i>
+                </button>
+                <div class="chat-emoji-menu" id="chat-emoji-menu" hidden aria-label="Emojis frequentes">
+                  <button type="button" data-chat-emoji="👍" aria-label="Curtir">👍</button><button type="button" data-chat-emoji="👏" aria-label="Palmas">👏</button><button type="button" data-chat-emoji="✅" aria-label="Confirmado">✅</button><button type="button" data-chat-emoji="🙏" aria-label="Obrigado">🙏</button><button type="button" data-chat-emoji="😊" aria-label="Sorriso">😊</button><button type="button" data-chat-emoji="🎉" aria-label="Comemorar">🎉</button><button type="button" data-chat-emoji="❤️" aria-label="Coração">❤️</button><button type="button" data-chat-emoji="👋" aria-label="Olá">👋</button>
+                </div>
+              </div>
+              <textarea id="chat-message-input" rows="1" maxlength="4096" placeholder="Digite uma mensagem" aria-label="Mensagem"></textarea>
+              <button class="chat-icon-button" id="chat-microphone" type="button" aria-label="Gravar áudio">
+                <i data-lucide="mic" aria-hidden="true"></i>
+              </button>
+              <button class="chat-send-button" id="chat-send" type="submit" aria-label="Enviar mensagem" disabled>
+                <i data-lucide="send" aria-hidden="true"></i>
+              </button>
+              <input id="chat-file-image" type="file" accept="image/jpeg,image/png" hidden>
+              <input id="chat-file-document" type="file" accept=".txt,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx" hidden>
+              <input id="chat-file-video" type="file" accept="video/mp4,video/3gpp" hidden>
+            </form>
+          </div>
+        </section>
+
+        <aside class="chat-details-panel" id="chat-details-panel" aria-label="Dados do contato">
+          <div class="chat-details-head">
+            <strong>Dados do contato</strong>
+            <button id="chat-details-close" type="button" aria-label="Fechar dados do contato"><i data-lucide="x" aria-hidden="true"></i></button>
+          </div>
+          <div class="chat-details-empty" id="chat-details-empty">Selecione uma conversa.</div>
+          <div class="chat-details-content" id="chat-details-content" hidden>
+            <span class="chat-details-avatar" id="chat-details-avatar">-</span>
+            <h2 id="chat-details-name">-</h2>
+            <p id="chat-details-phone">-</p>
+            <dl class="chat-details-list">
+              <div><dt>WA ID</dt><dd id="chat-details-waid">-</dd></div>
+              <div><dt>Último atendimento</dt><dd id="chat-details-last">-</dd></div>
+              <div><dt>Não lidas</dt><dd id="chat-details-unread">0</dd></div>
+              <div><dt>Atendente</dt><dd id="chat-details-agent">Sem atendente</dd></div>
+            </dl>
+            <div class="chat-future-data" id="chat-sankhya-data">
+              <strong>Telefone não localizado no Sankhya</strong>
+              <p>Este número não está vinculado a um parceiro ou contato ativo.</p>
+              <button type="button" class="chat-link-partner-button" data-chat-link-partner><i data-lucide="link" aria-hidden="true"></i>Vincular parceiro</button>
+            </div>
+            <div class="chat-future-data chat-bitrix-data" id="chat-bitrix-data"></div>
+          </div>
+        </aside>
+      </section>
+    </main>
+  </section>
+
+  <section class="chat-media-modal" id="chat-media-modal" hidden>
+    <div class="chat-media-dialog" role="dialog" aria-modal="true" aria-label="Visualizar mídia">
+      <button id="chat-media-close" type="button" aria-label="Fechar"><i data-lucide="x" aria-hidden="true"></i></button>
+      <div id="chat-media-preview"></div>
+      <footer class="chat-upload-actions" id="chat-upload-actions" hidden>
+        <button id="chat-upload-cancel" type="button">Cancelar</button>
+        <button id="chat-upload-send" type="button">Enviar arquivo</button>
+      </footer>
+    </div>
+  </section>
+
+  <section class="chat-template-modal" id="chat-template-modal" hidden>
+    <div class="chat-template-dialog" role="dialog" aria-modal="true" aria-labelledby="chat-template-title">
+      <header><div><span>MODELOS APROVADOS</span><h2 id="chat-template-title">Templates</h2></div><button id="chat-template-close" type="button" aria-label="Fechar"><i data-lucide="x" aria-hidden="true"></i></button></header>
+      <label class="chat-search"><i data-lucide="search" aria-hidden="true"></i><input id="chat-template-search" type="search" placeholder="Buscar template..."></label>
+      <div class="chat-template-body">
+        <div class="chat-template-list" id="chat-template-list"></div>
+        <div class="chat-template-config" id="chat-template-config"><p>Selecione um template para visualizar e preencher.</p></div>
+      </div>
+      <footer><span id="chat-template-feedback"></span><button id="chat-template-send" type="button" disabled>Enviar template</button></footer>
+    </div>
+  </section>
+
+  <section class="chat-contact-modal" id="chat-contact-modal" hidden>
+    <form class="chat-contact-dialog" id="chat-contact-form" aria-modal="true" aria-labelledby="chat-contact-title">
+      <header>
+        <div><span>NOVA CONVERSA</span><h2 id="chat-contact-title">Adicionar contato</h2></div>
+        <button id="chat-contact-close" type="button" aria-label="Fechar"><i data-lucide="x" aria-hidden="true"></i></button>
+      </header>
+      <div class="chat-contact-body">
+        <p><i data-lucide="shield-check" aria-hidden="true"></i> Para iniciar a conversa, envie primeiro um template aprovado pela Meta. Mensagens livres serão liberadas apenas após a resposta do contato.</p>
+        <label>Buscar parceiro no Sankhya<input id="chat-partner-search" type="search" maxlength="120" autocomplete="off" placeholder="Código, nome ou CNPJ/CPF"></label>
+        <div class="chat-partner-results" id="chat-partner-results" hidden></div>
+        <div class="chat-selected-partner" id="chat-selected-partner" hidden>
+          <span class="chat-selected-partner-icon"><i data-lucide="store" aria-hidden="true"></i></span>
+          <span class="chat-selected-partner-copy">
+            <small>PARCEIRO SELECIONADO</small>
+            <strong id="chat-selected-partner-name"></strong>
+          </span>
+          <button type="button" id="chat-change-partner"><i data-lucide="refresh-cw" aria-hidden="true"></i>Trocar parceiro</button>
+        </div>
+        <div class="chat-partner-contact-field" id="chat-partner-contact-field" hidden>
+          <strong>Contato/WhatsApp cadastrado</strong>
+          <div class="chat-partner-contacts" id="chat-partner-contacts" role="radiogroup" aria-label="Contatos cadastrados"></div>
+          <input id="chat-partner-contact" type="hidden" value="">
+        </div>
+        <label class="chat-pipeline-field" id="chat-new-pipeline-field">Pipeline do Bitrix
+          <select id="chat-new-pipeline" required>
+            <option value="">Carregando pipelines...</option>
+          </select>
+          <small>Ao iniciar a conversa, um card será criado automaticamente neste pipeline.</small>
+        </label>
+      </div>
+      <footer><span id="chat-contact-feedback"></span><button id="chat-contact-submit" type="submit" disabled><i data-lucide="file-plus-2" aria-hidden="true"></i>Criar e escolher template</button></footer>
+    </form>
+  </section>
+
+  <section class="chat-contact-modal" id="chat-link-partner-modal" hidden>
+    <form class="chat-contact-dialog chat-link-partner-dialog" id="chat-link-partner-form" aria-modal="true" aria-labelledby="chat-link-partner-title">
+      <header>
+        <div><span>VINCULAR CADASTRO</span><h2 id="chat-link-partner-title">Vincular parceiro</h2></div>
+        <button id="chat-link-partner-close" type="button" aria-label="Fechar"><i data-lucide="x" aria-hidden="true"></i></button>
+      </header>
+      <div class="chat-contact-body">
+        <p><i data-lucide="shield-check" aria-hidden="true"></i> O telefone <b id="chat-link-partner-phone">-</b> será incluído como contato ativo no parceiro escolhido. Antes de criar, verificamos se ele já está cadastrado.</p>
+        <label>Buscar parceiro no Sankhya<input id="chat-link-partner-search" type="search" maxlength="120" autocomplete="off" placeholder="Código, nome ou CNPJ/CPF"></label>
+        <div class="chat-partner-results" id="chat-link-partner-results" hidden></div>
+        <div class="chat-selected-partner" id="chat-link-selected-partner" hidden>
+          <span class="chat-selected-partner-icon"><i data-lucide="store" aria-hidden="true"></i></span>
+          <span class="chat-selected-partner-copy"><small>PARCEIRO SELECIONADO</small><strong id="chat-link-selected-partner-name"></strong></span>
+          <button type="button" id="chat-link-change-partner"><i data-lucide="refresh-cw" aria-hidden="true"></i>Trocar parceiro</button>
+        </div>
+      </div>
+      <footer><span id="chat-link-partner-feedback"></span><button id="chat-link-partner-submit" type="submit" disabled><i data-lucide="link-2" aria-hidden="true"></i>Vincular telefone</button></footer>
+    </form>
+  </section>
+
   <section class="screen acompanhamento-screen" id="acompanhamento-screen" aria-hidden="true"></section>
 
   <section class="screen conferencia-screen acompanhamento-painel-screen" id="conferencia-screen">
@@ -12572,9 +12805,11 @@
 
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <script src="asyncRefresh.js?v=20260601-2"></script>
-  <script src="vendas-dashboard.js?v=20260805-1"></script>
+  <script src="vendas-dashboard.js?v=20260820-1"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="transporte-dashboard.js?v=20260810-3"></script>
+  <script src="transporte-dashboard.js?v=20260820-1"></script>
+  <script src="chat-core.js?v=20260819-1"></script>
+  <script src="chat.js?v=20260819-6"></script>
   <script src="app.js?v=20260805-5"></script>
 </body>
 </html>

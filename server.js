@@ -2,12 +2,19 @@ require('dotenv').config({ quiet: true });
 const express = require('express');
 const path = require('path');
 const routes = require('./routes');
+const chatRouter = require('./api/chatRouter');
 const {
+  cookieContingencia,
   cookieLogout,
+  cookieLogoutContingencia,
   cookieSessao,
   enriquecerUsuarioComPermissoes,
+  exigirAcessoSankhya,
   exigirAutenticacao,
+  lerCredencialContingencia,
   lerSessao,
+  sankhyaIndisponivel,
+  serializarCredencialContingencia,
   serializarSessao,
   validarUsuarioSankhya
 } = require('./api/auth');
@@ -58,15 +65,42 @@ app.use(express.static(path.join(__dirname, 'frontend')));
 app.post('/api/auth/login', async (req, res) => {
   try {
     const usuario = await validarUsuarioSankhya(req.body?.usuario, req.body?.senha);
-    res.setHeader('Set-Cookie', cookieSessao(serializarSessao(usuario)));
+    const cookies = [cookieSessao(serializarSessao(usuario))];
+    if (chatRouter._internals?.acessoPermitido(usuario)) {
+      cookies.push(cookieContingencia(serializarCredencialContingencia(
+        usuario,
+        req.body?.usuario,
+        req.body?.senha
+      )));
+    } else {
+      cookies.push(cookieLogoutContingencia());
+    }
+    res.setHeader('Set-Cookie', cookies);
     res.json({ ok: true, usuario });
   } catch (err) {
+    if (sankhyaIndisponivel(err)) {
+      const usuario = lerCredencialContingencia(req, req.body?.usuario, req.body?.senha);
+      if (usuario && chatRouter._internals?.acessoPermitido(usuario)) {
+        res.setHeader('Set-Cookie', cookieSessao(serializarSessao(usuario)));
+        res.json({
+          ok: true,
+          contingencia: true,
+          usuario,
+          aviso: 'Sankhya indisponível. Acesso liberado somente ao Chat.'
+        });
+        return;
+      }
+      res.status(503).json({
+        erro: 'O Sankhya está indisponível e este navegador não possui um acesso de contingência válido para o Chat.'
+      });
+      return;
+    }
     res.status(401).json({ erro: err.message || 'Usuario ou senha invalidos' });
   }
 });
 
 app.post('/api/auth/logout', (req, res) => {
-  res.setHeader('Set-Cookie', cookieLogout());
+  res.setHeader('Set-Cookie', [cookieLogout(), cookieLogoutContingencia()]);
   res.json({ ok: true });
 });
 
@@ -83,7 +117,8 @@ app.get('/api/auth/me', async (req, res) => {
   res.json({ autenticado: Boolean(usuario), usuario });
 });
 
-app.use('/api', exigirAutenticacao, routes);
+app.use('/api/chat', exigirAutenticacao, chatRouter);
+app.use('/api', exigirAutenticacao, exigirAcessoSankhya, routes);
 
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'frontend', 'index.html'));

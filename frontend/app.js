@@ -46,6 +46,7 @@ const estoqueContagemScreen = document.getElementById('estoque-contagem-screen')
 const relatoriosScreen = document.getElementById('relatorios-screen');
 const vendasGeraisScreen = document.getElementById('vendas-gerais-screen');
 const transporteScreen = document.getElementById('transporte-screen');
+const chatScreen = document.getElementById('chat-screen');
 const filaContexto = document.getElementById('fila-contexto');
 const inputDataInicial = document.getElementById('data-inicial');
 const inputDataFinal = document.getElementById('data-final');
@@ -692,7 +693,10 @@ window.fetch = async (...args) => {
   const response = await fetchOriginal(...args);
   const url = String(args[0] || '');
 
-  if (response.status === 401 && !url.includes('/api/auth/')) {
+  const sessaoLocalExpirada = response.status === 401
+    && response.headers.get('X-App-Auth-Required') === '1';
+
+  if (sessaoLocalExpirada && !url.includes('/api/auth/')) {
     mostrarLogin('Sessao expirada. Entre novamente.');
   }
 
@@ -850,7 +854,8 @@ function atualizarItemAtivoNavegacaoGlobal(tela) {
       || (tela === 'contagem' && alvo === 'abrir-contagem-estoque')
       || (tela === 'vendas' && alvo === 'abrir-vendas-gerais')
       || (tela === 'relatorios' && alvo === 'abrir-relatorios')
-      || (tela === 'transporte' && alvo === 'abrir-transporte');
+      || (tela === 'transporte' && alvo === 'abrir-transporte')
+      || (tela === 'chat' && alvo === 'abrir-chat');
     item.classList.toggle('is-active', ativo);
     if (ativo) item.setAttribute('aria-current', 'page');
     else item.removeAttribute('aria-current');
@@ -859,6 +864,7 @@ function atualizarItemAtivoNavegacaoGlobal(tela) {
 
 function mostrarNavegacaoGlobal(tela) {
   if (tela !== 'transporte') transporteScreen?.classList.remove('active');
+  if (tela !== 'chat') chatScreen?.classList.remove('active');
   document.body.classList.add('has-global-sidebar');
   homeDashboardSidebar.hidden = false;
   atualizarItemAtivoNavegacaoGlobal(tela);
@@ -866,6 +872,7 @@ function mostrarNavegacaoGlobal(tela) {
 
 function ocultarNavegacaoGlobal() {
   transporteScreen?.classList.remove('active');
+  chatScreen?.classList.remove('active');
   fecharSidebarHome();
   document.body.classList.remove('has-global-sidebar');
   homeDashboardSidebar.hidden = true;
@@ -888,6 +895,10 @@ function executarDestinoHome(id) {
   }
   if (id === 'abrir-transporte') {
     abrirTransporte();
+    return;
+  }
+  if (id === 'abrir-chat') {
+    abrirChat();
     return;
   }
   document.getElementById(id)?.click();
@@ -1099,8 +1110,10 @@ async function carregarResumoHome(forcar = false) {
 }
 
 function mostrarLogin(mensagem = '') {
+  document.body.classList.remove('chat-contingency-mode');
   window.vendasDashboardController?.limparSessao();
   window.transporteDashboardController?.limparSessao();
+  window.chatController?.encerrar();
   usuarioLogado = null;
   ocultarNavegacaoGlobal();
   limparNavegacaoFilaSalva();
@@ -1115,6 +1128,7 @@ function mostrarLogin(mensagem = '') {
   relatoriosScreen.classList.remove('active');
   vendasGeraisScreen.classList.remove('active');
   transporteScreen.classList.remove('active');
+  chatScreen?.classList.remove('active');
   loginStatus.textContent = mensagem;
   atualizarUsuarioLogadoNaTela();
 
@@ -1828,6 +1842,43 @@ function mostrarTransporte() {
   vendasGeraisScreen.classList.remove('active');
   transporteScreen.classList.add('active');
   mostrarNavegacaoGlobal('transporte');
+}
+
+function mostrarChat() {
+  if (!usuarioLogado) {
+    mostrarLogin('Entre para acessar o atendimento.');
+    return;
+  }
+
+  loginScreen.classList.remove('active');
+  homeScreen.classList.remove('active');
+  conferenciaScreen.classList.remove('active');
+  acompanhamentoScreen.classList.remove('active');
+  filaScreen.classList.remove('active');
+  consultaProdutosScreen.classList.remove('active');
+  atualizacaoContatoScreen.classList.remove('active');
+  estoqueContagemScreen.classList.remove('active');
+  relatoriosScreen.classList.remove('active');
+  vendasGeraisScreen.classList.remove('active');
+  transporteScreen.classList.remove('active');
+  chatScreen?.classList.add('active');
+  mostrarNavegacaoGlobal('chat');
+}
+
+async function abrirChat(conversationId = null, { substituirHistorico = false } = {}) {
+  if (!await window.chatController?.verificarAcesso()) return;
+  mostrarHomeESuspenderRefresh();
+  mostrarChat();
+  const hash = conversationId ? `#chat/${encodeURIComponent(conversationId)}` : '#chat';
+  const historyState = { tela: 'chat', conversationId: conversationId || null };
+  if (substituirHistorico) history.replaceState(historyState, '', hash);
+  else history.pushState(historyState, '', hash);
+
+  try {
+    await window.chatController?.preparar(conversationId);
+  } catch (error) {
+    console.error('Erro ao abrir o atendimento:', error);
+  }
 }
 
 async function abrirTransporte() {
@@ -9602,14 +9653,38 @@ function prepararTelaInicial() {
 
 async function prepararSessaoAutenticada(usuario) {
   usuarioLogado = usuario;
+  document.body.classList.toggle('chat-contingency-mode', usuario?.modoContingencia === true);
   atualizarUsuarioLogadoNaTela();
   prepararTelaInicial();
+
+  if (usuario?.modoContingencia === true) {
+    const permitido = await window.chatController?.verificarAcesso();
+    if (!permitido) {
+      mostrarLogin('O acesso de contingência deste usuário não está habilitado para o Chat.');
+      return;
+    }
+    const conversationId = window.location.hash.startsWith('#chat/')
+      ? decodeURIComponent(window.location.hash.slice('#chat/'.length))
+      : null;
+    mostrarHomeESuspenderRefresh();
+    mostrarChat();
+    await window.chatController?.preparar(conversationId)
+      .catch((error) => console.error('Erro ao abrir o Chat em contingência:', error));
+    history.replaceState(
+      { tela: 'chat', conversationId, contingencia: true },
+      '',
+      conversationId ? `#chat/${encodeURIComponent(conversationId)}` : '#chat'
+    );
+    return;
+  }
+
   const preparacoesAuxiliares = [
     carregarEmpresas(),
     verificarDisponibilidadeContagemEstoque(),
     verificarAcessoRelatorios(),
     window.vendasDashboardController?.verificarAcesso(usuario),
-    window.transporteDashboardController?.verificarAcesso(usuario)
+    window.transporteDashboardController?.verificarAcesso(usuario),
+    window.chatController?.verificarAcesso()
   ];
   void Promise.allSettled(preparacoesAuxiliares).then((resultados) => {
     resultados.forEach((resultado) => {
@@ -9679,6 +9754,21 @@ async function prepararSessaoAutenticada(usuario) {
     mostrarTransporte();
     await window.transporteDashboardController.preparar().catch((error) => console.error('Erro ao restaurar transporte:', error));
     history.replaceState({ tela: 'transporte' }, '', '#transporte');
+    return;
+  }
+
+  if (window.location.hash === '#chat' || window.location.hash.startsWith('#chat/')) {
+    if (!await window.chatController?.verificarAcesso()) {
+      mostrarHome();
+      history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);
+      return;
+    }
+    const conversationId = window.location.hash.startsWith('#chat/')
+      ? decodeURIComponent(window.location.hash.slice('#chat/'.length))
+      : null;
+    mostrarChat();
+    await window.chatController?.preparar(conversationId).catch((error) => console.error('Erro ao restaurar o atendimento:', error));
+    history.replaceState({ tela: 'chat', conversationId }, '', window.location.hash);
     return;
   }
 
@@ -9784,6 +9874,7 @@ document.querySelectorAll('[data-home-target]').forEach((elemento) => {
   elemento.addEventListener('click', () => executarDestinoHome(elemento.dataset.homeTarget));
 });
 document.querySelector('[data-home-screen="home"]')?.addEventListener('click', abrirVisaoGeralPeloMenu);
+document.getElementById('voltar-home-chat')?.addEventListener('click', abrirVisaoGeralPeloMenu);
 homeDashboardMenuToggle?.addEventListener('click', alternarSidebarHome);
 homeDashboardGlobalMenuToggle?.addEventListener('click', alternarSidebarHome);
 homeDashboardOverlay?.addEventListener('click', fecharSidebarHome);
@@ -10618,6 +10709,18 @@ window.addEventListener('popstate', (event) => {
     mostrarHomeESuspenderRefresh();
     mostrarTransporte();
     window.transporteDashboardController.preparar().catch((error) => console.error('Erro ao restaurar transporte:', error));
+    return;
+  }
+
+  if (state?.tela === 'chat' || window.location.hash === '#chat' || window.location.hash.startsWith('#chat/')) {
+    const conversationId = state?.conversationId || (
+      window.location.hash.startsWith('#chat/')
+        ? decodeURIComponent(window.location.hash.slice('#chat/'.length))
+        : null
+    );
+    mostrarHomeESuspenderRefresh();
+    mostrarChat();
+    window.chatController?.preparar(conversationId).catch((error) => console.error('Erro ao restaurar o atendimento:', error));
     return;
   }
 

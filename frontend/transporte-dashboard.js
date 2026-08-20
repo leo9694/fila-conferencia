@@ -28,8 +28,16 @@
   function peso(valor) { return Number(valor || 0).toLocaleString('pt-BR', { maximumFractionDigits: 3 }); }
   function percentual(valor) { return `${Number(valor || 0).toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`; }
   function dataBr(valor) { if (!valor) return '—'; const texto = String(valor); const match = texto.match(/^(\d{4})-(\d{2})-(\d{2})/); return match ? `${match[3]}/${match[2]}/${match[1]}` : texto; }
-  function hoje() { return new Date().toISOString().slice(0, 10); }
-  function anoAtualInicio() { return `${new Date().getFullYear()}-01-01`; }
+  function formatarDataLocal(data) {
+    return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
+  }
+  function hoje() { return formatarDataLocal(new Date()); }
+  function inicioPadrao() {
+    const data = new Date();
+    data.setHours(0, 0, 0, 0);
+    data.setDate(data.getDate() - 29);
+    return formatarDataLocal(data);
+  }
   function selecionarTexto(elemento, valor) { return Array.from(elemento.selectedOptions || []).map((opcao) => opcao.value).includes(valor); }
   function renderIcones() { window.lucide?.createIcons(); }
 
@@ -320,7 +328,7 @@
 
   async function preparar() {
     if (!permitido) return;
-    if (!elementos.dataInicial.value) elementos.dataInicial.value = anoAtualInicio();
+    if (!elementos.dataInicial.value) elementos.dataInicial.value = inicioPadrao();
     if (!elementos.dataFinal.value) elementos.dataFinal.value = hoje();
     await carregar();
   }

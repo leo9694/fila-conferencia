@@ -180,6 +180,16 @@ function criarBitrixService(options = {}) {
     return porNome.find((contato) => String(contato.NAME || '').startsWith(`${codigoTexto} -`)) || null;
   }
 
+  async function buscarContatoPorOrigem(originId) {
+    const origem = String(originId || '').trim();
+    if (!origem) throw new Error('Informe a origem do contato.');
+    const contatos = await consultarContatos({
+      filter: { '=ORIGIN_ID': origem },
+      select: ['ID', 'NAME', 'ORIGIN_ID', 'PHONE', 'EMAIL']
+    });
+    return contatos[0] || null;
+  }
+
   async function criarContato({ codigo, nome, telefone, email, fields = {} }) {
     const codigoTexto = String(codigo || '').trim();
     const nomeTexto = String(nome || '').trim();
@@ -195,6 +205,25 @@ function criarBitrixService(options = {}) {
         ORIGINATOR_ID: 'SANKHYA',
         ORIGIN_ID: `SANKHYA:${codigoTexto}`,
         PHONE: normalizarMultifield(telefone, 'WORK', normalizarTelefoneBrasileiro),
+        EMAIL: normalizarMultifield(email, 'WORK', (valor) => String(valor || '').trim().toLowerCase())
+      }
+    });
+    return { criado: true, id: payload.result };
+  }
+
+  async function criarContatoPorOrigem({ originId, nome, telefone, email, fields = {} }) {
+    const origem = String(originId || '').trim();
+    const nomeTexto = String(nome || '').trim();
+    if (!origem || !nomeTexto) throw new Error('Origem e nome do contato sao obrigatorios.');
+    const existente = await buscarContatoPorOrigem(origem);
+    if (existente) return { criado: false, contato: existente };
+    const payload = await callBitrix('crm.contact.add', {
+      fields: {
+        ...fields,
+        NAME: nomeTexto,
+        ORIGINATOR_ID: 'CHAT_APP',
+        ORIGIN_ID: origem,
+        PHONE: normalizarMultifield(telefone, 'MOBILE', normalizarTelefoneBrasileiro),
         EMAIL: normalizarMultifield(email, 'WORK', (valor) => String(valor || '').trim().toLowerCase())
       }
     });
@@ -300,7 +329,9 @@ function criarBitrixService(options = {}) {
     testarConexao,
     consultarContatos,
     buscarContatoPorCodigoSankhya,
+    buscarContatoPorOrigem,
     criarContato,
+    criarContatoPorOrigem,
     atualizarContato,
     sincronizarContato,
     consultarNegocios,

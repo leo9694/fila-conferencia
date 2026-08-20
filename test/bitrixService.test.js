@@ -99,6 +99,29 @@ test('cria negocio vinculado e registra o evento do CRM para automacoes', async 
   assert.equal(requisicao.params.params.REGISTER_SONET_EVENT, 'Y');
 });
 
+test('reutiliza contato de chat pela origem antes de criar outro', async () => {
+  const metodos = [];
+  const service = criarBitrixService({
+    webhookUrl: 'https://exemplo.bitrix24.com/rest/1/token',
+    logger: { error() {} },
+    httpClient: {
+      async post(url) {
+        const metodo = url.match(/\/([^/]+)\.json$/)?.[1];
+        metodos.push(metodo);
+        return { data: { result: [{ ID: '77', NAME: 'Contato WhatsApp', ORIGIN_ID: 'WHATSAPP:5566999990000' }] } };
+      }
+    }
+  });
+  const resultado = await service.criarContatoPorOrigem({
+    originId: 'WHATSAPP:5566999990000',
+    nome: 'Contato WhatsApp',
+    telefone: '5566999990000'
+  });
+  assert.equal(resultado.criado, false);
+  assert.equal(resultado.contato.ID, '77');
+  assert.deepEqual(metodos, ['crm.contact.list']);
+});
+
 test('cruza o nome do usuario Sankhya com funcionario ativo do Bitrix', async () => {
   const service = criarBitrixService({
     webhookUrl: 'https://exemplo.bitrix24.com/rest/1/token',

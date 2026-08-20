@@ -1,0 +1,139 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const ChatCore = require('../frontend/chat-core');
+
+test('exibe nome do contato e usa telefone como fallback', () => {
+  assert.equal(ChatCore.contactName({ contact: { profileName: 'Maria' } }), 'Maria');
+  assert.equal(ChatCore.contactName({ contact: { phone: '556599999999' } }), '556599999999');
+});
+
+test('identifica a mesma conversa pelo telefone mesmo quando o id muda', () => {
+  assert.deepEqual(ChatCore.conversationIdentityKeys({ id: 12, contact: { phone: '+55 (66) 99999-0000' } }), [
+    'id:12',
+    'phone:5566999990000'
+  ]);
+  assert.equal(ChatCore.conversationIdentityKeys({ id: 99, contact: { waId: '5566999990000' } })[1], 'phone:5566999990000');
+});
+
+test('gera prévias seguras para texto e mídias suportadas', () => {
+  assert.equal(ChatCore.messagePreview({ type: 'text', text: ' Bom dia ' }), 'Bom dia');
+  assert.match(ChatCore.messagePreview({ type: 'image' }), /Imagem/);
+  assert.match(ChatCore.messagePreview({ type: 'audio' }), /Áudio/);
+  assert.match(ChatCore.messagePreview({ type: 'document' }), /Documento/);
+  assert.match(ChatCore.messagePreview({ type: 'unknown' }), /não suportada/);
+  assert.match(ChatCore.messagePreview(null), /não suportada/);
+});
+
+test('não permite mensagem vazia nem envio duplicado', () => {
+  assert.equal(ChatCore.canSendText('   '), false);
+  assert.equal(ChatCore.canSendText('Olá', true), false);
+  assert.equal(ChatCore.canSendText('Olá', false), true);
+});
+
+test('mescla message:new sem duplicar e mantém ordem cronológica', () => {
+  const messages = ChatCore.mergeById(
+    [{ id: 2, text: 'dois', messageTimestamp: '2026-08-13T10:02:00Z' }],
+    [{ id: 1, text: 'um', messageTimestamp: '2026-08-13T10:01:00Z' }, { id: 2, status: 'READ' }]
+  );
+  assert.deepEqual(messages.map((item) => item.id), [1, 2]);
+  assert.equal(messages[1].status, 'READ');
+});
+
+test('deduplica template pela wamid quando a atualização chega com outro id', () => {
+  const messages = ChatCore.mergeById(
+    [{ id: 1, wamid: 'wamid.template', type: 'template', status: 'SENT' }],
+    [{ id: 2, wamid: 'wamid.template', type: 'template', status: 'DELIVERED' }]
+  );
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].status, 'DELIVERED');
+});
+
+test('mostra o corpo do template como prévia da conversa', () => {
+  assert.equal(ChatCore.messagePreview({ type: 'template', template: { body: 'Olá Maria' } }), 'Olá Maria');
+});
+
+test('mostra resposta de botão histórica salva como interactive', () => {
+  const message = { type: 'interactive', text: JSON.stringify({ button_reply: { title: 'Sim!' } }) };
+  assert.equal(ChatCore.interactiveReplyText(message), 'Sim!');
+  assert.equal(ChatCore.messagePreview(message), 'Sim!');
+});
+
+test('reconhece reações da Meta sem exibir o JSON bruto', () => {
+  const message = {
+    type: 'text',
+    text: JSON.stringify({ message_id: 'wamid.HBgM...', emoji: '👏' })
+  };
+  assert.deepEqual(ChatCore.reactionInfo(message), { emoji: '👏', messageId: 'wamid.HBgM...' });
+  assert.equal(ChatCore.messagePreview(message), 'Reagiu com 👏');
+});
+
+test('extrai nome e telefone de um contato compartilhado pela Meta', () => {
+  const message = {
+    type: 'contacts',
+    text: JSON.stringify({
+      contacts: [{
+        name: { formatted_name: 'Leonardo - TI - NORTE SUL' },
+        phones: [{ phone: '+5565999999999' }]
+      }]
+    })
+  };
+  assert.deepEqual(ChatCore.sharedContact(message), {
+    name: 'Leonardo - TI - NORTE SUL',
+    phone: '+5565999999999'
+  });
+});
+
+test('normaliza números para localizar uma conversa já existente', () => {
+  assert.equal(ChatCore.normalizePhone('+55 (66) 9233-9094'), '556692339094');
+});
+
+test('atualiza status por id ou wamid', () => {
+  const messages = [{ id: 1, wamid: 'wamid.1', status: 'SENT' }];
+  assert.equal(ChatCore.updateMessageStatus(messages, { messageId: 1, status: 'DELIVERED' })[0].status, 'DELIVERED');
+  assert.equal(ChatCore.updateMessageStatus(messages, { wamid: 'wamid.1', status: 'READ' })[0].status, 'READ');
+  assert.equal(ChatCore.statusSymbol('FAILED').failed, true);
+});
+
+test('desembrulha respostas padronizadas da API', () => {
+  assert.deepEqual(ChatCore.unwrap({ success: true, data: { id: 1 } }), { id: 1 });
+  assert.deepEqual(ChatCore.unwrap({ data: [1] }), { data: [1] });
+});
+
+test('usa serviceWindow como fonte de verdade para o estado do atendimento', () => {
+  assert.equal(ChatCore.serviceWindowState({ serviceWindow: { conversationInitiated: true, waitingForCustomerReply: true, initialTemplateStatus: 'DELIVERED' } }).key, 'awaiting-reply');
+  assert.equal(ChatCore.serviceWindowState({ serviceWindow: { conversationInitiated: true, canSendFreeform: true } }).key, 'open');
+  assert.equal(ChatCore.serviceWindowState({ serviceWindow: { conversationInitiated: true, waitingForCustomerReply: false, canSendFreeform: false } }).key, 'expired');
+});
+
+test('carrega histÃ³rico ao chegar ao topo ou quando o primeiro lote nÃ£o preenche a tela', () => {
+  assert.equal(ChatCore.shouldLoadOlderMessages({ scrollTop: 60, scrollHeight: 1200, clientHeight: 600 }), true);
+  assert.equal(ChatCore.shouldLoadOlderMessages(
+    { scrollTop: 200, scrollHeight: 500, clientHeight: 600 },
+    { fillViewport: true, fillRatio: 1.25 }
+  ), true);
+  assert.equal(ChatCore.shouldLoadOlderMessages({ scrollTop: 200, scrollHeight: 1200, clientHeight: 600 }), false);
+});
+
+test('carrega mais conversas ao chegar ao fim da lista ou quando o lote não preenche a área', () => {
+  assert.equal(ChatCore.shouldLoadMoreConversations({ scrollTop: 500, scrollHeight: 1000, clientHeight: 400 }), true);
+  assert.equal(ChatCore.shouldLoadMoreConversations({ scrollTop: 0, scrollHeight: 300, clientHeight: 400 }), true);
+  assert.equal(ChatCore.shouldLoadMoreConversations({ scrollTop: 100, scrollHeight: 1200, clientHeight: 400 }), false);
+});
+
+test('mescla páginas de conversas sem repetir o mesmo telefone', () => {
+  const result = ChatCore.mergeConversationPages([
+    { id: 10, contact: { phone: '5566999990000', name: 'Cliente' }, lastMessageAt: '2026-08-20T10:00:00Z' }
+  ], [
+    { id: 11, contact: { phone: '+55 (66) 99999-0000' }, lastMessageAt: '2026-08-19T10:00:00Z' },
+    { id: 12, contact: { phone: '5566988880000', name: 'Outro' } }
+  ]);
+  assert.equal(result.length, 2);
+  assert.equal(result[0].id, 10);
+  assert.deepEqual(result[0].relatedConversationIds, [10, 11]);
+});
+
+test('só reutiliza a conversa quando id ativo e objeto carregado pertencem ao mesmo chat', () => {
+  assert.equal(ChatCore.isLoadedConversation(20, { id: 20 }, 20), true);
+  assert.equal(ChatCore.isLoadedConversation(20, { id: 19 }, 20), false);
+  assert.equal(ChatCore.isLoadedConversation(20, null, 20), false);
+});

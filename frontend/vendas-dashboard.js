@@ -97,6 +97,13 @@
     return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}-${String(agora.getDate()).padStart(2, '0')}`;
   }
 
+  function dataInicialPadrao() {
+    const data = new Date();
+    data.setHours(0, 0, 0, 0);
+    data.setDate(data.getDate() - 29);
+    return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
+  }
+
   function dataBr(valor) {
     const match = String(valor || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
     return match ? `${match[3]}/${match[2]}/${match[1]}` : String(valor || '');
@@ -283,7 +290,7 @@
   async function preparar() {
     const hoje = dataHoje();
     if (!elementos.fim.value) elementos.fim.value = hoje;
-    if (!elementos.inicio.value) elementos.inicio.value = `${hoje.slice(0, 4)}-01-01`;
+    if (!elementos.inicio.value) elementos.inicio.value = dataInicialPadrao();
     await carregarEmpresas();
     await carregar();
   }
