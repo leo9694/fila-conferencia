@@ -15,7 +15,6 @@ test('persiste acesso e perfil do atendente sem guardar credenciais', () => {
     nomeExibicao: 'Leonardo Gabriel',
     assinatura: 'Leonardo | Norte Sul'
   }, 1);
-
   const recarregado = criarChatAtendenteStore({ filePath });
   assert.equal(recarregado.permitido(72), true);
   assert.equal(recarregado.obter(72).assinatura, 'Leonardo | Norte Sul');
@@ -111,7 +110,6 @@ test('persiste chats ocultos por usuário e permite revelá-los novamente', () =
   const filePath = path.join(dir, 'atendimentos.json');
   const store = criarChatAtendenteStore({ filePath });
   const identidades = ['id:19', 'id:20', 'phone:556692339094'];
-
   store.ocultarConversa(72, identidades, { nome: 'Leonardo - TI', telefone: '556692339094' });
   const recarregado = criarChatAtendenteStore({ filePath });
   assert.ok(recarregado.obterOcultacao(72, ['phone:556692339094']));
@@ -119,4 +117,22 @@ test('persiste chats ocultos por usuário e permite revelá-los novamente', () =
   assert.equal(recarregado.revelarConversa(72, identidades), true);
   assert.equal(recarregado.obterOcultacao(72, identidades), null);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('oculta uma conversa globalmente para todos os usuários e persiste a regra', (t) => {
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-store-'));
+  t.after(() => fs.rmSync(baseDir, { recursive: true, force: true }));
+
+  const store = criarChatAtendenteStore({ baseDir });
+  store.ocultarConversaGlobal(['id:19', 'phone:556692339094'], {
+    nome: 'Leonardo - TI - NORTE SUL',
+    telefone: '556692339094'
+  });
+
+  assert.equal(store.obterOcultacaoGlobal(['id:19']).nome, 'Leonardo - TI - NORTE SUL');
+  assert.equal(store.obterOcultacaoGlobal(['phone:556692339094']).telefone, '556692339094');
+
+  const recarregado = criarChatAtendenteStore({ baseDir });
+  assert.ok(recarregado.obterOcultacaoGlobal(['id:19']));
+  assert.equal(recarregado.obterOcultacaoGlobal(['id:38']), null);
 });

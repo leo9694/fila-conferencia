@@ -62,6 +62,24 @@ test('envia a reação para a mensagem da conversa sem montar URL manualmente', 
   }
 });
 
+test('normaliza o envelope da API ao criar uma conversa', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => new Response(JSON.stringify({
+    success: true,
+    data: { conversation: { id: 91, contact: { waId: '5566999990000' } }, created: true }
+  }), {
+    status: 201,
+    headers: { 'content-type': 'application/json' }
+  });
+  try {
+    const result = await whatsappApi.createConversation({ name: 'Cliente Teste', phone: '5566999990000' });
+    assert.equal(result.conversation.id, 91);
+    assert.equal(result.created, true);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('bridge em tempo real assina eventos e encerra socket sem ouvintes', () => {
   const handlers = new Map();
   let disconnected = false;

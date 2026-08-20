@@ -326,19 +326,19 @@
   function showConversationMenu(button, clientX, clientY) {
     closeConversationMenu();
     const conversationId = button.dataset.conversationId;
+    const conversation = state.conversations.find((item) => String(item.id) === String(conversationId));
+    const canMarkRead = ownsConversation(conversation);
     const menu = document.createElement('div');
     menu.className = 'chat-conversation-context-menu';
-    menu.innerHTML = `<button type="button" data-chat-menu-read><i data-lucide="check-check"></i>Marcar como lida</button><button type="button" class="is-danger" data-chat-menu-delete><i data-lucide="trash-2"></i>Excluir chat</button>`;
+    menu.innerHTML = `${canMarkRead ? '<button type="button" data-chat-menu-read><i data-lucide="check-check"></i>Marcar como lida</button>' : ''}<button type="button" class="is-danger" data-chat-menu-delete><i data-lucide="trash-2"></i>Excluir chat</button>`;
     document.body.append(menu);
     const width = menu.offsetWidth || 190;
     const height = menu.offsetHeight || 84;
     menu.style.left = `${Math.max(8, Math.min(clientX, window.innerWidth - width - 8))}px`;
     menu.style.top = `${Math.max(8, Math.min(clientY, window.innerHeight - height - 8))}px`;
-    menu.querySelector('[data-chat-menu-read]').addEventListener('click', async () => {
+    menu.querySelector('[data-chat-menu-read]')?.addEventListener('click', async () => {
       closeConversationMenu();
       await markRead(conversationId);
-      const item = state.conversations.find((conversation) => String(conversation.id) === String(conversationId));
-      if (item) { item.unreadCount = 0; renderConversations(); }
     });
     menu.querySelector('[data-chat-menu-delete]').addEventListener('click', async () => {
       closeConversationMenu();
@@ -839,7 +839,9 @@
       state.messageTotalPages = Number(payload?.pagination?.totalPages || 1);
       renderConversationDetails(); renderMessages();
       const listItem = state.conversations.find((item) => String(item.id) === requestedId);
-      if (Number(listItem?.unreadCount || conversation?.unreadCount || 0) > 0) markRead(requestedId);
+      if (ownsConversation(conversation) && Number(listItem?.unreadCount || conversation?.unreadCount || 0) > 0) {
+        markRead(requestedId);
+      }
       updateConversationHistory(requestedId, historyMode);
     } catch (error) {
       if (token !== state.activeLoadToken || requestedId !== String(state.conversationId)) return;
@@ -1041,7 +1043,7 @@
         const shouldScroll = nearBottom();
         state.messages = Core.mergeById(state.messages, [payload.message]); renderMessages({ preserveScroll: !shouldScroll });
         if (shouldScroll) requestAnimationFrame(() => scrollBottom('smooth')); else refs.newMessage.hidden = false;
-        if (String(payload.message?.direction).toUpperCase() === 'INBOUND') {
+        if (ownsConversation() && String(payload.message?.direction).toUpperCase() === 'INBOUND') {
           markRead(id);
           refreshActiveConversation(id);
         }
@@ -1063,9 +1065,9 @@
     }
     else if (event === 'conversation:read' || event === 'conversation:status' || event === 'conversation:assignment') applyConversationUpdate(payload);
     else if (event === 'conversation:deleted') {
-      const id = String(payload.conversationId || '');
-      state.conversations = state.conversations.filter((item) => String(item.id) !== id);
-      if (String(state.conversationId) === id) showConversationList({ replaceHistory: true });
+      const ids = new Set([payload.conversationId, ...(payload.relatedConversationIds || [])].map(String));
+      state.conversations = state.conversations.filter((item) => !ids.has(String(item.id)));
+      if (ids.has(String(state.conversationId))) showConversationList({ replaceHistory: true });
       renderConversations();
     }
   }
@@ -1136,6 +1138,11 @@
     if (!choice) return null;
     try {
       const conversation = await changeAssignment('CLAIM', null, choice);
+      if (conversation.readConfirmed) {
+        const item = state.conversations.find((entry) => String(entry.id) === String(id));
+        if (item) item.unreadCount = 0;
+        if (state.conversation) state.conversation.unreadCount = 0;
+      }
       state.assignment = 'MINE';
       refs.filters.querySelectorAll('[data-chat-assignment]').forEach((button) => button.classList.toggle('is-active', button.dataset.chatAssignment === 'MINE'));
       await loadConversations();
@@ -1678,7 +1685,7 @@
     modal.innerHTML = `<section class="chat-delete-dialog" role="dialog" aria-modal="true" aria-labelledby="chat-delete-title">
       <div class="chat-delete-icon"><i data-lucide="trash-2"></i></div>
       <h2 id="chat-delete-title">Excluir chat?</h2>
-      <p>Este chat será removido da sua lista em todos os dispositivos. O contato e as mensagens no WhatsApp não serão apagados; ele reaparecerá somente com uma nova mensagem ou se você iniciar a conversa novamente.</p>
+      <p>Este chat será removido para todos os usuários do atendimento. O contato e as mensagens no WhatsApp não serão apagados.</p>
       <span class="chat-delete-feedback" aria-live="polite"></span>
       <footer><button type="button" data-chat-delete-cancel>Cancelar</button><button type="button" data-chat-delete-confirm>Excluir chat</button></footer>
     </section>`;

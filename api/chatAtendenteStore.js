@@ -10,20 +10,27 @@ function normalizarTexto(valor, limite = 160) {
   return String(valor || '').trim().slice(0, limite);
 }
 
+function estadoVazio() {
+  return { usuarios: {}, conversas: {}, ocultas: {}, ocultasGlobais: {} };
+}
+
 function carregar(filePath) {
-  if (!fs.existsSync(filePath)) return { usuarios: {}, conversas: {}, ocultas: {} };
+  if (!fs.existsSync(filePath)) return estadoVazio();
   try {
     const conteudo = JSON.parse(fs.readFileSync(filePath, 'utf8'));
     return conteudo && typeof conteudo === 'object'
       ? {
         usuarios: conteudo.usuarios && typeof conteudo.usuarios === 'object' ? conteudo.usuarios : {},
         conversas: conteudo.conversas && typeof conteudo.conversas === 'object' ? conteudo.conversas : {},
-        ocultas: conteudo.ocultas && typeof conteudo.ocultas === 'object' ? conteudo.ocultas : {}
+        ocultas: conteudo.ocultas && typeof conteudo.ocultas === 'object' ? conteudo.ocultas : {},
+        ocultasGlobais: conteudo.ocultasGlobais && typeof conteudo.ocultasGlobais === 'object'
+          ? conteudo.ocultasGlobais
+          : {}
       }
-      : { usuarios: {}, conversas: {}, ocultas: {} };
+      : estadoVazio();
   } catch (error) {
     console.error('Falha ao carregar configuracao dos atendentes do chat:', error.message);
-    return { usuarios: {}, conversas: {}, ocultas: {} };
+    return estadoVazio();
   }
 }
 
@@ -229,6 +236,27 @@ function criarChatAtendenteStore(options = {}) {
     return { identidades: chaves, ...registro };
   }
 
+  function ocultarConversaGlobal(identidades, dados = {}) {
+    const chaves = normalizarIdentidades(identidades);
+    if (!chaves.length) throw new TypeError('Conversa inválida para ocultação global.');
+    const registro = {
+      ocultadaEm: new Date().toISOString(),
+      nome: normalizarTexto(dados.nome),
+      telefone: normalizarTexto(dados.telefone, 40)
+    };
+    chaves.forEach((chave) => { state.ocultasGlobais[chave] = registro; });
+    persistir();
+    return { identidades: chaves, ...registro };
+  }
+
+  function obterOcultacaoGlobal(identidades) {
+    const registros = normalizarIdentidades(identidades)
+      .map((chave) => state.ocultasGlobais[chave])
+      .filter(Boolean)
+      .sort((a, b) => new Date(b.ocultadaEm || 0) - new Date(a.ocultadaEm || 0));
+    return registros[0] ? { ...registros[0] } : null;
+  }
+
   function obterOcultacao(codUsu, identidades) {
     const codigo = normalizarCodigo(codUsu);
     if (codigo === null) return null;
@@ -267,7 +295,9 @@ function criarChatAtendenteStore(options = {}) {
     arquivarPipelinesConcluidos,
     marcarPipelinePendente,
     ocultarConversa,
+    ocultarConversaGlobal,
     obterOcultacao,
+    obterOcultacaoGlobal,
     revelarConversa
   };
 }

@@ -82,7 +82,11 @@ async function getConversation(id) {
 }
 
 async function createConversation(payload) {
-  return request('/api/conversations', json('POST', payload));
+  const response = await request('/api/conversations', json('POST', payload));
+  // A API de atendimento usa o envelope { success, data } nas criações,
+  // enquanto os endpoints de consulta retornam o recurso diretamente.
+  // Normalize aqui para os consumidores sempre receberem { conversation, ... }.
+  return response?.data?.conversation ? response.data : response;
 }
 
 async function getMessages(id, params) {

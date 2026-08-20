@@ -207,6 +207,7 @@ function instanteUltimaMensagem(conversa = {}) {
 
 function conversaOcultaParaUsuario(codUsu, conversa = {}) {
   const chaves = chavesIdentidadeConversa(conversa);
+  if (atendentes.obterOcultacaoGlobal(chaves)) return true;
   const ocultacao = atendentes.obterOcultacao(codUsu, chaves);
   if (!ocultacao) return false;
   const ocultadaEm = new Date(ocultacao.ocultadaEm || 0).getTime();
@@ -379,6 +380,29 @@ async function vincularCadastrosSankhya(conversas = []) {
     console.error('Falha ao vincular telefones do chat aos parceiros Sankhya:', error.message);
     return conversas.map((conversa) => ({ ...conversa, cadastroSankhya: null }));
   }
+}
+
+function vincularCadastrosSankhyaDoCache(conversas = []) {
+  const now = Date.now();
+  return conversas.map((conversa) => {
+    const identity = identidadeTelefoneWhatsapp(telefoneDaConversa(conversa));
+    const cached = cacheCadastroSankhyaPorTelefone.get(identity);
+    if (cached?.expiresAt <= now) cacheCadastroSankhyaPorTelefone.delete(identity);
+    return {
+      ...conversa,
+      cadastroSankhya: cached?.expiresAt > now ? cached.cadastro : (conversa.cadastroSankhya || null)
+    };
+  });
+}
+
+async function enriquecerConversasEmSegundoPlano(conversas = []) {
+  const [, vinculadas] = await Promise.all([
+    sincronizarPipelinesBitrix(conversas),
+    vincularCadastrosSankhya(conversas)
+  ]);
+  vinculadas.forEach((conversa) => {
+    eventosAtendimento.emit('updated', { conversation: comAtribuicao(conversa) });
+  });
 }
 
 function registrarGrupoConversa(canonica, itens) {
@@ -1006,8 +1030,12 @@ router.get('/conversations', asyncRoute(async (req, res) => {
   // ações de atendimento, não a visualização da conversa.
   const assignment = String(req.query.assignment || 'ALL').toUpperCase();
   const consolidadasBase = consolidarConversas(resposta.data || []);
-  await sincronizarPipelinesBitrix(consolidadasBase);
-  const consolidadas = await vincularCadastrosSankhya(consolidadasBase.map(comAtribuicao));
+  // Bitrix e Sankhya enriquecem a fila, mas não podem bloquear o acesso ao chat.
+  // Entregue imediatamente o estado local/cacheado e atualize os cards via SSE.
+  const consolidadas = vincularCadastrosSankhyaDoCache(consolidadasBase.map(comAtribuicao));
+  void enriquecerConversasEmSegundoPlano(consolidadasBase).catch((error) => {
+    console.error('Falha ao enriquecer a fila do chat em segundo plano:', error.message);
+  });
   const data = consolidadas.filter((conversa) => {
     if (conversaOcultaParaUsuario(req.usuario.codUsu, conversa)) return false;
     if (assignment === 'ALL') return true;
@@ -1184,7 +1212,19 @@ router.post('/conversations/:id/claim', asyncRoute(async (req, res) => {
   } else if (withoutPipeline || !(atual?.bitrixPipelines || []).length) {
     atendentes.marcarPipelinePendente(conversationId, 'Atendimento assumido sem pipeline.');
   }
-  const resultado = { ...comAtribuicao({ id: conversationId }), ...(bitrixError ? { bitrixError } : {}) };
+  let readConfirmed = false;
+  try {
+    const messageConversationId = await idConversaParaMensagem(conversationId);
+    await whatsappApi.markConversationRead(messageConversationId);
+    readConfirmed = true;
+  } catch {
+    // A atribuição local continua válida mesmo se a Meta não confirmar a leitura.
+  }
+  const resultado = {
+    ...comAtribuicao({ id: conversationId }),
+    readConfirmed,
+    ...(bitrixError ? { bitrixError } : {})
+  };
   eventosAtendimento.emit('assignment', { conversationId, conversation: resultado, assignment });
   res.json(resultado);
 }));
@@ -1235,7 +1275,10 @@ router.post('/conversations/:id/transfer', asyncRoute(async (req, res) => {
 }));
 
 router.post('/conversations/:id/read', asyncRoute(async (req, res) => {
-  const messageConversationId = await idConversaParaMensagem(id(req.params.id));
+  const conversationId = id(req.params.id);
+  const conversation = await obterConversaConsolidada(conversationId);
+  podeAtender(conversation, req.atendente);
+  const messageConversationId = await idConversaParaMensagem(conversationId);
   res.json(await whatsappApi.markConversationRead(messageConversationId));
 }));
 
@@ -1252,15 +1295,19 @@ router.patch('/conversations/:id/status', asyncRoute(async (req, res) => {
 router.delete('/conversations/:id', asyncRoute(async (req, res) => {
   const conversation = await obterConversaConsolidada(id(req.params.id));
   const contact = conversation.contact || conversation.Contact || {};
-  const ocultacao = atendentes.ocultarConversa(
-    req.usuario.codUsu,
+  const ocultacao = atendentes.ocultarConversaGlobal(
     chavesIdentidadeConversa(conversation),
     {
       nome: contact.name || contact.profileName || '',
       telefone: telefoneDaConversa(conversation)
     }
   );
-  res.json({ ocultada: true, conversationId: Number(conversation.id), ocultacao });
+  eventosAtendimento.emit('deleted', {
+    conversationId: Number(conversation.id),
+    relatedConversationIds: conversation.relatedConversationIds || [],
+    global: true
+  });
+  res.json({ ocultada: true, global: true, conversationId: Number(conversation.id), ocultacao });
 }));
 
 router.get('/templates', asyncRoute(async (req, res) => {
@@ -1323,7 +1370,14 @@ router.get('/events', (req, res) => {
     res.write(`data: ${JSON.stringify(payload)}\n\n`);
   };
   const onAssignment = (payload) => write('conversation:assignment', payload);
+  const onDeleted = (payload) => write('conversation:deleted', payload);
+  const onUpdated = (payload) => {
+    const conversation = payload?.conversation || payload || {};
+    if (!conversaOcultaParaUsuario(req.usuario.codUsu, conversation)) write('conversation:updated', payload);
+  };
   eventosAtendimento.on('assignment', onAssignment);
+  eventosAtendimento.on('deleted', onDeleted);
+  eventosAtendimento.on('updated', onUpdated);
   const unsubscribe = realtime.subscribe(
     ({ event, payload }) => {
       normalizarEventoAtendimento(event, payload)
@@ -1346,6 +1400,8 @@ router.get('/events', (req, res) => {
   req.on('close', () => {
     clearInterval(keepAlive);
     eventosAtendimento.off('assignment', onAssignment);
+    eventosAtendimento.off('deleted', onDeleted);
+    eventosAtendimento.off('updated', onUpdated);
     unsubscribe();
   });
 });
