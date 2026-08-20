@@ -73,6 +73,41 @@
     return emoji && (messageId || type === 'reaction') ? { emoji, messageId } : null;
   }
 
+  function reactionTarget(message = {}) {
+    const nested = message.meta || message.metadata || message.payload || {};
+    const candidates = [
+      message.wamid,
+      message.messageId,
+      message.message_id,
+      message.metaMessageId,
+      message.externalId,
+      nested.wamid,
+      nested.messageId,
+      nested.message_id,
+      typeof message.id === 'string' && !/^\d+$/.test(message.id) ? message.id : ''
+    ];
+    return candidates
+      .map((value) => String(value || '').trim())
+      .find((value) => /^[A-Za-z0-9._:+=/-]{3,512}$/.test(value)) || '';
+  }
+
+  function replyContext(message = {}) {
+    let value = message.replyContext || message.reply || message.context || message.metadata?.replyContext || null;
+    if (typeof value === 'string') {
+      try { value = JSON.parse(value); } catch { return null; }
+    }
+    if (!value || typeof value !== 'object') return null;
+    const messageId = String(value.messageId || value.message_id || value.wamid || '').trim();
+    const text = String(value.text || value.body || value.preview || '').trim();
+    if (!messageId && !text) return null;
+    return {
+      messageId,
+      text: text || 'Mensagem',
+      senderName: String(value.senderName || value.sender || value.author || '').trim(),
+      direction: String(value.direction || '').toUpperCase()
+    };
+  }
+
   function interactiveReplyText(message = {}) {
     let value = message.interactive || message.button || message.text || null;
     if (typeof value === 'string') {
@@ -260,6 +295,8 @@
     messagePreview,
     normalizePhone,
     reactionInfo,
+    reactionTarget,
+    replyContext,
     sharedContact,
     serviceWindow,
     serviceWindowState,

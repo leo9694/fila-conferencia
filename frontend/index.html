@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="/transporte-dashboard.css?v=20260810-3">
-  <link rel="stylesheet" href="/chat.css?v=20260819-7">
+  <link rel="stylesheet" href="/chat.css?v=20260820-1">
 
   <style>
     :root {
@@ -12493,6 +12493,11 @@
               <button id="chat-recording-send" type="button">Enviar</button>
             </div>
             <form class="chat-composer" id="chat-composer">
+              <div class="chat-composer-reply" id="chat-composer-reply" hidden>
+                <span><i data-lucide="reply" aria-hidden="true"></i></span>
+                <div><strong id="chat-composer-reply-author">Respondendo</strong><small id="chat-composer-reply-text"></small></div>
+                <button id="chat-composer-reply-cancel" type="button" aria-label="Cancelar resposta"><i data-lucide="x" aria-hidden="true"></i></button>
+              </div>
               <div class="chat-attachment-wrap">
                 <button class="chat-icon-button" id="chat-attachment-toggle" type="button" aria-label="Anexar arquivo" aria-expanded="false">
                   <i data-lucide="paperclip" aria-hidden="true"></i>
@@ -12511,7 +12516,12 @@
                   <i data-lucide="smile" aria-hidden="true"></i>
                 </button>
                 <div class="chat-emoji-menu" id="chat-emoji-menu" hidden aria-label="Emojis frequentes">
-                  <button type="button" data-chat-emoji="👍" aria-label="Curtir">👍</button><button type="button" data-chat-emoji="👏" aria-label="Palmas">👏</button><button type="button" data-chat-emoji="✅" aria-label="Confirmado">✅</button><button type="button" data-chat-emoji="🙏" aria-label="Obrigado">🙏</button><button type="button" data-chat-emoji="😊" aria-label="Sorriso">😊</button><button type="button" data-chat-emoji="🎉" aria-label="Comemorar">🎉</button><button type="button" data-chat-emoji="❤️" aria-label="Coração">❤️</button><button type="button" data-chat-emoji="👋" aria-label="Olá">👋</button>
+                  <div class="chat-emoji-primary">
+                    <button type="button" data-chat-emoji="👍" aria-label="Curtir">👍</button><button type="button" data-chat-emoji="👏" aria-label="Palmas">👏</button><button type="button" data-chat-emoji="✅" aria-label="Confirmado">✅</button><button type="button" data-chat-emoji="🙏" aria-label="Obrigado">🙏</button><button type="button" data-chat-emoji="😊" aria-label="Sorriso">😊</button><button type="button" data-chat-emoji="🎉" aria-label="Comemorar">🎉</button><button type="button" data-chat-emoji="❤️" aria-label="Coração">❤️</button><button type="button" data-chat-emoji="👋" aria-label="Olá">👋</button><button class="chat-emoji-more-toggle" type="button" data-chat-emoji-more aria-label="Mais emojis" aria-expanded="false">+</button>
+                  </div>
+                  <div class="chat-emoji-more" data-chat-emoji-more-list hidden>
+                    <button type="button" data-chat-emoji="😂">😂</button><button type="button" data-chat-emoji="🤣">🤣</button><button type="button" data-chat-emoji="😍">😍</button><button type="button" data-chat-emoji="🥰">🥰</button><button type="button" data-chat-emoji="😘">😘</button><button type="button" data-chat-emoji="😅">😅</button><button type="button" data-chat-emoji="😎">😎</button><button type="button" data-chat-emoji="🤩">🤩</button><button type="button" data-chat-emoji="🤔">🤔</button><button type="button" data-chat-emoji="😮">😮</button><button type="button" data-chat-emoji="😢">😢</button><button type="button" data-chat-emoji="😭">😭</button><button type="button" data-chat-emoji="😡">😡</button><button type="button" data-chat-emoji="🔥">🔥</button><button type="button" data-chat-emoji="💯">💯</button><button type="button" data-chat-emoji="🙌">🙌</button><button type="button" data-chat-emoji="🤝">🤝</button><button type="button" data-chat-emoji="👀">👀</button><button type="button" data-chat-emoji="💪">💪</button><button type="button" data-chat-emoji="👌">👌</button><button type="button" data-chat-emoji="👎">👎</button><button type="button" data-chat-emoji="💚">💚</button><button type="button" data-chat-emoji="💙">💙</button><button type="button" data-chat-emoji="✨">✨</button>
+                  </div>
                 </div>
               </div>
               <textarea id="chat-message-input" rows="1" maxlength="4096" placeholder="Digite uma mensagem" aria-label="Mensagem"></textarea>
@@ -12817,8 +12827,8 @@
   <script src="vendas-dashboard.js?v=20260820-1"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="transporte-dashboard.js?v=20260820-1"></script>
-  <script src="chat-core.js?v=20260819-1"></script>
-  <script src="chat.js?v=20260819-6"></script>
+  <script src="chat-core.js?v=20260820-1"></script>
+  <script src="chat.js?v=20260820-1"></script>
   <script src="app.js?v=20260805-5"></script>
 </body>
 </html>

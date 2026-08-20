@@ -137,7 +137,7 @@ function idMensagemWhatsapp(value) {
   const messageId = String(value || '').trim();
   // WAMIDs podem terminar com "="; por isso não usamos uma validação apenas
   // numérica nem interpolamos o identificador em SQL.
-  return /^[A-Za-z0-9._:=-]{3,512}$/.test(messageId) ? messageId : '';
+  return /^[A-Za-z0-9._:+=/-]{3,512}$/.test(messageId) ? messageId : '';
 }
 
 function filtroAcessoAtivo(alias = 'USU') {
@@ -1206,10 +1206,20 @@ router.get('/conversations/:id/messages', asyncRoute(async (req, res) => {
 router.post('/conversations/:id/messages', asyncRoute(async (req, res) => {
   const text = String(req.body?.text || '').trim();
   if (!text) return res.status(400).json({ erro: 'Digite uma mensagem.' });
+  const replyToMessageId = req.body?.replyToMessageId
+    ? idMensagemWhatsapp(req.body.replyToMessageId)
+    : '';
+  if (req.body?.replyToMessageId && !replyToMessageId) {
+    return res.status(400).json({ erro: 'A mensagem selecionada para resposta é inválida.' });
+  }
   const conversation = await obterConversaConsolidada(id(req.params.id));
   podeAtender(conversation, req.atendente);
   const messageConversationId = await idConversaParaMensagem(id(req.params.id));
-  const resposta = await whatsappApi.sendTextMessage(messageConversationId, textoAssinado(text, req.atendente));
+  const resposta = await whatsappApi.sendTextMessage(
+    messageConversationId,
+    textoAssinado(text, req.atendente),
+    replyToMessageId
+  );
   atendentes.registrarInteracao(conversation.id);
   res.status(201).json(resposta);
 }));

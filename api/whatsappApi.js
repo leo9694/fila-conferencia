@@ -93,8 +93,11 @@ async function getMessages(id, params) {
   return request(`/api/conversations/${encodeURIComponent(id)}/messages${queryString(params)}`);
 }
 
-async function sendTextMessage(id, text) {
-  return request(`/api/conversations/${encodeURIComponent(id)}/messages`, json('POST', { text }));
+async function sendTextMessage(id, text, replyToMessageId = '') {
+  return request(`/api/conversations/${encodeURIComponent(id)}/messages`, json('POST', {
+    text,
+    ...(replyToMessageId ? { replyToMessageId } : {})
+  }));
 }
 
 async function sendReaction(id, messageId, emoji) {

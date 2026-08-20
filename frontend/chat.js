@@ -8,6 +8,8 @@
   const MESSAGE_SCROLL_THRESHOLD = 80;
   const MESSAGE_FILL_RATIO = 1.25;
   const HIDDEN_CONVERSATIONS_KEY = 'fila-conferencia.chat.hidden-conversations';
+  const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+  const MORE_REACTIONS = ['👏', '🔥', '🎉', '✅', '😊', '😍', '🤔', '😅', '🤝', '👀', '💯', '🙌', '👎', '😡', '🤩', '🥳'];
 
   const byId = (id) => document.getElementById(id);
   const refs = {
@@ -16,6 +18,8 @@
     refresh: byId('chat-refresh'), newContact: byId('chat-new-contact'), more: byId('chat-load-more'), empty: byId('chat-empty-state'),
     active: byId('chat-active-view'), messages: byId('chat-message-list'), input: byId('chat-message-input'),
     form: byId('chat-composer'), send: byId('chat-send'), feedback: byId('chat-composer-feedback'),
+    composerReply: byId('chat-composer-reply'), composerReplyAuthor: byId('chat-composer-reply-author'),
+    composerReplyText: byId('chat-composer-reply-text'), composerReplyCancel: byId('chat-composer-reply-cancel'),
     contactName: byId('chat-contact-name'), contactPhone: byId('chat-contact-phone'),
     contactAvatar: byId('chat-contact-avatar'), details: byId('chat-details-panel'),
     detailsToggle: byId('chat-details-toggle'), detailsClose: byId('chat-details-close'),
@@ -71,7 +75,7 @@
     totalConversations: 0, assignment: 'ALL', access: null, profile: null, agents: [],
     hiddenConversationIds: new Set(), selectedPartner: null, partnerSearchToken: 0,
     linkPartner: null, linkPartnerSearchToken: 0, pipelines: [], pipelinesPromise: null,
-    mediaZoom: 1
+    mediaZoom: 1, replyingTo: null
   };
 
   let viewportSyncTimer = null;
@@ -490,6 +494,13 @@
     return '<div class="chat-unsupported"><i data-lucide="circle-help"></i>Mensagem não suportada</div>';
   }
 
+  function renderReplyContext(message) {
+    const reply = Core.replyContext(message);
+    if (!reply) return '';
+    const author = reply.senderName || (reply.direction === 'OUTBOUND' ? 'Você' : Core.contactName(state.conversation || {}));
+    return `<div class="chat-message-reply-quote"><strong>${escapeHtml(author)}</strong><span>${escapeHtml(reply.text)}</span></div>`;
+  }
+
   function renderTemplateMessage(message) {
     const template = message.template || {};
     const header = template.header || '';
@@ -521,20 +532,27 @@
   }
 
   function messageReactionTarget(message = {}) {
-    return [message.wamid, message.messageId]
-      .map((value) => String(value || '').trim())
-      .find((value) => /^[A-Za-z0-9._:=-]{3,512}$/.test(value)) || '';
+    return Core.reactionTarget(message);
   }
 
   function renderReactionActions(message) {
     const target = messageReactionTarget(message);
-    const canReact = target && ownsConversation() && !state.conversation?.requiresTemplate;
-    if (!canReact) return '';
+    const serviceWindow = Core.serviceWindow(state.conversation || {});
+    const reactionAvailable = target && serviceWindow.canSendFreeform === true;
+    if (!reactionAvailable) return '';
+    const owner = ownsConversation();
     const targetEscaped = escapeHtml(target);
     return `<div class="chat-message-actions">
-      <button class="chat-message-action-toggle" type="button" data-chat-reaction-toggle aria-label="Reagir à mensagem" aria-expanded="false"><i data-lucide="chevron-down"></i></button>
+      <button class="chat-message-action-toggle${owner ? '' : ' requires-assignment'}" type="button" data-chat-reaction-toggle aria-label="${owner ? 'Reagir à mensagem' : 'Assuma o atendimento para reagir'}" title="${owner ? 'Reagir à mensagem' : 'Assuma o atendimento para reagir'}" aria-expanded="false"><i data-lucide="chevron-down"></i></button>
       <div class="chat-message-reaction-menu" data-chat-reaction-menu hidden>
-        ${['👍', '❤️', '😂', '😮', '😢', '🙏'].map((emoji) => `<button type="button" data-chat-message-reaction data-message-id="${targetEscaped}" data-emoji="${emoji}" aria-label="Reagir com ${emoji}">${emoji}</button>`).join('')}
+        <div class="chat-message-reaction-quick">
+          ${QUICK_REACTIONS.map((emoji) => `<button type="button" data-chat-message-reaction data-message-id="${targetEscaped}" data-emoji="${emoji}" aria-label="Reagir com ${emoji}">${emoji}</button>`).join('')}
+          <button class="chat-message-reaction-more-toggle" type="button" data-chat-reaction-more aria-label="Mais emojis" aria-expanded="false">+</button>
+        </div>
+        <div class="chat-message-reaction-more" data-chat-reaction-more-list hidden>
+          ${MORE_REACTIONS.map((emoji) => `<button type="button" data-chat-message-reaction data-message-id="${targetEscaped}" data-emoji="${emoji}" aria-label="Reagir com ${emoji}">${emoji}</button>`).join('')}
+        </div>
+        <button class="chat-message-reply-action" type="button" data-chat-message-reply data-message-id="${targetEscaped}"><i data-lucide="reply"></i><span>Responder</span></button>
       </div>
     </div>`;
   }
@@ -547,7 +565,7 @@
       window.lucide?.createIcons();
       return;
     }
-    const messageKeys = new Set(state.messages.flatMap((message) => [message.id, message.wamid, message.messageId]
+    const messageKeys = new Set(state.messages.flatMap((message) => [message.id, message.wamid, message.messageId, messageReactionTarget(message)]
       .map((value) => String(value || '').trim()).filter(Boolean)));
     const reactionsByMessage = new Map();
     state.messages.forEach((message) => {
@@ -564,7 +582,7 @@
     refs.messages.innerHTML = `${state.messagePage < state.messageTotalPages ? '<div class="chat-history-loader" aria-hidden="true"><span></span><span></span><span></span></div>' : ''}${renderMetaSessionNotice()}${messages.map((message) => {
       const outbound = String(message.direction).toUpperCase() === 'OUTBOUND';
       const status = Core.statusSymbol(message.status);
-      const reactions = [...new Set([message.id, message.wamid, message.messageId]
+      const reactions = [...new Set([message.id, message.wamid, message.messageId, messageReactionTarget(message)]
         .map((value) => reactionsByMessage.get(String(value || '').trim()) || []).flat())];
       const reactionBadge = reactions.length
         ? `<span class="chat-reaction-badge" title="Reação recebida">${reactions.map((emoji) => escapeHtml(emoji)).join('')}</span>`
@@ -575,7 +593,7 @@
         ? `<div class="chat-message-failure" role="alert"><span aria-hidden="true">!</span><div><strong>Falha no envio</strong><small>${failureReason.code ? `Erro ${escapeHtml(failureReason.code)}: ` : ''}${escapeHtml(failureReason.text)}</small></div></div>`
         : '';
       return `<article class="chat-message ${outbound ? 'is-outbound' : 'is-inbound'}" data-message-id="${escapeHtml(message.id)}">
-        <div class="chat-bubble${reactions.length ? ' has-reaction' : ''}">${renderMessageContent(message)}<footer><time>${escapeHtml(messageTime(message))}</time>${outbound && status.symbol ? `<span class="chat-message-status${statusClass}" title="${escapeHtml(status.label)}" aria-label="${escapeHtml(status.label)}">${status.symbol}</span>` : ''}</footer>${failureAlert}${reactionBadge}${renderReactionActions(message)}</div>
+        <div class="chat-bubble${reactions.length ? ' has-reaction' : ''}">${renderReplyContext(message)}${renderMessageContent(message)}<footer><time>${escapeHtml(messageTime(message))}</time>${outbound && status.symbol ? `<span class="chat-message-status${statusClass}" title="${escapeHtml(status.label)}" aria-label="${escapeHtml(status.label)}">${status.symbol}</span>` : ''}</footer>${failureAlert}${reactionBadge}${renderReactionActions(message)}</div>
       </article>`;
     }).join('')}`;
     refs.messages.querySelectorAll('[data-chat-media]').forEach((element) => {
@@ -598,8 +616,12 @@
         actions.classList.remove('is-open');
         const menu = actions.querySelector('[data-chat-reaction-menu]');
         const toggle = actions.querySelector('[data-chat-reaction-toggle]');
+        const more = actions.querySelector('[data-chat-reaction-more]');
+        const moreList = actions.querySelector('[data-chat-reaction-more-list]');
         if (menu) menu.hidden = true;
         if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        if (more) more.setAttribute('aria-expanded', 'false');
+        if (moreList) moreList.hidden = true;
       });
     };
     const setReactionMenuOpen = (actions, open) => {
@@ -615,6 +637,17 @@
       button.addEventListener('click', () => {
         const actions = button.closest('.chat-message-actions');
         setReactionMenuOpen(actions, !actions?.classList.contains('is-open'));
+      });
+    });
+    refs.messages.querySelectorAll('[data-chat-reaction-more]').forEach((button) => {
+      button.addEventListener('click', (event) => {
+        event.stopPropagation();
+        const actions = button.closest('.chat-message-actions');
+        const moreList = actions?.querySelector('[data-chat-reaction-more-list]');
+        if (!moreList) return;
+        const expanded = moreList.hidden;
+        moreList.hidden = !expanded;
+        button.setAttribute('aria-expanded', String(expanded));
       });
     });
     const mobileReactionGesture = window.matchMedia('(max-width: 640px), (pointer: coarse)').matches;
@@ -661,13 +694,20 @@
           refs.messages.querySelectorAll('.chat-message-actions.is-open').forEach((actions) => {
             actions.classList.remove('is-open');
             const menu = actions.querySelector('[data-chat-reaction-menu]');
+            const more = actions.querySelector('[data-chat-reaction-more]');
+            const moreList = actions.querySelector('[data-chat-reaction-more-list]');
             if (menu) menu.hidden = true;
+            if (more) more.setAttribute('aria-expanded', 'false');
+            if (moreList) moreList.hidden = true;
           });
         }
       });
     }
     refs.messages.querySelectorAll('[data-chat-message-reaction]').forEach((button) => {
       button.addEventListener('click', () => sendReaction(button.dataset.messageId, button.dataset.emoji));
+    });
+    refs.messages.querySelectorAll('[data-chat-message-reply]').forEach((button) => {
+      button.addEventListener('click', () => startReply(button.dataset.messageId));
     });
     window.lucide?.createIcons();
     if (preserveScroll) refs.messages.scrollTop = refs.messages.scrollHeight - oldHeight + oldTop;
@@ -849,6 +889,7 @@
     }
     const token = ++state.activeLoadToken;
     state.conversationId = requestedId;
+    clearReply();
     state.conversation = state.conversations.find((item) => String(item.id) === requestedId) || null;
     state.messages = [];
     state.messagePage = 1;
@@ -930,6 +971,46 @@
     refs.input.style.height = 'auto'; refs.input.style.height = `${Math.min(refs.input.scrollHeight, 128)}px`;
   }
 
+  function renderComposerReply() {
+    if (!refs.composerReply) return;
+    const reply = state.replyingTo;
+    refs.composerReply.hidden = !reply;
+    if (!reply) return;
+    refs.composerReplyAuthor.textContent = reply.senderName || 'Respondendo';
+    refs.composerReplyText.textContent = reply.text || 'Mensagem';
+    window.lucide?.createIcons();
+  }
+
+  function clearReply() {
+    state.replyingTo = null;
+    renderComposerReply();
+  }
+
+  function startReply(messageId) {
+    if (!ownsConversation()) {
+      setFeedback('Assuma o atendimento para responder à mensagem.', true);
+      return;
+    }
+    const message = state.messages.find((item) => messageReactionTarget(item) === String(messageId || ''));
+    if (!message) return;
+    const outbound = String(message.direction || '').toUpperCase() === 'OUTBOUND';
+    state.replyingTo = {
+      messageId,
+      text: Core.messagePreview(message),
+      senderName: outbound ? (message.senderUserName || state.profile?.signature || 'Você') : Core.contactName(state.conversation || {}),
+      direction: outbound ? 'OUTBOUND' : 'INBOUND'
+    };
+    renderComposerReply();
+    refs.messages.querySelectorAll('.chat-message-actions.is-open').forEach((actions) => {
+      actions.classList.remove('is-open');
+      const menu = actions.querySelector('[data-chat-reaction-menu]');
+      const toggle = actions.querySelector('[data-chat-reaction-toggle]');
+      if (menu) menu.hidden = true;
+      if (toggle) toggle.setAttribute('aria-expanded', 'false');
+    });
+    refs.input.focus();
+  }
+
   async function sendText(event) {
     event.preventDefault();
     const text = refs.input.value.trim();
@@ -937,16 +1018,21 @@
     state.sending = true; updateComposer(); setFeedback('Enviando...');
     try {
       const message = await api(`/conversations/${encodeURIComponent(state.conversationId)}/messages`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text, replyToMessageId: state.replyingTo?.messageId || undefined })
       });
-      state.messages = Core.mergeById(state.messages, [message]); refs.input.value = ''; renderMessages();
+      state.messages = Core.mergeById(state.messages, [message]); refs.input.value = ''; clearReply(); renderMessages();
       setFeedback();
     } catch (error) { setFeedback('Não foi possível enviar a mensagem.', true); }
     finally { state.sending = false; updateComposer(); refs.input.focus(); }
   }
 
   async function sendReaction(messageId, emoji) {
-    if (!state.conversationId || !messageId || !emoji || state.sending || !ownsConversation()) return;
+    if (!state.conversationId || !messageId || !emoji || state.sending) return;
+    if (!ownsConversation()) {
+      setFeedback('Assuma o atendimento para reagir à mensagem.', true);
+      return;
+    }
     state.sending = true;
     updateComposer();
     try {
@@ -994,10 +1080,30 @@
   function applyImageZoom(nextZoom) {
     const image = refs.mediaPreview.querySelector('.chat-media-zoom-stage img');
     if (!image) return;
-    state.mediaZoom = Math.min(4, Math.max(0.5, Math.round(nextZoom * 10) / 10));
-    image.style.width = state.mediaZoom === 1 ? '' : `${state.mediaZoom * 100}%`;
-    image.classList.toggle('is-zoomed', state.mediaZoom !== 1);
+    state.mediaZoom = Math.min(4, Math.max(1, Math.round(nextZoom * 10) / 10));
+    const fitWidth = Number(image.dataset.fitWidth);
+    const fitHeight = Number(image.dataset.fitHeight);
+    if (fitWidth > 0 && fitHeight > 0) {
+      image.style.width = `${Math.round(fitWidth * state.mediaZoom)}px`;
+      image.style.height = `${Math.round(fitHeight * state.mediaZoom)}px`;
+    }
+    image.classList.toggle('is-zoomed', state.mediaZoom > 1);
     refs.mediaZoomLabel.textContent = `${Math.round(state.mediaZoom * 100)}%`;
+  }
+
+  function fitImageViewer(image) {
+    const stage = image?.closest('.chat-media-zoom-stage');
+    if (!stage || !image.naturalWidth || !image.naturalHeight) return;
+    const availableWidth = Math.max(1, stage.clientWidth);
+    const availableHeight = Math.max(1, stage.clientHeight);
+    const fitScale = Math.min(
+      availableWidth / image.naturalWidth,
+      availableHeight / image.naturalHeight,
+      1
+    );
+    image.dataset.fitWidth = String(image.naturalWidth * fitScale);
+    image.dataset.fitHeight = String(image.naturalHeight * fitScale);
+    applyImageZoom(state.mediaZoom);
   }
 
   function openImageViewer(url) {
@@ -1007,6 +1113,10 @@
     refs.mediaZoomControls.hidden = false;
     refs.mediaZoomLabel.textContent = '100%';
     refs.mediaModal.hidden = false;
+    const image = refs.mediaPreview.querySelector('.chat-media-zoom-stage img');
+    const fit = () => requestAnimationFrame(() => fitImageViewer(image));
+    if (image.complete) fit();
+    else image.addEventListener('load', fit, { once: true });
     window.lucide?.createIcons();
   }
 
@@ -1784,6 +1894,10 @@
     window.visualViewport?.addEventListener('resize', () => syncRestingViewportHeight(180));
     window.addEventListener('resize', () => syncRestingViewportHeight(180));
     refs.form.addEventListener('submit', sendText); refs.input.addEventListener('input', updateComposer);
+    refs.composerReplyCancel?.addEventListener('click', () => {
+      clearReply();
+      refs.input.focus();
+    });
     refs.input.addEventListener('blur', () => syncRestingViewportHeight(280));
     refs.input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); refs.form.requestSubmit(); } });
     refs.refresh.addEventListener('click', () => { state.page = 1; loadConversations(); });
@@ -1824,10 +1938,26 @@
     refs.emojiToggle.addEventListener('click', () => {
       refs.emojiMenu.hidden = !refs.emojiMenu.hidden;
       refs.emojiToggle.setAttribute('aria-expanded', String(!refs.emojiMenu.hidden));
+      if (refs.emojiMenu.hidden) {
+        refs.emojiMenu.classList.remove('is-expanded');
+        const moreList = refs.emojiMenu.querySelector('[data-chat-emoji-more-list]');
+        const moreButton = refs.emojiMenu.querySelector('[data-chat-emoji-more]');
+        if (moreList) moreList.hidden = true;
+        if (moreButton) moreButton.setAttribute('aria-expanded', 'false');
+      }
       refs.attachmentMenu.hidden = true;
       refs.attachmentToggle.setAttribute('aria-expanded', 'false');
     });
     refs.emojiMenu.addEventListener('click', (event) => {
+      const moreButton = event.target.closest('[data-chat-emoji-more]');
+      if (moreButton) {
+        const moreList = refs.emojiMenu.querySelector('[data-chat-emoji-more-list]');
+        const expanded = Boolean(moreList?.hidden);
+        if (moreList) moreList.hidden = !expanded;
+        moreButton.setAttribute('aria-expanded', String(expanded));
+        refs.emojiMenu.classList.toggle('is-expanded', expanded);
+        return;
+      }
       const button = event.target.closest('[data-chat-emoji]');
       if (!button || refs.input.disabled) return;
       const emoji = button.dataset.chatEmoji || '';
@@ -1837,6 +1967,11 @@
       refs.input.focus();
       refs.input.setSelectionRange(start + emoji.length, start + emoji.length);
       refs.emojiMenu.hidden = true;
+      refs.emojiMenu.classList.remove('is-expanded');
+      const moreList = refs.emojiMenu.querySelector('[data-chat-emoji-more-list]');
+      const moreToggle = refs.emojiMenu.querySelector('[data-chat-emoji-more]');
+      if (moreList) moreList.hidden = true;
+      if (moreToggle) moreToggle.setAttribute('aria-expanded', 'false');
       refs.emojiToggle.setAttribute('aria-expanded', 'false');
       updateComposer();
     });

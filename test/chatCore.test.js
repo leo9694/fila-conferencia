@@ -71,6 +71,33 @@ test('reconhece reações da Meta sem exibir o JSON bruto', () => {
   assert.equal(ChatCore.messagePreview(message), 'Reagiu com 👏');
 });
 
+test('localiza o identificador da Meta para reagir em mensagens novas', () => {
+  assert.equal(ChatCore.reactionTarget({ wamid: 'wamid.HBgM.1' }), 'wamid.HBgM.1');
+  assert.equal(ChatCore.reactionTarget({ message_id: 'wamid.HBgM.2' }), 'wamid.HBgM.2');
+  assert.equal(ChatCore.reactionTarget({ meta: { messageId: 'wamid.HBgM.3' } }), 'wamid.HBgM.3');
+  assert.equal(ChatCore.reactionTarget({ id: 'wamid.HBgM.4' }), 'wamid.HBgM.4');
+  assert.equal(ChatCore.reactionTarget({ wamid: 'wamid.HBgM+abc/def==' }), 'wamid.HBgM+abc/def==');
+  assert.equal(ChatCore.reactionTarget({ id: 42 }), '');
+});
+
+test('normaliza o contexto de uma mensagem respondida', () => {
+  assert.deepEqual(ChatCore.replyContext({
+    replyContext: {
+      messageId: 'wamid.original',
+      text: 'Mensagem original',
+      senderName: 'Cliente',
+      direction: 'INBOUND'
+    }
+  }), {
+    messageId: 'wamid.original',
+    text: 'Mensagem original',
+    senderName: 'Cliente',
+    direction: 'INBOUND'
+  });
+  assert.equal(ChatCore.replyContext({ replyContext: '{"messageId":"wamid.2","text":"Oi"}' }).text, 'Oi');
+  assert.equal(ChatCore.replyContext({}), null);
+});
+
 test('extrai nome e telefone de um contato compartilhado pela Meta', () => {
   const message = {
     type: 'contacts',
