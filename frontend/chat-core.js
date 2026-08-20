@@ -27,7 +27,8 @@
 
   function contactName(conversation = {}) {
     const value = contact(conversation);
-    return value.name || value.profileName || value.phone || value.waId || 'Contato sem nome';
+    const sankhyaName = String(conversation.cadastroSankhya?.nomeContato || '').trim();
+    return sankhyaName || value.name || value.profileName || value.phone || value.waId || 'Contato sem nome';
   }
 
   function initials(value) {
@@ -135,11 +136,20 @@
   }
 
   function updateMessageStatus(items = [], update = {}) {
-    const id = String(update.id ?? update.messageId ?? '');
-    const wamid = String(update.wamid ?? '');
+    const updateKeys = new Set([update.id, update.messageId, update.message_id, update.wamid]
+      .map((value) => String(value ?? '').trim())
+      .filter(Boolean));
+    const status = update.status || update.messageStatus || update.deliveryStatus || '';
+    const statusRank = { SENT: 1, DELIVERED: 2, READ: 3 };
     return items.map((message) => {
-      if ((id && String(message.id) === id) || (wamid && String(message.wamid) === wamid)) {
-        return { ...message, status: update.status || message.status };
+      const matches = [message.id, message.messageId, message.message_id, message.wamid]
+        .map((value) => String(value ?? '').trim())
+        .some((value) => value && updateKeys.has(value));
+      if (matches) {
+        const atual = String(message.status || '').toUpperCase();
+        const proximo = String(status || '').toUpperCase();
+        if (statusRank[atual] && statusRank[proximo] && statusRank[proximo] < statusRank[atual]) return message;
+        return { ...message, status: status || message.status };
       }
       return message;
     });
@@ -202,8 +212,8 @@
   function statusSymbol(status) {
     const normalized = String(status || '').toUpperCase();
     if (normalized === 'FAILED') return { symbol: '!', label: 'Falha no envio', failed: true };
-    if (normalized === 'READ') return { symbol: '✓✓', label: 'Lida' };
-    if (normalized === 'DELIVERED') return { symbol: '✓✓', label: 'Entregue' };
+    if (normalized === 'READ') return { symbol: '✓✓', label: 'Lida', read: true };
+    if (normalized === 'DELIVERED') return { symbol: '✓✓', label: 'Entregue', delivered: true };
     if (normalized === 'SENT') return { symbol: '✓', label: 'Enviada' };
     return { symbol: '', label: normalized || '' };
   }

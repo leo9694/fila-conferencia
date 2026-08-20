@@ -207,7 +207,16 @@ function instanteUltimaMensagem(conversa = {}) {
 
 function conversaOcultaParaUsuario(codUsu, conversa = {}) {
   const chaves = chavesIdentidadeConversa(conversa);
-  if (atendentes.obterOcultacaoGlobal(chaves)) return true;
+  const ocultacaoGlobal = atendentes.obterOcultacaoGlobal(chaves);
+  if (ocultacaoGlobal) {
+    const ocultadaEm = new Date(ocultacaoGlobal.ocultadaEm || 0).getTime();
+    const novaAtividade = instanteUltimaMensagem(conversa);
+    if (novaAtividade > ocultadaEm) {
+      atendentes.revelarConversaGlobal(chaves);
+      return false;
+    }
+    return true;
+  }
   const ocultacao = atendentes.obterOcultacao(codUsu, chaves);
   if (!ocultacao) return false;
   const ocultadaEm = new Date(ocultacao.ocultadaEm || 0).getTime();
@@ -263,7 +272,7 @@ function nomeDaConversa(conversa = {}) {
   return contato.name || contato.fullName || conversa.contactName || 'Contato WhatsApp';
 }
 
-async function criarContatoWhatsappNoSankhya({ codParc, nomeContato, telefone }) {
+async function criarContatoWhatsappNoSankhya({ codParc, nomeContato, cargo, telefone }) {
   const [sequencia] = await executeQuery(`
     SELECT NVL(MAX(CODCONTATO), 0) AS ULTIMO
     FROM TGFCTT
@@ -271,30 +280,33 @@ async function criarContatoWhatsappNoSankhya({ codParc, nomeContato, telefone })
   `);
   const codContato = Number(sequencia?.ULTIMO || 0) + 1;
   const nome = textoContatoChat(nomeContato, 40) || 'Contato WhatsApp';
+  const cargoContato = textoContatoChat(cargo, 40);
   await executeService('CRUDServiceProvider.saveRecord', {
     dataSet: {
       rootEntity: 'Contato',
       includePresentationFields: 'N',
-      entity: { path: '', fieldset: { list: 'CODPARC,CODCONTATO,NOMECONTATO,APELIDO,CELULAR,ATIVO' } },
+      entity: { path: '', fieldset: { list: 'CODPARC,CODCONTATO,NOMECONTATO,APELIDO,CARGO,CELULAR,ATIVO' } },
       dataRow: {
         localFields: {
           CODPARC: campoSankhya(codParc),
           CODCONTATO: campoSankhya(codContato),
           NOMECONTATO: campoSankhya(nome),
           APELIDO: campoSankhya(textoContatoChat(nome, 15)),
+          CARGO: campoSankhya(cargoContato),
           CELULAR: campoSankhya(telefone),
           ATIVO: campoSankhya('S')
         }
       }
     }
   }, { forceAccessSession: true });
-  return { codContato, nomeContato: nome };
+  return { codContato, nomeContato: nome, cargo: cargoContato };
 }
 
-async function buscarCadastrosSankhyaPorTelefones(conversas = []) {
+async function buscarCadastrosSankhyaPorTelefones(conversas = [], { force = false } = {}) {
   const identities = [...new Set(conversas.map((item) => identidadeTelefoneWhatsapp(telefoneDaConversa(item))).filter(Boolean))];
   const now = Date.now();
   const missing = identities.filter((identity) => {
+    if (force) return true;
     const cached = cacheCadastroSankhyaPorTelefone.get(identity);
     return !cached || cached.expiresAt <= now;
   });
@@ -373,9 +385,9 @@ async function buscarCadastrosSankhyaPorTelefones(conversas = []) {
   });
 }
 
-async function vincularCadastrosSankhya(conversas = []) {
+async function vincularCadastrosSankhya(conversas = [], options = {}) {
   try {
-    return await buscarCadastrosSankhyaPorTelefones(conversas);
+    return await buscarCadastrosSankhyaPorTelefones(conversas, options);
   } catch (error) {
     console.error('Falha ao vincular telefones do chat aos parceiros Sankhya:', error.message);
     return conversas.map((conversa) => ({ ...conversa, cadastroSankhya: null }));
@@ -390,7 +402,7 @@ function vincularCadastrosSankhyaDoCache(conversas = []) {
     if (cached?.expiresAt <= now) cacheCadastroSankhyaPorTelefone.delete(identity);
     return {
       ...conversa,
-      cadastroSankhya: cached?.expiresAt > now ? cached.cadastro : (conversa.cadastroSankhya || null)
+      cadastroSankhya: cached?.expiresAt > now ? cached.cadastro : null
     };
   });
 }
@@ -1104,7 +1116,7 @@ router.get('/conversations/:id', asyncRoute(async (req, res) => {
   const conversation = await obterConversaConsolidada(id(req.params.id));
   await sincronizarPipelinesBitrix([conversation]);
   const atualizado = comAtribuicao(conversation);
-  const [vinculada] = await vincularCadastrosSankhya([atualizado]);
+  const [vinculada] = await vincularCadastrosSankhya([atualizado], { force: true });
   res.json(vinculada);
 }));
 
@@ -1118,13 +1130,18 @@ router.post('/conversations/:id/sankhya-link', asyncRoute(async (req, res) => {
   const codParc = Number(req.body?.codParc);
   if (!Number.isInteger(codParc) || codParc <= 0) return res.status(400).json({ erro: 'Selecione um parceiro válido.' });
   const conversation = await obterConversaConsolidada(id(req.params.id));
+  const nomeContato = textoContatoChat(req.body?.nomeContato, 40) || nomeDaConversa(conversation);
+  const cargo = textoContatoChat(req.body?.cargo, 40);
   const telefone = normalizarTelefoneWhatsapp(telefoneDaConversa(conversation));
   if (!telefone) return res.status(400).json({ erro: 'Esta conversa não possui um telefone válido para vincular.' });
   const resultado = await contatosDoParceiro(codParc);
   if (!resultado) return res.status(404).json({ erro: 'Parceiro ativo não encontrado no Sankhya.' });
 
   const identidade = identidadeTelefoneWhatsapp(telefone);
-  const existente = resultado.contatos.find((contato) => identidadeTelefoneWhatsapp(contato.telefone) === identidade);
+  const existente = resultado.contatos.find((contato) =>
+    String(contato.key || '').startsWith('CTT:')
+      && identidadeTelefoneWhatsapp(contato.telefone) === identidade
+  );
   const contactKey = existente?.key || '';
   const match = contactKey.match(/^CTT:(\d+):/);
   const vinculo = existente
@@ -1137,7 +1154,8 @@ router.post('/conversations/:id/sankhya-link', asyncRoute(async (req, res) => {
     : {
       ...(await criarContatoWhatsappNoSankhya({
         codParc,
-        nomeContato: nomeDaConversa(conversation),
+        nomeContato,
+        cargo,
         telefone
       })),
       origem: 'CONTATO',

@@ -51,6 +51,8 @@
     linkPartnerSearch: byId('chat-link-partner-search'), linkPartnerResults: byId('chat-link-partner-results'),
     linkSelectedPartner: byId('chat-link-selected-partner'), linkSelectedPartnerName: byId('chat-link-selected-partner-name'),
     linkChangePartner: byId('chat-link-change-partner'), linkPartnerFeedback: byId('chat-link-partner-feedback'),
+    linkContactFields: byId('chat-link-contact-fields'), linkContactName: byId('chat-link-contact-name'),
+    linkContactRole: byId('chat-link-contact-role'),
     linkPartnerSubmit: byId('chat-link-partner-submit'),
     mediaPreview: byId('chat-media-preview'), mediaClose: byId('chat-media-close'),
     uploadActions: byId('chat-upload-actions'), uploadCancel: byId('chat-upload-cancel'),
@@ -553,8 +555,9 @@
       const reactionBadge = reactions.length
         ? `<span class="chat-reaction-badge" title="Reação recebida">${reactions.map((emoji) => escapeHtml(emoji)).join('')}</span>`
         : '';
+      const statusClass = status.failed ? ' is-failed' : status.read ? ' is-read' : status.delivered ? ' is-delivered' : '';
       return `<article class="chat-message ${outbound ? 'is-outbound' : 'is-inbound'}" data-message-id="${escapeHtml(message.id)}">
-        <div class="chat-bubble${reactions.length ? ' has-reaction' : ''}">${renderMessageContent(message)}<footer><time>${escapeHtml(messageTime(message))}</time>${outbound && status.symbol ? `<span class="chat-message-status${status.failed ? ' is-failed' : ''}" title="${escapeHtml(status.label)}">${status.symbol}</span>` : ''}</footer>${reactionBadge}${renderReactionActions(message)}</div>
+        <div class="chat-bubble${reactions.length ? ' has-reaction' : ''}">${renderMessageContent(message)}<footer><time>${escapeHtml(messageTime(message))}</time>${outbound && status.symbol ? `<span class="chat-message-status${statusClass}" title="${escapeHtml(status.label)}" aria-label="${escapeHtml(status.label)}">${status.symbol}</span>` : ''}</footer>${reactionBadge}${renderReactionActions(message)}</div>
       </article>`;
     }).join('')}`;
     refs.messages.querySelectorAll('[data-chat-media]').forEach((element) => {
@@ -1054,7 +1057,12 @@
         renderConversations();
       }
     } else if (event === 'message:status') {
-      state.messages = Core.updateMessageStatus(state.messages, payload.message || payload);
+      const updates = Array.isArray(payload.statuses)
+        ? payload.statuses
+        : [payload.message || payload.statusUpdate || payload];
+      updates.forEach((update) => {
+        state.messages = Core.updateMessageStatus(state.messages, update);
+      });
       renderMessages({ preserveScroll: true });
       const id = String(payload.conversationId || payload.message?.conversationId || '');
       if (id === String(state.conversationId)) refreshActiveConversation(id);
@@ -1505,6 +1513,9 @@
   function resetLinkPartnerSelection() {
     state.linkPartner = null;
     refs.linkSelectedPartner.hidden = true;
+    refs.linkContactFields.hidden = true;
+    refs.linkContactName.value = '';
+    refs.linkContactRole.value = '';
     refs.linkPartnerSubmit.disabled = true;
   }
 
@@ -1517,6 +1528,7 @@
     refs.linkPartnerResults.innerHTML = '';
     refs.linkPartnerFeedback.textContent = '';
     refs.linkPartnerPhone.textContent = formatWhatsAppPhone(Core.contact(state.conversation || {}).phone || Core.contact(state.conversation || {}).waId || '');
+    refs.linkContactName.value = Core.contact(state.conversation || {}).name || '';
     refs.linkPartnerModal.hidden = false;
     requestAnimationFrame(() => refs.linkPartnerSearch.focus());
   }
@@ -1560,6 +1572,8 @@
     state.linkPartner = { codParc, nome: button.dataset.chatLinkPartnerName || 'Parceiro' };
     refs.linkSelectedPartnerName.textContent = `${codParc} - ${state.linkPartner.nome}`;
     refs.linkSelectedPartner.hidden = false;
+    refs.linkContactFields.hidden = false;
+    if (!refs.linkContactName.value.trim()) refs.linkContactName.value = Core.contact(state.conversation || {}).name || '';
     refs.linkPartnerSearch.hidden = true;
     refs.linkPartnerSearch.closest('label').hidden = true;
     refs.linkPartnerResults.hidden = true;
@@ -1583,11 +1597,18 @@
     const codParc = Number(state.linkPartner?.codParc);
     const conversationId = state.conversationId;
     if (!Number.isInteger(codParc) || !conversationId) return;
+    const nomeContato = refs.linkContactName.value.trim();
+    const cargo = refs.linkContactRole.value.trim();
+    if (!nomeContato) {
+      refs.linkPartnerFeedback.textContent = 'Informe o nome do contato.';
+      refs.linkContactName.focus();
+      return;
+    }
     refs.linkPartnerSubmit.disabled = true;
     refs.linkPartnerFeedback.textContent = 'Vinculando telefone...';
     try {
       const result = await api(`/conversations/${encodeURIComponent(conversationId)}/sankhya-link`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codParc })
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codParc, nomeContato, cargo })
       });
       const conversation = result?.conversation;
       if (!conversation?.cadastroSankhya?.verificado) throw new Error('O Sankhya não confirmou o vínculo do telefone.');

@@ -281,6 +281,23 @@ function criarChatAtendenteStore(options = {}) {
     return alterado;
   }
 
+  function revelarConversaGlobal(identidades) {
+    const chaves = normalizarIdentidades(identidades);
+    const ocultacoesRelacionadas = new Set(chaves
+      .map((chave) => state.ocultasGlobais[chave]?.ocultadaEm)
+      .filter(Boolean));
+    if (!ocultacoesRelacionadas.size) return false;
+    let alterado = false;
+    Object.keys(state.ocultasGlobais).forEach((chave) => {
+      if (ocultacoesRelacionadas.has(state.ocultasGlobais[chave]?.ocultadaEm)) {
+        delete state.ocultasGlobais[chave];
+        alterado = true;
+      }
+    });
+    if (alterado) persistir();
+    return alterado;
+  }
+
   return {
     filePath,
     state,
@@ -298,7 +315,8 @@ function criarChatAtendenteStore(options = {}) {
     ocultarConversaGlobal,
     obterOcultacao,
     obterOcultacaoGlobal,
-    revelarConversa
+    revelarConversa,
+    revelarConversaGlobal
   };
 }
 

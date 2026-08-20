@@ -136,3 +136,15 @@ test('oculta uma conversa globalmente para todos os usuários e persiste a regra
   assert.ok(recarregado.obterOcultacaoGlobal(['id:19']));
   assert.equal(recarregado.obterOcultacaoGlobal(['id:38']), null);
 });
+
+test('revela globalmente todas as identidades do chat quando chega nova atividade', (t) => {
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-store-'));
+  t.after(() => fs.rmSync(baseDir, { recursive: true, force: true }));
+
+  const store = criarChatAtendenteStore({ baseDir });
+  store.ocultarConversaGlobal(['id:19', 'id:20', 'phone:556692339094']);
+
+  assert.equal(store.revelarConversaGlobal(['id:20']), true);
+  assert.equal(store.obterOcultacaoGlobal(['id:19']), null);
+  assert.equal(store.obterOcultacaoGlobal(['phone:556692339094']), null);
+});

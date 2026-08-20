@@ -5,6 +5,10 @@ const ChatCore = require('../frontend/chat-core');
 test('exibe nome do contato e usa telefone como fallback', () => {
   assert.equal(ChatCore.contactName({ contact: { profileName: 'Maria' } }), 'Maria');
   assert.equal(ChatCore.contactName({ contact: { phone: '556599999999' } }), '556599999999');
+  assert.equal(ChatCore.contactName({
+    contact: { profileName: 'Nome do WhatsApp' },
+    cadastroSankhya: { nomeContato: 'Maria Compras' }
+  }), 'Maria Compras');
 });
 
 test('identifica a mesma conversa pelo telefone mesmo quando o id muda', () => {
@@ -91,6 +95,10 @@ test('atualiza status por id ou wamid', () => {
   const messages = [{ id: 1, wamid: 'wamid.1', status: 'SENT' }];
   assert.equal(ChatCore.updateMessageStatus(messages, { messageId: 1, status: 'DELIVERED' })[0].status, 'DELIVERED');
   assert.equal(ChatCore.updateMessageStatus(messages, { wamid: 'wamid.1', status: 'READ' })[0].status, 'READ');
+  assert.equal(ChatCore.updateMessageStatus(messages, { messageId: 'wamid.1', status: 'read' })[0].status, 'read');
+  assert.equal(ChatCore.updateMessageStatus([{ wamid: 'wamid.1', status: 'READ' }], { message_id: 'wamid.1', status: 'delivered' })[0].status, 'READ');
+  assert.equal(ChatCore.statusSymbol('READ').read, true);
+  assert.equal(ChatCore.statusSymbol('DELIVERED').delivered, true);
   assert.equal(ChatCore.statusSymbol('FAILED').failed, true);
 });
 

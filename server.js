@@ -126,6 +126,22 @@ app.get('/', (req, res) => {
 
 const port = process.env.PORT || 3000;
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`API rodando em http://localhost:${port}`);
 });
+
+// Mantém o processo ligado ao terminal durante o desenvolvimento. No Windows,
+// isso também garante que o Ctrl+C seja entregue ao processo Node iniciado pelo npm.
+if (process.stdin.isTTY) process.stdin.resume();
+
+let encerrando = false;
+function encerrar(signal) {
+  if (encerrando) return;
+  encerrando = true;
+  console.log(`\n${signal} recebido. Encerrando a API...`);
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 5000).unref();
+}
+
+process.once('SIGINT', () => encerrar('Ctrl+C'));
+process.once('SIGTERM', () => encerrar('SIGTERM'));

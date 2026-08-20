@@ -12628,6 +12628,10 @@
           <span class="chat-selected-partner-copy"><small>PARCEIRO SELECIONADO</small><strong id="chat-link-selected-partner-name"></strong></span>
           <button type="button" id="chat-link-change-partner"><i data-lucide="refresh-cw" aria-hidden="true"></i>Trocar parceiro</button>
         </div>
+        <div class="chat-link-contact-fields" id="chat-link-contact-fields" hidden>
+          <label>Nome do contato<input id="chat-link-contact-name" type="text" maxlength="40" autocomplete="name" required placeholder="Nome da pessoa vinculada ao telefone"></label>
+          <label>Cargo do contato <small>(opcional)</small><input id="chat-link-contact-role" type="text" maxlength="40" autocomplete="organization-title" placeholder="Ex.: Compras, Financeiro, Gerente"></label>
+        </div>
       </div>
       <footer><span id="chat-link-partner-feedback"></span><button id="chat-link-partner-submit" type="submit" disabled><i data-lucide="link-2" aria-hidden="true"></i>Vincular telefone</button></footer>
     </form>

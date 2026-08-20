@@ -1,38 +1,42 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+## Project Structure
 
 This is a CommonJS Node.js/Express application for Sankhya operational workflows.
 
-- `server.js` starts the HTTP server; `routes.js` contains API routes and workflow orchestration.
-- `api/` holds domain modules and integrations, including Sankhya access, entry conferences, stock counting, authorization, and report generation.
-- `frontend/` contains the static browser application (`index.html`, `app.js`, CSS, and assets).
-- `test/` contains Node's built-in test runner suites. Keep tests beside the matching domain name, e.g. `api/estoqueAjuste.js` → `test/estoqueAjuste.test.js`.
-- `data/` stores local runtime state. Treat it as operational data, not source code.
+- `server.js` starts the HTTP server; `routes.js` orchestrates API workflows.
+- `api/` contains domain modules and Sankhya, WhatsApp, and Bitrix integrations.
+- `frontend/` contains the static browser app, styles, scripts, and assets.
+- `test/` contains suites using Node's built-in test runner.
+- `data/` stores runtime state and must not be treated as source code.
 
-## Build, Test, and Development Commands
+Match tests to the domain file, for example `api/estoqueAjuste.js` with `test/estoqueAjuste.test.js`.
+
+## Commands
 
 ```bash
-npm start          # Starts the server with node server.js
-npm test           # Runs all Node test suites
-node --test test/conferenciaEntrada.test.js  # Runs one focused suite
-npm run test:bitrix # Exercises the Bitrix integration script
+npm start                                      # Start the application
+npm test                                       # Run every test
+node --test test/conferenciaEntrada.test.js    # Run one focused suite
+npm run test:bitrix                            # Exercise Bitrix integration
 ```
 
-Run the smallest relevant test file first. Run `npm test` before handing off changes that affect shared behavior, routes, or integrations.
+Run the smallest relevant test first. Run the full suite when shared routes, integrations, or cross-domain behavior change.
 
-## Coding Style & Naming Conventions
+## Coding Style
 
-Use JavaScript with 2-space indentation, semicolons, `const` by default, and `async`/`await` for I/O. Use Portuguese domain names where they match Sankhya terminology (`conferencia`, `lote`, `estoque`) and descriptive camelCase for variables and functions. Keep SQL close to its use site and validate numeric identifiers before interpolation. Do not introduce dependencies or broad refactors without a clear need.
+Use JavaScript with 2-space indentation, semicolons, `const` by default, and `async`/`await` for I/O. Use descriptive camelCase names and Portuguese terminology where it matches the Sankhya domain (`conferencia`, `lote`, `estoque`). Keep SQL near its use and validate identifiers before interpolation. Avoid unnecessary dependencies.
 
-## Testing Guidelines
+## Testing
 
-Tests use `node:test` and `node:assert/strict`. Name tests as behavioral sentences, for example `test('consolida linhas repetidas...', ...)`. Add a regression test for every production bug, especially around stock, lot/control, quantity conversion, and conference finalization. Mock external services; never run destructive production actions from tests.
+Use `node:test` and `node:assert/strict`. Name tests as behavioral sentences, such as `test('consolida linhas repetidas...', ...)`. Add regression coverage for production bugs, especially stock, control/lot, unit conversion, and conference finalization. Mock external services; tests must never mutate production.
 
-## Commit & Pull Request Guidelines
+## Efficient Agent Workflow
 
-Use concise imperative commits consistent with history: `fix: consolida notas de ajuste por tipo` or `Corrige migracao de lotes nos ajustes de estoque`. Keep each commit focused. PRs should explain the operational impact, list tests run, and include screenshots for frontend changes. Never commit `.env` files, tokens, passwords, or production data.
+Prioritize focused investigation and low token usage without reducing quality. Search with `rg`, then read only files, functions, routes, and tests directly related to the request. Avoid rereading unchanged files or exploring the whole repository without evidence that it is necessary.
 
-## Security & Configuration
+Make minimal, objective edits. Do not perform unrelated refactors, formatting sweeps, dependency upgrades, or architectural changes. For complex bugs, investigate enough to identify the cause before editing; never guess merely to save tokens. Preserve user changes and operational data. Keep updates and final responses short, stating the outcome, changed files, and tests run. Never trade correctness, security, or data integrity for speed.
 
-Configuration belongs in local `.env*` files. Do not print secrets in logs or command output. Production Sankhya writes require explicit user authorization and a read-only verification before mutation.
+## Commits, PRs, and Security
+
+Use focused imperative commits, such as `fix: consolida notas de ajuste por tipo`. PRs must explain operational impact, tests, and include screenshots for UI changes. Never commit credentials, `.env` files, tokens, passwords, or production data. Production writes require explicit authorization and read-only verification first.
