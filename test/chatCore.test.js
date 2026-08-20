@@ -102,6 +102,16 @@ test('atualiza status por id ou wamid', () => {
   assert.equal(ChatCore.statusSymbol('FAILED').failed, true);
 });
 
+test('explica a falha de entrega devolvida pela Meta', () => {
+  assert.deepEqual(ChatCore.messageFailureReason({
+    failureDetails: [{ code: 131026, title: 'Message undeliverable' }]
+  }), {
+    code: '131026',
+    text: 'A mensagem não pôde ser entregue ao destinatário.'
+  });
+  assert.match(ChatCore.messageFailureReason({ status: 'FAILED' }).text, /não informou/i);
+});
+
 test('desembrulha respostas padronizadas da API', () => {
   assert.deepEqual(ChatCore.unwrap({ success: true, data: { id: 1 } }), { id: 1 });
   assert.deepEqual(ChatCore.unwrap({ data: [1] }), { data: [1] });

@@ -55,6 +55,7 @@
     linkContactRole: byId('chat-link-contact-role'),
     linkPartnerSubmit: byId('chat-link-partner-submit'),
     mediaPreview: byId('chat-media-preview'), mediaClose: byId('chat-media-close'),
+    mediaZoomControls: byId('chat-media-zoom-controls'), mediaZoomLabel: byId('chat-media-zoom-label'),
     uploadActions: byId('chat-upload-actions'), uploadCancel: byId('chat-upload-cancel'),
     uploadSend: byId('chat-upload-send')
   };
@@ -69,10 +70,22 @@
     recordingStartedAt: 0, recordingTimer: null, pendingUpload: null, loadToken: 0, activeLoadToken: 0,
     totalConversations: 0, assignment: 'ALL', access: null, profile: null, agents: [],
     hiddenConversationIds: new Set(), selectedPartner: null, partnerSearchToken: 0,
-    linkPartner: null, linkPartnerSearchToken: 0, pipelines: [], pipelinesPromise: null
+    linkPartner: null, linkPartnerSearchToken: 0, pipelines: [], pipelinesPromise: null,
+    mediaZoom: 1
   };
 
   let viewportSyncTimer = null;
+  const imagePreviewObserver = typeof IntersectionObserver === 'function'
+    ? new IntersectionObserver((entries, observer) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        observer.unobserve(entry.target);
+        state.autoMediaQueue = state.autoMediaQueue.then(async () => {
+          if (!state.autoMediaDisabled && entry.target.isConnected) await activateMedia(entry.target, false, true);
+        });
+      });
+    }, { rootMargin: '180px 0px' })
+    : null;
 
   function syncRestingViewportHeight(delay = 0) {
     clearTimeout(viewportSyncTimer);
@@ -447,6 +460,7 @@
     state.mediaUrls.set(id, url);
     if (type === 'audio') return `<audio class="chat-audio" controls preload="metadata" src="${escapeHtml(url)}"></audio>`;
     if (type === 'video') return `<video class="chat-video" controls preload="metadata" src="${escapeHtml(url)}"></video>`;
+    if (type === 'image') return `<button class="chat-image-preview" type="button" data-chat-media="image" data-media-id="${escapeHtml(id)}" aria-label="Abrir imagem"><img loading="lazy" decoding="async" src="${escapeHtml(url)}" alt="Imagem da conversa"></button>`;
     return '';
   }
 
@@ -471,7 +485,7 @@
       if (type === 'video') return `${cachedMediaMarkup(type, rawId)
         || `<div class="chat-media-shell is-video" data-chat-media="video" data-media-id="${id}" aria-label="Preparando vídeo"><i data-lucide="play"></i><span></span></div>`}${caption ? `<p>${caption}</p>` : ''}`;
       if (type === 'document') return `<button class="chat-document" type="button" data-chat-media="document" data-media-id="${id}" data-filename="${escapeHtml(message.filename || message.media?.filename || 'documento')}"><i data-lucide="file-text"></i><span><strong>${escapeHtml(message.filename || message.media?.filename || 'Documento')}</strong><small>Abrir ou baixar</small></span></button>`;
-      return `<button class="chat-image-placeholder" type="button" data-chat-media="image" data-media-id="${id}"><i data-lucide="image"></i><span>Carregar imagem</span></button>${caption ? `<p>${caption}</p>` : ''}`;
+      return `${cachedMediaMarkup('image', rawId) || `<button class="chat-image-placeholder" type="button" data-chat-media="image" data-media-id="${id}"><i data-lucide="image"></i><span>Preparando imagem...</span></button>`}${caption ? `<p>${caption}</p>` : ''}`;
     }
     return '<div class="chat-unsupported"><i data-lucide="circle-help"></i>Mensagem não suportada</div>';
   }
@@ -556,13 +570,20 @@
         ? `<span class="chat-reaction-badge" title="Reação recebida">${reactions.map((emoji) => escapeHtml(emoji)).join('')}</span>`
         : '';
       const statusClass = status.failed ? ' is-failed' : status.read ? ' is-read' : status.delivered ? ' is-delivered' : '';
+      const failureReason = status.failed ? Core.messageFailureReason(message) : null;
+      const failureAlert = outbound && status.failed
+        ? `<div class="chat-message-failure" role="alert"><span aria-hidden="true">!</span><div><strong>Falha no envio</strong><small>${failureReason.code ? `Erro ${escapeHtml(failureReason.code)}: ` : ''}${escapeHtml(failureReason.text)}</small></div></div>`
+        : '';
       return `<article class="chat-message ${outbound ? 'is-outbound' : 'is-inbound'}" data-message-id="${escapeHtml(message.id)}">
-        <div class="chat-bubble${reactions.length ? ' has-reaction' : ''}">${renderMessageContent(message)}<footer><time>${escapeHtml(messageTime(message))}</time>${outbound && status.symbol ? `<span class="chat-message-status${statusClass}" title="${escapeHtml(status.label)}" aria-label="${escapeHtml(status.label)}">${status.symbol}</span>` : ''}</footer>${reactionBadge}${renderReactionActions(message)}</div>
+        <div class="chat-bubble${reactions.length ? ' has-reaction' : ''}">${renderMessageContent(message)}<footer><time>${escapeHtml(messageTime(message))}</time>${outbound && status.symbol ? `<span class="chat-message-status${statusClass}" title="${escapeHtml(status.label)}" aria-label="${escapeHtml(status.label)}">${status.symbol}</span>` : ''}</footer>${failureAlert}${reactionBadge}${renderReactionActions(message)}</div>
       </article>`;
     }).join('')}`;
     refs.messages.querySelectorAll('[data-chat-media]').forEach((element) => {
       element.addEventListener('click', () => activateMedia(element));
-      if (['audio', 'video'].includes(element.dataset.chatMedia)) {
+      const mediaKind = element.dataset.chatMedia;
+      if (mediaKind === 'image' && element.classList.contains('chat-image-placeholder') && imagePreviewObserver) {
+        imagePreviewObserver.observe(element);
+      } else if (['audio', 'video'].includes(mediaKind) || (mediaKind === 'image' && element.classList.contains('chat-image-placeholder'))) {
         state.autoMediaQueue = state.autoMediaQueue.then(async () => {
           if (!state.autoMediaDisabled && element.isConnected) await activateMedia(element, false, true);
         });
@@ -703,10 +724,16 @@
       const kind = element.dataset.chatMedia;
       if (kind === 'audio') element.outerHTML = `<audio class="chat-audio" controls preload="metadata" src="${url}"></audio>`;
       else if (kind === 'video' && !openModal) element.outerHTML = `<video class="chat-video" controls preload="metadata" src="${url}"></video>`;
+      else if (kind === 'image' && !openModal) {
+        element.className = 'chat-image-preview';
+        element.setAttribute('aria-label', 'Abrir imagem');
+        element.innerHTML = `<img loading="lazy" decoding="async" src="${url}" alt="Imagem da conversa">`;
+      }
       else if (kind === 'document') {
         const link = document.createElement('a'); link.href = url; link.download = element.dataset.filename || 'documento'; link.click();
       } else {
-        refs.mediaPreview.innerHTML = kind === 'video' ? `<video controls autoplay src="${url}"></video>` : `<img src="${url}" alt="Mídia da conversa">`;
+        if (kind === 'image') openImageViewer(url);
+        else refs.mediaPreview.innerHTML = `<video controls autoplay src="${url}"></video>`;
         refs.mediaModal.hidden = false;
       }
     } catch (error) {
@@ -958,8 +985,29 @@
     if (state.pendingUpload?.previewUrl) URL.revokeObjectURL(state.pendingUpload.previewUrl);
     state.pendingUpload = null;
     refs.uploadActions.hidden = true;
+    refs.mediaZoomControls.hidden = true;
+    state.mediaZoom = 1;
     refs.mediaModal.hidden = true;
     refs.mediaPreview.innerHTML = '';
+  }
+
+  function applyImageZoom(nextZoom) {
+    const image = refs.mediaPreview.querySelector('.chat-media-zoom-stage img');
+    if (!image) return;
+    state.mediaZoom = Math.min(4, Math.max(0.5, Math.round(nextZoom * 10) / 10));
+    image.style.width = state.mediaZoom === 1 ? '' : `${state.mediaZoom * 100}%`;
+    image.classList.toggle('is-zoomed', state.mediaZoom !== 1);
+    refs.mediaZoomLabel.textContent = `${Math.round(state.mediaZoom * 100)}%`;
+  }
+
+  function openImageViewer(url) {
+    state.mediaZoom = 1;
+    refs.uploadActions.hidden = true;
+    refs.mediaPreview.innerHTML = `<div class="chat-media-zoom-stage"><img src="${escapeHtml(url)}" alt="Imagem ampliada"></div>`;
+    refs.mediaZoomControls.hidden = false;
+    refs.mediaZoomLabel.textContent = '100%';
+    refs.mediaModal.hidden = false;
+    window.lucide?.createIcons();
   }
 
   function prepareFile(kind, file) {
@@ -1151,9 +1199,7 @@
         if (item) item.unreadCount = 0;
         if (state.conversation) state.conversation.unreadCount = 0;
       }
-      state.assignment = 'MINE';
-      refs.filters.querySelectorAll('[data-chat-assignment]').forEach((button) => button.classList.toggle('is-active', button.dataset.chatAssignment === 'MINE'));
-      await loadConversations();
+      renderConversations();
       setFeedback(conversation.bitrixError
         ? `Atendimento assumido. O pipeline ficou pendente: ${conversation.bitrixError}`
         : choice.withoutPipeline ? 'Atendimento assumido sem pipeline. Vincule-o depois nos dados do contato.' : 'Atendimento assumido e card do Bitrix vinculado.',
@@ -1649,6 +1695,8 @@
       renderConversations();
       closeNewContact();
       await openConversation(created.id, { historyMode: 'push' });
+      // Versões anteriores do backend exigiam uma segunda chamada para assumir.
+      // Mantém o fallback sem atrasar o fluxo normal, que já retorna atribuído.
       if (!assignedUser(state.conversation)) await claimConversation(created.id, { prompt: false, pipelineId });
       if (result.bitrixError) setFeedback(`Conversa criada, mas o card do Bitrix ficou pendente: ${result.bitrixError}`, true);
       if (ownsConversation()) openTemplates();
@@ -1751,6 +1799,17 @@
     refs.detailsToggle.addEventListener('click', () => { const hidden = refs.details.classList.toggle('is-collapsed'); refs.detailsToggle.setAttribute('aria-expanded', String(!hidden)); });
     refs.detailsClose.addEventListener('click', () => { refs.details.classList.add('is-collapsed'); refs.detailsToggle.setAttribute('aria-expanded', 'false'); });
     refs.newMessage.addEventListener('click', () => scrollBottom('smooth'));
+    refs.mediaZoomControls.addEventListener('click', (event) => {
+      const action = event.target.closest('[data-chat-zoom]')?.dataset.chatZoom;
+      if (action === 'in') applyImageZoom(state.mediaZoom + 0.25);
+      else if (action === 'out') applyImageZoom(state.mediaZoom - 0.25);
+      else if (action === 'reset') applyImageZoom(1);
+    });
+    refs.mediaPreview.addEventListener('wheel', (event) => {
+      if (refs.mediaZoomControls.hidden || !refs.mediaPreview.querySelector('img')) return;
+      event.preventDefault();
+      applyImageZoom(state.mediaZoom + (event.deltaY < 0 ? 0.2 : -0.2));
+    }, { passive: false });
     refs.claim.addEventListener('click', () => claimConversation());
     refs.release.addEventListener('click', async () => { try { await changeAssignment('RELEASE'); showConversationList({ replaceHistory: true }); await loadConversations(); setFeedback('Conversa devolvida para a fila sem atendente.'); } catch (error) { setFeedback(error.message, true); } });
     refs.transfer.addEventListener('click', openTransferDialog);

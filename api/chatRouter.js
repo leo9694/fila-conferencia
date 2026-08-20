@@ -521,7 +521,7 @@ async function normalizarEventoAtendimento(event, payload = {}) {
     const knownId = phone ? conversaCanonicaPorTelefone.get(phone) : null;
     const cached = knownId ? cacheConversaCanonica.get(knownId) : null;
     const conversation = consolidarConversas(cached ? [cached, incoming] : [incoming])[0];
-    return { ...payload, conversationId: conversation.id, conversation };
+    return { ...payload, conversationId: conversation.id, conversation: comAtribuicao(conversation) };
   }
   const rawId = Number(payload.conversationId || payload.message?.conversationId || payload.conversation?.id);
   if (!Number.isInteger(rawId)) return payload;
@@ -1097,6 +1097,15 @@ router.post('/conversations', asyncRoute(async (req, res) => {
     }])
   };
   atendentes.revelarConversa(req.usuario.codUsu, chavesIdentidadeConversa(conversation));
+  const atribuicaoAtual = comAtribuicao(conversation).assignment;
+  let atribuicaoCriada = null;
+  if (!atribuicaoAtual) {
+    atribuicaoCriada = atendentes.atribuirConversa(conversation.id, {
+      acao: 'START',
+      ator: req.atendente,
+      destino: req.atendente
+    });
+  }
   let bitrixError = '';
   try {
     await vincularPipelineBitrix(conversation, pipelineId);
@@ -1104,9 +1113,17 @@ router.post('/conversations', asyncRoute(async (req, res) => {
     bitrixError = error.message || 'Não foi possível criar o card no Bitrix.';
     atendentes.marcarPipelinePendente(conversation.id, bitrixError);
   }
+  const conversationWithAssignment = comAtribuicao(conversation);
+  if (atribuicaoCriada) {
+    eventosAtendimento.emit('assignment', {
+      conversationId: conversation.id,
+      conversation: conversationWithAssignment,
+      assignment: atribuicaoCriada
+    });
+  }
   res.status(existente ? 200 : 201).json({
     ...resposta,
-    conversation: comAtribuicao(conversation),
+    conversation: conversationWithAssignment,
     bitrixError,
     selectedContact: { ...contato, codParc, parceiro: resultado.parceiro.nome }
   });

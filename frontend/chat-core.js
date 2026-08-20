@@ -149,7 +149,11 @@
         const atual = String(message.status || '').toUpperCase();
         const proximo = String(status || '').toUpperCase();
         if (statusRank[atual] && statusRank[proximo] && statusRank[proximo] < statusRank[atual]) return message;
-        return { ...message, status: status || message.status };
+        return {
+          ...message,
+          status: status || message.status,
+          ...(update.failureDetails !== undefined ? { failureDetails: update.failureDetails } : {})
+        };
       }
       return message;
     });
@@ -218,6 +222,22 @@
     return { symbol: '', label: normalized || '' };
   }
 
+  function messageFailureReason(message = {}) {
+    const details = Array.isArray(message.failureDetails)
+      ? message.failureDetails[0]
+      : Array.isArray(message.errors) ? message.errors[0] : null;
+    const code = details?.code ?? message.errorCode ?? message.error_code ?? '';
+    const raw = details?.error_data?.details || details?.message || details?.title
+      || message.errorMessage || message.error_message || '';
+    const numericCode = String(code || '').trim();
+    if (numericCode === '131026') {
+      return { code: numericCode, text: 'A mensagem não pôde ser entregue ao destinatário.' };
+    }
+    const text = String(raw || '').trim();
+    if (text) return { code: numericCode, text };
+    return { code: numericCode, text: 'A integração não informou o motivo específico.' };
+  }
+
   function debounce(callback, delay = 350) {
     let timer = null;
     return (...args) => {
@@ -246,6 +266,7 @@
     shouldLoadMoreConversations,
     shouldLoadOlderMessages,
     statusSymbol,
+    messageFailureReason,
     unwrap,
     updateMessageStatus
   };

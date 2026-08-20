@@ -12560,6 +12560,11 @@
     <div class="chat-media-dialog" role="dialog" aria-modal="true" aria-label="Visualizar mídia">
       <button id="chat-media-close" type="button" aria-label="Fechar"><i data-lucide="x" aria-hidden="true"></i></button>
       <div id="chat-media-preview"></div>
+      <div class="chat-media-zoom-controls" id="chat-media-zoom-controls" hidden>
+        <button type="button" data-chat-zoom="out" aria-label="Diminuir zoom"><i data-lucide="zoom-out" aria-hidden="true"></i></button>
+        <button type="button" data-chat-zoom="reset" aria-label="Restaurar zoom"><span id="chat-media-zoom-label">100%</span></button>
+        <button type="button" data-chat-zoom="in" aria-label="Aumentar zoom"><i data-lucide="zoom-in" aria-hidden="true"></i></button>
+      </div>
       <footer class="chat-upload-actions" id="chat-upload-actions" hidden>
         <button id="chat-upload-cancel" type="button">Cancelar</button>
         <button id="chat-upload-send" type="button">Enviar arquivo</button>
