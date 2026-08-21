@@ -1040,20 +1040,31 @@ router.get('/partners/:codParc/contacts', asyncRoute(async (req, res) => {
 }));
 
 router.get('/conversations', asyncRoute(async (req, res) => {
-  const resposta = await whatsappApi.getConversations({
-    page: req.query.page,
-    limit: req.query.limit,
-    search: req.query.search,
-    status: req.query.status,
-    // A distribuição é local ao aplicativo; a API externa sempre entrega a fila completa.
-    assignment: 'ALL'
-  });
   // A fila inicial precisa exibir os atendimentos existentes. A posse só limita
   // ações de atendimento, não a visualização da conversa.
   const assignment = String(req.query.assignment || 'ALL').toUpperCase();
   const agentId = pertenceDiretoria(req.usuario) && /^\d+$/.test(String(req.query.agentId || ''))
     ? String(req.query.agentId)
     : '';
+  const page = Math.max(1, Number(req.query.page || 1));
+  const limit = Math.max(1, Math.min(100, Number(req.query.limit || 30)));
+  const filtroLocalAtivo = Boolean(agentId || assignment !== 'ALL');
+  const parametros = {
+    page: filtroLocalAtivo ? 1 : page,
+    limit: filtroLocalAtivo ? 100 : limit,
+    search: req.query.search,
+    status: req.query.status,
+    // A distribuição é local ao aplicativo; a API externa sempre entrega a fila completa.
+    assignment: 'ALL'
+  };
+  const resposta = await whatsappApi.getConversations(parametros);
+  if (filtroLocalAtivo) {
+    const totalPages = Math.max(1, Number(resposta.pagination?.totalPages || 1));
+    for (let currentPage = 2; currentPage <= totalPages; currentPage += 1) {
+      const next = await whatsappApi.getConversations({ ...parametros, page: currentPage });
+      resposta.data = [...(resposta.data || []), ...(next.data || [])];
+    }
+  }
   const consolidadasBase = consolidarConversas(resposta.data || []);
   // Bitrix e Sankhya enriquecem a fila, mas não podem bloquear o acesso ao chat.
   // Entregue imediatamente o estado local/cacheado e atualize os cards via SSE.
@@ -1061,7 +1072,7 @@ router.get('/conversations', asyncRoute(async (req, res) => {
   void enriquecerConversasEmSegundoPlano(consolidadasBase).catch((error) => {
     console.error('Falha ao enriquecer a fila do chat em segundo plano:', error.message);
   });
-  const data = consolidadas.filter((conversa) => {
+  const filtradas = consolidadas.filter((conversa) => {
     if (conversaOcultaParaUsuario(req.usuario.codUsu, conversa)) return false;
     return conversaCorrespondeFiltroAtendente(conversa, {
       assignment,
@@ -1069,16 +1080,19 @@ router.get('/conversations', asyncRoute(async (req, res) => {
       currentAgentId: req.atendente.id
     });
   });
+  const data = filtroLocalAtivo ? filtradas.slice((page - 1) * limit, page * limit) : filtradas;
   const pagination = resposta.pagination || {};
   res.json({
     ...resposta,
     data,
     pagination: {
       ...pagination,
-      page: Number(pagination.page || req.query.page || 1),
-      limit: Number(pagination.limit || req.query.limit || 30),
-      total: Number(pagination.total || data.length),
-      totalPages: Math.max(1, Number(pagination.totalPages || 1))
+      page,
+      limit,
+      total: filtroLocalAtivo ? filtradas.length : Number(pagination.total || data.length),
+      totalPages: filtroLocalAtivo
+        ? Math.max(1, Math.ceil(filtradas.length / limit))
+        : Math.max(1, Number(pagination.totalPages || 1))
     }
   });
 }));

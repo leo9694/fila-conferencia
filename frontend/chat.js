@@ -548,7 +548,7 @@
     const owner = ownsConversation();
     const targetEscaped = escapeHtml(target);
     return `<div class="chat-message-actions">
-      <button class="chat-message-action-toggle${owner ? '' : ' requires-assignment'}" type="button" data-chat-reaction-toggle aria-label="${owner ? 'Reagir à mensagem' : 'Assuma o atendimento para reagir'}" title="${owner ? 'Reagir à mensagem' : 'Assuma o atendimento para reagir'}" aria-expanded="false"><i data-lucide="chevron-down"></i></button>
+      <button class="chat-message-action-toggle${owner ? '' : ' requires-assignment'}" type="button" data-chat-reaction-toggle aria-label="${owner ? 'Abrir ações da mensagem' : 'Assuma o atendimento para interagir'}" title="${owner ? 'Abrir ações da mensagem' : 'Assuma o atendimento para interagir'}" aria-expanded="false"><i data-lucide="ellipsis-vertical"></i></button>
       <div class="chat-message-reaction-menu" data-chat-reaction-menu hidden>
         <div class="chat-message-reaction-quick">
           ${QUICK_REACTIONS.map((emoji) => `<button type="button" data-chat-message-reaction data-message-id="${targetEscaped}" data-emoji="${emoji}" aria-label="Reagir com ${emoji}">${emoji}</button>`).join('')}
@@ -1141,6 +1141,20 @@
     refs.uploadActions.hidden = false;
     refs.mediaModal.hidden = false;
     window.lucide?.createIcons();
+  }
+
+  function pasteImage(event) {
+    const item = [...(event.clipboardData?.items || [])]
+      .find((clipboardItem) => clipboardItem.kind === 'file' && clipboardItem.type.startsWith('image/'));
+    const source = item?.getAsFile();
+    if (!source) return;
+    event.preventDefault();
+    const extension = source.type === 'image/jpeg' ? 'jpg' : (source.type.split('/')[1] || 'png');
+    const file = new File([source], `imagem-colada-${Date.now()}.${extension}`, {
+      type: source.type || 'image/png',
+      lastModified: Date.now()
+    });
+    prepareFile('image', file);
   }
 
   async function submitPendingUpload() {
@@ -1940,6 +1954,7 @@
     window.visualViewport?.addEventListener('resize', () => syncRestingViewportHeight(180));
     window.addEventListener('resize', () => syncRestingViewportHeight(180));
     refs.form.addEventListener('submit', sendText); refs.input.addEventListener('input', updateComposer);
+    refs.input.addEventListener('paste', pasteImage);
     refs.composerReplyCancel?.addEventListener('click', () => {
       clearReply();
       refs.input.focus();
