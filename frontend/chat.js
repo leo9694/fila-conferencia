@@ -379,7 +379,7 @@
     const canMarkRead = ownsConversation(conversation);
     const menu = document.createElement('div');
     menu.className = 'chat-conversation-context-menu';
-    menu.innerHTML = `${canMarkRead ? '<button type="button" data-chat-menu-read><i data-lucide="check-check"></i>Marcar como lida</button>' : ''}<button type="button" class="is-danger" data-chat-menu-delete><i data-lucide="trash-2"></i>Excluir chat</button>`;
+    menu.innerHTML = `${canMarkRead ? '<button type="button" data-chat-menu-read><i data-lucide="check-check"></i>Marcar como lida</button>' : ''}<button type="button" class="is-danger" data-chat-menu-delete><i data-lucide="trash-2"></i>Excluir chat</button><button type="button" data-chat-menu-rename><i data-lucide="pencil"></i>Renomear</button>`;
     document.body.append(menu);
     const width = menu.offsetWidth || 190;
     const height = menu.offsetHeight || 84;
@@ -392,6 +392,10 @@
     menu.querySelector('[data-chat-menu-delete]').addEventListener('click', async () => {
       closeConversationMenu();
       openDeleteConfirmation(conversationId);
+    });
+    menu.querySelector('[data-chat-menu-rename]').addEventListener('click', () => {
+      closeConversationMenu();
+      openRenameConversation(conversationId);
     });
     window.lucide?.createIcons();
   }
@@ -2025,6 +2029,56 @@
     document.body.append(modal);
     window.lucide?.createIcons();
     requestAnimationFrame(() => confirm.focus());
+  }
+
+  function openRenameConversation(conversationId) {
+    document.querySelector('.chat-delete-modal')?.remove();
+    const conversation = state.conversations.find((item) => String(item.id) === String(conversationId)) || state.conversation || {};
+    const modal = document.createElement('div');
+    modal.className = 'chat-delete-modal';
+    modal.innerHTML = `<section class="chat-delete-dialog chat-rename-dialog" role="dialog" aria-modal="true" aria-labelledby="chat-rename-title">
+      <div class="chat-rename-icon"><i data-lucide="pencil"></i></div>
+      <h2 id="chat-rename-title">Renomear cliente</h2>
+      <p>Este nome será exibido apenas no atendimento. O cadastro do parceiro no Sankhya não será alterado.</p>
+      <label>Nome exibido no chat<input type="text" maxlength="160" value="${escapeHtml(Core.contactName(conversation))}" data-chat-rename-input></label>
+      <span class="chat-delete-feedback" aria-live="polite"></span>
+      <footer><button type="button" data-chat-rename-cancel>Cancelar</button><button type="button" data-chat-rename-confirm>Salvar nome</button></footer>
+    </section>`;
+    const close = () => modal.remove();
+    const input = modal.querySelector('[data-chat-rename-input]');
+    const feedback = modal.querySelector('.chat-delete-feedback');
+    const confirm = modal.querySelector('[data-chat-rename-confirm]');
+    modal.addEventListener('click', (event) => { if (event.target === modal) close(); });
+    modal.querySelector('[data-chat-rename-cancel]').addEventListener('click', close);
+    confirm.addEventListener('click', async () => {
+      const nomeExibicao = input.value.trim();
+      if (!nomeExibicao) {
+        feedback.textContent = 'Informe o nome do cliente.';
+        input.focus();
+        return;
+      }
+      confirm.disabled = true;
+      feedback.textContent = 'Salvando nome...';
+      try {
+        const atualizado = await api(`/conversations/${encodeURIComponent(conversationId)}/display-name`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ nomeExibicao })
+        });
+        applyConversationUpdate({ conversation: atualizado });
+        close();
+      } catch (error) {
+        feedback.textContent = error.message || 'Não foi possível renomear o cliente.';
+        confirm.disabled = false;
+      }
+    });
+    modal.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') close();
+      if (event.key === 'Enter' && event.target === input) confirm.click();
+    });
+    document.body.append(modal);
+    window.lucide?.createIcons();
+    requestAnimationFrame(() => { input.focus(); input.select(); });
   }
 
   function bindEvents() {

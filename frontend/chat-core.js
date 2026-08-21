@@ -27,8 +27,9 @@
 
   function contactName(conversation = {}) {
     const value = contact(conversation);
+    const displayName = String(conversation.displayName || conversation.nomeExibicao || '').trim();
     const sankhyaName = String(conversation.cadastroSankhya?.nomeContato || '').trim();
-    return sankhyaName || value.name || value.profileName || value.phone || value.waId || 'Contato sem nome';
+    return displayName || sankhyaName || value.name || value.profileName || value.phone || value.waId || 'Contato sem nome';
   }
 
   function initials(value) {

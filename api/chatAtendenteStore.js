@@ -137,6 +137,20 @@ function criarChatAtendenteStore(options = {}) {
     return obterConversa(chave);
   }
 
+  function renomearConversa(id, nome) {
+    const chave = normalizarConversa(id);
+    const nomeExibicao = normalizarTexto(nome);
+    if (!chave || !nomeExibicao) throw new TypeError('Nome da conversa inválido.');
+    const atual = state.conversas[chave] || {};
+    state.conversas[chave] = {
+      ...atual,
+      nomeExibicao,
+      renomeadoEm: new Date().toISOString()
+    };
+    persistir();
+    return obterConversa(chave);
+  }
+
   function vincularPipeline(id, pipeline = {}) {
     const chave = normalizarConversa(id);
     const categoryId = Number(pipeline.categoryId);
@@ -308,6 +322,7 @@ function criarChatAtendenteStore(options = {}) {
     obterConversa,
     atribuirConversa,
     registrarInteracao,
+    renomearConversa,
     vincularPipeline,
     arquivarPipelinesConcluidos,
     marcarPipelinePendente,

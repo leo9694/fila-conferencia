@@ -57,6 +57,16 @@ test('renova a interação sem trocar o responsável do atendimento', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('persiste o nome personalizado exibido na conversa', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-renomear-'));
+  const filePath = path.join(dir, 'atendimentos.json');
+  const store = criarChatAtendenteStore({ filePath });
+  store.renomearConversa(123, 'Emilly Financeiro');
+  const recarregado = criarChatAtendenteStore({ filePath });
+  assert.equal(recarregado.obterConversa(123).nomeExibicao, 'Emilly Financeiro');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('mantém mais de um pipeline Bitrix vinculado ao mesmo chat', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-pipelines-'));
   const filePath = path.join(dir, 'atendimentos.json');

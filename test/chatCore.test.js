@@ -9,6 +9,10 @@ test('exibe nome do contato e usa telefone como fallback', () => {
     contact: { profileName: 'Nome do WhatsApp' },
     cadastroSankhya: { nomeContato: 'Maria Compras' }
   }), 'Maria Compras');
+  assert.equal(ChatCore.contactName({
+    displayName: 'Emilly Financeiro',
+    cadastroSankhya: { nomeContato: 'Maria Compras' }
+  }), 'Emilly Financeiro');
 });
 
 test('identifica a mesma conversa pelo telefone mesmo quando o id muda', () => {

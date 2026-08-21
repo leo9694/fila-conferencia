@@ -95,6 +95,7 @@ function comAtribuicao(conversa = {}) {
   const pipelineHistory = Array.isArray(atribuicao?.bitrixPipelineHistory) ? atribuicao.bitrixPipelineHistory : [];
   return {
     ...conversa,
+    displayName: atribuicao?.nomeExibicao || null,
     assignment: atribuicao?.userId ? {
       userId: String(atribuicao.userId),
       userName: atribuicao.userName || 'Atendente',
@@ -522,6 +523,54 @@ async function buscarConversaPorTelefone(telefone) {
     if (identidadeTelefoneWhatsapp(telefoneDaConversa(conversa)) === identity) unique.set(String(conversa.id), conversa);
   });
   return consolidarConversas([...unique.values()])[0] || null;
+}
+
+async function buscarConversasPorCodigoParceiro(codParc) {
+  const resultado = await contatosDoParceiro(codParc);
+  if (!resultado?.contatos?.length) return [];
+  const identidades = new Set(resultado.contatos
+    .map((contato) => identidadeTelefoneWhatsapp(contato.telefone))
+    .filter(Boolean));
+  const encontradas = new Map();
+  const encontradasPorTelefone = new Set();
+  const registrar = (conversa) => {
+    const identidade = identidadeTelefoneWhatsapp(telefoneDaConversa(conversa));
+    if (!identidades.has(identidade)) return;
+    encontradas.set(String(conversa.id), conversa);
+    encontradasPorTelefone.add(identidade);
+  };
+
+  // A conversa atual já pode estar consolidada no processo, mesmo quando a
+  // integração externa não aplica corretamente o filtro por telefone.
+  identidades.forEach((identidade) => {
+    const conversationId = conversaCanonicaPorTelefone.get(identidade);
+    const conversa = conversationId ? cacheConversaCanonica.get(conversationId) : null;
+    if (conversa) registrar(conversa);
+  });
+
+  const tamanhoLote = 5;
+  for (let inicio = 0; inicio < resultado.contatos.length; inicio += tamanhoLote) {
+    const lote = resultado.contatos.slice(inicio, inicio + tamanhoLote);
+    const conversas = await Promise.all(lote.map((contato) => (
+      buscarConversaPorTelefone(contato.telefone).catch(() => null)
+    )));
+    conversas.filter(Boolean).forEach(registrar);
+  }
+
+  const pendentes = [...identidades].filter((identidade) => !encontradasPorTelefone.has(identidade));
+  if (!pendentes.length) return consolidarConversas([...encontradas.values()]);
+
+  // Fallback para integrações que ignoram o parâmetro de busca por telefone.
+  // A varredura só acontece em uma pesquisa explícita por código de parceiro.
+  const primeiraPagina = await whatsappApi.getConversations({ page: 1, limit: 100, assignment: 'ALL' });
+  const paginas = Math.max(1, Number(primeiraPagina.pagination?.totalPages || 1));
+  const examinar = (lista = []) => lista.forEach(registrar);
+  examinar(primeiraPagina.data || []);
+  for (let page = 2; page <= paginas && encontradasPorTelefone.size < identidades.size; page += 1) {
+    const proxima = await whatsappApi.getConversations({ page, limit: 100, assignment: 'ALL' });
+    examinar(proxima.data || []);
+  }
+  return consolidarConversas([...encontradas.values()]);
 }
 
 async function normalizarEventoAtendimento(event, payload = {}) {
@@ -1077,7 +1126,9 @@ router.get('/conversations', asyncRoute(async (req, res) => {
     : '';
   const page = Math.max(1, Number(req.query.page || 1));
   const limit = Math.max(1, Math.min(100, Number(req.query.limit || 30)));
-  const filtroLocalAtivo = Boolean(agentId || assignment !== 'ALL');
+  const busca = String(req.query.search || '').trim();
+  const codParcBusca = /^\d+$/.test(busca) ? Number(busca) : null;
+  const filtroLocalAtivo = Boolean(agentId || assignment !== 'ALL' || codParcBusca);
   const parametros = {
     page: filtroLocalAtivo ? 1 : page,
     limit: filtroLocalAtivo ? 100 : limit,
@@ -1093,6 +1144,10 @@ router.get('/conversations', asyncRoute(async (req, res) => {
       const next = await whatsappApi.getConversations({ ...parametros, page: currentPage });
       resposta.data = [...(resposta.data || []), ...(next.data || [])];
     }
+  }
+  if (Number.isInteger(codParcBusca) && codParcBusca > 0) {
+    const conversasDoParceiro = await buscarConversasPorCodigoParceiro(codParcBusca);
+    resposta.data = [...(resposta.data || []), ...conversasDoParceiro];
   }
   const consolidadasBase = consolidarConversas(resposta.data || []);
   // Bitrix e Sankhya enriquecem a fila, mas não podem bloquear o acesso ao chat.
@@ -1193,6 +1248,20 @@ router.get('/conversations/:id', asyncRoute(async (req, res) => {
   const atualizado = comAtribuicao(conversation);
   const [vinculada] = await vincularCadastrosSankhya([atualizado], { force: true });
   res.json(vinculada);
+}));
+
+router.patch('/conversations/:id/display-name', asyncRoute(async (req, res) => {
+  const conversationId = id(req.params.id);
+  const nomeExibicao = String(req.body?.nomeExibicao || '').trim();
+  if (!nomeExibicao) return res.status(400).json({ erro: 'Informe o nome do cliente.' });
+  const conversation = await obterConversaConsolidada(conversationId);
+  const relatedIds = new Set([conversation.id, ...(conversation.relatedConversationIds || [])]
+    .map(Number)
+    .filter(Number.isInteger));
+  relatedIds.forEach((relatedId) => atendentes.renomearConversa(relatedId, nomeExibicao));
+  const atualizado = comAtribuicao(conversation);
+  eventosAtendimento.emit('updated', { conversation: atualizado });
+  res.json(atualizado);
 }));
 
 router.get('/conversations/:id/bitrix-history', asyncRoute(async (req, res) => {
