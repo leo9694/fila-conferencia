@@ -7,6 +7,47 @@ function controle(valor) {
   return String(valor ?? '').trim() || ' ';
 }
 
+function textoData(valor) {
+  return String(valor ?? '').trim() || null;
+}
+
+function planejarDatasEstoqueEntrada(itensPedido = [], itensInformados = []) {
+  const itensPorSequencia = new Map(
+    itensPedido.map((item) => [numero(item?.SEQUENCIA), item])
+  );
+  const planejadas = new Map();
+
+  for (const itemInformado of itensInformados) {
+    const itemPedido = itensPorSequencia.get(numero(itemInformado?.sequencia));
+    if (!itemPedido || !Array.isArray(itemInformado?.leituras)) continue;
+
+    for (const leitura of itemInformado.leituras) {
+      const dtFabricacao = textoData(leitura?.dtFabricacao);
+      const dtValidade = textoData(leitura?.dtValidade);
+      if (!dtFabricacao && !dtValidade) continue;
+
+      const registro = {
+        codEmp: numero(itemPedido.CODEMP),
+        codProd: numero(itemPedido.CODPROD),
+        codLocal: numero(itemPedido.CODLOCALORIG),
+        controle: controle(leitura?.controle || itemPedido.CONTROLE),
+        dtFabricacao,
+        dtValidade
+      };
+      const chave = [registro.codEmp, registro.codProd, registro.codLocal, registro.controle].join('|');
+      const existente = planejadas.get(chave);
+      planejadas.set(chave, {
+        ...existente,
+        ...registro,
+        dtFabricacao: registro.dtFabricacao || existente?.dtFabricacao || null,
+        dtValidade: registro.dtValidade || existente?.dtValidade || null
+      });
+    }
+  }
+
+  return [...planejadas.values()];
+}
+
 function chaveDetalheEntrada(detalhe) {
   return [
     numero(detalhe?.CODPROD),
@@ -424,6 +465,7 @@ function retornoPossuiDocumentosAuxiliares(resultado) {
 module.exports = {
   consolidarDetalhesNativosEntrada,
   consolidarLeiturasEntrada,
+  planejarDatasEstoqueEntrada,
   distribuirQuantidadeProporcional,
   distribuirValorProporcional,
   planejarControlesItensEntrada,

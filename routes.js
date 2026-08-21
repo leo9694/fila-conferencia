@@ -15,6 +15,7 @@ const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
 const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
 const {
   consolidarLeiturasEntrada,
+  planejarDatasEstoqueEntrada,
   distribuirQuantidadeProporcional,
   distribuirValorProporcional,
   planejarControlesItensEntrada,
@@ -2378,72 +2379,97 @@ function formatarDataCampoSankhya(valor) {
   return texto;
 }
 
-async function atualizarDatasEstoqueEntrada({ itensPedido, itensInformados }) {
-  const itensPorSequencia = new Map(itensPedido.map((item) => [Number(item.SEQUENCIA), item]));
+async function prepararDatasEstoqueEntrada({ itensPedido, itensInformados }) {
+  const planejadas = planejarDatasEstoqueEntrada(itensPedido, itensInformados);
   const atualizacoes = [];
-  const chavesAtualizadas = new Set();
+  for (const planejada of planejadas) {
+    const dtValidade = formatarDataCampoSankhya(planejada.dtValidade);
+    const dtFabricacao = formatarDataCampoSankhya(planejada.dtFabricacao);
+    const controle = normalizarControleConferencia(planejada.controle);
+    const [estoque] = await executeQuery(`
+      SELECT
+        CODEMP,
+        CODPROD,
+        CODLOCAL,
+        NVL(TRIM(CONTROLE), ' ') AS CONTROLE,
+        CODPARC,
+        TIPO,
+        TO_CHAR(DTFABRICACAO, 'DD/MM/YYYY') AS DTFABRICACAO,
+        TO_CHAR(DTVAL, 'DD/MM/YYYY') AS DTVAL
+      FROM TGFEST
+      WHERE CODEMP = ${Number(planejada.codEmp)}
+        AND CODPROD = ${Number(planejada.codProd)}
+        AND CODLOCAL = ${Number(planejada.codLocal)}
+        AND NVL(TRIM(CONTROLE), ' ') = '${textoSql(controle)}'
+        AND NVL(CODPARC, 0) = 0
+        AND NVL(TIPO, 'P') = 'P'
+    `);
+    const camposDesejados = {};
+    if (dtValidade) camposDesejados.DTVAL = dtValidade;
+    if (dtFabricacao) camposDesejados.DTFABRICACAO = dtFabricacao;
+    const planoDatas = planejarDatasRastreabilidade({
+      registro: estoque,
+      dtFabricacao,
+      dtValidade
+    });
 
-  for (const itemInformado of itensInformados) {
-    const itemPedido = itensPorSequencia.get(Number(itemInformado.sequencia));
-    if (!itemPedido || !Array.isArray(itemInformado.leituras)) continue;
-
-    for (const leitura of itemInformado.leituras) {
-      const dtValidade = formatarDataCampoSankhya(leitura.dtValidade);
-      const dtFabricacao = formatarDataCampoSankhya(leitura.dtFabricacao);
-      if (!dtValidade && !dtFabricacao) continue;
-
-      const controle = normalizarControleConferencia(leitura.controle || itemPedido.CONTROLE);
-      const chave = [
-        itemPedido.CODEMP,
-        itemPedido.CODPROD,
-        itemPedido.CODLOCALORIG || 0,
-        controle,
-        dtFabricacao || '',
-        dtValidade || ''
-      ].join('|');
-      if (chavesAtualizadas.has(chave)) continue;
-      chavesAtualizadas.add(chave);
-
-      const estoques = await executeQuery(`
-        SELECT
-          CODEMP,
-          CODPROD,
-          CODLOCAL,
-          NVL(TRIM(CONTROLE), ' ') AS CONTROLE,
-          CODPARC,
-          TIPO
-        FROM TGFEST
-        WHERE CODEMP = ${Number(itemPedido.CODEMP)}
-          AND CODPROD = ${Number(itemPedido.CODPROD)}
-          AND CODLOCAL = ${Number(itemPedido.CODLOCALORIG || 0)}
-          AND NVL(TRIM(CONTROLE), ' ') = '${textoSql(controle)}'
-      `);
-
-      for (const estoque of estoques) {
-        const campos = {};
-        if (dtValidade) campos.DTVAL = dtValidade;
-        if (dtFabricacao) campos.DTFABRICACAO = dtFabricacao;
-
-        await atualizarRegistroApi(
-          'Estoque',
-          {
-            CODEMP: estoque.CODEMP,
-            CODPROD: estoque.CODPROD,
-            CODLOCAL: estoque.CODLOCAL,
-            CONTROLE: normalizarControleConferencia(estoque.CONTROLE),
-            CODPARC: estoque.CODPARC,
-            TIPO: estoque.TIPO
-          },
-          campos
-        );
-        atualizacoes.push({
-          codProd: estoque.CODPROD,
-          controle: normalizarControleConferencia(estoque.CONTROLE).trim(),
-          dtValidade,
-          dtFabricacao
-        });
-      }
+    if (!estoque) {
+      await salvarRegistroApi('Estoque', {
+        CODEMP: Number(planejada.codEmp),
+        CODLOCAL: Number(planejada.codLocal),
+        CODPROD: Number(planejada.codProd),
+        CONTROLE: controle,
+        CODPARC: 0,
+        TIPO: 'P',
+        ESTOQUE: 0,
+        RESERVADO: 0,
+        ESTMIN: 0,
+        ESTMAX: 0,
+        ATIVO: 'S',
+        STATUSLOTE: 'N',
+        ...camposDesejados
+      });
+    } else if (Object.keys(planoDatas.camposAlterados).length > 0) {
+      await atualizarRegistroApi(
+        'Estoque',
+        {
+          CODEMP: estoque.CODEMP,
+          CODPROD: estoque.CODPROD,
+          CODLOCAL: estoque.CODLOCAL,
+          CONTROLE: normalizarControleConferencia(estoque.CONTROLE),
+          CODPARC: estoque.CODPARC,
+          TIPO: estoque.TIPO
+        },
+        planoDatas.camposAlterados
+      );
     }
+
+    const [confirmado] = await executeQuery(`
+      SELECT
+        TO_CHAR(DTFABRICACAO, 'DD/MM/YYYY') AS DTFABRICACAO,
+        TO_CHAR(DTVAL, 'DD/MM/YYYY') AS DTVAL
+      FROM TGFEST
+      WHERE CODEMP = ${Number(planejada.codEmp)}
+        AND CODPROD = ${Number(planejada.codProd)}
+        AND CODLOCAL = ${Number(planejada.codLocal)}
+        AND NVL(TRIM(CONTROLE), ' ') = '${textoSql(controle)}'
+        AND NVL(CODPARC, 0) = 0
+        AND NVL(TIPO, 'P') = 'P'
+    `);
+    if (!confirmado
+      || (dtFabricacao && confirmado.DTFABRICACAO !== dtFabricacao)
+      || (dtValidade && confirmado.DTVAL !== dtValidade)) {
+      throw new Error(
+        `O Sankhya não gravou fabricação/validade do produto ${planejada.codProd}, lote ${controle.trim() || 'sem controle'}. Revise as datas antes de finalizar a conferência.`
+      );
+    }
+
+    atualizacoes.push({
+      codProd: Number(planejada.codProd),
+      controle: controle.trim(),
+      dtValidade,
+      dtFabricacao
+    });
   }
 
   return atualizacoes;
@@ -6773,6 +6799,13 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
         })
       : [];
 
+    // A nota de compra ainda está pendente neste ponto. Para que o Sankhya
+    // consiga validar fabricação e validade na confirmação, prepare a posição
+    // do lote antes de finalizar a conferência nativa.
+    const datasEstoqueAtualizadas = modo === 'entrada'
+      ? await prepararDatasEstoqueEntrada({ itensPedido, itensInformados: itens })
+      : [];
+
     if (modo === 'entrada') {
       await enfileirarSincronizacaoEntrada(nunota, () => sincronizarDetalhesConferenciaEntrada({
         nuconf,
@@ -6874,10 +6907,6 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       FROM TGFCON2
       WHERE NUCONF = ${nuconf}
     `);
-
-    const datasEstoqueAtualizadas = modo === 'entrada'
-      ? await atualizarDatasEstoqueEntrada({ itensPedido, itensInformados: itens })
-      : [];
 
     conferenciaProgressStore.remover(nunota);
 

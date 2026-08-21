@@ -5,6 +5,7 @@ const {
   consolidarDetalhesNativosEntrada,
   distribuirQuantidadeProporcional,
   distribuirValorProporcional,
+  planejarDatasEstoqueEntrada,
   planejarControlesItensEntrada,
   planejarDesmembramentoLotesEntrada,
   planejarSincronizacaoDetalhesEntrada,
@@ -15,6 +16,44 @@ const {
   documentosAuxiliaresConferencia,
   retornoPossuiDocumentosAuxiliares
 } = require('../api/conferenciaEntrada');
+
+test('planeja datas para lotes novos mesmo sem posição de estoque existente', () => {
+  const datas = planejarDatasEstoqueEntrada([
+    { SEQUENCIA: 1, CODEMP: 1, CODPROD: 4062, CODLOCALORIG: 1010101, CONTROLE: '050628' }
+  ], [
+    {
+      sequencia: 1,
+      leituras: [{ controle: '050628', dtFabricacao: '2026-05-10', dtValidade: '2028-05-10' }]
+    }
+  ]);
+
+  assert.deepEqual(datas, [{
+    codEmp: 1,
+    codProd: 4062,
+    codLocal: 1010101,
+    controle: '050628',
+    dtFabricacao: '2026-05-10',
+    dtValidade: '2028-05-10'
+  }]);
+});
+
+test('consolida leituras do mesmo lote sem perder fabricação ou validade', () => {
+  const datas = planejarDatasEstoqueEntrada([
+    { SEQUENCIA: 1, CODEMP: 1, CODPROD: 4062, CODLOCALORIG: 1010101, CONTROLE: '050628' }
+  ], [
+    {
+      sequencia: 1,
+      leituras: [
+        { controle: '050628', dtFabricacao: '2026-05-10' },
+        { controle: '050628', dtValidade: '2028-05-10' }
+      ]
+    }
+  ]);
+
+  assert.equal(datas.length, 1);
+  assert.equal(datas[0].dtFabricacao, '2026-05-10');
+  assert.equal(datas[0].dtValidade, '2028-05-10');
+});
 
 test('permite reabrir conferencia de entrada finalizada divergente', () => {
   assert.equal(conferenciaEntradaPodeSerReaberta('D'), true);
