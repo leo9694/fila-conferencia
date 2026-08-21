@@ -1039,6 +1039,35 @@ router.get('/partners/:codParc/contacts', asyncRoute(async (req, res) => {
   res.json(resultado);
 }));
 
+router.post('/partners/:codParc/contacts', asyncRoute(async (req, res) => {
+  const codParc = Number(req.params.codParc);
+  const nomeContato = textoContatoChat(req.body?.nomeContato, 40);
+  const cargo = textoContatoChat(req.body?.cargo, 40);
+  const telefone = normalizarTelefoneWhatsapp(req.body?.telefone);
+  if (!Number.isInteger(codParc) || codParc <= 0) return res.status(400).json({ erro: 'Parceiro inválido.' });
+  if (!nomeContato) return res.status(400).json({ erro: 'Informe o nome do contato.' });
+  if (!telefone) return res.status(400).json({ erro: 'Informe um telefone válido com DDD.' });
+
+  const resultado = await contatosDoParceiro(codParc);
+  if (!resultado) return res.status(404).json({ erro: 'Parceiro ativo não encontrado no Sankhya.' });
+  const identidade = identidadeTelefoneWhatsapp(telefone);
+  if (resultado.contatos.some((contato) => identidadeTelefoneWhatsapp(contato.telefone) === identidade)) {
+    return res.status(409).json({ erro: 'Este telefone já está cadastrado neste parceiro.' });
+  }
+
+  const criado = await criarContatoWhatsappNoSankhya({ codParc, nomeContato, cargo, telefone });
+  res.status(201).json({
+    parceiro: resultado.parceiro,
+    contato: {
+      ...criado,
+      key: `CTT:${criado.codContato}:CELULAR`,
+      telefone,
+      nome: criado.nomeContato,
+      tipo: criado.cargo || 'Contato'
+    }
+  });
+}));
+
 router.get('/conversations', asyncRoute(async (req, res) => {
   // A fila inicial precisa exibir os atendimentos existentes. A posse só limita
   // ações de atendimento, não a visualização da conversa.

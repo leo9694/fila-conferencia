@@ -48,10 +48,15 @@
     contactModal: byId('chat-contact-modal'), contactForm: byId('chat-contact-form'), contactClose: byId('chat-contact-close'),
     partnerSearch: byId('chat-partner-search'), partnerResults: byId('chat-partner-results'),
     selectedPartner: byId('chat-selected-partner'), selectedPartnerName: byId('chat-selected-partner-name'),
+    selectedPartnerLabel: byId('chat-selected-partner-label'),
     changePartner: byId('chat-change-partner'), partnerContactField: byId('chat-partner-contact-field'),
     partnerContacts: byId('chat-partner-contacts'), partnerContact: byId('chat-partner-contact'),
+    newSankhyaContact: byId('chat-new-sankhya-contact'), newSankhyaContactPanel: byId('chat-new-sankhya-contact-panel'),
+    newSankhyaContactClose: byId('chat-new-sankhya-contact-close'), newSankhyaContactName: byId('chat-new-sankhya-contact-name'),
+    newSankhyaContactPhone: byId('chat-new-sankhya-contact-phone'), newSankhyaContactRole: byId('chat-new-sankhya-contact-role'),
+    newSankhyaContactFeedback: byId('chat-new-sankhya-contact-feedback'), newSankhyaContactSave: byId('chat-new-sankhya-contact-save'),
     newPipelineField: byId('chat-new-pipeline-field'), newPipeline: byId('chat-new-pipeline'),
-    contactFeedback: byId('chat-contact-feedback'), contactSubmit: byId('chat-contact-submit'),
+    contactFeedback: byId('chat-contact-feedback'), contactSubmit: byId('chat-contact-submit'), contactCancel: byId('chat-contact-cancel'),
     linkPartnerModal: byId('chat-link-partner-modal'), linkPartnerForm: byId('chat-link-partner-form'),
     linkPartnerClose: byId('chat-link-partner-close'), linkPartnerPhone: byId('chat-link-partner-phone'),
     linkPartnerSearch: byId('chat-link-partner-search'), linkPartnerResults: byId('chat-link-partner-results'),
@@ -253,6 +258,27 @@
 
   function sankhyaCadastro(item = {}) {
     return item.cadastroSankhya?.verificado ? item.cadastroSankhya : null;
+  }
+
+  function sankhyaVinculos(item = {}) {
+    const cadastro = sankhyaCadastro(item);
+    if (!cadastro) return [];
+    const registros = Array.isArray(cadastro.parceiros) && cadastro.parceiros.length
+      ? cadastro.parceiros
+      : [cadastro];
+    const porParceiro = new Map();
+    registros.forEach((registro = {}) => {
+      const key = String(registro.codParc || registro.nomeParc || 'parceiro');
+      if (!porParceiro.has(key)) {
+        porParceiro.set(key, {
+          codParc: registro.codParc,
+          nomeParc: registro.nomeParc,
+          contatos: new Set()
+        });
+      }
+      if (registro.nomeContato) porParceiro.get(key).contatos.add(String(registro.nomeContato).trim());
+    });
+    return [...porParceiro.values()];
   }
 
   function sankhyaBadge(item = {}, compact = true) {
@@ -812,9 +838,12 @@
     const cadastro = sankhyaCadastro(item);
     if (refs.sankhyaData) {
       if (cadastro) {
-        const outros = Math.max(0, Number(cadastro.parceiros?.length || 0) - 1);
+        const vinculos = sankhyaVinculos(item);
         refs.sankhyaData.classList.add('is-verified');
-        refs.sankhyaData.innerHTML = `<strong><i data-lucide="badge-check" aria-hidden="true"></i> Cadastro Sankhya verificado</strong><p><b>${escapeHtml(cadastro.codParc || '-')} - ${escapeHtml(cadastro.nomeParc || 'Parceiro')}</b>${cadastro.nomeContato ? `<br>Contato: ${escapeHtml(cadastro.nomeContato)}` : ''}${outros ? `<br>+${outros} outro${outros > 1 ? 's' : ''} vínculo${outros > 1 ? 's' : ''} com este telefone.` : ''}</p>`;
+        refs.sankhyaData.innerHTML = `<strong><i data-lucide="badge-check" aria-hidden="true"></i> Cadastro Sankhya verificado</strong><div class="chat-sankhya-links">${vinculos.map((vinculo) => {
+          const contatos = [...vinculo.contatos];
+          return `<p><b>${escapeHtml(vinculo.codParc || '-')} - ${escapeHtml(vinculo.nomeParc || 'Parceiro')}</b>${contatos.length ? `<br>Contato${contatos.length > 1 ? 's' : ''}: ${escapeHtml(contatos.join(', '))}` : ''}</p>`;
+        }).join('')}</div>`;
       } else {
         refs.sankhyaData.classList.remove('is-verified');
         refs.sankhyaData.innerHTML = '<strong>Telefone não localizado no Sankhya</strong><p>Este número não está vinculado a um parceiro ou contato ativo.</p><button type="button" class="chat-link-partner-button" data-chat-link-partner><i data-lucide="link" aria-hidden="true"></i>Vincular parceiro</button>';
@@ -1613,6 +1642,7 @@
   function resetPartnerSelection() {
     state.selectedPartner = null;
     refs.selectedPartner.hidden = true;
+    refs.selectedPartnerLabel.hidden = true;
     refs.partnerContactField.hidden = true;
     refs.partnerContacts.innerHTML = '';
     refs.partnerContact.value = '';
@@ -1644,7 +1674,7 @@
     }
   }
 
-  async function selectPartner(codParc) {
+  async function selectPartner(codParc, preferredContactKey = '') {
     const token = ++state.partnerSearchToken;
     refs.contactFeedback.textContent = 'Carregando contatos do parceiro...';
     refs.partnerContact.value = '';
@@ -1655,17 +1685,21 @@
       state.selectedPartner = payload.parceiro;
       refs.selectedPartnerName.textContent = `${payload.parceiro.codParc} - ${payload.parceiro.nome}`;
       refs.selectedPartner.hidden = false;
+      refs.selectedPartnerLabel.hidden = false;
       refs.partnerResults.hidden = true;
       refs.partnerSearch.hidden = true;
       refs.partnerSearch.closest('label').hidden = true;
       refs.partnerContactField.hidden = false;
       const contacts = Array.isArray(payload.contatos) ? payload.contatos : [];
-      refs.partnerContact.value = contacts[0]?.key || '';
+      const preferredIndex = contacts.findIndex((contact) => contact.key === preferredContactKey);
+      const selectedIndex = contacts.length ? Math.max(0, preferredIndex) : -1;
+      refs.partnerContact.value = contacts[selectedIndex]?.key || '';
       refs.partnerContacts.innerHTML = contacts.map((contact, index) => {
         const type = String(contact.tipo || '').toLocaleLowerCase('pt-BR');
         const badgeClass = type.includes('principal') ? 'is-primary' : type.includes('financ') ? 'is-financial' : 'is-contact';
         const badge = contact.tipo || contact.nome || 'Contato';
-        return `<button class="chat-partner-contact-option${index === 0 ? ' is-selected' : ''}" type="button" role="radio" aria-checked="${index === 0}" data-chat-contact="${escapeHtml(contact.key)}">
+        const selected = index === selectedIndex;
+        return `<button class="chat-partner-contact-option${selected ? ' is-selected' : ''}" type="button" role="radio" aria-checked="${selected}" data-chat-contact="${escapeHtml(contact.key)}">
           <span class="chat-contact-radio" aria-hidden="true"></span>
           <i data-lucide="message-circle" aria-hidden="true"></i>
           <span class="chat-contact-option-copy">
@@ -1687,12 +1721,55 @@
 
   function changeSelectedPartner() {
     state.partnerSearchToken += 1;
+    closeNewSankhyaContact();
     resetPartnerSelection();
     refs.partnerSearch.hidden = false;
     refs.partnerSearch.closest('label').hidden = false;
     refs.partnerResults.hidden = true;
     refs.contactFeedback.textContent = '';
     refs.partnerSearch.focus();
+  }
+
+  function closeNewSankhyaContact() {
+    refs.newSankhyaContactPanel.hidden = true;
+    refs.newSankhyaContactName.value = '';
+    refs.newSankhyaContactPhone.value = '';
+    refs.newSankhyaContactRole.value = '';
+    refs.newSankhyaContactFeedback.textContent = '';
+    refs.newSankhyaContactSave.disabled = false;
+  }
+
+  function openNewSankhyaContact() {
+    if (!state.selectedPartner) return;
+    refs.newSankhyaContactPanel.hidden = false;
+    refs.newSankhyaContactFeedback.textContent = '';
+    requestAnimationFrame(() => refs.newSankhyaContactName.focus());
+  }
+
+  async function saveNewSankhyaContact() {
+    const codParc = Number(state.selectedPartner?.codParc);
+    const nomeContato = refs.newSankhyaContactName.value.trim();
+    const telefone = refs.newSankhyaContactPhone.value.trim();
+    const cargo = refs.newSankhyaContactRole.value.trim();
+    if (!nomeContato || !telefone) {
+      refs.newSankhyaContactFeedback.textContent = 'Informe o nome e o telefone do contato.';
+      (!nomeContato ? refs.newSankhyaContactName : refs.newSankhyaContactPhone).focus();
+      return;
+    }
+    refs.newSankhyaContactSave.disabled = true;
+    refs.newSankhyaContactFeedback.textContent = 'Salvando contato no Sankhya...';
+    try {
+      const result = await api(`/partners/${encodeURIComponent(codParc)}/contacts`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nomeContato, telefone, cargo })
+      });
+      closeNewSankhyaContact();
+      await selectPartner(codParc, result?.contato?.key || '');
+      refs.contactFeedback.textContent = 'Contato salvo no Sankhya e selecionado.';
+    } catch (error) {
+      refs.newSankhyaContactFeedback.textContent = error.message || 'Não foi possível salvar o contato.';
+      refs.newSankhyaContactSave.disabled = false;
+    }
   }
 
   function openNewContact() {
@@ -1722,6 +1799,7 @@
     state.partnerSearchToken += 1;
     refs.contactModal.hidden = true;
     refs.contactForm.reset();
+    closeNewSankhyaContact();
     resetPartnerSelection();
     refs.contactFeedback.textContent = '';
   }
@@ -2046,6 +2124,7 @@
     refs.templateOpen.addEventListener('click', openTemplates); refs.templateClose.addEventListener('click', () => { refs.templateModal.hidden = true; });
     refs.templateSearch.addEventListener('input', renderTemplates); refs.templateSend.addEventListener('click', submitTemplate);
     refs.contactClose.addEventListener('click', closeNewContact);
+    refs.contactCancel.addEventListener('click', closeNewContact);
     refs.contactForm.addEventListener('submit', createNewContact);
     refs.partnerSearch.addEventListener('input', Core.debounce(searchPartners, 320));
     refs.partnerResults.addEventListener('click', (event) => {
@@ -2053,6 +2132,9 @@
       if (button) selectPartner(button.dataset.chatPartner);
     });
     refs.changePartner.addEventListener('click', changeSelectedPartner);
+    refs.newSankhyaContact.addEventListener('click', openNewSankhyaContact);
+    refs.newSankhyaContactClose.addEventListener('click', closeNewSankhyaContact);
+    refs.newSankhyaContactSave.addEventListener('click', saveNewSankhyaContact);
     refs.newPipeline?.addEventListener('change', updateNewContactSubmit);
     refs.partnerContacts.addEventListener('click', (event) => {
       const button = event.target.closest('[data-chat-contact]');

@@ -12611,13 +12611,14 @@
   <section class="chat-contact-modal" id="chat-contact-modal" hidden>
     <form class="chat-contact-dialog" id="chat-contact-form" aria-modal="true" aria-labelledby="chat-contact-title">
       <header>
-        <div><span>NOVA CONVERSA</span><h2 id="chat-contact-title">Adicionar contato</h2></div>
+        <div><span>NOVA CONVERSA</span><h2 id="chat-contact-title">Adicionar contato</h2><p>Selecione o número e o pipeline para iniciar a conversa.</p></div>
         <button id="chat-contact-close" type="button" aria-label="Fechar"><i data-lucide="x" aria-hidden="true"></i></button>
       </header>
       <div class="chat-contact-body">
-        <p><i data-lucide="shield-check" aria-hidden="true"></i> Para iniciar a conversa, envie primeiro um template aprovado pela Meta. Mensagens livres serão liberadas apenas após a resposta do contato.</p>
+        <div class="chat-contact-notice"><i data-lucide="shield-check" aria-hidden="true"></i><span><strong>Template obrigatório para iniciar</strong>Envie primeiro um template aprovado pela Meta. Mensagens livres serão liberadas após a resposta do contato.</span></div>
         <label>Buscar parceiro no Sankhya<input id="chat-partner-search" type="search" maxlength="120" autocomplete="off" placeholder="Código, nome ou CNPJ/CPF"></label>
         <div class="chat-partner-results" id="chat-partner-results" hidden></div>
+        <strong class="chat-contact-section-title" id="chat-selected-partner-label" hidden>Parceiro selecionado</strong>
         <div class="chat-selected-partner" id="chat-selected-partner" hidden>
           <span class="chat-selected-partner-icon"><i data-lucide="store" aria-hidden="true"></i></span>
           <span class="chat-selected-partner-copy">
@@ -12627,9 +12628,18 @@
           <button type="button" id="chat-change-partner"><i data-lucide="refresh-cw" aria-hidden="true"></i>Trocar parceiro</button>
         </div>
         <div class="chat-partner-contact-field" id="chat-partner-contact-field" hidden>
-          <strong>Contato/WhatsApp cadastrado</strong>
+          <div class="chat-contact-field-heading"><strong>Contatos disponíveis</strong><button id="chat-new-sankhya-contact" type="button"><i data-lucide="user-plus" aria-hidden="true"></i>Novo contato</button></div>
           <div class="chat-partner-contacts" id="chat-partner-contacts" role="radiogroup" aria-label="Contatos cadastrados"></div>
           <input id="chat-partner-contact" type="hidden" value="">
+        </div>
+        <div class="chat-new-sankhya-contact" id="chat-new-sankhya-contact-panel" hidden>
+          <div class="chat-new-sankhya-contact-heading"><span><strong>Novo contato</strong><small>Este contato será salvo no parceiro selecionado no Sankhya.</small></span><button id="chat-new-sankhya-contact-close" type="button" aria-label="Fechar novo contato"><i data-lucide="x" aria-hidden="true"></i></button></div>
+          <div class="chat-new-sankhya-contact-fields">
+            <label><span>Nome do contato</span><input id="chat-new-sankhya-contact-name" type="text" maxlength="40" autocomplete="name" placeholder="Nome da pessoa"></label>
+            <label><span>Telefone/WhatsApp</span><input id="chat-new-sankhya-contact-phone" type="tel" maxlength="20" autocomplete="tel" placeholder="Ex.: +55 66 99999-1234"></label>
+            <label><span>Cargo <small>(opcional)</small></span><input id="chat-new-sankhya-contact-role" type="text" maxlength="40" autocomplete="organization-title" placeholder="Ex.: Compras, Financeiro"></label>
+          </div>
+          <div class="chat-new-sankhya-contact-actions"><span id="chat-new-sankhya-contact-feedback"></span><button id="chat-new-sankhya-contact-save" type="button"><i data-lucide="save" aria-hidden="true"></i>Salvar contato</button></div>
         </div>
         <label class="chat-pipeline-field" id="chat-new-pipeline-field">Pipeline do Bitrix
           <select id="chat-new-pipeline" required>
@@ -12638,7 +12648,7 @@
           <small>Ao iniciar a conversa, um card será criado automaticamente neste pipeline.</small>
         </label>
       </div>
-      <footer><span id="chat-contact-feedback"></span><button id="chat-contact-submit" type="submit" disabled><i data-lucide="file-plus-2" aria-hidden="true"></i>Criar e escolher template</button></footer>
+      <footer><button id="chat-contact-cancel" class="chat-contact-cancel" type="button">Cancelar</button><span id="chat-contact-feedback"></span><button id="chat-contact-submit" type="submit" disabled><i data-lucide="file-plus-2" aria-hidden="true"></i>Criar e escolher template</button></footer>
     </form>
   </section>
 

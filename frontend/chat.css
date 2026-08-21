@@ -19,11 +19,12 @@
 .chat-workspace-actions::before { content:'Chat'; margin-right:auto; color:#173a47; font-size:.92rem; font-weight:800; }
 .chat-conversations-panel,.chat-details-panel { min-width:0; display:flex; flex-direction:column; background:#fbfdfd; }
 .chat-conversations-panel { position:relative; border-right:1px solid #dfe9e7; }
-.chat-panel-title { display:flex; align-items:center; justify-content:space-between; padding:14px 14px 8px; }
-.chat-panel-title>div { display:flex; align-items:center; gap:8px; }
-.chat-panel-title strong { font-size:1rem; }
+.chat-panel-title { display:flex; align-items:center; justify-content:space-between; gap:4px; min-width:0; padding:14px 8px 8px 10px; }
+.chat-panel-title>div { display:flex; align-items:center; gap:4px; min-width:0; }
+.chat-panel-title>div:first-child { flex:1 1 auto; overflow:hidden; }
+.chat-panel-title strong { min-width:0; overflow:hidden; font-size:.92rem; text-overflow:ellipsis; white-space:nowrap; }
 .chat-panel-title span { display:grid; place-items:center; min-width:23px; height:23px; padding:0 6px; border-radius:999px; background:#e1f3ee; color:#087f6d; font-size:.7rem; font-weight:800; }
-.chat-panel-actions { display:flex; align-items:center; gap:2px; }.chat-panel-title button,.chat-details-head button { display:grid; place-items:center; width:32px; height:32px; border:0; border-radius:9px; background:transparent; color:#52707b; }
+.chat-panel-actions { flex:0 0 auto; display:flex; align-items:center; gap:1px; }.chat-panel-title button { flex:0 0 27px; width:27px; height:30px; }.chat-panel-title button,.chat-details-head button { display:grid; place-items:center; border:0; border-radius:9px; background:transparent; color:#52707b; }.chat-details-head button { width:32px; height:32px; }
 .chat-panel-title button:hover,.chat-details-head button:hover { background:#e8f3f0; color:#087f6d; }
 .chat-panel-title button.is-active { background:#dff3ed; color:#087f6d; }
 .chat-panel-title svg,.chat-details-head svg { width:17px; }
@@ -107,6 +108,9 @@
 .chat-future-data:not(.is-verified) strong { color:#657982; }
 .chat-future-data strong svg { width:14px; height:14px; }
 .chat-future-data p b { color:#294753; }
+.chat-sankhya-links { margin-top:5px; display:flex; flex-direction:column; gap:6px; }
+.chat-sankhya-links p { margin:0; padding-top:6px; border-top:1px solid rgba(8,127,109,.12); }
+.chat-sankhya-links p:first-child { padding-top:0; border-top:0; }
 .chat-link-partner-button { min-height:31px; margin-top:10px; padding:0 10px; display:inline-flex; align-items:center; gap:6px; border:1px solid #9dcec3; border-radius:8px; background:#fff; color:#087f6d; font-size:.64rem; font-weight:800; cursor:pointer; }
 .chat-link-partner-button:hover { border-color:#087f6d; background:#eaf7f3; }
 .chat-link-partner-button svg { width:14px; height:14px; }
@@ -321,13 +325,19 @@
 }
 
 /* Nova conversa: parceiro e telefones cadastrados no Sankhya. */
-.chat-contact-dialog { width:min(660px,96vw); max-height:92dvh; }
+.chat-contact-dialog { width:min(780px,96vw); max-height:92dvh; border-radius:22px; }
 .chat-contact-dialog>header { padding:20px 24px 16px; }
 .chat-contact-dialog>header span { font-size:.68rem; }
 .chat-contact-dialog h2 { font-size:1.55rem; }
+.chat-contact-dialog>header p { margin:5px 0 0; color:#657b85; font-size:.76rem; }
 .chat-contact-dialog>header button { width:34px; height:34px; display:grid; place-items:center; cursor:pointer; }
 .chat-contact-dialog>header button svg { width:22px; height:22px; }
 .chat-contact-body { max-height:68dvh; padding:18px 24px; gap:14px; }
+.chat-contact-notice { padding:15px 17px; display:flex; align-items:center; gap:14px; border-radius:13px; background:#edf8f5; color:#506b74; font-size:.72rem; line-height:1.45; }
+.chat-contact-notice>svg { flex:0 0 auto; width:28px; height:28px; color:#087f6d; }
+.chat-contact-notice>span { display:flex; flex-direction:column; gap:2px; }
+.chat-contact-notice strong { color:#087f6d; font-size:.82rem; }
+.chat-contact-section-title { margin-bottom:-7px; color:#294753; font-size:.78rem; }
 .chat-contact-body>p { padding:13px 15px; font-size:.76rem; }
 .chat-contact-body>p svg { width:20px; height:20px; }
 .chat-selected-partner { min-height:72px; padding:14px 170px 14px 72px; justify-content:center; gap:4px; border-radius:12px; }
@@ -344,6 +354,28 @@
 .chat-partner-contact-field { display:flex; flex-direction:column; gap:8px; }
 .chat-partner-contact-field[hidden] { display:none; }
 .chat-partner-contact-field>strong { color:#294753; font-size:.78rem; }
+.chat-contact-field-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.chat-contact-field-heading>strong { color:#294753; font-size:.78rem; }
+.chat-contact-field-heading>button { min-height:32px; padding:0 10px; display:inline-flex; align-items:center; gap:6px; border:1px solid #9dcec3; border-radius:8px; background:#fff; color:#087f6d; font-size:.64rem; font-weight:800; cursor:pointer; }
+.chat-contact-field-heading>button:hover { border-color:#087f6d; background:#eaf7f3; }
+.chat-contact-field-heading>button svg { width:14px; height:14px; }
+.chat-new-sankhya-contact { padding:14px; display:flex; flex-direction:column; gap:12px; border:1px solid #a9d8ce; border-radius:12px; background:#f5fbf9; }
+.chat-new-sankhya-contact[hidden] { display:none; }
+.chat-new-sankhya-contact-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+.chat-new-sankhya-contact-heading>span { display:flex; flex-direction:column; gap:2px; }
+.chat-new-sankhya-contact-heading strong { color:#075f54; font-size:.8rem; }
+.chat-new-sankhya-contact-heading small { color:#6c838b; font-size:.61rem; }
+.chat-new-sankhya-contact-heading>button { width:28px; height:28px; display:grid; place-items:center; border:0; border-radius:7px; background:#e5f3ef; color:#53717a; cursor:pointer; }
+.chat-new-sankhya-contact-heading>button svg { width:15px; height:15px; }
+.chat-new-sankhya-contact-fields { display:grid; grid-template-columns:1.1fr 1fr 1fr; gap:9px; }
+.chat-new-sankhya-contact-fields label { min-width:0; display:grid; grid-template-rows:16px 40px; align-items:center; gap:5px; }
+.chat-new-sankhya-contact-fields label>span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.chat-new-sankhya-contact-fields label small { color:#789097; font-size:.58rem; font-weight:600; }
+.chat-new-sankhya-contact-actions { display:flex; align-items:center; justify-content:flex-end; gap:12px; }
+.chat-new-sankhya-contact-actions>span { flex:1; color:#b42318; font-size:.63rem; }
+.chat-new-sankhya-contact-actions>button { min-height:36px; padding:0 12px; display:inline-flex; align-items:center; gap:6px; border:0; border-radius:8px; background:#087f6d; color:#fff; font-size:.66rem; font-weight:800; cursor:pointer; }
+.chat-new-sankhya-contact-actions>button:disabled { opacity:.55; }
+.chat-new-sankhya-contact-actions>button svg { width:14px; height:14px; }
 .chat-pipeline-field select,.chat-contact-body select { min-height:42px; padding:0 10px; border:1px solid #cbded9; border-radius:9px; background:#fff; color:#173a47; font:inherit; font-weight:700; }
 .chat-pipeline-field select:focus,.chat-contact-body select:focus { outline:0; border-color:#20a88e; box-shadow:0 0 0 3px rgba(32,168,142,.1); }
 .chat-pipeline-field small { color:#71858e; font-size:.61rem; font-weight:500; line-height:1.35; }
@@ -384,6 +416,7 @@
 .chat-contact-dialog>footer { padding:15px 24px; }
 .chat-contact-dialog>footer button { min-height:42px; padding:0 16px; display:flex; align-items:center; gap:7px; }
 .chat-contact-dialog>footer button svg { width:17px; height:17px; }
+.chat-contact-dialog>footer .chat-contact-cancel { border:1px solid #b9cbc7; background:#fff; color:#294753; }
 
 @media (max-width:640px) {
   .chat-contact-modal { padding:8px; }
@@ -395,6 +428,8 @@
   .chat-selected-partner-icon { left:10px; width:40px; height:40px; }
   .chat-selected-partner button { left:12px; right:12px; top:auto; bottom:10px; justify-content:center; transform:none; }
   .chat-link-contact-fields { grid-template-columns:1fr; }
+  .chat-new-sankhya-contact-fields { grid-template-columns:1fr; }
+  .chat-contact-field-heading { align-items:flex-start; }
   .chat-partner-contact-option { grid-template-columns:18px 22px minmax(0,1fr); gap:8px; }
   .chat-partner-contact-option em { grid-column:3; justify-self:start; }
   .chat-contact-dialog>footer { padding:11px 14px; flex-wrap:wrap; }
