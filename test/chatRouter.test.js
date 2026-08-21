@@ -32,6 +32,16 @@ test('omite da lista de atendentes usuários com limite de acesso expirado', () 
   );
 });
 
+test('filtra conversas por atendente sem alterar os filtros existentes', () => {
+  const conversa = { assignment: { userId: '72' } };
+  assert.equal(chatRouter._internals.conversaCorrespondeFiltroAtendente(conversa, { agentId: '72' }), true);
+  assert.equal(chatRouter._internals.conversaCorrespondeFiltroAtendente(conversa, { agentId: '81' }), false);
+  assert.equal(chatRouter._internals.conversaCorrespondeFiltroAtendente({}, { assignment: 'UNASSIGNED' }), true);
+  assert.equal(chatRouter._internals.conversaCorrespondeFiltroAtendente(conversa, {
+    assignment: 'MINE', currentAgentId: '72'
+  }), true);
+});
+
 test('normaliza telefone brasileiro para o formato internacional do WhatsApp', () => {
   assert.equal(chatRouter._internals.normalizarTelefoneWhatsapp('(66) 99999-0000'), '5566999990000');
   assert.equal(chatRouter._internals.normalizarTelefoneWhatsapp('+55 66 99999-0000'), '5566999990000');

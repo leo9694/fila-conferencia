@@ -12432,6 +12432,9 @@
           <div class="chat-panel-title">
             <div><strong>Conversas</strong><span id="chat-conversation-count">0</span></div>
             <div class="chat-panel-actions">
+              <button id="chat-agent-filter-toggle" type="button" aria-label="Filtrar por atendente" title="Filtrar por atendente" aria-expanded="false" hidden>
+                <i data-lucide="list-filter" aria-hidden="true"></i>
+              </button>
               <button id="chat-profile-open" type="button" aria-label="Meu perfil de atendimento" title="Meu perfil">
                 <i data-lucide="circle-user-round" aria-hidden="true"></i>
               </button>
@@ -12443,6 +12446,17 @@
               </button>
               <button id="chat-refresh" type="button" aria-label="Atualizar conversas" title="Atualizar">
                 <i data-lucide="refresh-cw" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+          <div class="chat-agent-filter" id="chat-agent-filter" hidden>
+            <label for="chat-agent-filter-select">Atendente</label>
+            <div>
+              <select id="chat-agent-filter-select" aria-label="Filtrar conversas por atendente">
+                <option value="">Todos os atendentes</option>
+              </select>
+              <button id="chat-agent-filter-clear" type="button" aria-label="Limpar filtro de atendente" title="Limpar filtro" hidden>
+                <i data-lucide="x" aria-hidden="true"></i>
               </button>
             </div>
           </div>

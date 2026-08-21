@@ -61,6 +61,16 @@ function acessoPermitido(usuario = {}) {
   return pertenceDiretoria(usuario) || atendentes.permitido(usuario.codUsu);
 }
 
+function conversaCorrespondeFiltroAtendente(conversa = {}, filtros = {}) {
+  const agentId = String(filtros.agentId || '').trim();
+  const assignedId = String(conversa.assignment?.userId || '');
+  if (agentId) return assignedId === agentId;
+  const assignment = String(filtros.assignment || 'ALL').toUpperCase();
+  if (assignment === 'ALL') return true;
+  if (assignment === 'UNASSIGNED') return !assignedId;
+  return assignedId === String(filtros.currentAgentId || '');
+}
+
 function atribuicaoExpirada(atribuicao = {}, conversa = {}, agora = Date.now()) {
   if (!atribuicao?.userId) return false;
   const momentos = [atribuicao.assignedAt, atribuicao.lastInteractionAt, instanteUltimaMensagem(conversa)]
@@ -1041,6 +1051,9 @@ router.get('/conversations', asyncRoute(async (req, res) => {
   // A fila inicial precisa exibir os atendimentos existentes. A posse só limita
   // ações de atendimento, não a visualização da conversa.
   const assignment = String(req.query.assignment || 'ALL').toUpperCase();
+  const agentId = pertenceDiretoria(req.usuario) && /^\d+$/.test(String(req.query.agentId || ''))
+    ? String(req.query.agentId)
+    : '';
   const consolidadasBase = consolidarConversas(resposta.data || []);
   // Bitrix e Sankhya enriquecem a fila, mas não podem bloquear o acesso ao chat.
   // Entregue imediatamente o estado local/cacheado e atualize os cards via SSE.
@@ -1050,9 +1063,11 @@ router.get('/conversations', asyncRoute(async (req, res) => {
   });
   const data = consolidadas.filter((conversa) => {
     if (conversaOcultaParaUsuario(req.usuario.codUsu, conversa)) return false;
-    if (assignment === 'ALL') return true;
-    if (assignment === 'UNASSIGNED') return !conversa.assignment;
-    return conversa.assignment?.userId === req.atendente.id;
+    return conversaCorrespondeFiltroAtendente(conversa, {
+      assignment,
+      agentId,
+      currentAgentId: req.atendente.id
+    });
   });
   const pagination = resposta.pagination || {};
   res.json({
@@ -1465,6 +1480,7 @@ router._internals = {
   cadastroSankhyaSelecionado,
   chavesIdentidadeConversa,
   consolidarConversas,
+  conversaCorrespondeFiltroAtendente,
   conversaOcultaParaUsuario,
   filtroAcessoAtivo,
   idPipelineBitrix,

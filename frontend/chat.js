@@ -15,6 +15,8 @@
   const refs = {
     screen: byId('chat-screen'), workspace: byId('chat-workspace'), list: byId('chat-conversation-list'),
     count: byId('chat-conversation-count'), search: byId('chat-search-input'), filters: byId('chat-filters'),
+    agentFilterToggle: byId('chat-agent-filter-toggle'), agentFilter: byId('chat-agent-filter'),
+    agentFilterSelect: byId('chat-agent-filter-select'), agentFilterClear: byId('chat-agent-filter-clear'),
     refresh: byId('chat-refresh'), newContact: byId('chat-new-contact'), more: byId('chat-load-more'), empty: byId('chat-empty-state'),
     active: byId('chat-active-view'), messages: byId('chat-message-list'), input: byId('chat-message-input'),
     form: byId('chat-composer'), send: byId('chat-send'), feedback: byId('chat-composer-feedback'),
@@ -72,7 +74,7 @@
     autoMediaQueue: Promise.resolve(), autoMediaDisabled: false,
     recorder: null, recordingStream: null, recordingChunks: [], recordingBlob: null,
     recordingStartedAt: 0, recordingTimer: null, pendingUpload: null, loadToken: 0, activeLoadToken: 0,
-    totalConversations: 0, assignment: 'ALL', access: null, profile: null, agents: [],
+    totalConversations: 0, assignment: 'ALL', agentId: '', access: null, profile: null, agents: [],
     hiddenConversationIds: new Set(), selectedPartner: null, partnerSearchToken: 0,
     linkPartner: null, linkPartnerSearchToken: 0, pipelines: [], pipelinesPromise: null,
     mediaZoom: 1, replyingTo: null
@@ -113,6 +115,7 @@
 
   function matchesAssignment(item = {}) {
     const assigned = assignedUser(item);
+    if (state.agentId) return Boolean(assigned && assigned.id === String(state.agentId));
     if (state.assignment === 'ALL') return true;
     if (state.assignment === 'UNASSIGNED') return !assigned;
     return Boolean(assigned && assigned.id === String(state.profile?.id));
@@ -127,6 +130,7 @@
       state.hiddenConversationIds = new Set(readHiddenConversationIds());
       if (menu) menu.hidden = payload?.permitido !== true;
       if (refs.settingsOpen) refs.settingsOpen.hidden = payload?.diretor !== true;
+      if (refs.agentFilterToggle) refs.agentFilterToggle.hidden = payload?.diretor !== true;
       return payload?.permitido === true;
     } catch {
       state.access = null; state.profile = null;
@@ -401,6 +405,7 @@
       if (state.search) query.set('search', state.search);
       if (state.status) query.set('status', state.status);
       query.set('assignment', state.assignment);
+      if (state.access?.diretor === true && state.agentId) query.set('agentId', state.agentId);
       const payload = await api(`/conversations?${query}`);
       if (token !== state.loadToken) return;
       const received = Array.isArray(payload?.data) ? payload.data : [];
@@ -1254,6 +1259,47 @@
     return state.agents;
   }
 
+  function renderAgentFilterOptions() {
+    if (!refs.agentFilterSelect) return;
+    refs.agentFilterSelect.innerHTML = '<option value="">Todos os atendentes</option>' + state.agents.map((agent) =>
+      `<option value="${escapeHtml(agent.id)}"${String(agent.id) === String(state.agentId) ? ' selected' : ''}>${escapeHtml(agent.name)}</option>`
+    ).join('');
+  }
+
+  async function toggleAgentFilter() {
+    if (state.access?.diretor !== true || !refs.agentFilter) return;
+    const opening = refs.agentFilter.hidden;
+    refs.agentFilter.hidden = !opening;
+    refs.agentFilterToggle.setAttribute('aria-expanded', String(opening));
+    if (!opening) return;
+    if (!state.agents.length) {
+      refs.agentFilterSelect.disabled = true;
+      refs.agentFilterSelect.innerHTML = '<option>Carregando atendentes...</option>';
+      try {
+        await loadAgents();
+        renderAgentFilterOptions();
+      } catch (error) {
+        refs.agentFilterSelect.innerHTML = '<option>Não foi possível carregar</option>';
+      } finally {
+        refs.agentFilterSelect.disabled = false;
+      }
+    } else renderAgentFilterOptions();
+  }
+
+  function applyAgentFilter(agentId = '') {
+    state.agentId = String(agentId || '');
+    refs.agentFilterClear.hidden = !state.agentId;
+    refs.agentFilterToggle.classList.toggle('is-active', Boolean(state.agentId));
+    const selected = state.agents.find((agent) => String(agent.id) === state.agentId);
+    refs.agentFilterToggle.title = selected ? `Atendente: ${selected.name}` : 'Filtrar por atendente';
+    state.assignment = 'ALL';
+    refs.filters.querySelectorAll('[data-chat-assignment]').forEach((button) => {
+      button.classList.toggle('is-active', button.dataset.chatAssignment === 'ALL');
+    });
+    state.page = 1;
+    loadConversations();
+  }
+
   async function changeAssignment(action, target = null, extra = {}) {
     if (!state.conversationId) return null;
     const path = action === 'CLAIM' ? 'claim' : action === 'TRANSFER' ? 'transfer' : 'release';
@@ -1901,11 +1947,15 @@
     refs.input.addEventListener('blur', () => syncRestingViewportHeight(280));
     refs.input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); refs.form.requestSubmit(); } });
     refs.refresh.addEventListener('click', () => { state.page = 1; loadConversations(); });
+    refs.agentFilterToggle?.addEventListener('click', (event) => { event.stopPropagation(); toggleAgentFilter(); });
+    refs.agentFilter?.addEventListener('click', (event) => event.stopPropagation());
+    refs.agentFilterSelect?.addEventListener('change', () => applyAgentFilter(refs.agentFilterSelect.value));
+    refs.agentFilterClear?.addEventListener('click', () => { refs.agentFilterSelect.value = ''; applyAgentFilter(''); });
     refs.newContact.addEventListener('click', openNewContact);
     refs.more.addEventListener('click', () => { state.page += 1; loadConversations({ append: true }); });
     refs.list.addEventListener('scroll', loadMoreConversationsIfNeeded, { passive: true });
     refs.search.addEventListener('input', Core.debounce(() => { state.search = refs.search.value.trim(); state.page = 1; loadConversations(); }, 350));
-    refs.filters.addEventListener('click', (event) => { const button = event.target.closest('[data-chat-assignment]'); if (!button) return; refs.filters.querySelectorAll('button').forEach((item) => item.classList.toggle('is-active', item === button)); state.assignment = button.dataset.chatAssignment; state.page = 1; loadConversations(); });
+    refs.filters.addEventListener('click', (event) => { const button = event.target.closest('[data-chat-assignment]'); if (!button) return; refs.filters.querySelectorAll('button').forEach((item) => item.classList.toggle('is-active', item === button)); state.assignment = button.dataset.chatAssignment; state.agentId = ''; if (refs.agentFilterSelect) refs.agentFilterSelect.value = ''; if (refs.agentFilterClear) refs.agentFilterClear.hidden = true; refs.agentFilterToggle?.classList.remove('is-active'); state.page = 1; loadConversations(); });
     refs.mobileBack.addEventListener('click', () => {
       if (history.state?.tela === 'chat' && history.state?.conversationId) history.back();
       else showConversationList({ replaceHistory: true });
@@ -2015,6 +2065,10 @@
       if (event.target.closest('[data-chat-bitrix-history]')) openBitrixHistory();
       if (event.target.closest('[data-bitrix-deal]')) event.preventDefault();
       if (!event.target.closest('.chat-conversation-context-menu')) closeConversationMenu();
+      if (!event.target.closest('#chat-agent-filter') && !event.target.closest('#chat-agent-filter-toggle')) {
+        refs.agentFilter.hidden = true;
+        refs.agentFilterToggle?.setAttribute('aria-expanded', 'false');
+      }
     });
   }
 
@@ -2048,6 +2102,7 @@
     state.page = 1;
     state.totalPages = 1;
     state.totalConversations = 0;
+    state.agentId = '';
     state.access = null;
     state.profile = null;
     state.agents = [];
