@@ -45,6 +45,7 @@
 .chat-filters button { flex:0 0 auto; padding:6px 9px; border:1px solid #d7e4e2; border-radius:999px; background:#fff; color:#607580; font-size:.67rem; font-weight:700; }
 .chat-filters button.is-active { border-color:#087f6d; background:#087f6d; color:#fff; }
 .chat-conversation-list { flex:1; min-height:0; overflow-y:auto; }
+.chat-conversation-list.is-refreshing { opacity:.94; transition:opacity .12s ease; }
 .chat-conversation { width:100%; padding:11px 12px; display:flex; align-items:center; gap:10px; border:0; border-bottom:1px solid #edf2f1; background:transparent; text-align:left; transition:.15s ease; }
 .chat-conversation:hover { background:#f0f8f6; }
 .chat-conversation.is-active { background:#e4f4ef; box-shadow:inset 3px 0 #087f6d; }

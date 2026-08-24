@@ -8,6 +8,8 @@
   const MESSAGE_SCROLL_THRESHOLD = 80;
   const MESSAGE_FILL_RATIO = 1.25;
   const HIDDEN_CONVERSATIONS_KEY = 'fila-conferencia.chat.hidden-conversations';
+  const UI_CACHE_KEY = 'fila-conferencia.chat.ui-cache.v1';
+  const UI_CACHE_TTL = 10 * 60 * 1000;
   const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
   const MORE_REACTIONS = ['👏', '🔥', '🎉', '✅', '😊', '😍', '🤔', '😅', '🤝', '👀', '💯', '🙌', '👎', '😡', '🤩', '🥳'];
 
@@ -82,8 +84,13 @@
     totalConversations: 0, assignment: 'ALL', agentId: '', access: null, profile: null, agents: [],
     hiddenConversationIds: new Set(), selectedPartner: null, partnerSearchToken: 0,
     linkPartner: null, linkPartnerSearchToken: 0, pipelines: [], pipelinesPromise: null,
-    mediaZoom: 1, replyingTo: null
+    mediaZoom: 1, replyingTo: null, conversationCache: new Map(),
+    messagesRenderFrame: null, messagesRenderPreserveScroll: true,
+    conversationsRenderFrame: null, uiCacheTimer: null
   };
+
+  const CONVERSATION_CACHE_LIMIT = 6;
+  const CACHED_MESSAGES_LIMIT = 80;
 
   let viewportSyncTimer = null;
   const imagePreviewObserver = typeof IntersectionObserver === 'function'
@@ -344,6 +351,109 @@
     refs.list.innerHTML = Array.from({ length: 7 }, () => '<div class="chat-conversation-skeleton"><i></i><span></span><b></b></div>').join('');
   }
 
+  function persistUiCache() {
+    clearTimeout(state.uiCacheTimer);
+    state.uiCacheTimer = null;
+    if (!state.profile?.id) return;
+    const activeId = String(state.conversationId || '');
+    const active = activeId && state.conversation
+      ? {
+          id: activeId,
+          conversation: state.conversation,
+          messages: state.messages.slice(-Math.min(CACHED_MESSAGES_LIMIT, 40)),
+          messagePage: state.messagePage,
+          messageTotalPages: state.messageTotalPages
+        }
+      : null;
+    try {
+      sessionStorage.setItem(UI_CACHE_KEY, JSON.stringify({
+        savedAt: Date.now(),
+        profileId: String(state.profile.id),
+        conversations: state.conversations.slice(0, 40),
+        totalConversations: state.totalConversations,
+        totalPages: state.totalPages,
+        active
+      }));
+    } catch {}
+  }
+
+  function scheduleUiCachePersist() {
+    clearTimeout(state.uiCacheTimer);
+    state.uiCacheTimer = setTimeout(persistUiCache, 180);
+  }
+
+  function restoreUiCache() {
+    if (!state.profile?.id || state.conversations.length) return false;
+    try {
+      const cached = JSON.parse(sessionStorage.getItem(UI_CACHE_KEY) || 'null');
+      if (!cached || String(cached.profileId) !== String(state.profile.id) || Date.now() - Number(cached.savedAt || 0) > UI_CACHE_TTL) {
+        sessionStorage.removeItem(UI_CACHE_KEY);
+        return false;
+      }
+      state.conversations = Array.isArray(cached.conversations) ? cached.conversations : [];
+      state.totalConversations = Number(cached.totalConversations || state.conversations.length);
+      state.totalPages = Number(cached.totalPages || 1);
+      if (cached.active?.id && cached.active?.conversation) {
+        state.conversationCache.set(String(cached.active.id), {
+          conversation: cached.active.conversation,
+          messages: Array.isArray(cached.active.messages) ? cached.active.messages : [],
+          messagePage: Number(cached.active.messagePage || 1),
+          messageTotalPages: Number(cached.active.messageTotalPages || 1)
+        });
+      }
+      return state.conversations.length > 0;
+    } catch {
+      sessionStorage.removeItem(UI_CACHE_KEY);
+      return false;
+    }
+  }
+
+  function cacheActiveConversation() {
+    const id = String(state.conversationId || '');
+    if (!id || !state.conversation) return;
+    state.conversationCache.delete(id);
+    state.conversationCache.set(id, {
+      conversation: state.conversation,
+      messages: state.messages.slice(-CACHED_MESSAGES_LIMIT),
+      messagePage: state.messagePage,
+      messageTotalPages: state.messageTotalPages
+    });
+    while (state.conversationCache.size > CONVERSATION_CACHE_LIMIT) {
+      state.conversationCache.delete(state.conversationCache.keys().next().value);
+    }
+    scheduleUiCachePersist();
+  }
+
+  function scheduleConversationsRender() {
+    if (state.conversationsRenderFrame) return;
+    state.conversationsRenderFrame = requestAnimationFrame(() => {
+      state.conversationsRenderFrame = null;
+      renderConversations();
+      scheduleUiCachePersist();
+    });
+  }
+
+  function scheduleMessagesRender({ preserveScroll = true } = {}) {
+    state.messagesRenderPreserveScroll = state.messagesRenderFrame
+      ? state.messagesRenderPreserveScroll && preserveScroll
+      : preserveScroll;
+    if (state.messagesRenderFrame) return;
+    state.messagesRenderFrame = requestAnimationFrame(() => {
+      const keepScroll = state.messagesRenderPreserveScroll;
+      state.messagesRenderFrame = null;
+      state.messagesRenderPreserveScroll = true;
+      renderMessages({ preserveScroll: keepScroll });
+      cacheActiveConversation();
+    });
+  }
+
+  function cancelScheduledMessagesRender() {
+    if (!state.messagesRenderFrame) return;
+    cancelAnimationFrame(state.messagesRenderFrame);
+    state.messagesRenderFrame = null;
+    state.messagesRenderPreserveScroll = true;
+  }
+
   function renderConversations() {
     refs.count.textContent = String(state.totalConversations || state.conversations.length);
     refs.more.hidden = state.page >= state.totalPages;
@@ -425,11 +535,12 @@
   }
 
   async function loadConversations({ append = false } = {}) {
-    if (state.loading) return;
+    if (append && state.loading) return;
     state.loading = true;
     const requestedPage = state.page;
-    if (!append) renderConversationSkeleton();
     const token = ++state.loadToken;
+    if (!append && !state.conversations.length) renderConversationSkeleton();
+    else refs.list.classList.add('is-refreshing');
     try {
       const query = new URLSearchParams({ page: String(state.page), limit: '30' });
       if (state.search) query.set('search', state.search);
@@ -448,13 +559,18 @@
         Number(payload?.pagination?.total || state.conversations.length) - state.hiddenConversationIds.size
       );
       renderConversations();
+      scheduleUiCachePersist();
       requestAnimationFrame(loadMoreConversationsIfNeeded);
     } catch (error) {
+      if (token !== state.loadToken) return;
       if (append) state.page = Math.max(1, requestedPage - 1);
       refs.list.innerHTML = `<div class="chat-list-error"><strong>Não foi possível carregar as conversas.</strong><span>${escapeHtml(error.message)}</span><button type="button">Tentar novamente</button></div>`;
       refs.list.querySelector('button')?.addEventListener('click', () => loadConversations());
     } finally {
-      state.loading = false;
+      if (token === state.loadToken) {
+        state.loading = false;
+        refs.list.classList.remove('is-refreshing');
+      }
     }
   }
 
@@ -903,6 +1019,8 @@
 
   function showConversationList({ replaceHistory = false } = {}) {
     setFeedback();
+    cacheActiveConversation();
+    cancelScheduledMessagesRender();
     state.activeLoadToken += 1;
     refs.workspace.classList.remove('has-conversation');
     state.conversationId = null;
@@ -926,17 +1044,23 @@
       return;
     }
     const token = ++state.activeLoadToken;
+    cacheActiveConversation();
+    cancelScheduledMessagesRender();
     state.conversationId = requestedId;
     clearReply();
-    state.conversation = state.conversations.find((item) => String(item.id) === requestedId) || null;
-    state.messages = [];
-    state.messagePage = 1;
-    state.messageTotalPages = 1;
+    const cached = state.conversationCache.get(requestedId);
+    state.conversation = cached?.conversation || state.conversations.find((item) => String(item.id) === requestedId) || null;
+    state.messages = cached?.messages || [];
+    state.messagePage = cached
+      ? Math.min(cached.messagePage || 1, Math.max(1, Math.ceil(cached.messages.length / MESSAGE_PAGE_SIZE)))
+      : 1;
+    state.messageTotalPages = cached?.messageTotalPages || 1;
     state.loadingOlder = false;
     renderConversations();
     if (state.conversation) renderConversationDetails();
     refs.workspace.classList.add('has-conversation'); refs.empty.hidden = true; refs.active.hidden = false;
-    refs.messages.innerHTML = '<div class="chat-messages-loading"><span></span><span></span><span></span></div>';
+    if (state.messages.length) renderMessages();
+    else refs.messages.innerHTML = '<div class="chat-messages-loading"><span></span><span></span><span></span></div>';
     try {
       const [conversation, payload] = await Promise.all([
         api(`/conversations/${encodeURIComponent(requestedId)}`),
@@ -947,6 +1071,7 @@
       state.messages = Core.mergeById(Array.isArray(payload?.data) ? payload.data : [], state.messages);
       state.messageTotalPages = Number(payload?.pagination?.totalPages || 1);
       renderConversationDetails(); renderMessages();
+      cacheActiveConversation();
       const listItem = state.conversations.find((item) => String(item.id) === requestedId);
       if (ownsConversation(conversation) && Number(listItem?.unreadCount || conversation?.unreadCount || 0) > 0) {
         markRead(requestedId);
@@ -1218,13 +1343,13 @@
     const merged = index >= 0 ? { ...state.conversations[index], ...incoming, ...payload } : incoming;
     if (!matchesAssignment(merged)) {
       if (index >= 0) state.conversations.splice(index, 1);
-      renderConversations();
+      scheduleConversationsRender();
       return;
     }
     if (index >= 0) state.conversations[index] = merged;
     else if (incoming.id) state.conversations.unshift(incoming);
     state.conversations.sort((a, b) => new Date(conversationTimestamp(b) || 0) - new Date(conversationTimestamp(a) || 0));
-    renderConversations();
+    scheduleConversationsRender();
   }
 
   function applyConversationUpdate(payload = {}) {
@@ -1234,7 +1359,7 @@
     if (id && id === String(state.conversationId)) {
       state.conversation = { ...(state.conversation || {}), ...incoming, ...(payload.serviceWindow ? { serviceWindow: payload.serviceWindow } : {}) };
       renderConversationDetails();
-      renderMessages({ preserveScroll: true });
+      scheduleMessagesRender({ preserveScroll: true });
     }
   }
 
@@ -1245,7 +1370,7 @@
       state.conversation = conversation;
       upsertConversation(conversation);
       renderConversationDetails();
-      renderMessages({ preserveScroll: true });
+      scheduleMessagesRender({ preserveScroll: true });
     } catch {}
   }
 
@@ -1254,7 +1379,7 @@
       const id = String(payload.conversationId || payload.message?.conversationId || '');
       if (id === String(state.conversationId)) {
         const shouldScroll = nearBottom();
-        state.messages = Core.mergeById(state.messages, [payload.message]); renderMessages({ preserveScroll: !shouldScroll });
+        state.messages = Core.mergeById(state.messages, [payload.message]); scheduleMessagesRender({ preserveScroll: !shouldScroll });
         if (shouldScroll) requestAnimationFrame(() => scrollBottom('smooth')); else refs.newMessage.hidden = false;
         if (ownsConversation() && String(payload.message?.direction).toUpperCase() === 'INBOUND') {
           markRead(id);
@@ -1264,7 +1389,7 @@
         const item = state.conversations.find((conversation) => String(conversation.id) === id);
         if (item) { item.lastMessage = payload.message; item.lastMessageAt = payload.message?.messageTimestamp || new Date().toISOString(); item.unreadCount = Number(item.unreadCount || 0) + 1; }
         else loadConversations();
-        renderConversations();
+        scheduleConversationsRender();
       }
     } else if (event === 'message:status') {
       const updates = Array.isArray(payload.statuses)
@@ -1273,7 +1398,7 @@
       updates.forEach((update) => {
         state.messages = Core.updateMessageStatus(state.messages, update);
       });
-      renderMessages({ preserveScroll: true });
+      scheduleMessagesRender({ preserveScroll: true });
       const id = String(payload.conversationId || payload.message?.conversationId || '');
       if (id === String(state.conversationId)) refreshActiveConversation(id);
     } else if (event === 'conversation:new' || event === 'conversation:updated') {
@@ -1286,7 +1411,7 @@
       const ids = new Set([payload.conversationId, ...(payload.relatedConversationIds || [])].map(String));
       state.conversations = state.conversations.filter((item) => !ids.has(String(item.id)));
       if (ids.has(String(state.conversationId))) showConversationList({ replaceHistory: true });
-      renderConversations();
+      scheduleConversationsRender();
     }
   }
 
@@ -2085,6 +2210,10 @@
     syncRestingViewportHeight();
     window.visualViewport?.addEventListener('resize', () => syncRestingViewportHeight(180));
     window.addEventListener('resize', () => syncRestingViewportHeight(180));
+    window.addEventListener('pagehide', persistUiCache);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') persistUiCache();
+    });
     refs.form.addEventListener('submit', sendText); refs.input.addEventListener('input', updateComposer);
     refs.input.addEventListener('paste', pasteImage);
     refs.composerReplyCancel?.addEventListener('click', () => {
@@ -2235,9 +2364,12 @@
     mountWorkspaceActions();
     if (!state.initialized) { bindEvents(); connectRealtime(); state.initialized = true; }
     else if (!state.eventSource) connectRealtime();
-    if (!state.conversations.length) await loadConversations();
+    restoreUiCache();
+    const refresh = state.conversations.length ? loadConversations() : null;
+    if (!refresh) await loadConversations();
     if (conversationId) await openConversation(conversationId, { historyMode: 'none' });
     else showConversationList();
+    refresh?.catch(() => {});
     window.lucide?.createIcons();
   }
 
@@ -2249,6 +2381,13 @@
     state.conversation = null;
     state.conversationId = null;
     state.messages = [];
+    state.conversationCache.clear();
+    cancelScheduledMessagesRender();
+    if (state.conversationsRenderFrame) cancelAnimationFrame(state.conversationsRenderFrame);
+    state.conversationsRenderFrame = null;
+    clearTimeout(state.uiCacheTimer);
+    state.uiCacheTimer = null;
+    try { sessionStorage.removeItem(UI_CACHE_KEY); } catch {}
     state.loadingOlder = false;
     state.page = 1;
     state.totalPages = 1;
