@@ -10,6 +10,9 @@
     contact: byId('whatsapp-call-contact'), phone: byId('whatsapp-call-phone'), status: byId('whatsapp-call-status'),
     duration: byId('whatsapp-call-duration'), accept: byId('whatsapp-call-accept'), reject: byId('whatsapp-call-reject'),
     mute: byId('whatsapp-call-mute'), end: byId('whatsapp-call-end'), permission: byId('whatsapp-call-permission'),
+    transfer: byId('whatsapp-call-transfer'), transferPicker: byId('whatsapp-call-transfer-picker'),
+    transferAgent: byId('whatsapp-call-transfer-agent'), transferSend: byId('whatsapp-call-transfer-send'),
+    transferCancel: byId('whatsapp-call-transfer-cancel'),
     close: byId('whatsapp-call-close'), remoteAudio: byId('whatsapp-call-remote-audio'),
     history: byId('chat-call-history'), start: byId('chat-call-start'),
     historyOpen: byId('chat-call-history-open'), historyModal: byId('whatsapp-call-history-modal'),
@@ -24,6 +27,7 @@
   const state = {
     status: 'IDLE', call: null, conversation: null, profile: null, source: null, client: null,
     signal: null, timer: null, startedAt: 0, ringtone: null, reconnecting: false,
+    transfer: null, outgoingTransfer: null,
     clientId: createCallClientId()
   };
 
@@ -82,7 +86,10 @@
       claim: (id, payload) => api(`/calls/${encodeURIComponent(id)}/claim`, callBody(payload)),
       preAccept: (id, payload) => api(`/calls/${encodeURIComponent(id)}/pre-accept`, callBody(payload)),
       accept: (id, payload) => api(`/calls/${encodeURIComponent(id)}/accept`, callBody(payload)),
-      create: (id, payload) => api(`/conversations/${encodeURIComponent(id)}/calls`, jsonBody(payload))
+      create: (id, payload) => api(`/conversations/${encodeURIComponent(id)}/calls`, jsonBody(payload)),
+      createOutboundMedia: (id, payload) => api(`/conversations/${encodeURIComponent(id)}/calls/media`, jsonBody(payload)),
+      joinMedia: (id, payload) => api(`/calls/${encodeURIComponent(id)}/media`, jsonBody(payload)),
+      mediaReady: (id, payload) => api(`/calls/${encodeURIComponent(id)}/media-ready`, jsonBody(payload))
     };
   }
 
@@ -102,6 +109,7 @@
     refs.accept.hidden = status !== 'RINGING';
     refs.reject.hidden = status !== 'RINGING';
     refs.mute.hidden = !['CONNECTING', 'ACTIVE'].includes(status);
+    refs.transfer.hidden = status !== 'ACTIVE';
     refs.end.hidden = !['CONNECTING', 'ACTIVE'].includes(status);
     refs.permission.hidden = status !== 'PERMISSION';
     refs.close.hidden = !['PERMISSION', 'FAILED', 'ENDED'].includes(status);
@@ -161,6 +169,10 @@
     refs.mute.classList.remove('is-active');
     refs.mute.innerHTML = '<i data-lucide="mic" aria-hidden="true"></i><span>Silenciar</span>';
     state.call = null;
+    state.transfer = null;
+    state.outgoingTransfer = null;
+    refs.transferPicker.hidden = true;
+    refs.transfer.innerHTML = '<i data-lucide="phone-forwarded" aria-hidden="true"></i><span>Transferir</span>';
     state.status = 'IDLE';
     if (close) closeOverlay();
     window.lucide?.createIcons();
@@ -189,13 +201,26 @@
     stopRingtone();
     setStatus('CONNECTING', 'Conectando áudio...');
     try {
-      const currentSignal = await waitForIncomingSignal();
       state.client = makeClient();
-      await state.client.acceptIncoming({
-        callId: callId(state.call), conversationId: conversationId(state.call), offer: currentSignal
-      });
-      setStatus('CONNECTING', 'Aguardando conexão...');
+      if (state.transfer) {
+        await api(`/calls/${encodeURIComponent(callId(state.call))}/transfer/${encodeURIComponent(state.transfer.transferId)}/accept`, jsonBody({}));
+        await state.client.connectGateway({ callId: callId(state.call), transferId: state.transfer.transferId });
+        setStatus('ACTIVE', 'Chamada transferida');
+        startTimer(state.call.answeredAt || Date.now());
+      } else {
+        await state.client.acceptIncoming({ callId: callId(state.call), conversationId: conversationId(state.call) });
+        setStatus('CONNECTING', 'Aguardando conexão...');
+      }
     } catch (error) {
+      if (state.transfer) {
+        const failedTransfer = state.transfer;
+        try {
+          await api(`/calls/${encodeURIComponent(callId(state.call))}/transfer/${encodeURIComponent(failedTransfer.transferId)}/reject`, jsonBody({}));
+        } catch {}
+        cleanup();
+        toast(error.message || 'Não foi possível conectar o áudio da transferência.');
+        return;
+      }
       if (error?.status === 409) {
         cleanup();
         toast(error.message || 'Esta chamada já foi atendida por outro atendente.');
@@ -215,8 +240,53 @@
   }
 
   async function rejectIncoming() {
-    try { await updateCall('reject'); } catch (error) { toast(error.message); }
+    try {
+      if (state.transfer) {
+        await api(`/calls/${encodeURIComponent(callId(state.call))}/transfer/${encodeURIComponent(state.transfer.transferId)}/reject`, jsonBody({}));
+      } else await updateCall('reject');
+    } catch (error) { toast(error.message); }
     cleanup();
+  }
+
+  async function openTransferPicker() {
+    if (!state.call || state.status !== 'ACTIVE') return;
+    if (state.outgoingTransfer) {
+      try {
+        await api(`/calls/${encodeURIComponent(callId(state.call))}/transfer/${encodeURIComponent(state.outgoingTransfer.transferId)}/cancel`, jsonBody({}));
+      } catch (error) { toast(error.message); }
+      return;
+    }
+    refs.transferPicker.hidden = false;
+    refs.transferAgent.innerHTML = '<option value="">Carregando atendentes...</option>';
+    try {
+      const payload = await api('/call-agents');
+      const agents = (payload?.data || payload || []).filter((item) => item.availability === 'AVAILABLE'
+        && String(item.id) !== String(state.profile?.id || state.profile?.codUsu || ''));
+      refs.transferAgent.innerHTML = agents.length
+        ? agents.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('')
+        : '<option value="">Nenhum atendente disponível</option>';
+      refs.transferSend.disabled = !agents.length;
+    } catch (error) {
+      refs.transferAgent.innerHTML = '<option value="">Falha ao carregar</option>';
+      refs.transferSend.disabled = true;
+      toast(error.message);
+    }
+  }
+
+  async function sendTransfer() {
+    const targetAgentId = refs.transferAgent.value;
+    if (!targetAgentId || !state.call) return;
+    refs.transferSend.disabled = true;
+    try {
+      state.outgoingTransfer = await api(`/calls/${encodeURIComponent(callId(state.call))}/transfer`, jsonBody({ targetAgentId }));
+      refs.transferPicker.hidden = true;
+      refs.transfer.innerHTML = '<i data-lucide="x" aria-hidden="true"></i><span>Cancelar transferência</span>';
+      refs.status.textContent = `Aguardando ${state.outgoingTransfer.toAgent?.name || 'atendente'} aceitar...`;
+      window.lucide?.createIcons();
+    } catch (error) {
+      refs.transferSend.disabled = false;
+      toast(error.message);
+    }
   }
 
   async function endCall() {
@@ -294,6 +364,54 @@
 
   function handleEvent(event, payload = {}) {
     const incomingId = callId(payload);
+    if (event === 'call:transfer:incoming') {
+      if (state.status !== 'IDLE') {
+        toast('Uma transferência chegou, mas você já está em outra chamada.');
+        return;
+      }
+      state.transfer = payload;
+      state.call = payload;
+      refs.title.textContent = 'Transferência de chamada';
+      openOverlay(payload, 'RINGING');
+      refs.status.textContent = `${payload.fromAgent?.name || 'Outro atendente'} quer transferir esta chamada`;
+      startRingtone();
+      return;
+    }
+    if (event === 'call:transferred:away') {
+      if (!state.call || incomingId !== callId(state.call)) return;
+      cleanup();
+      toast(`Chamada transferida para ${payload.toAgent?.name || 'outro atendente'}.`);
+      return;
+    }
+    if (event === 'call:transfer:accepted') {
+      if (state.outgoingTransfer?.transferId === payload.transferId) {
+        refs.status.textContent = `${payload.toAgent?.name || 'Atendente'} aceitou; conectando o áudio...`;
+      }
+      return;
+    }
+    if (['call:transfer:rejected', 'call:transfer:cancelled', 'call:transfer:expired'].includes(event)) {
+      const targetTransfer = state.transfer?.transferId === payload.transferId;
+      const sourceTransfer = state.outgoingTransfer?.transferId === payload.transferId;
+      if (!targetTransfer && !sourceTransfer) return;
+      if (targetTransfer) {
+        cleanup();
+        toast(event === 'call:transfer:cancelled' ? 'A transferência foi cancelada.' : 'A transferência não está mais disponível.');
+      } else {
+        state.outgoingTransfer = null;
+        refs.transferPicker.hidden = true;
+        refs.transfer.innerHTML = '<i data-lucide="phone-forwarded" aria-hidden="true"></i><span>Transferir</span>';
+        refs.status.textContent = 'Chamada em andamento';
+        window.lucide?.createIcons();
+        toast(event === 'call:transfer:rejected' ? 'O atendente recusou a transferência.' : 'A transferência foi encerrada.');
+      }
+      return;
+    }
+    if (event === 'call:transfer:completed') {
+      if (state.transfer?.transferId !== payload.transferId) return;
+      state.transfer = null;
+      setStatus('ACTIVE', 'Chamada transferida');
+      return;
+    }
     if (event === 'call:incoming') {
       if (state.status !== 'IDLE' && incomingId !== callId(state.call)) {
         toast('Outra chamada está chegando.');
@@ -361,7 +479,9 @@
     state.source?.close();
     const source = new EventSource('/api/chat/events');
     state.source = source;
-    ['call:incoming', 'call:claimed', 'call:ringing', 'call:connecting', 'call:active', 'call:ended', 'call:failed', 'call:rejected', 'call:updated', 'call:signal']
+    ['call:incoming', 'call:claimed', 'call:ringing', 'call:connecting', 'call:active', 'call:ended', 'call:failed', 'call:rejected', 'call:updated', 'call:signal',
+      'call:transfer:incoming', 'call:transfer:accepted', 'call:transfer:rejected', 'call:transfer:cancelled',
+      'call:transfer:expired', 'call:transfer:completed', 'call:transferred:away']
       .forEach((event) => source.addEventListener(event, (message) => {
         try { handleEvent(event, JSON.parse(message.data)); } catch {}
       }));
@@ -468,6 +588,9 @@
   refs.reject?.addEventListener('click', rejectIncoming);
   refs.end?.addEventListener('click', endCall);
   refs.mute?.addEventListener('click', toggleMute);
+  refs.transfer?.addEventListener('click', openTransferPicker);
+  refs.transferSend?.addEventListener('click', sendTransfer);
+  refs.transferCancel?.addEventListener('click', () => { refs.transferPicker.hidden = true; });
   refs.permission?.addEventListener('click', requestPermission);
   refs.close?.addEventListener('click', () => cleanup());
   refs.start?.addEventListener('click', () => startOutbound(state.conversation));

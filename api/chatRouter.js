@@ -1603,7 +1603,7 @@ router.get('/conversations/:id/calls/permission', asyncRoute(async (req, res) =>
   const conversationId = id(req.params.id);
   const conversation = await obterConversaConsolidada(conversationId);
   podeAtender(conversation, req.atendente, true);
-  res.json(await whatsappApi.getCallPermission(conversationId, agenteChamada(req.atendente)));
+  res.json(await whatsappApi.getCallPermission(conversationId, agenteChamada(req.atendente), req.atendente));
 }));
 
 router.post('/conversations/:id/calls/permission', asyncRoute(async (req, res) => {
@@ -1613,7 +1613,16 @@ router.post('/conversations/:id/calls/permission', asyncRoute(async (req, res) =
   res.json(await whatsappApi.requestCallPermission(conversationId, {
     body: String(req.body?.body || '').trim(),
     agent: agenteChamada(req.atendente)
-  }));
+  }, req.atendente));
+}));
+
+router.post('/conversations/:id/calls/media', asyncRoute(async (req, res) => {
+  const conversationId = id(req.params.id);
+  const conversation = await obterConversaConsolidada(conversationId);
+  podeAtender(conversation, req.atendente);
+  res.status(201).json(await whatsappApi.createOutboundMedia(conversationId, {
+    session: req.body?.session
+  }, req.atendente));
 }));
 
 router.post('/conversations/:id/calls', asyncRoute(async (req, res) => {
@@ -1621,10 +1630,51 @@ router.post('/conversations/:id/calls', asyncRoute(async (req, res) => {
   const conversation = await obterConversaConsolidada(conversationId);
   podeAtender(conversation, req.atendente);
   res.status(201).json(await whatsappApi.createCall(conversationId, {
-    session: req.body?.session,
+    ...(req.body?.mediaSessionId ? { mediaSessionId: req.body.mediaSessionId } : { session: req.body?.session }),
     agent: agenteChamada(req.atendente)
-  }));
+  }, req.atendente));
 }));
+
+router.get('/call-agents', asyncRoute(async (req, res) => {
+  res.json(await whatsappApi.getCallAgents(req.atendente));
+}));
+
+router.post('/calls/:callId/media', asyncRoute(async (req, res) => {
+  const callId = idChamadaWhatsapp(req.params.callId);
+  if (!callId) return res.status(400).json({ erro: 'Chamada inválida.' });
+  res.status(201).json(await whatsappApi.joinCallMedia(callId, {
+    session: req.body?.session,
+    ...(req.body?.transferId ? { transferId: req.body.transferId } : {})
+  }, req.atendente));
+}));
+
+router.post('/calls/:callId/media-ready', asyncRoute(async (req, res) => {
+  const callId = idChamadaWhatsapp(req.params.callId);
+  if (!callId) return res.status(400).json({ erro: 'Chamada inválida.' });
+  res.json(await whatsappApi.callMediaReady(callId, {
+    ...(req.body?.transferId ? { transferId: req.body.transferId } : {})
+  }, req.atendente));
+}));
+
+router.post('/calls/:callId/transfer', asyncRoute(async (req, res) => {
+  const callId = idChamadaWhatsapp(req.params.callId);
+  if (!callId) return res.status(400).json({ erro: 'Chamada inválida.' });
+  res.status(201).json(await whatsappApi.requestCallTransfer(
+    callId, String(req.body?.targetAgentId || ''), req.atendente
+  ));
+}));
+
+for (const action of ['accept', 'reject', 'cancel']) {
+  router.post(`/calls/:callId/transfer/:transferId/${action}`, asyncRoute(async (req, res) => {
+    const callId = idChamadaWhatsapp(req.params.callId);
+    if (!callId || !/^[0-9a-f-]{36}$/i.test(String(req.params.transferId || ''))) {
+      return res.status(400).json({ erro: 'Transferência inválida.' });
+    }
+    res.json(await whatsappApi.updateCallTransfer(
+      callId, req.params.transferId, action, req.atendente
+    ));
+  }));
+}
 
 function reivindicarChamada(callId, conversation, atendente) {
   const resultado = controleChamadas.reivindicar(callId, conversation.id, atendente);
@@ -1689,7 +1739,7 @@ for (const action of ['pre-accept', 'accept', 'reject', 'terminate']) {
     const resposta = await whatsappApi.updateCall(callId, action, {
       ...(req.body?.session ? { session: req.body.session } : {}),
       agent: agenteChamada(req.atendente)
-    });
+    }, req.atendente);
     if (['reject', 'terminate'].includes(action)) controleChamadas.liberar(callId, atendente);
     res.json(resposta);
   }));
@@ -1735,7 +1785,10 @@ router.get('/events', (req, res) => {
     res.write(`data: ${JSON.stringify(payload)}\n\n`);
   };
   const onAssignment = (payload) => write('conversation:assignment', payload);
-  const onCall = ({ event, payload }) => write(event, payload);
+  const onCall = ({ event, payload }) => {
+    const attendantId = payload?.attendant?.id;
+    if (!attendantId || String(attendantId) === String(req.atendente.id)) write(event, payload);
+  };
   const onDeleted = (payload) => write('conversation:deleted', payload);
   const onUpdated = (payload) => {
     const conversation = payload?.conversation || payload || {};
@@ -1748,10 +1801,6 @@ router.get('/events', (req, res) => {
   const unsubscribe = realtime.subscribe(
     ({ event, payload }) => {
       if (String(event).startsWith('call:')) {
-        if (['call:ended', 'call:failed', 'call:rejected'].includes(String(event))) {
-          controleChamadas.liberar(idChamadaWhatsapp(payload?.callId || payload?.call?.id || payload?.id));
-        }
-        write(event, payload);
         return;
       }
       normalizarEventoAtendimento(event, payload)
@@ -1770,6 +1819,30 @@ router.get('/events', (req, res) => {
     },
     (payload) => write('connection', payload)
   );
+  const agentRealtime = whatsappApi.createRealtimeBridge({ agent: req.atendente });
+  const unsubscribeAgent = agentRealtime.subscribe(({ event, payload }) => {
+    if (!String(event).startsWith('call:')) return;
+    if (event === 'call:transfer:completed' && payload?.conversationId
+      && String(payload?.toAgent?.id || '') === String(req.atendente.id)) {
+      const current = atendentes.obterConversa(payload.conversationId);
+      if (String(current?.userId || '') !== String(req.atendente.id)) {
+        const assignment = atendentes.atribuirConversa(payload.conversationId, {
+          acao: 'CALL_TRANSFER',
+          ator: payload.fromAgent || { id: 'SISTEMA', name: 'Sistema' },
+          destino: req.atendente
+        });
+        eventosAtendimento.emit('assignment', {
+          conversationId: Number(payload.conversationId),
+          conversation: comAtribuicao({ id: Number(payload.conversationId) }),
+          assignment
+        });
+      }
+    }
+    if (['call:ended', 'call:failed', 'call:rejected', 'call:transferred:away'].includes(String(event))) {
+      controleChamadas.liberar(idChamadaWhatsapp(payload?.callId || payload?.call?.id || payload?.id));
+    }
+    write(event, payload);
+  });
   const keepAlive = setInterval(() => res.write(': keep-alive\n\n'), 25000);
   req.on('close', () => {
     clearInterval(keepAlive);
@@ -1778,6 +1851,7 @@ router.get('/events', (req, res) => {
     eventosAtendimento.off('deleted', onDeleted);
     eventosAtendimento.off('updated', onUpdated);
     unsubscribe();
+    unsubscribeAgent();
   });
 });
 

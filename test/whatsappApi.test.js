@@ -99,3 +99,20 @@ test('bridge em tempo real assina eventos e encerra socket sem ouvintes', () => 
   unsubscribe();
   assert.equal(disconnected, true);
 });
+
+test('token individual é curto, assinado e não expõe o segredo', () => {
+  const original = process.env.CALL_AGENT_AUTH_SECRET;
+  process.env.CALL_AGENT_AUTH_SECRET = 'segredo-de-teste-comprido-com-32-caracteres';
+  try {
+    const token = whatsappApi._internals.createAgentToken({ id: 42, name: 'Ana' }, 1000);
+    const [payload, signature] = token.split('.');
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    assert.equal(claims.sub, '42');
+    assert.equal(claims.exp, 1090);
+    assert.ok(signature);
+    assert.doesNotMatch(token, /segredo-de-teste/);
+  } finally {
+    if (original === undefined) delete process.env.CALL_AGENT_AUTH_SECRET;
+    else process.env.CALL_AGENT_AUTH_SECRET = original;
+  }
+});

@@ -6,6 +6,7 @@ const { WhatsAppCallClient, eventUiStatus, formatDuration } = require('../fronte
 class PeerMock {
   constructor() {
     this.iceGatheringState = 'complete';
+    this.connectionState = 'connected';
     this.tracks = [];
   }
   addTrack(track) { this.tracks.push(track); }
@@ -22,8 +23,12 @@ function fixture() {
   const calls = [];
   const api = {
     claim: async (...args) => calls.push(['claim', ...args]),
-    preAccept: async (...args) => calls.push(['preAccept', ...args]),
-    accept: async (...args) => calls.push(['accept', ...args]),
+    joinMedia: async (...args) => { calls.push(['joinMedia', ...args]); return { session: { sdpType: 'answer', sdp: 'gateway-answer' } }; },
+    mediaReady: async (...args) => calls.push(['mediaReady', ...args]),
+    createOutboundMedia: async (...args) => {
+      calls.push(['createOutboundMedia', ...args]);
+      return { mediaSessionId: 'media-1', session: { sdpType: 'answer', sdp: 'gateway-answer' } };
+    },
     create: async (...args) => { calls.push(['create', ...args]); return { id: 'call-2' }; }
   };
   let microphoneRequests = 0;
@@ -36,18 +41,21 @@ function fixture() {
   return { api, calls, client, stream, track, microphoneRequests: () => microphoneRequests };
 }
 
-test('solicita microfone somente ao aceitar e envia a mesma answer no pre-accept e accept', async () => {
+test('solicita microfone somente ao aceitar e conecta pelo gateway antes de ativar', async () => {
   const item = fixture();
   assert.equal(item.microphoneRequests(), 0);
-  await item.client.acceptIncoming({ callId: 'call-1', conversationId: 12, offer: { sdpType: 'offer', sdp: 'offer-sdp' } });
+  await item.client.acceptIncoming({ callId: 'call-1', conversationId: 12 });
   assert.equal(item.microphoneRequests(), 1);
-  assert.deepEqual(item.calls.map(([name]) => name), ['claim', 'preAccept', 'accept']);
-  assert.deepEqual(item.calls[1][2].session, item.calls[2][2].session);
+  assert.deepEqual(item.calls.map(([name]) => name), ['claim', 'joinMedia', 'mediaReady']);
+  assert.equal(item.calls[1][2].session.sdpType, 'offer');
+  assert.equal(item.client.peer.remoteDescription.sdp, 'gateway-answer');
 });
 
 test('mute desabilita somente a faixa local e cleanup encerra mídia e peer', async () => {
   const item = fixture();
   await item.client.startOutgoing({ conversationId: 12 });
+  assert.deepEqual(item.calls.map(([name]) => name), ['createOutboundMedia', 'create']);
+  assert.equal(item.calls[1][2].mediaSessionId, 'media-1');
   assert.equal(item.client.toggleMute(true), true);
   assert.equal(item.track.enabled, false);
   const peer = item.client.peer;

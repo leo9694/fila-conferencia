@@ -41,10 +41,50 @@
     return { sdpType: description.type, sdp: description.sdp };
   }
 
+  function waitForPeerConnected(peer, timeoutMs = 12000) {
+    if (['connected', 'completed'].includes(peer?.connectionState) || peer?.iceConnectionState === 'connected') {
+      return Promise.resolve();
+    }
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        peer.removeEventListener?.('connectionstatechange', change);
+        peer.removeEventListener?.('iceconnectionstatechange', change);
+        if (error) reject(error); else resolve();
+      };
+      const change = () => {
+        if (['connected', 'completed'].includes(peer.connectionState)
+          || ['connected', 'completed'].includes(peer.iceConnectionState)) finish();
+        else if (['failed', 'closed'].includes(peer.connectionState)
+          || ['failed', 'closed'].includes(peer.iceConnectionState)) finish(new Error('Falha ao conectar o áudio.'));
+      };
+      const timer = setTimeout(() => finish(new Error('Tempo esgotado ao conectar o áudio.')), timeoutMs);
+      peer.addEventListener?.('connectionstatechange', change);
+      peer.addEventListener?.('iceconnectionstatechange', change);
+    });
+  }
+
   function eventUiStatus(event, currentStatus, hasClient) {
     if (!['call:ringing', 'call:connecting'].includes(event)) return null;
     if (currentStatus === 'RINGING' && !hasClient) return 'RINGING';
     return 'CONNECTING';
+  }
+
+  async function retryMediaAction(action, { attempts = 15, delayMs = 200 } = {}) {
+    let lastError;
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      try { return await action(); }
+      catch (error) {
+        lastError = error;
+        const pendingMedia = error?.status === 409 && /(?:microfone|áudio).*(?:pronto|ready)|media_not_ready/i.test(error.message || '');
+        if (!pendingMedia || attempt === attempts - 1) throw error;
+        await new Promise((resolve) => setTimeout(resolve, delayMs));
+      }
+    }
+    throw lastError;
   }
 
   class WhatsAppCallClient {
@@ -84,20 +124,27 @@
       this.localStream.getTracks().forEach((track) => this.peer.addTrack(track, this.localStream));
     }
 
-    async acceptIncoming({ callId, conversationId, offer }) {
+    async connectGateway({ callId, transferId }) {
+      await this.preparePeer();
+      await this.captureMicrophone();
+      const offer = await this.peer.createOffer();
+      await this.peer.setLocalDescription(offer);
+      await waitForIceGathering(this.peer);
+      const response = await this.api.joinMedia(callId, {
+        session: sessionFrom(this.peer.localDescription),
+        ...(transferId ? { transferId } : {})
+      });
+      const answer = response?.session || response;
+      await this.peer.setRemoteDescription({ type: answer.sdpType || answer.type || 'answer', sdp: answer.sdp });
+      await waitForPeerConnected(this.peer);
+      await retryMediaAction(() => this.api.mediaReady(callId, transferId ? { transferId } : {}));
+      return answer;
+    }
+
+    async acceptIncoming({ callId, conversationId }) {
       try {
         await this.api.claim(callId, { conversationId });
-        await this.preparePeer();
-        await this.captureMicrophone();
-        await this.peer.setRemoteDescription({ type: offer.sdpType || offer.type || 'offer', sdp: offer.sdp });
-        const answer = await this.peer.createAnswer();
-        await this.peer.setLocalDescription(answer);
-        await waitForIceGathering(this.peer);
-        const session = sessionFrom(this.peer.localDescription);
-        const payload = { conversationId, session };
-        await this.api.preAccept(callId, payload);
-        await this.api.accept(callId, payload);
-        return session;
+        return await this.connectGateway({ callId });
       } catch (error) {
         this.cleanup();
         throw error;
@@ -111,7 +158,13 @@
         const offer = await this.peer.createOffer();
         await this.peer.setLocalDescription(offer);
         await waitForIceGathering(this.peer);
-        return this.api.create(conversationId, { session: sessionFrom(this.peer.localDescription) });
+        const media = await this.api.createOutboundMedia(conversationId, {
+          session: sessionFrom(this.peer.localDescription)
+        });
+        const answer = media?.session || media;
+        await this.peer.setRemoteDescription({ type: answer.sdpType || answer.type || 'answer', sdp: answer.sdp });
+        await waitForPeerConnected(this.peer);
+        return retryMediaAction(() => this.api.create(conversationId, { mediaSessionId: media.mediaSessionId }));
       } catch (error) {
         this.cleanup();
         throw error;
@@ -151,5 +204,8 @@
     }
   }
 
-  return { TERMINAL_STATES, WhatsAppCallClient, eventUiStatus, formatDuration, sessionFrom, waitForIceGathering };
+  return {
+    TERMINAL_STATES, WhatsAppCallClient, eventUiStatus, formatDuration, sessionFrom,
+    retryMediaAction, waitForIceGathering, waitForPeerConnected
+  };
 }));

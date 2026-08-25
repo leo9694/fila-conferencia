@@ -12603,8 +12603,17 @@
         <button class="is-danger" id="whatsapp-call-reject" type="button"><i data-lucide="phone-off" aria-hidden="true"></i><span>Recusar</span></button>
         <button class="is-primary" id="whatsapp-call-accept" type="button"><i data-lucide="phone" aria-hidden="true"></i><span>Atender</span></button>
         <button id="whatsapp-call-mute" type="button" hidden><i data-lucide="mic" aria-hidden="true"></i><span>Silenciar</span></button>
+        <button id="whatsapp-call-transfer" type="button" hidden><i data-lucide="phone-forwarded" aria-hidden="true"></i><span>Transferir</span></button>
         <button class="is-danger" id="whatsapp-call-end" type="button" hidden><i data-lucide="phone-off" aria-hidden="true"></i><span>Encerrar</span></button>
         <button class="is-primary is-wide" id="whatsapp-call-permission" type="button" hidden><i data-lucide="message-circle" aria-hidden="true"></i><span>Solicitar autorização</span></button>
+      </div>
+      <div class="whatsapp-call-transfer-picker" id="whatsapp-call-transfer-picker" hidden>
+        <label for="whatsapp-call-transfer-agent">Transferir para</label>
+        <select id="whatsapp-call-transfer-agent"></select>
+        <div>
+          <button id="whatsapp-call-transfer-cancel" type="button">Voltar</button>
+          <button id="whatsapp-call-transfer-send" type="button">Solicitar transferência</button>
+        </div>
       </div>
       <audio id="whatsapp-call-remote-audio" autoplay playsinline hidden></audio>
     </div>

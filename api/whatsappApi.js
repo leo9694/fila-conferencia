@@ -1,5 +1,6 @@
 const { EventEmitter } = require('events');
 const { Readable } = require('stream');
+const crypto = require('crypto');
 
 const DEFAULT_API_URL = 'https://whatsapp-api.nortesulsementes.com';
 const SOCKET_EVENTS = [
@@ -19,7 +20,15 @@ const SOCKET_EVENTS = [
   'call:ended',
   'call:failed',
   'call:updated',
-  'call:signal'
+  'call:signal',
+  'call:claimed',
+  'call:transfer:incoming',
+  'call:transfer:accepted',
+  'call:transfer:rejected',
+  'call:transfer:cancelled',
+  'call:transfer:expired',
+  'call:transfer:completed',
+  'call:transferred:away'
 ];
 
 function baseUrl() {
@@ -30,10 +39,28 @@ function apiKey() {
   return String(process.env.WHATSAPP_INTERNAL_API_KEY || '').trim();
 }
 
-function headers(extra = {}) {
+function createAgentToken(agent, now = Math.floor(Date.now() / 1000)) {
+  const secret = String(process.env.CALL_AGENT_AUTH_SECRET || '').trim();
+  if (secret.length < 32) throw new Error('Autenticação individual de chamadas não configurada.');
+  if (!agent?.id || !agent?.name) throw new Error('Identidade do atendente ausente.');
+  const payload = Buffer.from(JSON.stringify({
+    iss: 'norte-sul-atendimento',
+    aud: 'norte-sul-whatsapp-api',
+    sub: String(agent.id),
+    name: String(agent.name),
+    director: agent.director === true,
+    iat: now,
+    exp: now + 90
+  })).toString('base64url');
+  const signature = crypto.createHmac('sha256', secret).update(payload).digest('base64url');
+  return `${payload}.${signature}`;
+}
+
+function headers(extra = {}, agent) {
   const result = { Accept: 'application/json', ...extra };
   const key = apiKey();
   if (key) result['X-API-Key'] = key;
+  if (agent) result['X-Agent-Token'] = createAgentToken(agent);
   return result;
 }
 
@@ -55,10 +82,11 @@ async function parseResponse(response) {
 }
 
 async function request(path, options = {}) {
+  const { agent, ...fetchOptions } = options;
   const response = await fetch(`${baseUrl()}${path}`, {
-    ...options,
-    headers: headers(options.headers),
-    signal: options.signal || AbortSignal.timeout(30000)
+    ...fetchOptions,
+    headers: headers(fetchOptions.headers, agent),
+    signal: fetchOptions.signal || AbortSignal.timeout(30000)
   });
   return parseResponse(response);
 }
@@ -136,20 +164,50 @@ async function getConversationCalls(id, params) {
   return request(`/api/conversations/${encodeURIComponent(id)}/calls${queryString(params)}`);
 }
 
-async function getCallPermission(id, params) {
-  return request(`/api/conversations/${encodeURIComponent(id)}/calls/permission${queryString(params)}`);
+async function getCallPermission(id, params, agent) {
+  return request(`/api/conversations/${encodeURIComponent(id)}/calls/permission${queryString(params)}`, { agent });
 }
 
-async function requestCallPermission(id, payload) {
-  return request(`/api/conversations/${encodeURIComponent(id)}/calls/permission`, json('POST', payload));
+async function requestCallPermission(id, payload, agent) {
+  return request(`/api/conversations/${encodeURIComponent(id)}/calls/permission`, { ...json('POST', payload), agent });
 }
 
-async function createCall(id, payload) {
-  return request(`/api/conversations/${encodeURIComponent(id)}/calls`, json('POST', payload));
+async function createCall(id, payload, agent) {
+  return request(`/api/conversations/${encodeURIComponent(id)}/calls`, { ...json('POST', payload), agent });
 }
 
-async function updateCall(callId, action, payload) {
-  return request(`/api/calls/${encodeURIComponent(callId)}/${encodeURIComponent(action)}`, json('POST', payload));
+async function updateCall(callId, action, payload, agent) {
+  return request(`/api/calls/${encodeURIComponent(callId)}/${encodeURIComponent(action)}`, {
+    ...json('POST', payload), agent
+  });
+}
+
+async function getCallAgents(agent) {
+  return request('/api/call-agents', { agent });
+}
+
+async function joinCallMedia(callId, payload, agent) {
+  return request(`/api/calls/${encodeURIComponent(callId)}/media`, { ...json('POST', payload), agent });
+}
+
+async function callMediaReady(callId, payload, agent) {
+  return request(`/api/calls/${encodeURIComponent(callId)}/media-ready`, { ...json('POST', payload), agent });
+}
+
+async function createOutboundMedia(id, payload, agent) {
+  return request(`/api/conversations/${encodeURIComponent(id)}/calls/media`, { ...json('POST', payload), agent });
+}
+
+async function requestCallTransfer(callId, targetAgentId, agent) {
+  return request(`/api/calls/${encodeURIComponent(callId)}/transfer`, {
+    ...json('POST', { targetAgentId }), agent
+  });
+}
+
+async function updateCallTransfer(callId, transferId, action, agent) {
+  return request(`/api/calls/${encodeURIComponent(callId)}/transfer/${encodeURIComponent(transferId)}/${action}`, {
+    ...json('POST', {}), agent
+  });
 }
 
 async function deleteConversation(id) {
@@ -214,7 +272,7 @@ async function getMedia(mediaId) {
   };
 }
 
-function createRealtimeBridge({ ioFactory } = {}) {
+function createRealtimeBridge({ ioFactory, agent } = {}) {
   const emitter = new EventEmitter();
   let socket = null;
   let state = 'idle';
@@ -231,7 +289,10 @@ function createRealtimeBridge({ ioFactory } = {}) {
     socket = io(baseUrl(), {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      auth: { apiKey: apiKey() },
+      auth: (callback) => callback({
+        apiKey: apiKey(),
+        ...(agent ? { agentToken: createAgentToken(agent) } : {})
+      }),
       timeout: 15000
     });
     emitState('connecting');
@@ -266,13 +327,16 @@ function createRealtimeBridge({ ioFactory } = {}) {
 
 module.exports = {
   createRealtimeBridge,
+  callMediaReady,
   createCall,
+  createOutboundMedia,
   createConversation,
   deleteConversation,
   getConversation,
   getConversationCalls,
   getConversations,
   getCallPermission,
+  getCallAgents,
   getCalls,
   getMedia,
   getMessages,
@@ -281,12 +345,15 @@ module.exports = {
   markConversationRead,
   previewTemplate,
   requestCallPermission,
+  requestCallTransfer,
   sendMedia,
   sendReaction,
   sendTemplate,
   sendTextMessage,
   updateAssignment,
   updateCall,
+  updateCallTransfer,
   updateConversationStatus,
-  _internals: { baseUrl, queryString, uploadMime }
+  joinCallMedia,
+  _internals: { baseUrl, createAgentToken, queryString, uploadMime }
 };

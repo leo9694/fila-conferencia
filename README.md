@@ -21,6 +21,7 @@ Configure no ambiente do servidor:
 ```env
 WHATSAPP_API_URL=https://whatsapp-api.nortesulsementes.com
 WHATSAPP_INTERNAL_API_KEY=chave-interna-da-api
+CALL_AGENT_AUTH_SECRET=mesmo-segredo-hmac-do-backend-whatsapp
 ```
 
 Arquitetura:
