@@ -2,7 +2,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  WhatsAppCallClient, agentAvailability, callControls, eventUiStatus, formatDuration, normalizeAgentList
+  WhatsAppCallClient, agentAvailability, callControls, callPermissionView, eventUiStatus,
+  formatDuration, friendlyCallError, normalizeAgentList, normalizeCallPermission,
+  shouldPlayOutboundRingback
 } = require('../frontend/whatsapp-call-core');
 
 class PeerMock {
@@ -86,6 +88,57 @@ test('mantém mídia e cancelamento disponíveis durante uma transferência pend
   assert.deepEqual(callControls('TRANSFER_CONNECTING'), {
     accept: false, reject: false, mute: true, end: false, transfer: false
   });
+});
+
+test('representa os estados reais da permissão sem iniciar chamada automaticamente', () => {
+  assert.deepEqual(callPermissionView({ status: 'UNKNOWN' }), {
+    action: 'REQUEST', label: 'Solicitar permissão de ligação',
+    message: 'Solicite autorização do cliente antes de ligar.', disabled: false
+  });
+  assert.deepEqual(callPermissionView({ status: 'PENDING' }), {
+    action: 'NONE', label: 'Permissão solicitada',
+    message: 'Solicitação enviada. Aguardando autorização do cliente...', disabled: true
+  });
+  assert.deepEqual(callPermissionView({ status: 'GRANTED', canCall: true }), {
+    action: 'CALL', label: 'Ligar', message: '✓ Cliente autorizou ligações', disabled: false
+  });
+});
+
+test('permite nova solicitação negada ou expirada somente quando a API autoriza', () => {
+  const allowed = [{ action_name: 'send_call_permission_request', can_perform_action: true }];
+  assert.equal(callPermissionView({ status: 'DENIED', actions: allowed }).action, 'REQUEST');
+  assert.equal(callPermissionView({ status: 'EXPIRED', actions: allowed }).action, 'REQUEST');
+  assert.deepEqual(callPermissionView({ status: 'DENIED', actions: [] }), {
+    action: 'NONE', label: 'Nova solicitação indisponível',
+    message: 'Cliente não autorizou ligações.', disabled: true
+  });
+});
+
+test('usa canCall da API como única fonte para habilitar a ligação', () => {
+  assert.equal(normalizeCallPermission({ status: 'GRANTED', canStart: true }).canCall, false);
+  assert.equal(callPermissionView({ status: 'GRANTED', canStart: true }).action, 'NONE');
+});
+
+test('traduz erros reais do fluxo outbound', () => {
+  assert.equal(friendlyCallError({ code: 'CALL_PERMISSION_REQUIRED' }), 'Solicite a permissão do cliente antes de ligar.');
+  assert.equal(friendlyCallError({ code: 'CALL_PERMISSION_EXPIRED' }), 'A permissão de ligação expirou. Solicite novamente.');
+  assert.equal(friendlyCallError({ code: 'CALL_ALREADY_ACTIVE' }), 'Já existe uma chamada ativa para esta conversa.');
+  assert.equal(friendlyCallError({ code: 'AGENT_BUSY' }), 'Você já está em outra chamada.');
+  assert.equal(friendlyCallError({ code: 'META_CALL_FAILED' }), 'A Meta não conseguiu iniciar a ligação. Tente novamente.');
+});
+
+test('mantém encerramento disponível enquanto a chamada outbound toca', () => {
+  assert.deepEqual(callControls('RINGING', { direction: 'OUTBOUND' }), {
+    accept: false, reject: false, mute: false, end: true, transfer: false
+  });
+});
+
+test('toca o retorno sonoro somente enquanto a chamada outbound chama', () => {
+  assert.equal(shouldPlayOutboundRingback('INITIATING', 'OUTBOUND'), true);
+  assert.equal(shouldPlayOutboundRingback('RINGING', 'OUTBOUND'), true);
+  assert.equal(shouldPlayOutboundRingback('CONNECTING', 'OUTBOUND'), false);
+  assert.equal(shouldPlayOutboundRingback('ACTIVE', 'OUTBOUND'), false);
+  assert.equal(shouldPlayOutboundRingback('RINGING', 'INBOUND'), false);
 });
 
 test('normaliza disponibilidade sem oferecer atendentes ocupados ou offline', () => {

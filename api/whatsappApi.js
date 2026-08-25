@@ -276,7 +276,8 @@ async function sendMedia(id, kind, file, fields = {}) {
 
 async function getMedia(mediaId) {
   const response = await fetch(`${baseUrl()}/api/media/${encodeURIComponent(mediaId)}`, {
-    headers: headers({ Accept: '*/*' })
+    headers: headers({ Accept: '*/*' }),
+    signal: AbortSignal.timeout(20000)
   });
   if (!response.ok) await parseResponse(response);
   return {

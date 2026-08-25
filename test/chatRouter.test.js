@@ -155,6 +155,28 @@ test('gera identidades persistentes para todos os canais consolidados do contato
   );
 });
 
+test('considera a liberação mais recente acima de uma atribuição antiga de ID relacionado', () => {
+  const atribuicao = chatRouter._internals.obterAtribuicaoMaisRecente([
+    {
+      conversationId: 10,
+      userId: '72',
+      userName: 'Leonardo',
+      assignedAt: '2026-08-25T12:00:00.000Z',
+      historico: [{ acao: 'CLAIM', em: '2026-08-25T12:00:00.000Z' }]
+    },
+    {
+      conversationId: 11,
+      userId: null,
+      userName: null,
+      assignedAt: null,
+      historico: [{ acao: 'RELEASE', em: '2026-08-25T12:05:00.000Z' }]
+    }
+  ]);
+
+  assert.equal(atribuicao.conversationId, 11);
+  assert.equal(atribuicao.userId, null);
+});
+
 test('resolve todos os ids relacionados de uma conversa consolidada', () => {
   const [conversation] = chatRouter._internals.consolidarConversas([
     { id: 71, contact: { phone: '5566999990000' } },

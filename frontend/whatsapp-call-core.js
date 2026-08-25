@@ -7,25 +7,107 @@
 
   const CALL_STATES = Object.freeze({
     IDLE: 'IDLE',
+    INITIATING: 'INITIATING',
     RINGING: 'RINGING',
     CONNECTING: 'CONNECTING',
     ACTIVE: 'ACTIVE',
     TRANSFER_PENDING: 'TRANSFER_PENDING',
     TRANSFER_CONNECTING: 'TRANSFER_CONNECTING',
     ENDING: 'ENDING',
-    ENDED: 'ENDED'
+    ENDED: 'ENDED',
+    FAILED: 'FAILED',
+    BUSY: 'BUSY',
+    REJECTED: 'REJECTED'
   });
   const TERMINAL_STATES = new Set(['REJECTED', 'MISSED', 'BUSY', 'FAILED', 'ENDED']);
 
-  function callControls(status) {
+  function callControls(status, { direction = 'INBOUND' } = {}) {
     const hasMedia = ['CONNECTING', 'ACTIVE', 'TRANSFER_PENDING', 'TRANSFER_CONNECTING'].includes(status);
+    const incomingRinging = status === 'RINGING' && direction !== 'OUTBOUND';
     return {
-      accept: status === 'RINGING',
-      reject: status === 'RINGING',
+      accept: incomingRinging,
+      reject: incomingRinging,
       mute: hasMedia,
-      end: ['CONNECTING', 'ACTIVE', 'TRANSFER_PENDING'].includes(status),
+      end: ['RINGING', 'CONNECTING', 'ACTIVE', 'TRANSFER_PENDING'].includes(status)
+        && (status !== 'RINGING' || direction === 'OUTBOUND'),
       transfer: ['ACTIVE', 'TRANSFER_PENDING'].includes(status)
     };
+  }
+
+  function shouldPlayOutboundRingback(status, direction) {
+    return String(direction || '').toUpperCase() === 'OUTBOUND'
+      && ['INITIATING', 'RINGING'].includes(String(status || '').toUpperCase());
+  }
+
+  function normalizeCallPermission(payload = {}) {
+    const status = String(payload.status || 'UNKNOWN').trim().toUpperCase() || 'UNKNOWN';
+    return { ...payload, status, canCall: payload.canCall === true };
+  }
+
+  function canRequestCallPermission(permission = {}) {
+    if (permission.status === 'PENDING' || permission.canCall) return false;
+    if (!Array.isArray(permission.actions)) return permission.status === 'UNKNOWN';
+    const requestAction = permission.actions.find((action) => (
+      String(action?.action_name || action?.name || '').toLowerCase() === 'send_call_permission_request'
+    ));
+    return requestAction?.can_perform_action === true;
+  }
+
+  function callPermissionView(payload = {}) {
+    const permission = normalizeCallPermission(payload);
+    const canRequest = canRequestCallPermission(permission);
+    if (permission.status === 'GRANTED' && permission.canCall) {
+      return { action: 'CALL', label: 'Ligar', message: '✓ Cliente autorizou ligações', disabled: false };
+    }
+    if (permission.status === 'PENDING') {
+      return {
+        action: 'NONE', label: 'Permissão solicitada',
+        message: 'Solicitação enviada. Aguardando autorização do cliente...', disabled: true
+      };
+    }
+    if (permission.status === 'DENIED') {
+      return {
+        action: canRequest ? 'REQUEST' : 'NONE',
+        label: canRequest ? 'Solicitar novamente' : 'Nova solicitação indisponível',
+        message: 'Cliente não autorizou ligações.', disabled: !canRequest
+      };
+    }
+    if (permission.status === 'EXPIRED') {
+      return {
+        action: canRequest ? 'REQUEST' : 'NONE',
+        label: canRequest ? 'Solicitar novamente' : 'Nova solicitação indisponível',
+        message: 'Permissão de ligação expirada.', disabled: !canRequest
+      };
+    }
+    if (permission.status === 'REVOKED') {
+      return {
+        action: canRequest ? 'REQUEST' : 'NONE',
+        label: canRequest ? 'Solicitar novamente' : 'Nova solicitação indisponível',
+        message: 'Permissão de ligação revogada.', disabled: !canRequest
+      };
+    }
+    if (canRequest) {
+      return {
+        action: 'REQUEST', label: 'Solicitar permissão de ligação',
+        message: 'Solicite autorização do cliente antes de ligar.', disabled: false
+      };
+    }
+    return {
+      action: 'NONE', label: 'Ligação indisponível',
+      message: 'A ligação não está disponível para esta conversa.', disabled: true
+    };
+  }
+
+  function friendlyCallError(error = {}) {
+    const code = String(error.code || error.publicCode || '').toUpperCase();
+    const messages = {
+      CALL_PERMISSION_REQUIRED: 'Solicite a permissão do cliente antes de ligar.',
+      CALL_PERMISSION_EXPIRED: 'A permissão de ligação expirou. Solicite novamente.',
+      CALL_ALREADY_ACTIVE: 'Já existe uma chamada ativa para esta conversa.',
+      AGENT_BUSY: 'Você já está em outra chamada.',
+      META_CALL_FAILED: 'A Meta não conseguiu iniciar a ligação. Tente novamente.'
+    };
+    return messages[code] || error.message || 'Não foi possível concluir a chamada.';
   }
 
   function normalizeAgentList(payload) {
@@ -257,7 +339,9 @@
 
   return {
     CALL_STATES, TERMINAL_STATES, WhatsAppCallClient, agentAvailability, callControls,
-    eventUiStatus, formatDuration, normalizeAgentList, sessionFrom,
-    retryMediaAction, waitForIceGathering, waitForPeerConnected
+    canRequestCallPermission,
+    callPermissionView, eventUiStatus, formatDuration, friendlyCallError, normalizeAgentList,
+    normalizeCallPermission, sessionFrom,
+    retryMediaAction, shouldPlayOutboundRingback, waitForIceGathering, waitForPeerConnected
   };
 }));

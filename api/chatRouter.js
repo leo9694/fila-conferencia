@@ -145,13 +145,22 @@ function idsRelacionadosConversa(conversa = {}) {
 }
 
 function obterAtribuicaoConversa(conversa = {}) {
-  return idsRelacionadosConversa(conversa)
+  return obterAtribuicaoMaisRecente(idsRelacionadosConversa(conversa)
     .map((conversationId) => atendentes.obterConversa(conversationId))
+    .filter(Boolean));
+}
+
+function instanteEstadoAtribuicao(atribuicao = {}) {
+  const historico = Array.isArray(atribuicao.historico) ? atribuicao.historico : [];
+  const ultimoEvento = historico[historico.length - 1]?.em;
+  const instante = new Date(ultimoEvento || atribuicao.assignedAt || 0).getTime();
+  return Number.isFinite(instante) ? instante : 0;
+}
+
+function obterAtribuicaoMaisRecente(atribuicoes = []) {
+  return [...atribuicoes]
     .filter(Boolean)
-    .sort((a, b) => {
-      const assigned = Number(Boolean(b.userId)) - Number(Boolean(a.userId));
-      return assigned || new Date(b.assignedAt || 0) - new Date(a.assignedAt || 0);
-    })[0] || null;
+    .sort((a, b) => instanteEstadoAtribuicao(b) - instanteEstadoAtribuicao(a))[0] || null;
 }
 
 function atribuirGrupoConversa(conversa = {}, dados = {}) {
@@ -1026,6 +1035,7 @@ function isMetaAuthError(error) {
 
 function sendError(res, error) {
   const upstreamStatus = Number(error?.status) || 0;
+  const integrationCode = String(error?.integrationCode || error?.code || '').trim();
   if (error?.configurationError === true) {
     const code = error.integrationCode || 'INTEGRATION_NOT_CONFIGURED';
     if (!sendError.reportedConfigurationErrors.has(code)) {
@@ -1038,26 +1048,38 @@ function sendError(res, error) {
   }
   if (error?.localAuthorization === true) {
     res.status(upstreamStatus >= 400 && upstreamStatus <= 499 ? upstreamStatus : 403)
-      .json({ erro: error.message || 'Ação não permitida para este atendente.' });
+      .json({ erro: error.message || 'Ação não permitida para este atendente.', ...(integrationCode ? { codigo: integrationCode } : {}) });
     return;
   }
   const status = responseStatus(error);
   if (upstreamStatus === 401 || upstreamStatus === 403) {
     if (isMetaAuthError(error)) {
       console.error('A Meta recusou a credencial do WhatsApp:', error?.message || error);
-      res.status(status).json({ erro: 'O token da Meta expirou ou foi invalidado. Atualize a credencial do WhatsApp.' });
+      res.status(status).json({
+        erro: 'O token da Meta expirou ou foi invalidado. Atualize a credencial do WhatsApp.',
+        ...(integrationCode ? { codigo: integrationCode } : {})
+      });
       return;
     }
     console.error('Falha de autenticação entre a fila e o atendimento:', error?.message || error);
-    res.status(status).json({ erro: 'A integração do atendimento não está autorizada no servidor.' });
+    res.status(status).json({
+      erro: 'A integração do atendimento não está autorizada no servidor.',
+      ...(integrationCode ? { codigo: integrationCode } : {})
+    });
     return;
   }
   if (status >= 500) {
     console.error('Falha na integração com o atendimento:', error?.message || error);
-    res.status(status).json({ erro: 'O atendimento está temporariamente indisponível.' });
+    res.status(status).json({
+      erro: 'O atendimento está temporariamente indisponível.',
+      ...(integrationCode ? { codigo: integrationCode } : {})
+    });
     return;
   }
-  res.status(status).json({ erro: error?.message || 'Falha na integração com o atendimento.' });
+  res.status(status).json({
+    erro: error?.message || 'Falha na integração com o atendimento.',
+    ...(integrationCode ? { codigo: integrationCode } : {})
+  });
 }
 
 sendError.reportedConfigurationErrors = new Set();
@@ -1817,7 +1839,9 @@ router.get('/media/:mediaId', asyncRoute(async (req, res) => {
   }
   const media = await whatsappApi.getMedia(mediaId);
   res.setHeader('Content-Type', media.contentType);
-  res.setHeader('Cache-Control', 'private, no-store');
+  // O identificador aponta para uma mídia imutável. O cache privado evita baixar
+  // novamente o mesmo arquivo ao alternar conversas ou recarregar a página.
+  res.setHeader('Cache-Control', 'private, max-age=86400, stale-while-revalidate=604800');
   if (media.contentLength) res.setHeader('Content-Length', media.contentLength);
   if (!media.body) return res.end();
   media.body.on('error', () => res.destroy());
@@ -1876,7 +1900,7 @@ router.get('/events', (req, res) => {
       && String(payload?.toAgent?.id || '') === String(req.atendente.id)) {
       const current = atendentes.obterConversa(payload.conversationId);
       if (String(current?.userId || '') !== String(req.atendente.id)) {
-        const assignment = atendentes.atribuirConversa(payload.conversationId, {
+        const assignment = atribuirGrupoConversa({ id: Number(payload.conversationId) }, {
           acao: 'CALL_TRANSFER',
           ator: payload.fromAgent || { id: 'SISTEMA', name: 'Sistema' },
           destino: req.atendente
@@ -1941,6 +1965,7 @@ router._internals = {
   agenteChamada,
   criarControleChamadas,
   idsRelacionadosConversa,
+  obterAtribuicaoMaisRecente,
   textoContatoChat,
   textoSql,
   variantesTelefoneSankhya,

@@ -77,8 +77,8 @@
     conversations: [], conversation: null, conversationId: null, page: 1, totalPages: 1,
     status: '', search: '', messages: [], calls: [], messagePage: 1, messageTotalPages: 1,
     loading: false, loadingOlder: false, sending: false, initialized: false, eventSource: null,
-    mediaUrls: new Map(), templates: [], selectedTemplate: null,
-    autoMediaQueue: Promise.resolve(), autoMediaDisabled: false,
+    mediaUrls: new Map(), mediaRequests: new Map(), templates: [], selectedTemplate: null,
+    autoMediaQueue: [], autoMediaActive: 0,
     recorder: null, recordingStream: null, recordingChunks: [], recordingBlob: null,
     recordingStartedAt: 0, recordingTimer: null, pendingUpload: null, loadToken: 0, activeLoadToken: 0,
     totalConversations: 0, assignment: 'ALL', agentId: '', access: null, profile: null, agents: [],
@@ -93,14 +93,35 @@
   const CACHED_MESSAGES_LIMIT = 80;
 
   let viewportSyncTimer = null;
-  const imagePreviewObserver = typeof IntersectionObserver === 'function'
+  const AUTO_MEDIA_CONCURRENCY = 4;
+
+  function drainAutoMediaQueue() {
+    while (state.autoMediaActive < AUTO_MEDIA_CONCURRENCY && state.autoMediaQueue.length) {
+      const element = state.autoMediaQueue.shift();
+      delete element?.dataset.mediaQueued;
+      if (!element?.isConnected || element.dataset.loading === 'true') continue;
+      state.autoMediaActive += 1;
+      activateMedia(element, false, true)
+        .finally(() => {
+          state.autoMediaActive -= 1;
+          drainAutoMediaQueue();
+        });
+    }
+  }
+
+  function queueAutomaticMedia(element) {
+    if (!element?.isConnected || element.dataset.loading === 'true' || element.dataset.mediaQueued === 'true') return;
+    element.dataset.mediaQueued = 'true';
+    state.autoMediaQueue.push(element);
+    drainAutoMediaQueue();
+  }
+
+  const mediaPreviewObserver = typeof IntersectionObserver === 'function'
     ? new IntersectionObserver((entries, observer) => {
       entries.forEach((entry) => {
         if (!entry.isIntersecting) return;
         observer.unobserve(entry.target);
-        state.autoMediaQueue = state.autoMediaQueue.then(async () => {
-          if (!state.autoMediaDisabled && entry.target.isConnected) await activateMedia(entry.target, false, true);
-        });
+        queueAutomaticMedia(entry.target);
       });
     }, { rootMargin: '180px 0px' })
     : null;
@@ -115,14 +136,22 @@
   }
 
   function assignedUser(item = {}) {
+    const hasCurrentAssignment = Object.prototype.hasOwnProperty.call(item, 'assignment');
     const assignment = item.assignment || {};
-    const id = assignment.userId ?? item.assignedUserId ?? null;
-    return id ? { id: String(id), name: assignment.userName || item.assignedUserName || 'Atendente' } : null;
+    const id = hasCurrentAssignment ? assignment.userId : (item.assignedUserId ?? null);
+    return id ? {
+      id: String(id),
+      name: assignment.userName || (!hasCurrentAssignment ? item.assignedUserName : '') || 'Atendente'
+    } : null;
   }
 
   function ownsConversation(item = state.conversation) {
     const assigned = assignedUser(item);
     return Boolean(assigned && state.profile && assigned.id === String(state.profile.id));
+  }
+
+  function canTransferConversation(item = state.conversation) {
+    return Boolean(assignedUser(item) && (ownsConversation(item) || state.access?.diretor === true));
   }
 
   function matchesAssignment(item = {}) {
@@ -221,10 +250,12 @@
       const payload = type.includes('application/json') ? await response.json().catch(() => null) : null;
       if (!response.ok) {
         const message = payload?.erro || payload?.error?.message;
-        if (message) throw new Error(message);
-        throw new Error(response.status >= 500
+        const error = new Error(message || (response.status >= 500
           ? 'Falha ao conectar com a API de atendimento.'
-          : 'Não foi possível concluir esta solicitação no atendimento.');
+          : 'Não foi possível concluir esta solicitação no atendimento.'));
+        error.status = response.status;
+        error.payload = payload;
+        throw error;
       }
       return Core.unwrap(payload);
     } catch (error) {
@@ -233,6 +264,17 @@
       }
       throw error;
     }
+  }
+
+  function isAssignmentConflict(error) {
+    return [403, 409].includes(Number(error?.status))
+      && /atendente|atendimento|conversa/i.test(String(error?.message || ''));
+  }
+
+  async function reconcileAssignmentConflict(error) {
+    if (!isAssignmentConflict(error) || !state.conversationId) return false;
+    await refreshActiveConversation(state.conversationId).catch(() => null);
+    return true;
   }
 
   function escapeHtml(value) {
@@ -770,13 +812,11 @@
     refs.messages.querySelectorAll('[data-chat-media]').forEach((element) => {
       element.addEventListener('click', () => activateMedia(element));
       const mediaKind = element.dataset.chatMedia;
-      if (mediaKind === 'image' && element.classList.contains('chat-image-placeholder') && imagePreviewObserver) {
-        imagePreviewObserver.observe(element);
-      } else if (['audio', 'video'].includes(mediaKind) || (mediaKind === 'image' && element.classList.contains('chat-image-placeholder'))) {
-        state.autoMediaQueue = state.autoMediaQueue.then(async () => {
-          if (!state.autoMediaDisabled && element.isConnected) await activateMedia(element, false, true);
-        });
-      }
+      const shouldLoadAutomatically = ['audio', 'video'].includes(mediaKind)
+        || (mediaKind === 'image' && element.classList.contains('chat-image-placeholder'));
+      if (!shouldLoadAutomatically) return;
+      if (mediaPreviewObserver) mediaPreviewObserver.observe(element);
+      else queueAutomaticMedia(element);
     });
     refs.messages.querySelectorAll('[data-chat-start-contact]').forEach((button) => {
       button.addEventListener('click', () => startChatFromSharedContact(button));
@@ -912,19 +952,40 @@
       state.mediaUrls.set(id, cached);
       return cached;
     }
-    const response = await fetch(`/api/chat/media/${encodeURIComponent(id)}`);
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      throw new Error(payload?.erro || 'Não foi possível carregar a mídia.');
+    if (state.mediaRequests.has(id)) return state.mediaRequests.get(id);
+    const request = (async () => {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
+      try {
+        const response = await fetch(`/api/chat/media/${encodeURIComponent(id)}`, {
+          signal: controller.signal,
+          cache: 'force-cache'
+        });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => null);
+          throw new Error(payload?.erro || 'Não foi possível carregar a mídia.');
+        }
+        const url = URL.createObjectURL(await response.blob());
+        state.mediaUrls.set(id, url);
+        while (state.mediaUrls.size > 80) {
+          const oldestId = state.mediaUrls.keys().next().value;
+          URL.revokeObjectURL(state.mediaUrls.get(oldestId));
+          state.mediaUrls.delete(oldestId);
+        }
+        return url;
+      } catch (error) {
+        if (error?.name === 'AbortError') throw new Error('A mídia demorou demais para responder. Toque para tentar novamente.');
+        throw error;
+      } finally {
+        clearTimeout(timeout);
+      }
+    })();
+    state.mediaRequests.set(id, request);
+    try {
+      return await request;
+    } finally {
+      state.mediaRequests.delete(id);
     }
-    const url = URL.createObjectURL(await response.blob());
-    state.mediaUrls.set(id, url);
-    while (state.mediaUrls.size > 80) {
-      const oldestId = state.mediaUrls.keys().next().value;
-      URL.revokeObjectURL(state.mediaUrls.get(oldestId));
-      state.mediaUrls.delete(oldestId);
-    }
-    return url;
   }
 
   async function activateMedia(element, openModal = true, automatic = false) {
@@ -948,8 +1009,7 @@
         refs.mediaModal.hidden = false;
       }
     } catch (error) {
-      if (automatic) state.autoMediaDisabled = true;
-      element.innerHTML = '<i data-lucide="circle-alert"></i> Mídia temporariamente indisponível';
+      element.innerHTML = '<i data-lucide="circle-alert"></i> Toque para tentar novamente';
       window.lucide?.createIcons();
       setFeedback(error.message, true);
     } finally {
@@ -960,8 +1020,9 @@
   function clearMediaUrls() {
     state.mediaUrls.forEach((url) => URL.revokeObjectURL(url));
     state.mediaUrls.clear();
-    state.autoMediaQueue = Promise.resolve();
-    state.autoMediaDisabled = false;
+    state.mediaRequests.clear();
+    state.autoMediaQueue = [];
+    state.autoMediaActive = 0;
   }
 
   function renderConversationDetails() {
@@ -1004,7 +1065,7 @@
     refs.assignmentLabel.textContent = agent?.name || 'Sem atendente';
     refs.detailsAgent.textContent = agent?.name || 'Sem atendente';
     refs.claim.hidden = Boolean(agent);
-    refs.transfer.hidden = !owner;
+    refs.transfer.hidden = !canTransferConversation(item);
     refs.release.hidden = !owner;
     const session = Core.serviceWindow(item);
     const requiresTemplate = session.canSendFreeform !== true;
@@ -1212,7 +1273,10 @@
       });
       state.messages = Core.mergeById(state.messages, [message]); refs.input.value = ''; clearReply(); renderMessages();
       setFeedback();
-    } catch (error) { setFeedback('Não foi possível enviar a mensagem.', true); }
+    } catch (error) {
+      const reconciled = await reconcileAssignmentConflict(error);
+      setFeedback(reconciled ? error.message : 'Não foi possível enviar a mensagem.', true);
+    }
     finally { state.sending = false; updateComposer(); refs.input.focus(); }
   }
 
@@ -1527,13 +1591,18 @@
     if (!state.conversationId) return null;
     const path = action === 'CLAIM' ? 'claim' : action === 'TRANSFER' ? 'transfer' : 'release';
     const body = { ...extra, ...(target ? { codUsu: target.codUsu ?? target.id } : {}) };
-    const conversation = await api(`/conversations/${encodeURIComponent(state.conversationId)}/${path}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
-    });
-    state.conversation = { ...state.conversation, ...conversation };
-    upsertConversation({ ...state.conversation, ...conversation });
-    renderConversationDetails();
-    return conversation;
+    try {
+      const conversation = await api(`/conversations/${encodeURIComponent(state.conversationId)}/${path}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+      });
+      state.conversation = { ...state.conversation, ...conversation };
+      upsertConversation({ ...state.conversation, ...conversation });
+      renderConversationDetails();
+      return conversation;
+    } catch (error) {
+      await reconcileAssignmentConflict(error);
+      throw error;
+    }
   }
 
   function choosePipeline({ allowNone = false, title = 'Selecionar pipeline', description = '' } = {}) {
@@ -1638,12 +1707,18 @@
   }
 
   function openTransferDialog() {
-    if (!ownsConversation()) return;
+    if (!canTransferConversation()) return;
     const modal = document.createElement('div');
     modal.className = 'chat-agent-modal';
     modal.innerHTML = `<form class="chat-agent-dialog"><header><div><span>ATENDIMENTO</span><h2>Transferir conversa</h2></div><button type="button" data-close aria-label="Fechar">×</button></header><label>Atendente<select required><option value="">Selecione...</option></select></label><p class="chat-agent-feedback"></p><footer><button type="button" data-close>Cancelar</button><button type="submit">Transferir</button></footer></form>`;
     const select = modal.querySelector('select');
-    const fill = () => { select.innerHTML = '<option value="">Selecione...</option>' + state.agents.filter((agent) => String(agent.id) !== String(state.profile?.id)).map((agent) => `<option value="${escapeHtml(agent.codUsu)}">${escapeHtml(agent.name)}</option>`).join(''); };
+    const fill = () => {
+      const currentAgentId = assignedUser(state.conversation)?.id;
+      select.innerHTML = '<option value="">Selecione...</option>' + state.agents
+        .filter((agent) => String(agent.id) !== String(currentAgentId || ''))
+        .map((agent) => `<option value="${escapeHtml(agent.codUsu)}">${escapeHtml(agent.name)}</option>`)
+        .join('');
+    };
     (state.agents.length ? Promise.resolve(state.agents) : loadAgents()).then(fill).catch((error) => { modal.querySelector('.chat-agent-feedback').textContent = error.message; });
     const close = () => modal.remove();
     modal.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', close));

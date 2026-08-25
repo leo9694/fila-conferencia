@@ -47,6 +47,8 @@
     if (!response.ok) {
       const error = new Error(payload?.erro || payload?.error?.message || 'Não foi possível concluir a chamada.');
       error.status = response.status;
+      error.code = payload?.code || payload?.codigo || payload?.publicCode || payload?.integrationCode
+        || payload?.error?.code || payload?.details?.code || '';
       throw error;
     }
     return payload?.data ?? payload;
@@ -106,14 +108,17 @@
     state.status = status;
     refs.panel.dataset.status = status;
     refs.status.textContent = state.reconnecting ? 'Reconectando ao servidor...' : text;
-    const controls = Core.callControls(status);
+    const controls = Core.callControls(status, { direction: String(state.call?.direction || '').toUpperCase() });
     refs.accept.hidden = !controls.accept;
     refs.reject.hidden = !controls.reject;
     refs.mute.hidden = !controls.mute;
     refs.transfer.hidden = !controls.transfer;
     refs.end.hidden = !controls.end;
     refs.permission.hidden = status !== 'PERMISSION';
-    refs.close.hidden = !['PERMISSION', 'FAILED', 'ENDED'].includes(status);
+    refs.close.hidden = !['PERMISSION', 'FAILED', 'BUSY', 'REJECTED', 'ENDED'].includes(status);
+    const direction = String(state.call?.direction || '').toUpperCase();
+    if (Core.shouldPlayOutboundRingback(status, direction)) startRingback();
+    else if (state.ringtone?.kind === 'outbound') stopRingtone();
   }
 
   function openOverlay(payload, status = 'RINGING') {
@@ -141,14 +146,54 @@
       oscillator.frequency.value = 520;
       oscillator.connect(gain); gain.connect(context.destination); oscillator.start();
       const pulse = setInterval(() => { gain.gain.value = gain.gain.value ? 0 : 0.035; }, 450);
-      state.ringtone = { context, oscillator, pulse };
+      state.ringtone = { kind: 'incoming', context, oscillator, pulse };
+    } catch {}
+  }
+
+  function startRingback() {
+    if (state.ringtone?.kind === 'outbound') return;
+    stopRingtone();
+    const Context = window.AudioContext || window.webkitAudioContext;
+    if (!Context) return;
+    try {
+      const context = new Context();
+      const gain = context.createGain();
+      const oscillators = [440, 480].map((frequency) => {
+        const oscillator = context.createOscillator();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = frequency;
+        oscillator.connect(gain);
+        oscillator.start();
+        return oscillator;
+      });
+      gain.connect(context.destination);
+      gain.gain.value = 0;
+      state.ringtone = { kind: 'outbound', context, gain, oscillators, timer: null, stopped: false };
+      const playCycle = () => {
+        const tone = state.ringtone;
+        if (!tone || tone.kind !== 'outbound' || tone.stopped) return;
+        tone.gain.gain.setValueAtTime(0.025, tone.context.currentTime);
+        tone.timer = setTimeout(() => {
+          if (!state.ringtone || state.ringtone !== tone || tone.stopped) return;
+          tone.gain.gain.setValueAtTime(0, tone.context.currentTime);
+          tone.timer = setTimeout(playCycle, 2500);
+        }, 1100);
+      };
+      context.resume?.().catch(() => {});
+      playCycle();
     } catch {}
   }
 
   function stopRingtone() {
     if (!state.ringtone) return;
-    clearInterval(state.ringtone.pulse);
-    try { state.ringtone.oscillator.stop(); state.ringtone.context.close(); } catch {}
+    const tone = state.ringtone;
+    tone.stopped = true;
+    clearInterval(tone.pulse);
+    clearTimeout(tone.timer);
+    try {
+      (tone.oscillators || [tone.oscillator]).filter(Boolean).forEach((oscillator) => oscillator.stop());
+      tone.context.close();
+    } catch {}
     state.ringtone = null;
   }
 
@@ -318,35 +363,35 @@
     window.lucide?.createIcons();
   }
 
-  function permissionAllowed(payload = {}) {
-    return payload.allowed === true || payload.canCall === true || payload.canStart === true
-      || payload.startCall?.canPerformAction === true || payload.start_call?.can_perform_action === true
-      || payload.permission?.start_call?.can_perform_action === true;
-  }
-
   function applyPermission(payload = {}, { notify = false } = {}) {
-    if (!state.conversation?.id || Number(payload.conversationId) !== Number(state.conversation.id)) return;
-    state.permission = payload;
-    const status = String(payload.status || '').toUpperCase();
-    const allowed = permissionAllowed(payload);
+    if (!state.conversation?.id) return;
+    if (payload.conversationId && Number(payload.conversationId) !== Number(state.conversation.id)) return;
+    const previous = Core.normalizeCallPermission(state.permission || {});
+    const permission = Core.normalizeCallPermission(payload);
+    const view = Core.callPermissionView(permission);
+    state.permission = permission;
     refs.start.hidden = false;
     refs.start.disabled = state.status !== 'IDLE' && state.status !== 'PERMISSION';
-    refs.start.title = allowed ? 'Ligar pelo WhatsApp' : 'Solicitar permissão para ligar';
-    if (allowed) {
-      if (state.status === 'PERMISSION') cleanup();
-      refs.start.disabled = false;
-      if (notify) toast('Ligação autorizada. Você já pode ligar.');
-      return;
-    }
+    refs.start.title = view.action === 'CALL' ? 'Ligar pelo WhatsApp' : view.label;
     if (state.status === 'PERMISSION') {
-      refs.status.textContent = status === 'PENDING'
-        ? 'Solicitação enviada. Aguarde a autorização do cliente.'
-        : status === 'EXPIRED' ? 'A autorização expirou. Solicite novamente.'
-          : 'O cliente não autorizou a ligação.';
+      refs.status.textContent = view.message;
+      refs.permission.dataset.action = view.action;
+      refs.permission.disabled = view.disabled;
+      refs.permission.querySelector('span').textContent = view.label;
+      refs.permission.querySelector('i')?.setAttribute('data-lucide', view.action === 'CALL' ? 'phone' : 'message-circle');
+      window.lucide?.createIcons();
     }
-    if (notify && ['DENIED', 'EXPIRED', 'REVOKED'].includes(status)) {
-      toast(status === 'EXPIRED' ? 'A autorização de ligação expirou.' : 'Ligação não autorizada pelo cliente.');
+    if (permission.status === 'PENDING') refs.start.disabled = false;
+    if (notify && previous.status !== permission.status) {
+      if (permission.status === 'GRANTED' && permission.canCall) toast('✓ Cliente autorizou ligações.');
+      else if (['DENIED', 'EXPIRED', 'REVOKED'].includes(permission.status)) toast(view.message);
     }
+  }
+
+  function openPermission(conversation, permission) {
+    openOverlay(conversation, 'PERMISSION');
+    refs.title.textContent = 'Permissão para ligar';
+    applyPermission(permission);
   }
 
   async function startOutbound(conversation) {
@@ -358,10 +403,8 @@
     try {
       const permission = await api(`/conversations/${encodeURIComponent(conversation.id)}/call-permission`);
       applyPermission(permission);
-      if (!permissionAllowed(permission)) {
-        openOverlay(conversation, 'PERMISSION');
-        refs.title.textContent = 'Permissão para ligar';
-        refs.status.textContent = 'Para ligar, solicite primeiro a autorização do cliente pelo WhatsApp.';
+      if (!Core.normalizeCallPermission(permission).canCall) {
+        openPermission(conversation, permission);
         return;
       }
       await beginOutbound(conversation);
@@ -378,27 +421,34 @@
         body: 'Podemos ligar para ajudar no seu atendimento?'
       }));
       applyPermission(permission);
-      refs.status.textContent = 'Solicitação enviada. Aguarde a autorização do cliente.';
     } catch (error) {
-      refs.status.textContent = error.message || 'Não foi possível solicitar permissão para ligar.';
-    } finally {
+      refs.status.textContent = Core.friendlyCallError(error);
       refs.permission.disabled = false;
     }
   }
 
+  async function permissionAction() {
+    const view = Core.callPermissionView(state.permission || {});
+    if (view.action === 'CALL' && state.conversation) await beginOutbound(state.conversation);
+    else if (view.action === 'REQUEST') await requestPermission();
+  }
+
   async function beginOutbound(conversation) {
     state.call = { conversationId: conversation.id, direction: 'OUTBOUND', contact: conversation.contact };
-    openOverlay(conversation, 'CONNECTING');
+    openOverlay(conversation, 'INITIATING');
     refs.title.textContent = 'Ligação pelo WhatsApp';
+    refs.status.textContent = `Ligando para ${contact(conversation).name}...`;
     try {
       state.client = makeClient();
       const created = await state.client.startOutgoing({ conversationId: conversation.id });
       state.call = { ...state.call, ...(created?.call || created || {}) };
-      setStatus('CONNECTING', 'Chamando...');
+      setStatus('RINGING', 'Chamando...');
     } catch (error) {
-      setStatus('FAILED', error?.name === 'NotAllowedError'
+      const errorStatus = error.code === 'AGENT_BUSY' || error.code === 'CALL_ALREADY_ACTIVE' ? 'BUSY'
+        : error.code === 'CALL_PERMISSION_REQUIRED' || error.code === 'CALL_PERMISSION_EXPIRED' ? 'REJECTED' : 'FAILED';
+      setStatus(errorStatus, error?.name === 'NotAllowedError'
         ? 'É necessário permitir acesso ao microfone para iniciar a chamada.'
-        : (error.message || 'Não foi possível iniciar a chamada.'));
+        : Core.friendlyCallError(error));
     }
   }
 
@@ -411,9 +461,9 @@
     if (event === 'call:outgoing') {
       if (conversationId(payload) !== Number(state.conversation?.id) || state.call) return;
       state.call = payload.call || payload;
-      openOverlay(state.call, 'CONNECTING');
+      openOverlay(state.call, 'INITIATING');
       refs.title.textContent = 'Ligação pelo WhatsApp';
-      refs.status.textContent = 'Chamando...';
+      refs.status.textContent = `Ligando para ${contact(state.call).name}...`;
       return;
     }
     if (event === 'call:transfer:incoming') {
@@ -506,13 +556,26 @@
       state.call = { ...state.call, ...(payload.call || payload) };
       const updatedStatus = String(payload.call?.status || payload.status || '').toUpperCase();
       if (Core.TERMINAL_STATES.has(updatedStatus)) {
-        cleanup();
-        toast(updatedStatus === 'MISSED' ? 'Chamada perdida.' : 'A ligação foi encerrada.');
+        const terminalStatus = updatedStatus === 'MISSED' ? 'ENDED' : updatedStatus;
+        cleanup({ close: false });
+        setStatus(terminalStatus, updatedStatus === 'MISSED' ? 'Chamada não atendida.'
+          : updatedStatus === 'BUSY' ? 'Cliente ocupado.'
+            : updatedStatus === 'REJECTED' ? 'O cliente recusou a chamada.'
+              : updatedStatus === 'FAILED' ? 'Falha ao completar a chamada.' : 'A ligação foi encerrada.');
         if (state.conversation) loadHistory(state.conversation).catch(() => {});
       }
       return;
     }
     if (!state.call) return;
+    const direction = String(state.call.direction || '').toUpperCase();
+    if (direction === 'OUTBOUND' && event === 'call:ringing') {
+      setStatus('RINGING', 'Chamando...');
+      return;
+    }
+    if (direction === 'OUTBOUND' && event === 'call:connecting') {
+      setStatus('CONNECTING', 'Conectando áudio...');
+      return;
+    }
     const eventStatus = Core.eventUiStatus(event, state.status, Boolean(state.client));
     if (eventStatus === 'RINGING') setStatus('RINGING', 'Chamada recebida pelo WhatsApp');
     else if (eventStatus === 'CONNECTING') setStatus('CONNECTING', event === 'call:ringing' ? 'Chamando...' : 'Conectando áudio...');
@@ -520,10 +583,11 @@
       stopRingtone(); setStatus('ACTIVE', 'Chamada em andamento'); startTimer(payload.call?.answeredAt || payload.answeredAt);
     } else if (['call:ended', 'call:rejected', 'call:failed'].includes(event)) {
       const wasRinging = state.status === 'RINGING';
+      const terminalStatus = event === 'call:rejected' ? 'REJECTED' : event === 'call:failed' ? 'FAILED' : 'ENDED';
       const message = event === 'call:rejected' ? 'O cliente recusou a chamada.'
         : event === 'call:failed' ? 'Falha ao estabelecer áudio.' : 'A ligação foi encerrada.';
-      cleanup();
-      toast(wasRinging ? `Chamada perdida de ${contact(payload).name}` : message);
+      cleanup({ close: false });
+      setStatus(terminalStatus, wasRinging ? `Chamada perdida de ${contact(payload).name}` : message);
       if (state.conversation) loadHistory(state.conversation).catch(() => {});
     }
   }
@@ -631,14 +695,18 @@
     state.conversation = conversation || null;
     refs.start.hidden = true;
     if (!conversation?.id) return;
+    const requestedConversationId = String(conversation.id);
     loadHistory(conversation).catch(() => {});
     try {
       const permission = await api(`/conversations/${encodeURIComponent(conversation.id)}/call-permission`);
+      if (String(state.conversation?.id || '') !== requestedConversationId) return;
       applyPermission(permission);
       refs.start.hidden = false;
       refs.start.disabled = state.status !== 'IDLE';
-      refs.start.title = permissionAllowed(permission) ? 'Ligar pelo WhatsApp' : 'Solicitar permissão para ligar';
+      refs.start.title = Core.normalizeCallPermission(permission).canCall
+        ? 'Ligar pelo WhatsApp' : Core.callPermissionView(permission).label;
     } catch {
+      if (String(state.conversation?.id || '') !== requestedConversationId) return;
       refs.start.hidden = true;
     }
   }
@@ -650,7 +718,7 @@
   refs.transfer?.addEventListener('click', openTransferPicker);
   refs.transferSend?.addEventListener('click', sendTransfer);
   refs.transferCancel?.addEventListener('click', () => { refs.transferPicker.hidden = true; });
-  refs.permission?.addEventListener('click', requestPermission);
+  refs.permission?.addEventListener('click', permissionAction);
   refs.close?.addEventListener('click', () => cleanup());
   refs.start?.addEventListener('click', () => startOutbound(state.conversation));
   refs.historyOpen?.addEventListener('click', openGlobalHistory);
