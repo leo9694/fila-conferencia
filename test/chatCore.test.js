@@ -47,6 +47,28 @@ test('mescla message:new sem duplicar e mantém ordem cronológica', () => {
   assert.equal(messages[1].status, 'READ');
 });
 
+test('normaliza e intercala chamadas com mensagens pela data', () => {
+  const calls = ChatCore.normalizeCalls({ data: { items: [
+    { id: 'call-1', status: 'MISSED', createdAt: '2026-08-13T10:01:00Z' }
+  ] } });
+  const timeline = ChatCore.mergeTimeline([
+    { id: 2, text: 'depois', messageTimestamp: '2026-08-13T10:02:00Z' }
+  ], calls);
+  assert.deepEqual(timeline.map((item) => item.kind), ['call', 'message']);
+});
+
+test('descreve chamadas não atendidas e concluídas', () => {
+  assert.deepEqual(ChatCore.callTimelineInfo({ direction: 'INBOUND', status: 'MISSED' }), {
+    direction: 'INBOUND',
+    outbound: false,
+    icon: 'phone-incoming',
+    title: 'Ligação de voz',
+    subtitle: 'Não atendida',
+    statusClass: 'missed'
+  });
+  assert.equal(ChatCore.callTimelineInfo({ direction: 'OUTBOUND', status: 'ENDED', durationSeconds: 75 }).subtitle, 'Duração 01:15');
+});
+
 test('deduplica template pela wamid quando a atualização chega com outro id', () => {
   const messages = ChatCore.mergeById(
     [{ id: 1, wamid: 'wamid.template', type: 'template', status: 'SENT' }],

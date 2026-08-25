@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="/transporte-dashboard.css?v=20260810-3">
-  <link rel="stylesheet" href="/chat.css?v=20260820-1">
+  <link rel="stylesheet" href="/chat.css?v=20260825-4">
 
   <style>
     :root {
@@ -12468,6 +12468,9 @@
             <button type="button" data-chat-assignment="MINE">Meus atendimentos</button>
             <button type="button" data-chat-assignment="UNASSIGNED">Sem atendente</button>
             <button class="is-active" type="button" data-chat-assignment="ALL">Todos</button>
+            <button class="chat-call-history-open" id="chat-call-history-open" type="button" aria-label="Abrir histórico de ligações" title="Histórico de ligações">
+              <i data-lucide="phone-call" aria-hidden="true"></i>
+            </button>
           </div>
           <div class="chat-conversation-list" id="chat-conversation-list" aria-live="polite"></div>
           <button class="chat-load-more" id="chat-load-more" type="button" hidden>Carregar mais</button>
@@ -12492,6 +12495,9 @@
               <button class="chat-assignment-button" id="chat-claim" type="button">Assumir</button>
               <button class="chat-assignment-button" id="chat-transfer" type="button" hidden>Transferir</button>
               <button class="chat-assignment-button is-light" id="chat-release" type="button" hidden>Liberar</button>
+              <button class="chat-call-start" id="chat-call-start" type="button" aria-label="Ligar pelo WhatsApp" title="Ligar pelo WhatsApp" hidden>
+                <i data-lucide="phone" aria-hidden="true"></i>
+              </button>
               <button class="chat-details-toggle" id="chat-details-toggle" type="button" aria-label="Mostrar dados do contato" aria-expanded="true">
                 <i data-lucide="panel-right" aria-hidden="true"></i>
               </button>
@@ -12574,10 +12580,45 @@
               <button type="button" class="chat-link-partner-button" data-chat-link-partner><i data-lucide="link" aria-hidden="true"></i>Vincular parceiro</button>
             </div>
             <div class="chat-future-data chat-bitrix-data" id="chat-bitrix-data"></div>
+            <div class="chat-future-data chat-call-history" id="chat-call-history"></div>
           </div>
         </aside>
       </section>
     </main>
+  </section>
+
+  <section class="whatsapp-call-overlay" id="whatsapp-call-overlay" hidden>
+    <div class="whatsapp-call-panel" id="whatsapp-call-panel" data-status="IDLE" role="dialog" aria-modal="true" aria-labelledby="whatsapp-call-title">
+      <button class="whatsapp-call-close" id="whatsapp-call-close" type="button" aria-label="Fechar chamada" hidden>
+        <i data-lucide="x" aria-hidden="true"></i>
+      </button>
+      <span class="whatsapp-call-avatar"><i data-lucide="phone-call" aria-hidden="true"></i></span>
+      <p class="whatsapp-call-eyebrow">WHATSAPP</p>
+      <h2 id="whatsapp-call-title">Chamada pelo WhatsApp</h2>
+      <strong id="whatsapp-call-contact">Contato do WhatsApp</strong>
+      <span id="whatsapp-call-phone"></span>
+      <p class="whatsapp-call-status" id="whatsapp-call-status">Chamada recebida</p>
+      <time id="whatsapp-call-duration">00:00</time>
+      <div class="whatsapp-call-actions">
+        <button class="is-danger" id="whatsapp-call-reject" type="button"><i data-lucide="phone-off" aria-hidden="true"></i><span>Recusar</span></button>
+        <button class="is-primary" id="whatsapp-call-accept" type="button"><i data-lucide="phone" aria-hidden="true"></i><span>Atender</span></button>
+        <button id="whatsapp-call-mute" type="button" hidden><i data-lucide="mic" aria-hidden="true"></i><span>Silenciar</span></button>
+        <button class="is-danger" id="whatsapp-call-end" type="button" hidden><i data-lucide="phone-off" aria-hidden="true"></i><span>Encerrar</span></button>
+        <button class="is-primary is-wide" id="whatsapp-call-permission" type="button" hidden><i data-lucide="message-circle" aria-hidden="true"></i><span>Solicitar autorização</span></button>
+      </div>
+      <audio id="whatsapp-call-remote-audio" autoplay playsinline hidden></audio>
+    </div>
+  </section>
+
+  <section class="whatsapp-call-history-modal" id="whatsapp-call-history-modal" hidden>
+    <div class="whatsapp-call-history-dialog" role="dialog" aria-modal="true" aria-labelledby="whatsapp-call-history-title">
+      <header>
+        <span><i data-lucide="phone-call" aria-hidden="true"></i></span>
+        <div><small>ATENDIMENTO</small><h2 id="whatsapp-call-history-title">Histórico de ligações</h2></div>
+        <button id="whatsapp-call-history-close" type="button" aria-label="Fechar histórico"><i data-lucide="x" aria-hidden="true"></i></button>
+      </header>
+      <div class="whatsapp-call-history-global" id="whatsapp-call-history-global" aria-live="polite"></div>
+    </div>
   </section>
 
   <section class="chat-media-modal" id="chat-media-modal" hidden>
@@ -12851,8 +12892,10 @@
   <script src="vendas-dashboard.js?v=20260820-1"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="transporte-dashboard.js?v=20260820-1"></script>
-  <script src="chat-core.js?v=20260820-1"></script>
-  <script src="chat.js?v=20260820-1"></script>
+  <script src="chat-core.js?v=20260825-1"></script>
+  <script src="whatsapp-call-core.js?v=20260825-2"></script>
+  <script src="whatsapp-call.js?v=20260825-2"></script>
+  <script src="chat.js?v=20260825-2"></script>
   <script src="app.js?v=20260805-5"></script>
 </body>
 </html>

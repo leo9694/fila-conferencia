@@ -57,6 +57,42 @@ test('aceita WAMID e bloqueia reações inválidas antes de chamar a integraçã
   assert.equal(chatRouter._internals.reacaoValida('texto\nindevido'), '');
 });
 
+test('valida identificadores de chamada e monta somente a identidade pública do atendente', () => {
+  assert.equal(chatRouter._internals.idChamadaWhatsapp('call_abc-123'), 'call_abc-123');
+  assert.equal(chatRouter._internals.idChamadaWhatsapp('../ chamada'), '');
+  assert.equal(chatRouter._internals.idClienteChamada('device-123', { id: 72 }), 'device-123');
+  assert.equal(chatRouter._internals.idClienteChamada('curto', { id: 72 }), 'legacy:72');
+  assert.equal(chatRouter._internals.atendenteChamada({ id: 72 }, 'device-123').clientId, 'device-123');
+  assert.deepEqual(chatRouter._internals.agenteChamada({
+    id: 72,
+    name: 'Leonardo',
+    director: true,
+    token: 'nao-deve-sair'
+  }), { id: '72', name: 'Leonardo', director: true });
+});
+
+test('garante posse exclusiva da chamada ao primeiro atendente', () => {
+  const controle = chatRouter._internals.criarControleChamadas();
+  const primeiroDispositivo = { id: 72, name: 'Leonardo', clientId: 'device-a' };
+  const primeiro = controle.reivindicar('call-1', 12, primeiroDispositivo);
+  assert.equal(primeiro.criado, true);
+  assert.equal(controle.reivindicar('call-1', 12, primeiroDispositivo).criado, false);
+  assert.throws(
+    () => controle.reivindicar('call-1', 12, { id: 72, name: 'Leonardo', clientId: 'device-b' }),
+    (error) => error.status === 409 && /Leonardo/i.test(error.message)
+  );
+  assert.throws(
+    () => controle.reivindicar('call-1', 12, { id: 81, name: 'Outro', clientId: 'device-c' }),
+    (error) => error.status === 409 && /Leonardo/i.test(error.message)
+  );
+  assert.throws(
+    () => controle.exigir('call-1', { id: 81, name: 'Outro', director: true, clientId: 'device-c' }),
+    (error) => error.status === 409
+  );
+  assert.equal(controle.liberar('call-1', { id: 72, clientId: 'device-b' }), false);
+  assert.equal(controle.liberar('call-1', primeiroDispositivo), true);
+});
+
 test('trata números móveis da Meta com e sem o nono dígito como o mesmo WhatsApp', () => {
   assert.equal(chatRouter._internals.identidadeTelefoneWhatsapp('5566999633482'), '556699633482');
   assert.equal(chatRouter._internals.identidadeTelefoneWhatsapp('556699633482'), '556699633482');

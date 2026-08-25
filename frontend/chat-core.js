@@ -149,6 +149,73 @@
     });
   }
 
+  function normalizeCalls(payload) {
+    if (Array.isArray(payload)) return payload;
+    const direct = payload?.calls || payload?.items || payload?.data;
+    if (Array.isArray(direct)) return direct;
+    return direct?.calls || direct?.items || direct?.data || [];
+  }
+
+  function callTimestamp(call = {}) {
+    return call.startedAt || call.createdAt || call.answeredAt || call.endedAt || call.updatedAt || '';
+  }
+
+  function formatCallDuration(seconds) {
+    const total = Math.max(0, Math.floor(Number(seconds) || 0));
+    const minutes = Math.floor(total / 60);
+    return `${String(minutes).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+  }
+
+  function callTimelineInfo(call = {}) {
+    const direction = String(call.direction || '').toUpperCase();
+    const status = String(call.status || '').toUpperCase();
+    const duration = Number(call.durationSeconds || 0);
+    let subtitle = direction === 'OUTBOUND' ? 'Chamada realizada' : 'Chamada recebida';
+    let statusClass = 'completed';
+    if (['MISSED', 'NO_ANSWER', 'UNANSWERED'].includes(status)) {
+      subtitle = 'Não atendida';
+      statusClass = 'missed';
+    } else if (status === 'REJECTED') {
+      subtitle = 'Recusada';
+      statusClass = 'rejected';
+    } else if (status === 'FAILED') {
+      subtitle = 'Falha na ligação';
+      statusClass = 'failed';
+    } else if (['RINGING', 'CONNECTING'].includes(status)) {
+      subtitle = 'Chamando…';
+      statusClass = 'active';
+    } else if (status === 'ACTIVE') {
+      subtitle = 'Em andamento';
+      statusClass = 'active';
+    } else if (duration > 0) {
+      subtitle = `Duração ${formatCallDuration(duration)}`;
+    } else if (['ENDED', 'COMPLETED', 'TERMINATED'].includes(status)) {
+      subtitle = 'Encerrada';
+    }
+    return {
+      direction,
+      outbound: direction === 'OUTBOUND',
+      icon: direction === 'OUTBOUND' ? 'phone-outgoing' : 'phone-incoming',
+      title: 'Ligação de voz',
+      subtitle,
+      statusClass
+    };
+  }
+
+  function mergeTimeline(messages = [], calls = []) {
+    const timestamp = (entry) => {
+      const value = entry.kind === 'call'
+        ? callTimestamp(entry.value)
+        : (entry.value?.messageTimestamp || entry.value?.createdAt || '');
+      const parsed = new Date(value).getTime();
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    return [
+      ...messages.map((value) => ({ kind: 'message', value })),
+      ...calls.map((value) => ({ kind: 'call', value }))
+    ].sort((left, right) => timestamp(left) - timestamp(right));
+  }
+
   function serviceWindow(conversation = {}) {
     return conversation.serviceWindow || conversation.metaWindow || {};
   }
@@ -291,9 +358,13 @@
     initials,
     interactiveReplyText,
     isLoadedConversation,
+    callTimelineInfo,
+    callTimestamp,
     mergeById,
+    mergeTimeline,
     mergeConversationPages,
     messagePreview,
+    normalizeCalls,
     normalizePhone,
     reactionInfo,
     reactionTarget,

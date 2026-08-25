@@ -75,7 +75,7 @@
 
   const state = {
     conversations: [], conversation: null, conversationId: null, page: 1, totalPages: 1,
-    status: '', search: '', messages: [], messagePage: 1, messageTotalPages: 1,
+    status: '', search: '', messages: [], calls: [], messagePage: 1, messageTotalPages: 1,
     loading: false, loadingOlder: false, sending: false, initialized: false, eventSource: null,
     mediaUrls: new Map(), templates: [], selectedTemplate: null,
     autoMediaQueue: Promise.resolve(), autoMediaDisabled: false,
@@ -86,7 +86,7 @@
     linkPartner: null, linkPartnerSearchToken: 0, pipelines: [], pipelinesPromise: null,
     mediaZoom: 1, replyingTo: null, conversationCache: new Map(),
     messagesRenderFrame: null, messagesRenderPreserveScroll: true,
-    conversationsRenderFrame: null, uiCacheTimer: null
+    conversationsRenderFrame: null, uiCacheTimer: null, callsRefreshTimer: null
   };
 
   const CONVERSATION_CACHE_LIMIT = 6;
@@ -143,10 +143,13 @@
       if (menu) menu.hidden = payload?.permitido !== true;
       if (refs.settingsOpen) refs.settingsOpen.hidden = payload?.diretor !== true;
       if (refs.agentFilterToggle) refs.agentFilterToggle.hidden = payload?.diretor !== true;
+      if (payload?.permitido === true) window.whatsappCallController?.start(payload.perfil);
+      else window.whatsappCallController?.stop();
       return payload?.permitido === true;
     } catch {
       state.access = null; state.profile = null;
       if (menu) menu.hidden = true;
+      window.whatsappCallController?.stop();
       return false;
     }
   }
@@ -361,6 +364,7 @@
           id: activeId,
           conversation: state.conversation,
           messages: state.messages.slice(-Math.min(CACHED_MESSAGES_LIMIT, 40)),
+          calls: state.calls.slice(-40),
           messagePage: state.messagePage,
           messageTotalPages: state.messageTotalPages
         }
@@ -397,6 +401,7 @@
         state.conversationCache.set(String(cached.active.id), {
           conversation: cached.active.conversation,
           messages: Array.isArray(cached.active.messages) ? cached.active.messages : [],
+          calls: Array.isArray(cached.active.calls) ? cached.active.calls : [],
           messagePage: Number(cached.active.messagePage || 1),
           messageTotalPages: Number(cached.active.messageTotalPages || 1)
         });
@@ -415,6 +420,7 @@
     state.conversationCache.set(id, {
       conversation: state.conversation,
       messages: state.messages.slice(-CACHED_MESSAGES_LIMIT),
+      calls: state.calls.slice(-100),
       messagePage: state.messagePage,
       messageTotalPages: state.messageTotalPages
     });
@@ -708,10 +714,21 @@
     </div>`;
   }
 
+  function renderCallTimelineItem(call) {
+    const info = Core.callTimelineInfo(call);
+    return `<article class="chat-call-event ${info.outbound ? 'is-outbound' : 'is-inbound'}">
+      <div class="chat-call-event-card is-${escapeHtml(info.statusClass)}">
+        <span class="chat-call-event-icon"><i data-lucide="${escapeHtml(info.icon)}" aria-hidden="true"></i></span>
+        <span class="chat-call-event-copy"><strong>${escapeHtml(info.title)}</strong><small>${escapeHtml(info.subtitle)}</small></span>
+        <time>${escapeHtml(messageTime({ messageTimestamp: Core.callTimestamp(call) }))}</time>
+      </div>
+    </article>`;
+  }
+
   function renderMessages({ preserveScroll = false } = {}) {
     const oldHeight = refs.messages.scrollHeight;
     const oldTop = refs.messages.scrollTop;
-    if (!state.messages.length) {
+    if (!state.messages.length && !state.calls.length) {
       refs.messages.innerHTML = `${renderMetaSessionNotice()}<div class="chat-message-empty">Nenhuma mensagem nesta conversa.</div>`;
       window.lucide?.createIcons();
       return;
@@ -730,7 +747,10 @@
       const reaction = Core.reactionInfo(message);
       return !reaction || !messageKeys.has(reaction.messageId);
     });
-    refs.messages.innerHTML = `${state.messagePage < state.messageTotalPages ? '<div class="chat-history-loader" aria-hidden="true"><span></span><span></span><span></span></div>' : ''}${renderMetaSessionNotice()}${messages.map((message) => {
+    const timeline = Core.mergeTimeline(messages, state.calls);
+    refs.messages.innerHTML = `${state.messagePage < state.messageTotalPages ? '<div class="chat-history-loader" aria-hidden="true"><span></span><span></span><span></span></div>' : ''}${renderMetaSessionNotice()}${timeline.map((entry) => {
+      if (entry.kind === 'call') return renderCallTimelineItem(entry.value);
+      const message = entry.value;
       const outbound = String(message.direction).toUpperCase() === 'OUTBOUND';
       const status = Core.statusSymbol(message.status);
       const reactions = [...new Set([message.id, message.wamid, message.messageId, messageReactionTarget(message)]
@@ -1006,6 +1026,7 @@
     if (!agent) notice.textContent = 'Conversa sem atendente. Assuma para responder.';
     else if (!owner) notice.textContent = `Atendimento de ${agent.name}. Somente esse atendente pode responder.`;
     updateComposer();
+    window.whatsappCallController?.setConversation(item);
     window.lucide?.createIcons();
   }
 
@@ -1026,6 +1047,8 @@
     state.conversationId = null;
     state.conversation = null;
     state.messages = [];
+    state.calls = [];
+    window.whatsappCallController?.setConversation(null);
     refs.active.hidden = true;
     refs.empty.hidden = false;
     renderConversations();
@@ -1051,6 +1074,7 @@
     const cached = state.conversationCache.get(requestedId);
     state.conversation = cached?.conversation || state.conversations.find((item) => String(item.id) === requestedId) || null;
     state.messages = cached?.messages || [];
+    state.calls = cached?.calls || [];
     state.messagePage = cached
       ? Math.min(cached.messagePage || 1, Math.max(1, Math.ceil(cached.messages.length / MESSAGE_PAGE_SIZE)))
       : 1;
@@ -1059,16 +1083,18 @@
     renderConversations();
     if (state.conversation) renderConversationDetails();
     refs.workspace.classList.add('has-conversation'); refs.empty.hidden = true; refs.active.hidden = false;
-    if (state.messages.length) renderMessages();
+    if (state.messages.length || state.calls.length) renderMessages();
     else refs.messages.innerHTML = '<div class="chat-messages-loading"><span></span><span></span><span></span></div>';
     try {
-      const [conversation, payload] = await Promise.all([
+      const [conversation, payload, callsPayload] = await Promise.all([
         api(`/conversations/${encodeURIComponent(requestedId)}`),
-        api(`/conversations/${encodeURIComponent(requestedId)}/messages?page=1&limit=${MESSAGE_PAGE_SIZE}`)
+        api(`/conversations/${encodeURIComponent(requestedId)}/messages?page=1&limit=${MESSAGE_PAGE_SIZE}`),
+        api(`/conversations/${encodeURIComponent(requestedId)}/calls?page=1&limit=100`).catch(() => null)
       ]);
       if (token !== state.activeLoadToken || requestedId !== String(state.conversationId)) return;
       state.conversation = conversation;
       state.messages = Core.mergeById(Array.isArray(payload?.data) ? payload.data : [], state.messages);
+      if (callsPayload !== null) state.calls = Core.normalizeCalls(callsPayload);
       state.messageTotalPages = Number(payload?.pagination?.totalPages || 1);
       renderConversationDetails(); renderMessages();
       cacheActiveConversation();
@@ -1374,8 +1400,26 @@
     } catch {}
   }
 
+  async function refreshActiveCalls(id) {
+    try {
+      const payload = await api(`/conversations/${encodeURIComponent(id)}/calls?page=1&limit=100`);
+      if (String(id) !== String(state.conversationId)) return;
+      state.calls = Core.normalizeCalls(payload);
+      scheduleMessagesRender({ preserveScroll: true });
+      cacheActiveConversation();
+    } catch {}
+  }
+
+  function scheduleActiveCallsRefresh(id) {
+    clearTimeout(state.callsRefreshTimer);
+    state.callsRefreshTimer = setTimeout(() => refreshActiveCalls(id), 180);
+  }
+
   function handleRealtime(event, payload = {}) {
-    if (event === 'message:new') {
+    if (event.startsWith('call:')) {
+      const id = String(payload.conversationId || payload.call?.conversationId || payload.conversation?.id || '');
+      if (id && id === String(state.conversationId)) scheduleActiveCallsRefresh(id);
+    } else if (event === 'message:new') {
       const id = String(payload.conversationId || payload.message?.conversationId || '');
       if (id === String(state.conversationId)) {
         const shouldScroll = nearBottom();
@@ -1418,7 +1462,8 @@
   function connectRealtime() {
     state.eventSource?.close();
     const source = new EventSource('/api/chat/events'); state.eventSource = source;
-    ['conversation:new', 'conversation:updated', 'message:new', 'message:status', 'conversation:read', 'conversation:status', 'conversation:assignment', 'conversation:deleted'].forEach((event) => {
+    ['conversation:new', 'conversation:updated', 'message:new', 'message:status', 'conversation:read', 'conversation:status', 'conversation:assignment', 'conversation:deleted',
+      'call:incoming', 'call:claimed', 'call:ringing', 'call:connecting', 'call:active', 'call:ended', 'call:failed', 'call:rejected', 'call:updated'].forEach((event) => {
       source.addEventListener(event, (message) => { try { handleRealtime(event, JSON.parse(message.data)); } catch {} });
     });
     source.addEventListener('connection', (message) => { try { updateRealtime(JSON.parse(message.data)); } catch {} });
@@ -2374,6 +2419,7 @@
   }
 
   function encerrar() {
+    window.whatsappCallController?.stop();
     state.eventSource?.close(); state.eventSource = null; clearMediaUrls();
     if (state.recorder?.state === 'recording') stopRecording(true);
     closeMediaModal();

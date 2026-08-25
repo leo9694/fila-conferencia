@@ -10,7 +10,16 @@ const SOCKET_EVENTS = [
   'conversation:read',
   'conversation:status',
   'conversation:assignment',
-  'conversation:deleted'
+  'conversation:deleted',
+  'call:incoming',
+  'call:ringing',
+  'call:connecting',
+  'call:active',
+  'call:rejected',
+  'call:ended',
+  'call:failed',
+  'call:updated',
+  'call:signal'
 ];
 
 function baseUrl() {
@@ -117,6 +126,30 @@ async function updateConversationStatus(id, status) {
 
 async function updateAssignment(id, payload) {
   return request(`/api/conversations/${encodeURIComponent(id)}/assignment`, json('POST', payload));
+}
+
+async function getCalls(params) {
+  return request(`/api/calls${queryString(params)}`);
+}
+
+async function getConversationCalls(id, params) {
+  return request(`/api/conversations/${encodeURIComponent(id)}/calls${queryString(params)}`);
+}
+
+async function getCallPermission(id, params) {
+  return request(`/api/conversations/${encodeURIComponent(id)}/calls/permission${queryString(params)}`);
+}
+
+async function requestCallPermission(id, payload) {
+  return request(`/api/conversations/${encodeURIComponent(id)}/calls/permission`, json('POST', payload));
+}
+
+async function createCall(id, payload) {
+  return request(`/api/conversations/${encodeURIComponent(id)}/calls`, json('POST', payload));
+}
+
+async function updateCall(callId, action, payload) {
+  return request(`/api/calls/${encodeURIComponent(callId)}/${encodeURIComponent(action)}`, json('POST', payload));
 }
 
 async function deleteConversation(id) {
@@ -233,21 +266,27 @@ function createRealtimeBridge({ ioFactory } = {}) {
 
 module.exports = {
   createRealtimeBridge,
+  createCall,
   createConversation,
   deleteConversation,
   getConversation,
+  getConversationCalls,
   getConversations,
+  getCallPermission,
+  getCalls,
   getMedia,
   getMessages,
   getTemplate,
   getTemplates,
   markConversationRead,
   previewTemplate,
+  requestCallPermission,
   sendMedia,
   sendReaction,
   sendTemplate,
   sendTextMessage,
   updateAssignment,
+  updateCall,
   updateConversationStatus,
   _internals: { baseUrl, queryString, uploadMime }
 };
