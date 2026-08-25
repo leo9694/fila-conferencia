@@ -27,7 +27,7 @@
   const state = {
     status: 'IDLE', call: null, conversation: null, profile: null, source: null, client: null,
     signal: null, timer: null, startedAt: 0, ringtone: null, reconnecting: false,
-    transfer: null, outgoingTransfer: null,
+    transfer: null, outgoingTransfer: null, permission: null,
     clientId: createCallClientId()
   };
 
@@ -106,11 +106,12 @@
     state.status = status;
     refs.panel.dataset.status = status;
     refs.status.textContent = state.reconnecting ? 'Reconectando ao servidor...' : text;
-    refs.accept.hidden = status !== 'RINGING';
-    refs.reject.hidden = status !== 'RINGING';
-    refs.mute.hidden = !['CONNECTING', 'ACTIVE'].includes(status);
-    refs.transfer.hidden = status !== 'ACTIVE';
-    refs.end.hidden = !['CONNECTING', 'ACTIVE'].includes(status);
+    const controls = Core.callControls(status);
+    refs.accept.hidden = !controls.accept;
+    refs.reject.hidden = !controls.reject;
+    refs.mute.hidden = !controls.mute;
+    refs.transfer.hidden = !controls.transfer;
+    refs.end.hidden = !controls.end;
     refs.permission.hidden = status !== 'PERMISSION';
     refs.close.hidden = !['PERMISSION', 'FAILED', 'ENDED'].includes(status);
   }
@@ -203,13 +204,19 @@
     try {
       state.client = makeClient();
       if (state.transfer) {
+        setStatus('TRANSFER_CONNECTING', 'Aceitando transferência...');
+        await state.client.prepareLocalMedia();
         await api(`/calls/${encodeURIComponent(callId(state.call))}/transfer/${encodeURIComponent(state.transfer.transferId)}/accept`, jsonBody({}));
         await state.client.connectGateway({ callId: callId(state.call), transferId: state.transfer.transferId });
-        setStatus('ACTIVE', 'Chamada transferida');
-        startTimer(state.call.answeredAt || Date.now());
+        if (state.status === 'TRANSFER_CONNECTING') {
+          refs.status.textContent = 'Áudio conectado. Finalizando transferência...';
+        }
       } else {
         await state.client.acceptIncoming({ callId: callId(state.call), conversationId: conversationId(state.call) });
-        setStatus('CONNECTING', 'Aguardando conexão...');
+        if (state.status === 'CONNECTING') {
+          setStatus('ACTIVE', 'Chamada em andamento');
+          startTimer(state.call?.answeredAt || Date.now());
+        }
       }
     } catch (error) {
       if (state.transfer) {
@@ -249,10 +256,11 @@
   }
 
   async function openTransferPicker() {
-    if (!state.call || state.status !== 'ACTIVE') return;
+    if (!state.call || !['ACTIVE', 'TRANSFER_PENDING'].includes(state.status)) return;
     if (state.outgoingTransfer) {
       try {
         await api(`/calls/${encodeURIComponent(callId(state.call))}/transfer/${encodeURIComponent(state.outgoingTransfer.transferId)}/cancel`, jsonBody({}));
+        refs.status.textContent = 'Cancelando transferência...';
       } catch (error) { toast(error.message); }
       return;
     }
@@ -260,12 +268,17 @@
     refs.transferAgent.innerHTML = '<option value="">Carregando atendentes...</option>';
     try {
       const payload = await api('/call-agents');
-      const agents = (payload?.data || payload || []).filter((item) => item.availability === 'AVAILABLE'
-        && String(item.id) !== String(state.profile?.id || state.profile?.codUsu || ''));
+      const agents = Core.normalizeAgentList(payload)
+        .filter((item) => String(item.id) !== String(state.profile?.id || state.profile?.codUsu || ''));
       refs.transferAgent.innerHTML = agents.length
-        ? agents.map((item) => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)}</option>`).join('')
+        ? agents.map((item) => {
+          const availability = Core.agentAvailability(item);
+          return `<option value="${escapeHtml(item.id)}"${availability.available ? '' : ' disabled'}>${escapeHtml(item.name)} · ${escapeHtml(availability.label)}</option>`;
+        }).join('')
         : '<option value="">Nenhum atendente disponível</option>';
-      refs.transferSend.disabled = !agents.length;
+      const firstAvailable = agents.find((item) => Core.agentAvailability(item).available);
+      refs.transferAgent.value = firstAvailable ? String(firstAvailable.id) : '';
+      refs.transferSend.disabled = !firstAvailable;
     } catch (error) {
       refs.transferAgent.innerHTML = '<option value="">Falha ao carregar</option>';
       refs.transferSend.disabled = true;
@@ -281,7 +294,7 @@
       state.outgoingTransfer = await api(`/calls/${encodeURIComponent(callId(state.call))}/transfer`, jsonBody({ targetAgentId }));
       refs.transferPicker.hidden = true;
       refs.transfer.innerHTML = '<i data-lucide="x" aria-hidden="true"></i><span>Cancelar transferência</span>';
-      refs.status.textContent = `Aguardando ${state.outgoingTransfer.toAgent?.name || 'atendente'} aceitar...`;
+      setStatus('TRANSFER_PENDING', `Aguardando ${state.outgoingTransfer.toAgent?.name || 'atendente'} aceitar...`);
       window.lucide?.createIcons();
     } catch (error) {
       refs.transferSend.disabled = false;
@@ -311,6 +324,31 @@
       || payload.permission?.start_call?.can_perform_action === true;
   }
 
+  function applyPermission(payload = {}, { notify = false } = {}) {
+    if (!state.conversation?.id || Number(payload.conversationId) !== Number(state.conversation.id)) return;
+    state.permission = payload;
+    const status = String(payload.status || '').toUpperCase();
+    const allowed = permissionAllowed(payload);
+    refs.start.hidden = false;
+    refs.start.disabled = state.status !== 'IDLE' && state.status !== 'PERMISSION';
+    refs.start.title = allowed ? 'Ligar pelo WhatsApp' : 'Solicitar permissão para ligar';
+    if (allowed) {
+      if (state.status === 'PERMISSION') cleanup();
+      refs.start.disabled = false;
+      if (notify) toast('Ligação autorizada. Você já pode ligar.');
+      return;
+    }
+    if (state.status === 'PERMISSION') {
+      refs.status.textContent = status === 'PENDING'
+        ? 'Solicitação enviada. Aguarde a autorização do cliente.'
+        : status === 'EXPIRED' ? 'A autorização expirou. Solicite novamente.'
+          : 'O cliente não autorizou a ligação.';
+    }
+    if (notify && ['DENIED', 'EXPIRED', 'REVOKED'].includes(status)) {
+      toast(status === 'EXPIRED' ? 'A autorização de ligação expirou.' : 'Ligação não autorizada pelo cliente.');
+    }
+  }
+
   async function startOutbound(conversation) {
     if (!conversation?.id || state.status !== 'IDLE') {
       if (state.status !== 'IDLE') toast('Já existe uma chamada em andamento.');
@@ -318,7 +356,8 @@
     }
     state.conversation = conversation;
     try {
-      const permission = await api(`/conversations/${encodeURIComponent(conversation.id)}/calls/permission`);
+      const permission = await api(`/conversations/${encodeURIComponent(conversation.id)}/call-permission`);
+      applyPermission(permission);
       if (!permissionAllowed(permission)) {
         openOverlay(conversation, 'PERMISSION');
         refs.title.textContent = 'Permissão para ligar';
@@ -335,9 +374,10 @@
     if (!state.conversation?.id) return;
     refs.permission.disabled = true;
     try {
-      await api(`/conversations/${encodeURIComponent(state.conversation.id)}/calls/permission`, jsonBody({
+      const permission = await api(`/conversations/${encodeURIComponent(state.conversation.id)}/calls/permission`, jsonBody({
         body: 'Podemos ligar para ajudar no seu atendimento?'
       }));
+      applyPermission(permission);
       refs.status.textContent = 'Solicitação enviada. Aguarde a autorização do cliente.';
     } catch (error) {
       refs.status.textContent = error.message || 'Não foi possível solicitar permissão para ligar.';
@@ -364,6 +404,18 @@
 
   function handleEvent(event, payload = {}) {
     const incomingId = callId(payload);
+    if (event === 'call:permission:updated') {
+      applyPermission(payload, { notify: true });
+      return;
+    }
+    if (event === 'call:outgoing') {
+      if (conversationId(payload) !== Number(state.conversation?.id) || state.call) return;
+      state.call = payload.call || payload;
+      openOverlay(state.call, 'CONNECTING');
+      refs.title.textContent = 'Ligação pelo WhatsApp';
+      refs.status.textContent = 'Chamando...';
+      return;
+    }
     if (event === 'call:transfer:incoming') {
       if (state.status !== 'IDLE') {
         toast('Uma transferência chegou, mas você já está em outra chamada.');
@@ -385,7 +437,7 @@
     }
     if (event === 'call:transfer:accepted') {
       if (state.outgoingTransfer?.transferId === payload.transferId) {
-        refs.status.textContent = `${payload.toAgent?.name || 'Atendente'} aceitou; conectando o áudio...`;
+        setStatus('TRANSFER_PENDING', `${payload.toAgent?.name || 'Atendente'} aceitou; conectando o áudio...`);
       }
       return;
     }
@@ -400,7 +452,7 @@
         state.outgoingTransfer = null;
         refs.transferPicker.hidden = true;
         refs.transfer.innerHTML = '<i data-lucide="phone-forwarded" aria-hidden="true"></i><span>Transferir</span>';
-        refs.status.textContent = 'Chamada em andamento';
+        setStatus('ACTIVE', 'Chamada em andamento');
         window.lucide?.createIcons();
         toast(event === 'call:transfer:rejected' ? 'O atendente recusou a transferência.' : 'A transferência foi encerrada.');
       }
@@ -410,6 +462,7 @@
       if (state.transfer?.transferId !== payload.transferId) return;
       state.transfer = null;
       setStatus('ACTIVE', 'Chamada transferida');
+      startTimer(payload.call?.answeredAt || payload.answeredAt || state.call?.answeredAt || Date.now());
       return;
     }
     if (event === 'call:incoming') {
@@ -479,7 +532,7 @@
     state.source?.close();
     const source = new EventSource('/api/chat/events');
     state.source = source;
-    ['call:incoming', 'call:claimed', 'call:ringing', 'call:connecting', 'call:active', 'call:ended', 'call:failed', 'call:rejected', 'call:updated', 'call:signal',
+    ['call:permission:updated', 'call:outgoing', 'call:incoming', 'call:claimed', 'call:ringing', 'call:connecting', 'call:active', 'call:ended', 'call:failed', 'call:rejected', 'call:updated', 'call:signal',
       'call:transfer:incoming', 'call:transfer:accepted', 'call:transfer:rejected', 'call:transfer:cancelled',
       'call:transfer:expired', 'call:transfer:completed', 'call:transferred:away']
       .forEach((event) => source.addEventListener(event, (message) => {
@@ -487,7 +540,12 @@
       }));
     source.addEventListener('connection', () => {
       state.reconnecting = false;
-      if (state.status !== 'IDLE') setStatus(state.status, state.status === 'ACTIVE' ? 'Chamada em andamento' : 'Conectando áudio...');
+      if (state.status !== 'IDLE') {
+        const text = state.status === 'ACTIVE' ? 'Chamada em andamento'
+          : state.status === 'TRANSFER_PENDING' ? 'Transferência pendente'
+            : state.status === 'TRANSFER_CONNECTING' ? 'Finalizando transferência...' : 'Conectando áudio...';
+        setStatus(state.status, text);
+      }
     });
     source.onerror = () => {
       state.reconnecting = true;
@@ -575,7 +633,8 @@
     if (!conversation?.id) return;
     loadHistory(conversation).catch(() => {});
     try {
-      const permission = await api(`/conversations/${encodeURIComponent(conversation.id)}/calls/permission`);
+      const permission = await api(`/conversations/${encodeURIComponent(conversation.id)}/call-permission`);
+      applyPermission(permission);
       refs.start.hidden = false;
       refs.start.disabled = state.status !== 'IDLE';
       refs.start.title = permissionAllowed(permission) ? 'Ligar pelo WhatsApp' : 'Solicitar permissão para ligar';

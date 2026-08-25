@@ -5,7 +5,52 @@
 }(typeof globalThis !== 'undefined' ? globalThis : this, function createWhatsAppCallCore() {
   'use strict';
 
+  const CALL_STATES = Object.freeze({
+    IDLE: 'IDLE',
+    RINGING: 'RINGING',
+    CONNECTING: 'CONNECTING',
+    ACTIVE: 'ACTIVE',
+    TRANSFER_PENDING: 'TRANSFER_PENDING',
+    TRANSFER_CONNECTING: 'TRANSFER_CONNECTING',
+    ENDING: 'ENDING',
+    ENDED: 'ENDED'
+  });
   const TERMINAL_STATES = new Set(['REJECTED', 'MISSED', 'BUSY', 'FAILED', 'ENDED']);
+
+  function callControls(status) {
+    const hasMedia = ['CONNECTING', 'ACTIVE', 'TRANSFER_PENDING', 'TRANSFER_CONNECTING'].includes(status);
+    return {
+      accept: status === 'RINGING',
+      reject: status === 'RINGING',
+      mute: hasMedia,
+      end: ['CONNECTING', 'ACTIVE', 'TRANSFER_PENDING'].includes(status),
+      transfer: ['ACTIVE', 'TRANSFER_PENDING'].includes(status)
+    };
+  }
+
+  function normalizeAgentList(payload) {
+    if (Array.isArray(payload)) return payload;
+    if (Array.isArray(payload?.data)) return payload.data;
+    if (Array.isArray(payload?.data?.agents)) return payload.data.agents;
+    if (Array.isArray(payload?.data?.items)) return payload.data.items;
+    if (Array.isArray(payload?.agents)) return payload.agents;
+    if (Array.isArray(payload?.items)) return payload.items;
+    return [];
+  }
+
+  function agentAvailability(agent = {}) {
+    const raw = String(agent.availability || agent.status || '').trim().toUpperCase();
+    if (agent.online === false || ['OFFLINE', 'DISCONNECTED'].includes(raw)) {
+      return { code: 'OFFLINE', label: 'offline', available: false };
+    }
+    if (agent.busy === true || ['BUSY', 'IN_CALL', 'UNAVAILABLE'].includes(raw)) {
+      return { code: 'BUSY', label: 'ocupado', available: false };
+    }
+    if (agent.online === true || ['AVAILABLE', 'ONLINE', 'IDLE'].includes(raw)) {
+      return { code: 'AVAILABLE', label: 'disponível', available: true };
+    }
+    return { code: raw || 'OFFLINE', label: raw ? raw.toLowerCase() : 'offline', available: false };
+  }
 
   function formatDuration(value) {
     const seconds = Math.max(0, Math.floor(Number(value) || 0));
@@ -124,9 +169,14 @@
       this.localStream.getTracks().forEach((track) => this.peer.addTrack(track, this.localStream));
     }
 
+    async prepareLocalMedia() {
+      if (!this.peer) await this.preparePeer();
+      if (!this.localStream) await this.captureMicrophone();
+      return this.localStream;
+    }
+
     async connectGateway({ callId, transferId }) {
-      await this.preparePeer();
-      await this.captureMicrophone();
+      await this.prepareLocalMedia();
       const offer = await this.peer.createOffer();
       await this.peer.setLocalDescription(offer);
       await waitForIceGathering(this.peer);
@@ -143,6 +193,7 @@
 
     async acceptIncoming({ callId, conversationId }) {
       try {
+        await this.prepareLocalMedia();
         await this.api.claim(callId, { conversationId });
         return await this.connectGateway({ callId });
       } catch (error) {
@@ -205,7 +256,8 @@
   }
 
   return {
-    TERMINAL_STATES, WhatsAppCallClient, eventUiStatus, formatDuration, sessionFrom,
+    CALL_STATES, TERMINAL_STATES, WhatsAppCallClient, agentAvailability, callControls,
+    eventUiStatus, formatDuration, normalizeAgentList, sessionFrom,
     retryMediaAction, waitForIceGathering, waitForPeerConnected
   };
 }));

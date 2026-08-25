@@ -1,7 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
-const { WhatsAppCallClient, eventUiStatus, formatDuration } = require('../frontend/whatsapp-call-core');
+const {
+  WhatsAppCallClient, agentAvailability, callControls, eventUiStatus, formatDuration, normalizeAgentList
+} = require('../frontend/whatsapp-call-core');
 
 class PeerMock {
   constructor() {
@@ -75,4 +77,55 @@ test('mantém botões de atender e recusar durante eventos de chamada recebida',
   assert.equal(eventUiStatus('call:connecting', 'RINGING', false), 'RINGING');
   assert.equal(eventUiStatus('call:ringing', 'CONNECTING', true), 'CONNECTING');
   assert.equal(eventUiStatus('call:active', 'RINGING', false), null);
+});
+
+test('mantém mídia e cancelamento disponíveis durante uma transferência pendente', () => {
+  assert.deepEqual(callControls('TRANSFER_PENDING'), {
+    accept: false, reject: false, mute: true, end: true, transfer: true
+  });
+  assert.deepEqual(callControls('TRANSFER_CONNECTING'), {
+    accept: false, reject: false, mute: true, end: false, transfer: false
+  });
+});
+
+test('normaliza disponibilidade sem oferecer atendentes ocupados ou offline', () => {
+  assert.deepEqual(agentAvailability({ availability: 'AVAILABLE' }), {
+    code: 'AVAILABLE', label: 'disponível', available: true
+  });
+  assert.equal(agentAvailability({ status: 'BUSY' }).available, false);
+  assert.equal(agentAvailability({ online: false, status: 'AVAILABLE' }).code, 'OFFLINE');
+});
+
+test('normaliza os envelopes aceitos pela listagem de atendentes', () => {
+  const agents = [{ id: 72 }];
+  assert.equal(normalizeAgentList(agents), agents);
+  assert.equal(normalizeAgentList({ data: agents }), agents);
+  assert.equal(normalizeAgentList({ agents }), agents);
+  assert.equal(normalizeAgentList({ data: { agents } }), agents);
+  assert.equal(normalizeAgentList({ data: { items: agents } }), agents);
+});
+
+test('prepara microfone antes de reivindicar uma chamada e reaproveita a mídia', async () => {
+  const item = fixture();
+  const order = [];
+  item.client.mediaDevices.getUserMedia = async () => {
+    order.push('microphone');
+    return item.stream;
+  };
+  item.api.claim = async (...args) => {
+    order.push('claim');
+    item.calls.push(['claim', ...args]);
+  };
+  await item.client.acceptIncoming({ callId: 'call-1', conversationId: 12 });
+  assert.deepEqual(order, ['microphone', 'claim']);
+  assert.equal(item.client.peer.tracks.length, 1);
+});
+
+test('propaga transferId ao conectar mídia e confirmar media-ready', async () => {
+  const item = fixture();
+  await item.client.prepareLocalMedia();
+  await item.client.connectGateway({ callId: 'call-1', transferId: 'transfer-1' });
+  assert.equal(item.calls[0][2].transferId, 'transfer-1');
+  assert.deepEqual(item.calls[1][2], { transferId: 'transfer-1' });
+  assert.equal(item.microphoneRequests(), 1);
 });

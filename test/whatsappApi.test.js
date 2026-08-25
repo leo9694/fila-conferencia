@@ -80,6 +80,25 @@ test('normaliza o envelope da API ao criar uma conversa', async () => {
   }
 });
 
+test('consulta a permissão pelo endpoint canônico da conversa', async () => {
+  const originalFetch = global.fetch;
+  let requestUrl = '';
+  global.fetch = async (url) => {
+    requestUrl = String(url);
+    return new Response(JSON.stringify({ success: true, data: { status: 'GRANTED', canCall: true } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    });
+  };
+  try {
+    const result = await whatsappApi.getCallPermission(44, { id: 7, name: 'Ana' });
+    assert.match(requestUrl, /\/api\/conversations\/44\/call-permission/);
+    assert.equal(result.data.canCall, true);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('bridge em tempo real assina eventos e encerra socket sem ouvintes', () => {
   const handlers = new Map();
   let disconnected = false;
@@ -95,24 +114,71 @@ test('bridge em tempo real assina eventos e encerra socket sem ouvintes', () => 
   const unsubscribe = bridge.subscribe((event) => received.push(event));
   handlers.get('message:new')({ conversationId: 9, message: { id: 2 } });
   assert.equal(received[0].event, 'message:new');
+  assert.equal(typeof handlers.get('call:permission:updated'), 'function');
+  assert.equal(typeof handlers.get('call:outgoing'), 'function');
   assert.deepEqual(options.transports, ['websocket', 'polling']);
   unsubscribe();
   assert.equal(disconnected, true);
 });
 
+test('bridge individual sem segredo desativa somente a telefonia sem derrubar o processo', () => {
+  const original = process.env.CALL_AGENT_AUTH_SECRET;
+  delete process.env.CALL_AGENT_AUTH_SECRET;
+  let connections = 0;
+  const states = [];
+  try {
+    const bridge = whatsappApi.createRealtimeBridge({
+      agent: { id: 42, name: 'Ana' },
+      ioFactory() {
+        connections += 1;
+        throw new Error('não deveria abrir o socket');
+      }
+    });
+    const unsubscribe = bridge.subscribe(() => {}, (state) => states.push(state));
+    assert.equal(connections, 0);
+    assert.equal(states.at(-1).state, 'disabled');
+    assert.match(states.at(-1).detail, /não configurada/i);
+    unsubscribe();
+  } finally {
+    if (original === undefined) delete process.env.CALL_AGENT_AUTH_SECRET;
+    else process.env.CALL_AGENT_AUTH_SECRET = original;
+  }
+});
+
+test('ausência do segredo identifica falha de configuração sem expor credenciais', () => {
+  const original = process.env.CALL_AGENT_AUTH_SECRET;
+  delete process.env.CALL_AGENT_AUTH_SECRET;
+  try {
+    assert.throws(
+      () => whatsappApi._internals.createAgentToken({ id: 42, name: 'Ana' }),
+      (error) => error.status === 503
+        && error.configurationError === true
+        && error.integrationCode === 'CALL_AGENT_AUTH_NOT_CONFIGURED'
+    );
+  } finally {
+    if (original === undefined) delete process.env.CALL_AGENT_AUTH_SECRET;
+    else process.env.CALL_AGENT_AUTH_SECRET = original;
+  }
+});
+
 test('token individual é curto, assinado e não expõe o segredo', () => {
   const original = process.env.CALL_AGENT_AUTH_SECRET;
+  const originalEnvironment = process.env.CALL_CLIENT_ENV;
   process.env.CALL_AGENT_AUTH_SECRET = 'segredo-de-teste-comprido-com-32-caracteres';
+  process.env.CALL_CLIENT_ENV = 'local';
   try {
     const token = whatsappApi._internals.createAgentToken({ id: 42, name: 'Ana' }, 1000);
     const [payload, signature] = token.split('.');
     const claims = JSON.parse(Buffer.from(payload, 'base64url').toString());
     assert.equal(claims.sub, '42');
+    assert.equal(claims.environment, 'local');
     assert.equal(claims.exp, 1090);
     assert.ok(signature);
     assert.doesNotMatch(token, /segredo-de-teste/);
   } finally {
     if (original === undefined) delete process.env.CALL_AGENT_AUTH_SECRET;
     else process.env.CALL_AGENT_AUTH_SECRET = original;
+    if (originalEnvironment === undefined) delete process.env.CALL_CLIENT_ENV;
+    else process.env.CALL_CLIENT_ENV = originalEnvironment;
   }
 });

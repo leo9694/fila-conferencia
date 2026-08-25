@@ -1382,7 +1382,13 @@
     const incoming = payload.conversation || payload;
     const id = String(incoming.id ?? payload.conversationId ?? '');
     upsertConversation(payload);
-    if (id && id === String(state.conversationId)) {
+    const relatedIds = new Set([
+      id,
+      payload.conversationId,
+      ...(incoming.relatedConversationIds || []),
+      ...(state.conversation?.relatedConversationIds || [])
+    ].filter(Boolean).map(String));
+    if (state.conversationId && relatedIds.has(String(state.conversationId))) {
       state.conversation = { ...(state.conversation || {}), ...incoming, ...(payload.serviceWindow ? { serviceWindow: payload.serviceWindow } : {}) };
       renderConversationDetails();
       scheduleMessagesRender({ preserveScroll: true });

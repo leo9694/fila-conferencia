@@ -12,6 +12,8 @@ const SOCKET_EVENTS = [
   'conversation:status',
   'conversation:assignment',
   'conversation:deleted',
+  'call:permission:updated',
+  'call:outgoing',
   'call:incoming',
   'call:ringing',
   'call:connecting',
@@ -39,9 +41,20 @@ function apiKey() {
   return String(process.env.WHATSAPP_INTERNAL_API_KEY || '').trim();
 }
 
+function callClientEnvironment() {
+  return String(process.env.CALL_CLIENT_ENV || 'production')
+    .trim().toLowerCase().replace(/[^a-z0-9_-]/g, '').slice(0, 32) || 'production';
+}
+
 function createAgentToken(agent, now = Math.floor(Date.now() / 1000)) {
   const secret = String(process.env.CALL_AGENT_AUTH_SECRET || '').trim();
-  if (secret.length < 32) throw new Error('Autenticação individual de chamadas não configurada.');
+  if (secret.length < 32) {
+    const error = new Error('Autenticação individual de chamadas não configurada.');
+    error.status = 503;
+    error.integrationCode = 'CALL_AGENT_AUTH_NOT_CONFIGURED';
+    error.configurationError = true;
+    throw error;
+  }
   if (!agent?.id || !agent?.name) throw new Error('Identidade do atendente ausente.');
   const payload = Buffer.from(JSON.stringify({
     iss: 'norte-sul-atendimento',
@@ -49,6 +62,7 @@ function createAgentToken(agent, now = Math.floor(Date.now() / 1000)) {
     sub: String(agent.id),
     name: String(agent.name),
     director: agent.director === true,
+    environment: callClientEnvironment(),
     iat: now,
     exp: now + 90
   })).toString('base64url');
@@ -165,7 +179,7 @@ async function getConversationCalls(id, params) {
 }
 
 async function getCallPermission(id, params, agent) {
-  return request(`/api/conversations/${encodeURIComponent(id)}/calls/permission${queryString(params)}`, { agent });
+  return request(`/api/conversations/${encodeURIComponent(id)}/call-permission${queryString(params)}`, { agent });
 }
 
 async function requestCallPermission(id, payload, agent) {
@@ -284,15 +298,23 @@ function createRealtimeBridge({ ioFactory, agent } = {}) {
 
   function connect() {
     if (socket || emitter.listenerCount('event') === 0) return;
+    const socketAuth = { apiKey: apiKey() };
+    if (agent) {
+      try {
+        socketAuth.agentToken = createAgentToken(agent);
+      } catch (error) {
+        // A ausência do segredo deve indisponibilizar somente a telefonia.
+        // Nunca deixe a callback interna do Socket.IO derrubar o processo.
+        emitState('disabled', error?.message || 'Telefonia não configurada.');
+        return;
+      }
+    }
     let io = ioFactory;
     if (!io) ({ io } = require('socket.io-client'));
     socket = io(baseUrl(), {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      auth: (callback) => callback({
-        apiKey: apiKey(),
-        ...(agent ? { agentToken: createAgentToken(agent) } : {})
-      }),
+      auth: (callback) => callback(socketAuth),
       timeout: 15000
     });
     emitState('connecting');

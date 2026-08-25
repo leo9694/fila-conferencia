@@ -132,10 +132,43 @@ function atribuicaoExpirada(atribuicao = {}, conversa = {}, agora = Date.now()) 
   return ultimaInteracao > 0 && agora - ultimaInteracao >= ATRIBUICAO_SEM_INTERACAO_MS;
 }
 
+function idsRelacionadosConversa(conversa = {}) {
+  const referencia = typeof conversa === 'object' ? conversa : { id: conversa };
+  const informados = [referencia.id, referencia.conversationId, ...(referencia.relatedConversationIds || [])]
+    .map(Number)
+    .filter(Number.isInteger);
+  const ids = new Set(informados);
+  informados.forEach((conversationId) => {
+    grupoConversa(conversationId).ids.forEach((relatedId) => ids.add(Number(relatedId)));
+  });
+  return [...ids].filter(Number.isInteger);
+}
+
+function obterAtribuicaoConversa(conversa = {}) {
+  return idsRelacionadosConversa(conversa)
+    .map((conversationId) => atendentes.obterConversa(conversationId))
+    .filter(Boolean)
+    .sort((a, b) => {
+      const assigned = Number(Boolean(b.userId)) - Number(Boolean(a.userId));
+      return assigned || new Date(b.assignedAt || 0) - new Date(a.assignedAt || 0);
+    })[0] || null;
+}
+
+function atribuirGrupoConversa(conversa = {}, dados = {}) {
+  const ids = idsRelacionadosConversa(conversa);
+  if (!ids.length) throw new TypeError('Conversa inválida.');
+  let resultado = null;
+  ids.forEach((conversationId) => {
+    const atribuicao = atendentes.atribuirConversa(conversationId, dados);
+    if (conversationId === Number(conversa?.id ?? conversa)) resultado = atribuicao;
+  });
+  return resultado || atendentes.obterConversa(ids[0]);
+}
+
 function liberarAtribuicaoExpirada(conversa = {}) {
-  const atribuicao = atendentes.obterConversa(conversa.id);
+  const atribuicao = obterAtribuicaoConversa(conversa);
   if (!atribuicaoExpirada(atribuicao, conversa)) return atribuicao;
-  return atendentes.atribuirConversa(conversa.id, {
+  return atribuirGrupoConversa(conversa, {
     acao: 'EXPIRE',
     ator: { id: 'SISTEMA', name: 'Sistema' }
   });
@@ -993,6 +1026,16 @@ function isMetaAuthError(error) {
 
 function sendError(res, error) {
   const upstreamStatus = Number(error?.status) || 0;
+  if (error?.configurationError === true) {
+    const code = error.integrationCode || 'INTEGRATION_NOT_CONFIGURED';
+    if (!sendError.reportedConfigurationErrors.has(code)) {
+      sendError.reportedConfigurationErrors.add(code);
+      console.warn('Integração opcional não configurada:', error?.message || error);
+    }
+    res.status(upstreamStatus >= 500 && upstreamStatus <= 599 ? upstreamStatus : 503)
+      .json({ erro: error.message, codigo: code });
+    return;
+  }
   if (error?.localAuthorization === true) {
     res.status(upstreamStatus >= 400 && upstreamStatus <= 499 ? upstreamStatus : 403)
       .json({ erro: error.message || 'Ação não permitida para este atendente.' });
@@ -1016,6 +1059,8 @@ function sendError(res, error) {
   }
   res.status(status).json({ erro: error?.message || 'Falha na integração com o atendimento.' });
 }
+
+sendError.reportedConfigurationErrors = new Set();
 
 function asyncRoute(handler) {
   return async (req, res) => {
@@ -1447,17 +1492,17 @@ router.post('/conversations/:id/messages/reaction', asyncRoute(async (req, res) 
 
 router.post('/conversations/:id/claim', asyncRoute(async (req, res) => {
   const conversationId = id(req.params.id);
+  const conversation = await obterConversaConsolidada(conversationId);
   const pipelineId = idPipelineBitrix(req.body?.pipelineId);
   const withoutPipeline = req.body?.withoutPipeline === true;
-  const atual = atendentes.obterConversa(conversationId);
+  const atual = obterAtribuicaoConversa(conversation);
   if (atual?.userId && String(atual.userId) !== req.atendente.id) {
     return res.status(409).json({ erro: `Conversa em atendimento por ${atual.userName || 'outro atendente'}.` });
   }
-  const assignment = atendentes.atribuirConversa(conversationId, { acao: 'CLAIM', ator: req.atendente, destino: req.atendente });
+  const assignment = atribuirGrupoConversa(conversation, { acao: 'CLAIM', ator: req.atendente, destino: req.atendente });
   let bitrixError = '';
   if (pipelineId !== null) {
     try {
-      const conversation = await obterConversaConsolidada(conversationId);
       await vincularPipelineBitrix(conversation, pipelineId);
     } catch (error) {
       bitrixError = error.message || 'Não foi possível criar o card no Bitrix.';
@@ -1475,7 +1520,7 @@ router.post('/conversations/:id/claim', asyncRoute(async (req, res) => {
     // A atribuição local continua válida mesmo se a Meta não confirmar a leitura.
   }
   const resultado = {
-    ...comAtribuicao({ id: conversationId }),
+    ...comAtribuicao(conversation),
     readConfirmed,
     ...(bitrixError ? { bitrixError } : {})
   };
@@ -1499,9 +1544,10 @@ router.post('/conversations/:id/bitrix-pipelines', asyncRoute(async (req, res) =
 
 router.post('/conversations/:id/release', asyncRoute(async (req, res) => {
   const conversationId = id(req.params.id);
-  podeAtender({ id: conversationId }, req.atendente, true);
-  const assignment = atendentes.atribuirConversa(conversationId, { acao: 'RELEASE', ator: req.atendente });
-  const resultado = comAtribuicao({ id: conversationId });
+  const conversation = await obterConversaConsolidada(conversationId);
+  podeAtender(conversation, req.atendente, true);
+  const assignment = atribuirGrupoConversa(conversation, { acao: 'RELEASE', ator: req.atendente });
+  const resultado = comAtribuicao(conversation);
   eventosAtendimento.emit('assignment', { conversationId, conversation: resultado, assignment });
   res.json(resultado);
 }));
@@ -1518,12 +1564,13 @@ router.post('/conversations/:id/transfer', asyncRoute(async (req, res) => {
   const diretor = String(usuario?.NOMEGRUPO || '').trim().toLocaleUpperCase('pt-BR') === 'DIRETORIA';
   if (!usuario || (!diretor && destino?.habilitado !== true)) return res.status(400).json({ erro: 'Selecione um atendente habilitado.' });
   const conversationId = id(req.params.id);
-  podeAtender({ id: conversationId }, req.atendente, true);
-  const assignment = atendentes.atribuirConversa(conversationId, {
+  const conversation = await obterConversaConsolidada(conversationId);
+  podeAtender(conversation, req.atendente, true);
+  const assignment = atribuirGrupoConversa(conversation, {
     acao: 'TRANSFER', ator: req.atendente,
     destino: { id: String(codUsu), name: destino?.nomeExibicao || usuario.NOMEUSU }
   });
-  const resultado = comAtribuicao({ id: conversationId });
+  const resultado = comAtribuicao(conversation);
   eventosAtendimento.emit('assignment', { conversationId, conversation: resultado, assignment });
   res.json(resultado);
 }));
@@ -1599,12 +1646,15 @@ router.get('/conversations/:id/calls', asyncRoute(async (req, res) => {
   }));
 }));
 
-router.get('/conversations/:id/calls/permission', asyncRoute(async (req, res) => {
+async function consultarPermissaoLigacao(req, res) {
   const conversationId = id(req.params.id);
   const conversation = await obterConversaConsolidada(conversationId);
   podeAtender(conversation, req.atendente, true);
   res.json(await whatsappApi.getCallPermission(conversationId, agenteChamada(req.atendente), req.atendente));
-}));
+}
+
+router.get('/conversations/:id/call-permission', asyncRoute(consultarPermissaoLigacao));
+router.get('/conversations/:id/calls/permission', asyncRoute(consultarPermissaoLigacao));
 
 router.post('/conversations/:id/calls/permission', asyncRoute(async (req, res) => {
   const conversationId = id(req.params.id);
@@ -1683,7 +1733,7 @@ function reivindicarChamada(callId, conversation, atendente) {
   const atribuicao = liberarAtribuicaoExpirada(conversation);
   if (String(atribuicao?.userId || '') !== String(atendente.id)) {
     try {
-      const assignment = atendentes.atribuirConversa(conversation.id, {
+      const assignment = atribuirGrupoConversa(conversation, {
         acao: 'CALL_ACCEPT', ator: atendente, destino: atendente
       });
       eventosAtendimento.emit('assignment', {
@@ -1890,6 +1940,7 @@ router._internals = {
   atendenteChamada,
   agenteChamada,
   criarControleChamadas,
+  idsRelacionadosConversa,
   textoContatoChat,
   textoSql,
   variantesTelefoneSankhya,

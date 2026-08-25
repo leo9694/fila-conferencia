@@ -155,6 +155,15 @@ test('gera identidades persistentes para todos os canais consolidados do contato
   );
 });
 
+test('resolve todos os ids relacionados de uma conversa consolidada', () => {
+  const [conversation] = chatRouter._internals.consolidarConversas([
+    { id: 71, contact: { phone: '5566999990000' } },
+    { id: 72, contact: { phone: '5566999990000' } }
+  ]);
+  assert.deepEqual(new Set(chatRouter._internals.idsRelacionadosConversa(conversation)), new Set([71, 72]));
+  assert.deepEqual(new Set(chatRouter._internals.idsRelacionadosConversa({ id: 72 })), new Set([71, 72]));
+});
+
 test('escapa texto usado nas buscas de parceiros', () => {
   assert.equal(chatRouter._internals.textoSql("D'ÁVILA"), "D''ÁVILA");
 });
