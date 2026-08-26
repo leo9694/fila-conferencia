@@ -3675,6 +3675,7 @@ router.get('/produtos/consulta', async (req, res) => {
         PRO.CODPROD,
         PRO.DESCRPROD,
         PRO.REFERENCIA,
+        PRO.AD_CODBAR,
         PRO.CODVOL,
         PRO.CODGRUPOPROD,
         GRU.DESCRGRUPOPROD

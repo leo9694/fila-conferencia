@@ -376,6 +376,7 @@ const consultaProdutoLegenda = document.getElementById('consulta-produto-legenda
 const consultaProdutoFoto = document.getElementById('consulta-produto-foto');
 const botaoConsultaProdutoEtiqueta = document.getElementById('consulta-produto-imprimir-etiqueta');
 const botaoConsultaProdutoEtiquetaReferencia = document.getElementById('consulta-produto-imprimir-etiqueta-referencia');
+const botaoConsultaProdutoEtiquetaDuasColunas = document.getElementById('consulta-produto-imprimir-etiqueta-duas-colunas');
 const consultaEtiquetaModal = document.getElementById('consulta-etiqueta-modal');
 const consultaEtiquetaLote = document.getElementById('consulta-etiqueta-lote');
 const consultaEtiquetaCancelar = document.getElementById('consulta-etiqueta-cancelar');
@@ -384,6 +385,11 @@ const consultaEtiquetaReferenciaModal = document.getElementById('consulta-etique
 const consultaEtiquetaReferenciaQuantidade = document.getElementById('consulta-etiqueta-referencia-quantidade');
 const consultaEtiquetaReferenciaCancelar = document.getElementById('consulta-etiqueta-referencia-cancelar');
 const consultaEtiquetaReferenciaConfirmar = document.getElementById('consulta-etiqueta-referencia-confirmar');
+const consultaEtiquetaDuasColunasModal = document.getElementById('consulta-etiqueta-duas-colunas-modal');
+const consultaEtiquetaDuasColunasLote = document.getElementById('consulta-etiqueta-duas-colunas-lote');
+const consultaEtiquetaDuasColunasQuantidade = document.getElementById('consulta-etiqueta-duas-colunas-quantidade');
+const consultaEtiquetaDuasColunasCancelar = document.getElementById('consulta-etiqueta-duas-colunas-cancelar');
+const consultaEtiquetaDuasColunasConfirmar = document.getElementById('consulta-etiqueta-duas-colunas-confirmar');
 const consultaProdutoResumo = document.getElementById('consulta-produto-resumo');
 const consultaProdutoDetalhes = document.getElementById('consulta-produto-detalhes');
 const consultaProdutoStatus = document.getElementById('consulta-produto-status');
@@ -3965,6 +3971,7 @@ function renderizarConsultaVazia(mensagem = 'Digite o código do produto para vi
   consultaProdutoFoto.innerHTML = '<div class="consulta-empty">Sem produto selecionado.</div>';
   botaoConsultaProdutoEtiqueta.disabled = true;
   botaoConsultaProdutoEtiquetaReferencia.disabled = true;
+  botaoConsultaProdutoEtiquetaDuasColunas.disabled = true;
   consultaProdutoResumo.innerHTML = `<div class="consulta-empty">${escaparHtml(mensagem)}</div>`;
   consultaProdutoDetalhes.innerHTML = '<div class="consulta-empty">Nenhum detalhe carregado.</div>';
   consultaProdutoStatus.textContent = 'Aguardando consulta';
@@ -4001,6 +4008,7 @@ function renderizarConsultaProduto(payload) {
   consultaProdutoTitulo.textContent = `${produto.CODPROD} - ${produto.DESCRPROD || 'Produto'}`;
   botaoConsultaProdutoEtiqueta.disabled = false;
   botaoConsultaProdutoEtiquetaReferencia.disabled = false;
+  botaoConsultaProdutoEtiquetaDuasColunas.disabled = false;
   consultaProdutoLegenda.textContent = `Grupo: ${produto.DESCRGRUPOPROD || produto.CODGRUPOPROD || '-'}`;
   consultaProdutoFoto.innerHTML = `
     <img
@@ -4109,9 +4117,11 @@ function montarHtmlEtiquetaReferencia(produto, quantidade) {
       <div class="referencia">${referencia}</div>
     </section>
   `;
-  const paginas = Array.from({ length: Math.ceil(quantidade / 6) }, (_, pagina) => {
+  const totalFolhas = Math.ceil(quantidade / 6);
+  const alturaImpressao = totalFolhas * 50;
+  const folhas = Array.from({ length: totalFolhas }, (_, pagina) => {
     const etiquetasNaPagina = Math.min(6, quantidade - (pagina * 6));
-    return `<main class="sheet">${etiqueta.repeat(etiquetasNaPagina)}</main>`;
+    return `<section class="sheet">${etiqueta.repeat(etiquetasNaPagina)}</section>`;
   }).join('');
 
   return `<!doctype html>
@@ -4120,10 +4130,15 @@ function montarHtmlEtiquetaReferencia(produto, quantidade) {
   <meta charset="utf-8">
   <title>Etiqueta produto ${codigoProduto}</title>
   <style>
-    @page { size: 100mm 50mm; margin: 0; }
+    @page { size: 100mm ${alturaImpressao}mm; margin: 0; }
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; }
     body { background: #eee; color: #000; font-family: Arial, Helvetica, sans-serif; }
+    .print-roll {
+      width: 100mm;
+      height: ${alturaImpressao}mm;
+      background: #fff;
+    }
     .sheet {
       display: grid;
       width: 100mm;
@@ -4134,12 +4149,8 @@ function montarHtmlEtiquetaReferencia(produto, quantidade) {
       row-gap: 2mm;
       padding: 4mm 3mm;
       background: #fff;
-      break-after: page;
-      page-break-after: always;
-    }
-    .sheet:last-child {
-      break-after: auto;
-      page-break-after: auto;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     .label {
       position: relative;
@@ -4195,6 +4206,7 @@ function montarHtmlEtiquetaReferencia(produto, quantidade) {
     @media screen {
       body { padding: 12px; }
       .sheet { margin: 0 auto 12px; box-shadow: 0 5px 18px rgba(0, 0, 0, 0.24); }
+      .print-roll { height: auto; background: transparent; }
     }
     @media print {
       body { background: #fff; }
@@ -4202,7 +4214,7 @@ function montarHtmlEtiquetaReferencia(produto, quantidade) {
   </style>
 </head>
 <body>
-  ${paginas}
+  <main class="print-roll">${folhas}</main>
   <script>
     window.addEventListener('load', () => {
       window.focus();
@@ -4251,6 +4263,204 @@ function confirmarQuantidadeEtiquetaReferencia() {
 
   consultaEtiquetaReferenciaModal.hidden = true;
   imprimirEtiquetaReferenciaProdutoConsultado(quantidade);
+}
+
+function montarHtmlEtiquetaDuasColunas(produto, estoque, quantidade) {
+  const descricao = escaparHtml(produto.DESCRPROD || '-');
+  const codigoProduto = escaparHtml(produto.CODPROD ?? '-');
+  const referencia = escaparHtml(produto.REFERENCIA || '-');
+  const validade = escaparHtml(formatarData(estoque?.DTVAL) || '-');
+  let ean13 = montarEan13(produto.AD_CODBAR);
+  if (!ean13.codigo) ean13 = montarEan13(produto.REFERENCIA);
+  const totalFolhas = Math.ceil(quantidade / 2);
+  const etiqueta = `
+    <section class="label">
+      <div class="descricao">${descricao}</div>
+      <div class="codigo">${codigoProduto}</div>
+      <div class="barcode">${ean13.svg}</div>
+      <div class="referencia">${referencia}</div>
+      <div class="vencimento-label">Venc:</div>
+      <div class="vencimento">${validade}</div>
+    </section>
+  `;
+  const folhas = Array.from({ length: totalFolhas }, (_, pagina) => {
+    const etiquetasNaPagina = Math.min(2, quantidade - (pagina * 2));
+    return `<section class="sheet">${etiqueta.repeat(etiquetasNaPagina)}</section>`;
+  }).join('');
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Etiqueta 2 colunas — produto ${codigoProduto}</title>
+  <style>
+    @page { size: 311pt 170pt; margin: 0; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { background: #eee; color: #000; font-family: "Courier New", Courier, monospace; }
+    .print-roll {
+      width: 311pt;
+      background: #fff;
+    }
+    .sheet {
+      display: grid;
+      width: 311pt;
+      height: 170pt;
+      grid-template-columns: repeat(2, 153pt);
+      grid-template-rows: 140pt;
+      column-gap: 2pt;
+      align-content: start;
+      padding: 5pt 0 5pt 2pt;
+      background: #fff;
+      break-inside: avoid;
+      page-break-inside: avoid;
+      break-after: page;
+      page-break-after: always;
+    }
+    .sheet:last-child {
+      break-after: auto;
+      page-break-after: auto;
+    }
+    .label {
+      position: relative;
+      width: 153pt;
+      height: 140pt;
+      overflow: hidden;
+      background: #fff;
+    }
+    .descricao,
+    .codigo,
+    .referencia,
+    .vencimento-label,
+    .vencimento {
+      position: absolute;
+      display: flex;
+      overflow: hidden;
+      font-size: 7pt;
+      line-height: 1;
+      font-weight: 700;
+    }
+    .descricao {
+      left: 23pt;
+      top: 63pt;
+      width: 110pt;
+      height: 18pt;
+      align-items: flex-start;
+      justify-content: center;
+      text-align: center;
+    }
+    .codigo {
+      left: 23pt;
+      top: 81pt;
+      width: 110pt;
+      height: 10pt;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .barcode {
+      position: absolute;
+      left: 23pt;
+      top: 90pt;
+      width: 110pt;
+      height: 24pt;
+      overflow: hidden;
+    }
+    .barcode svg { display: block; width: 100%; height: 100%; }
+    .referencia {
+      left: 23pt;
+      top: 115pt;
+      width: 110pt;
+      height: 10pt;
+      justify-content: center;
+      text-align: center;
+    }
+    .vencimento-label {
+      left: 23pt;
+      top: 125pt;
+      width: 29pt;
+      height: 10pt;
+    }
+    .vencimento {
+      left: 52pt;
+      top: 125pt;
+      width: 81pt;
+      height: 10pt;
+      justify-content: center;
+      text-align: center;
+    }
+    @media screen {
+      body { padding: 12px; }
+      .sheet { margin: 0 auto 12px; box-shadow: 0 5px 18px rgba(0, 0, 0, 0.24); }
+      .print-roll { height: auto; background: transparent; }
+    }
+    @media print {
+      body { background: #fff; }
+    }
+  </style>
+</head>
+<body>
+  <main class="print-roll">${folhas}</main>
+  <script>
+    window.addEventListener('load', () => {
+      window.focus();
+      setTimeout(() => window.print(), 180);
+    });
+  <\/script>
+</body>
+</html>`;
+}
+
+function imprimirEtiquetaDuasColunas(produto, estoque, quantidade) {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    consultaProdutoStatus.textContent = 'O navegador bloqueou a nova aba de impressão.';
+    return;
+  }
+
+  printWindow.document.write(montarHtmlEtiquetaDuasColunas(produto, estoque, quantidade));
+  printWindow.document.close();
+}
+
+function abrirEtiquetaDuasColunas() {
+  const produto = consultaProdutoAtual?.produto;
+  if (!produto) return;
+
+  const estoques = Array.isArray(consultaProdutoAtual.estoque) ? consultaProdutoAtual.estoque : [];
+  consultaEtiquetaDuasColunasLote.innerHTML = estoques.length
+    ? estoques.map((estoque, indice) => {
+      const lote = estoque.CONTROLE || 'Sem lote';
+      const validade = formatarData(estoque.DTVAL) || 'Sem validade';
+      return `<option value="${indice}">${escaparHtml(lote)} | Validade: ${escaparHtml(validade)}</option>`;
+    }).join('')
+    : '<option value="-1">Sem lote | Sem validade</option>';
+  consultaEtiquetaDuasColunasQuantidade.value = '2';
+  consultaEtiquetaDuasColunasModal.hidden = false;
+  consultaEtiquetaDuasColunasLote.focus();
+}
+
+function fecharEtiquetaDuasColunas() {
+  consultaEtiquetaDuasColunasModal.hidden = true;
+  botaoConsultaProdutoEtiquetaDuasColunas.focus();
+}
+
+function confirmarEtiquetaDuasColunas() {
+  const produto = consultaProdutoAtual?.produto;
+  if (!produto) return;
+
+  const quantidade = Number(consultaEtiquetaDuasColunasQuantidade.value);
+  if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > 999) {
+    consultaEtiquetaDuasColunasQuantidade.reportValidity();
+    consultaEtiquetaDuasColunasQuantidade.focus();
+    consultaEtiquetaDuasColunasQuantidade.select();
+    return;
+  }
+
+  const estoques = Array.isArray(consultaProdutoAtual.estoque) ? consultaProdutoAtual.estoque : [];
+  const indice = Number(consultaEtiquetaDuasColunasLote.value);
+  const estoque = indice >= 0 ? estoques[indice] : null;
+  consultaEtiquetaDuasColunasModal.hidden = true;
+  imprimirEtiquetaDuasColunas(produto, estoque, quantidade);
 }
 
 function montarItemEtiquetaProduto(estoque) {
@@ -4324,6 +4534,7 @@ async function buscarConsultaProduto() {
   consultaProdutoAtual = null;
   botaoConsultaProdutoEtiqueta.disabled = true;
   botaoConsultaProdutoEtiquetaReferencia.disabled = true;
+  botaoConsultaProdutoEtiquetaDuasColunas.disabled = true;
   consultaProdutoStatus.textContent = 'Consultando produto...';
   consultaProdutoResumo.innerHTML = '<div class="consulta-empty">Buscando informacoes de estoque...</div>';
   consultaProdutoDetalhes.innerHTML = '<div class="consulta-empty">Carregando detalhes...</div>';
@@ -10127,7 +10338,8 @@ document.addEventListener('keydown', (event) => {
     homeGlobalSearch?.focus();
   }
   if (event.key === 'Escape') {
-    if (!consultaEtiquetaReferenciaModal.hidden) fecharQuantidadeEtiquetaReferencia();
+    if (!consultaEtiquetaDuasColunasModal.hidden) fecharEtiquetaDuasColunas();
+    else if (!consultaEtiquetaReferenciaModal.hidden) fecharQuantidadeEtiquetaReferencia();
     else if (!consultaEtiquetaModal.hidden) fecharSelecaoEtiquetaProduto();
     else fecharConsultaProdutosModal();
     fecharSidebarHome();
@@ -10140,6 +10352,7 @@ consultaProdutosScreen.addEventListener('click', (event) => {
 botaoConsultaProdutoBuscar.addEventListener('click', buscarConsultaProduto);
 botaoConsultaProdutoEtiqueta.addEventListener('click', abrirSelecaoEtiquetaProduto);
 botaoConsultaProdutoEtiquetaReferencia.addEventListener('click', abrirQuantidadeEtiquetaReferencia);
+botaoConsultaProdutoEtiquetaDuasColunas.addEventListener('click', abrirEtiquetaDuasColunas);
 consultaEtiquetaCancelar.addEventListener('click', fecharSelecaoEtiquetaProduto);
 consultaEtiquetaConfirmar.addEventListener('click', confirmarSelecaoEtiquetaProduto);
 consultaEtiquetaModal.addEventListener('click', (event) => {
@@ -10154,6 +10367,17 @@ consultaEtiquetaReferenciaQuantidade.addEventListener('keydown', (event) => {
   if (event.key === 'Enter') {
     event.preventDefault();
     confirmarQuantidadeEtiquetaReferencia();
+  }
+});
+consultaEtiquetaDuasColunasCancelar.addEventListener('click', fecharEtiquetaDuasColunas);
+consultaEtiquetaDuasColunasConfirmar.addEventListener('click', confirmarEtiquetaDuasColunas);
+consultaEtiquetaDuasColunasModal.addEventListener('click', (event) => {
+  if (event.target === consultaEtiquetaDuasColunasModal) fecharEtiquetaDuasColunas();
+});
+consultaEtiquetaDuasColunasQuantidade.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    confirmarEtiquetaDuasColunas();
   }
 });
 botaoConsultaProdutoVoltar.addEventListener('click', voltarConsultaProdutos);

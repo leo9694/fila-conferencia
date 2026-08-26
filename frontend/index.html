@@ -2801,7 +2801,8 @@
     }
 
     body.consulta-produtos-modal-open .consulta-etiqueta-modal,
-    body.consulta-produtos-modal-open .consulta-etiqueta-referencia-modal {
+    body.consulta-produtos-modal-open .consulta-etiqueta-referencia-modal,
+    body.consulta-produtos-modal-open .consulta-etiqueta-duas-colunas-modal {
       z-index: 4200;
     }
 
@@ -12142,6 +12143,9 @@
               <button class="btn-consulta-etiqueta" id="consulta-produto-imprimir-etiqueta-referencia" type="button" disabled>
                 Etiqueta com código de barras
               </button>
+              <button class="btn-consulta-etiqueta" id="consulta-produto-imprimir-etiqueta-duas-colunas" type="button" disabled>
+                Etiqueta com validade — 2 colunas
+              </button>
             </div>
           </div>
           <div class="consulta-foto-frame" id="consulta-produto-foto">
@@ -12196,6 +12200,25 @@
       <div class="pos-conferencia-actions">
         <button class="btn-back" id="consulta-etiqueta-referencia-cancelar" type="button">Cancelar</button>
         <button class="btn-start" id="consulta-etiqueta-referencia-confirmar" type="button">Imprimir etiquetas</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="pos-conferencia-modal consulta-etiqueta-duas-colunas-modal" id="consulta-etiqueta-duas-colunas-modal" hidden>
+    <div class="pos-conferencia-dialog" role="dialog" aria-modal="true" aria-labelledby="consulta-etiqueta-duas-colunas-titulo">
+      <h3 id="consulta-etiqueta-duas-colunas-titulo">Etiqueta com validade</h3>
+      <p>Selecione o lote/validade e informe a quantidade de etiquetas.</p>
+      <div class="fila-field">
+        <label for="consulta-etiqueta-duas-colunas-lote">Lote / validade</label>
+        <select id="consulta-etiqueta-duas-colunas-lote"></select>
+      </div>
+      <div class="fila-field">
+        <label for="consulta-etiqueta-duas-colunas-quantidade">Quantidade</label>
+        <input id="consulta-etiqueta-duas-colunas-quantidade" type="number" min="1" max="999" step="1" value="2" inputmode="numeric">
+      </div>
+      <div class="pos-conferencia-actions">
+        <button class="btn-back" id="consulta-etiqueta-duas-colunas-cancelar" type="button">Cancelar</button>
+        <button class="btn-start" id="consulta-etiqueta-duas-colunas-confirmar" type="button">Imprimir etiquetas</button>
       </div>
     </div>
   </section>
