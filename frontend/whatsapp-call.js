@@ -27,7 +27,7 @@
   const state = {
     status: 'IDLE', call: null, conversation: null, profile: null, source: null, client: null,
     signal: null, timer: null, startedAt: 0, ringtone: null, reconnecting: false,
-    transfer: null, outgoingTransfer: null, permission: null,
+    transfer: null, outgoingTransfer: null, permission: null, conversationLoadToken: 0,
     clientId: createCallClientId()
   };
 
@@ -100,7 +100,14 @@
       api: clientApi(),
       mediaDevices: navigator.mediaDevices,
       PeerConnection: window.RTCPeerConnection || window.webkitRTCPeerConnection,
-      remoteAudio: refs.remoteAudio
+      remoteAudio: refs.remoteAudio,
+      onRemoteMedia: () => {
+        if (String(state.call?.direction || '').toUpperCase() !== 'OUTBOUND'
+          || !['INITIATING', 'RINGING', 'CONNECTING'].includes(state.status)) return;
+        stopRingtone();
+        setStatus('ACTIVE', 'Chamada em andamento');
+        startTimer(state.call?.answeredAt || Date.now());
+      }
     });
   }
 
@@ -553,6 +560,7 @@
     }
     if (event === 'call:updated') {
       if (!state.call) return;
+      const previousStatus = state.status;
       state.call = { ...state.call, ...(payload.call || payload) };
       const updatedStatus = String(payload.call?.status || payload.status || '').toUpperCase();
       if (Core.TERMINAL_STATES.has(updatedStatus)) {
@@ -563,6 +571,21 @@
             : updatedStatus === 'REJECTED' ? 'O cliente recusou a chamada.'
               : updatedStatus === 'FAILED' ? 'Falha ao completar a chamada.' : 'A ligação foi encerrada.');
         if (state.conversation) loadHistory(state.conversation).catch(() => {});
+        return;
+      }
+      const uiStatus = Core.callUpdateUiStatus(updatedStatus);
+      if (uiStatus === 'ACTIVE') {
+        stopRingtone();
+        setStatus('ACTIVE', 'Chamada em andamento');
+        if (previousStatus !== 'ACTIVE' || !state.timer) {
+          startTimer(payload.call?.answeredAt || payload.answeredAt || state.call?.answeredAt || Date.now());
+        }
+      } else if (uiStatus === 'CONNECTING' && previousStatus !== 'ACTIVE') {
+        setStatus('CONNECTING', 'Conectando áudio...');
+      } else if (uiStatus === 'RINGING' && !['ACTIVE', 'CONNECTING'].includes(previousStatus)) {
+        setStatus('RINGING', 'Chamando...');
+      } else if (uiStatus === 'INITIATING' && !['ACTIVE', 'CONNECTING', 'RINGING'].includes(previousStatus)) {
+        setStatus('INITIATING', `Ligando para ${contact(state.call).name}...`);
       }
       return;
     }
@@ -692,22 +715,35 @@
   }
 
   async function setConversation(conversation) {
+    const previousConversationId = String(state.conversation?.id || '');
+    const requestedConversationId = String(conversation?.id || '');
+    const requestToken = ++state.conversationLoadToken;
     state.conversation = conversation || null;
-    refs.start.hidden = true;
-    if (!conversation?.id) return;
-    const requestedConversationId = String(conversation.id);
-    loadHistory(conversation).catch(() => {});
+    if (!requestedConversationId) {
+      state.permission = null;
+      refs.start.hidden = true;
+      return;
+    }
+    const changedConversation = previousConversationId !== requestedConversationId;
+    if (changedConversation) {
+      state.permission = null;
+      refs.start.hidden = true;
+      loadHistory(conversation).catch(() => {});
+    } else if (state.permission) {
+      applyPermission(state.permission);
+      refs.start.hidden = false;
+    }
     try {
       const permission = await api(`/conversations/${encodeURIComponent(conversation.id)}/call-permission`);
-      if (String(state.conversation?.id || '') !== requestedConversationId) return;
+      if (requestToken !== state.conversationLoadToken || String(state.conversation?.id || '') !== requestedConversationId) return;
       applyPermission(permission);
       refs.start.hidden = false;
       refs.start.disabled = state.status !== 'IDLE';
       refs.start.title = Core.normalizeCallPermission(permission).canCall
         ? 'Ligar pelo WhatsApp' : Core.callPermissionView(permission).label;
     } catch {
-      if (String(state.conversation?.id || '') !== requestedConversationId) return;
-      refs.start.hidden = true;
+      if (requestToken !== state.conversationLoadToken || String(state.conversation?.id || '') !== requestedConversationId) return;
+      if (!state.permission) refs.start.hidden = true;
     }
   }
 

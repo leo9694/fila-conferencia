@@ -316,6 +316,21 @@
     );
   }
 
+  function conversationUpdateScope(activeId, payload = {}, activeConversation = {}) {
+    const active = String(activeId ?? '');
+    if (!active) return 'NONE';
+    const incoming = payload.conversation || payload;
+    const incomingId = String(incoming.id ?? payload.conversationId ?? '');
+    if (incomingId === active) return 'DIRECT';
+    const relatedIds = [
+      ...(incoming.relatedConversationIds || []),
+      ...(payload.relatedConversationIds || [])
+    ].map(String);
+    if (relatedIds.includes(active)) return 'RELATED';
+    const activeRelatedIds = (activeConversation.relatedConversationIds || []).map(String);
+    return incomingId && activeRelatedIds.includes(incomingId) ? 'RELATED' : 'NONE';
+  }
+
   function statusSymbol(status) {
     const normalized = String(status || '').toUpperCase();
     if (normalized === 'FAILED') return { symbol: '!', label: 'Falha no envio', failed: true };
@@ -358,6 +373,7 @@
     initials,
     interactiveReplyText,
     isLoadedConversation,
+    conversationUpdateScope,
     callTimelineInfo,
     callTimestamp,
     mergeById,

@@ -208,3 +208,16 @@ test('só reutiliza a conversa quando id ativo e objeto carregado pertencem ao m
   assert.equal(ChatCore.isLoadedConversation(20, { id: 19 }, 20), false);
   assert.equal(ChatCore.isLoadedConversation(20, null, 20), false);
 });
+
+test('distingue atualização direta de atualização de conversa relacionada', () => {
+  assert.equal(ChatCore.conversationUpdateScope(20, { conversation: { id: 20 } }), 'DIRECT');
+  assert.equal(ChatCore.conversationUpdateScope(20, {
+    conversation: { id: 21, relatedConversationIds: [20] }
+  }), 'RELATED');
+  assert.equal(ChatCore.conversationUpdateScope(20, {
+    conversation: { id: 21 }
+  }, { id: 20, relatedConversationIds: [21] }), 'RELATED');
+  assert.equal(ChatCore.conversationUpdateScope(20, {
+    conversation: { id: 21, relatedConversationIds: [22] }
+  }), 'NONE');
+});

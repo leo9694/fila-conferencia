@@ -81,6 +81,7 @@
     autoMediaQueue: [], autoMediaActive: 0,
     recorder: null, recordingStream: null, recordingChunks: [], recordingBlob: null,
     recordingStartedAt: 0, recordingTimer: null, pendingUpload: null, loadToken: 0, activeLoadToken: 0,
+    activeRefreshToken: 0,
     totalConversations: 0, assignment: 'ALL', agentId: '', access: null, profile: null, agents: [],
     hiddenConversationIds: new Set(), selectedPartner: null, partnerSearchToken: 0,
     linkPartner: null, linkPartnerSearchToken: 0, pipelines: [], pipelinesPromise: null,
@@ -1026,6 +1027,7 @@
   }
 
   function renderConversationDetails() {
+    if (!Core.isLoadedConversation(state.conversationId, state.conversation, state.conversationId)) return;
     const item = state.conversation || {};
     const contact = Core.contact(item);
     const name = Core.contactName(item);
@@ -1104,6 +1106,7 @@
     cacheActiveConversation();
     cancelScheduledMessagesRender();
     state.activeLoadToken += 1;
+    state.activeRefreshToken += 1;
     refs.workspace.classList.remove('has-conversation');
     state.conversationId = null;
     state.conversation = null;
@@ -1128,6 +1131,7 @@
       return;
     }
     const token = ++state.activeLoadToken;
+    state.activeRefreshToken += 1;
     cacheActiveConversation();
     cancelScheduledMessagesRender();
     state.conversationId = requestedId;
@@ -1206,8 +1210,11 @@
   async function markRead(id) {
     const item = state.conversations.find((conversation) => String(conversation.id) === String(id));
     if (item) item.unreadCount = 0;
-    if (state.conversation) state.conversation.unreadCount = 0;
-    renderConversations(); renderConversationDetails();
+    if (String(state.conversationId) === String(id) && state.conversation) {
+      state.conversation.unreadCount = 0;
+      renderConversationDetails();
+    }
+    renderConversations();
     try { await api(`/conversations/${encodeURIComponent(id)}/read`, { method: 'POST' }); } catch {}
   }
 
@@ -1444,25 +1451,30 @@
 
   function applyConversationUpdate(payload = {}) {
     const incoming = payload.conversation || payload;
-    const id = String(incoming.id ?? payload.conversationId ?? '');
     upsertConversation(payload);
-    const relatedIds = new Set([
-      id,
-      payload.conversationId,
-      ...(incoming.relatedConversationIds || []),
-      ...(state.conversation?.relatedConversationIds || [])
-    ].filter(Boolean).map(String));
-    if (state.conversationId && relatedIds.has(String(state.conversationId))) {
+    const scope = Core.conversationUpdateScope(state.conversationId, payload, state.conversation);
+    if (scope === 'DIRECT') {
       state.conversation = { ...(state.conversation || {}), ...incoming, ...(payload.serviceWindow ? { serviceWindow: payload.serviceWindow } : {}) };
       renderConversationDetails();
       scheduleMessagesRender({ preserveScroll: true });
+    } else if (scope === 'RELATED' && state.conversationId) {
+      // Um evento de chat consolidado pode afetar o ativo, mas seus dados de
+      // contato nunca podem substituir diretamente o cabeçalho selecionado.
+      refreshActiveConversation(String(state.conversationId));
     }
   }
 
   async function refreshActiveConversation(id) {
+    const requestedId = String(id);
+    const selectionToken = state.activeLoadToken;
+    const refreshToken = ++state.activeRefreshToken;
     try {
-      const conversation = await api(`/conversations/${encodeURIComponent(id)}`);
-      if (String(id) !== String(state.conversationId)) return;
+      const conversation = await api(`/conversations/${encodeURIComponent(requestedId)}`);
+      if (
+        requestedId !== String(state.conversationId)
+        || selectionToken !== state.activeLoadToken
+        || refreshToken !== state.activeRefreshToken
+      ) return;
       state.conversation = conversation;
       upsertConversation(conversation);
       renderConversationDetails();
@@ -1589,12 +1601,15 @@
 
   async function changeAssignment(action, target = null, extra = {}) {
     if (!state.conversationId) return null;
+    const conversationId = String(state.conversationId);
+    const selectionToken = state.activeLoadToken;
     const path = action === 'CLAIM' ? 'claim' : action === 'TRANSFER' ? 'transfer' : 'release';
     const body = { ...extra, ...(target ? { codUsu: target.codUsu ?? target.id } : {}) };
     try {
-      const conversation = await api(`/conversations/${encodeURIComponent(state.conversationId)}/${path}`, {
+      const conversation = await api(`/conversations/${encodeURIComponent(conversationId)}/${path}`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
       });
+      if (conversationId !== String(state.conversationId) || selectionToken !== state.activeLoadToken) return conversation;
       state.conversation = { ...state.conversation, ...conversation };
       upsertConversation({ ...state.conversation, ...conversation });
       renderConversationDetails();
@@ -1661,15 +1676,18 @@
 
   async function addPipelineToConversation() {
     if (!state.conversationId) return;
+    const conversationId = String(state.conversationId);
+    const selectionToken = state.activeLoadToken;
     const choice = await choosePipeline({
       title: pipelineLinks(state.conversation).length ? 'Vincular outro pipeline' : 'Vincular pipeline',
       description: 'Será criado um único card para esta conversa no pipeline selecionado.'
     });
     if (!choice?.pipelineId && choice?.pipelineId !== 0) return;
     try {
-      const result = await api(`/conversations/${encodeURIComponent(state.conversationId)}/bitrix-pipelines`, {
+      const result = await api(`/conversations/${encodeURIComponent(conversationId)}/bitrix-pipelines`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(choice)
       });
+      if (conversationId !== String(state.conversationId) || selectionToken !== state.activeLoadToken) return;
       state.conversation = { ...state.conversation, ...(result.conversation || {}) };
       upsertConversation(state.conversation);
       renderConversationDetails();
@@ -2161,11 +2179,12 @@
       });
       const conversation = result?.conversation;
       if (!conversation?.cadastroSankhya?.verificado) throw new Error('O Sankhya não confirmou o vínculo do telefone.');
-      if (String(state.conversationId) === String(conversationId)) state.conversation = { ...state.conversation, ...conversation };
+      const isStillActive = String(state.conversationId) === String(conversationId);
+      if (isStillActive) state.conversation = { ...state.conversation, ...conversation };
       const index = state.conversations.findIndex((item) => String(item.id) === String(conversationId));
       if (index >= 0) state.conversations[index] = { ...state.conversations[index], ...conversation };
       renderConversations();
-      renderConversationDetails();
+      if (isStillActive) renderConversationDetails();
       closeLinkPartner();
       setFeedback(result.vinculo?.criado ? 'Telefone incluído e vinculado ao parceiro no Sankhya.' : 'Telefone já estava cadastrado e foi vinculado ao parceiro.');
     } catch (error) {

@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
-  WhatsAppCallClient, agentAvailability, callControls, callPermissionView, eventUiStatus,
+  WhatsAppCallClient, agentAvailability, callControls, callPermissionView, callUpdateUiStatus, eventUiStatus,
   formatDuration, friendlyCallError, normalizeAgentList, normalizeCallPermission,
   shouldPlayOutboundRingback
 } = require('../frontend/whatsapp-call-core');
@@ -79,6 +79,35 @@ test('mantém botões de atender e recusar durante eventos de chamada recebida',
   assert.equal(eventUiStatus('call:connecting', 'RINGING', false), 'RINGING');
   assert.equal(eventUiStatus('call:ringing', 'CONNECTING', true), 'CONNECTING');
   assert.equal(eventUiStatus('call:active', 'RINGING', false), null);
+});
+
+test('traduz atualizações genéricas da API para os estados visuais da chamada', () => {
+  assert.equal(callUpdateUiStatus('ringing'), 'RINGING');
+  assert.equal(callUpdateUiStatus('connecting'), 'CONNECTING');
+  assert.equal(callUpdateUiStatus('active'), 'ACTIVE');
+  assert.equal(callUpdateUiStatus('answered'), 'ACTIVE');
+  assert.equal(callUpdateUiStatus('connected'), 'ACTIVE');
+  assert.equal(callUpdateUiStatus('in_progress'), 'ACTIVE');
+  assert.equal(callUpdateUiStatus('unknown'), null);
+});
+
+test('notifica uma única vez quando a mídia remota é liberada', async () => {
+  let onUnmute;
+  let notifications = 0;
+  const client = new WhatsAppCallClient({
+    api: {},
+    PeerConnection: PeerMock,
+    onRemoteMedia: () => { notifications += 1; },
+    remoteAudio: { play: async () => {}, pause() {}, set srcObject(value) { this.value = value; } }
+  });
+  await client.preparePeer();
+  client.peer.ontrack({
+    streams: [{ getTracks: () => [] }],
+    track: { addEventListener: (event, listener) => { if (event === 'unmute') onUnmute = listener; } }
+  });
+  onUnmute();
+  onUnmute();
+  assert.equal(notifications, 1);
 });
 
 test('mantém mídia e cancelamento disponíveis durante uma transferência pendente', () => {

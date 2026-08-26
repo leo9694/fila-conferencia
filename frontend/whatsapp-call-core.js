@@ -200,6 +200,13 @@
     return 'CONNECTING';
   }
 
+  function callUpdateUiStatus(status) {
+    const normalized = String(status || '').trim().toUpperCase();
+    if (['ACTIVE', 'ANSWERED', 'CONNECTED', 'IN_PROGRESS'].includes(normalized)) return 'ACTIVE';
+    if (['INITIATING', 'RINGING', 'CONNECTING'].includes(normalized)) return normalized;
+    return null;
+  }
+
   async function retryMediaAction(action, { attempts = 15, delayMs = 200 } = {}) {
     let lastError;
     for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -215,16 +222,18 @@
   }
 
   class WhatsAppCallClient {
-    constructor({ api, mediaDevices, PeerConnection, remoteAudio, rtcConfig = {} } = {}) {
+    constructor({ api, mediaDevices, PeerConnection, remoteAudio, onRemoteMedia, rtcConfig = {} } = {}) {
       this.api = api;
       this.mediaDevices = mediaDevices;
       this.PeerConnection = PeerConnection;
       this.remoteAudio = remoteAudio || null;
+      this.onRemoteMedia = typeof onRemoteMedia === 'function' ? onRemoteMedia : null;
       this.rtcConfig = rtcConfig;
       this.peer = null;
       this.localStream = null;
       this.remoteStream = null;
       this.muted = false;
+      this.remoteMediaNotified = false;
     }
 
     async preparePeer() {
@@ -240,6 +249,13 @@
         if (this.remoteAudio && this.remoteStream) {
           this.remoteAudio.srcObject = this.remoteStream;
           Promise.resolve(this.remoteAudio.play?.()).catch(() => {});
+        }
+        if (event.track?.addEventListener) {
+          event.track.addEventListener('unmute', () => {
+            if (this.remoteMediaNotified) return;
+            this.remoteMediaNotified = true;
+            this.onRemoteMedia?.();
+          }, { once: true });
         }
       };
       return this.peer;
@@ -334,13 +350,14 @@
       this.localStream = null;
       this.remoteStream = null;
       this.muted = false;
+      this.remoteMediaNotified = false;
     }
   }
 
   return {
     CALL_STATES, TERMINAL_STATES, WhatsAppCallClient, agentAvailability, callControls,
     canRequestCallPermission,
-    callPermissionView, eventUiStatus, formatDuration, friendlyCallError, normalizeAgentList,
+    callPermissionView, callUpdateUiStatus, eventUiStatus, formatDuration, friendlyCallError, normalizeAgentList,
     normalizeCallPermission, sessionFrom,
     retryMediaAction, shouldPlayOutboundRingback, waitForIceGathering, waitForPeerConnected
   };
