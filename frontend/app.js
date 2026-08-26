@@ -4130,7 +4130,9 @@ function montarHtmlEtiquetaReferencia(produto, quantidade) {
       height: 50mm;
       grid-template-columns: repeat(3, 30mm);
       grid-template-rows: repeat(2, 20mm);
-      padding: 5mm;
+      column-gap: 2mm;
+      row-gap: 2mm;
+      padding: 4mm 3mm;
       background: #fff;
       break-after: page;
       page-break-after: always;
@@ -4153,7 +4155,7 @@ function montarHtmlEtiquetaReferencia(produto, quantidade) {
       position: absolute;
       left: 0;
       display: flex;
-      width: 25.15mm;
+      width: 30mm;
       justify-content: center;
       overflow: hidden;
       text-align: center;
@@ -4176,9 +4178,9 @@ function montarHtmlEtiquetaReferencia(produto, quantidade) {
     .barcode {
       position: absolute;
       top: 8.07mm;
-      left: 0.084mm;
-      width: 29.832mm;
-      height: 8.976mm;
+      left: 2.65mm;
+      width: 24.7mm;
+      height: 9.47mm;
       overflow: hidden;
     }
     .barcode svg { display: block; width: 100%; height: 100%; }
