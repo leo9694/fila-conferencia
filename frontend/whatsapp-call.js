@@ -16,7 +16,8 @@
     close: byId('whatsapp-call-close'), remoteAudio: byId('whatsapp-call-remote-audio'),
     history: byId('chat-call-history'), start: byId('chat-call-start'),
     historyOpen: byId('chat-call-history-open'), historyModal: byId('whatsapp-call-history-modal'),
-    historyClose: byId('whatsapp-call-history-close'), historyGlobal: byId('whatsapp-call-history-global')
+    historyClose: byId('whatsapp-call-history-close'), historyGlobal: byId('whatsapp-call-history-global'),
+    historyTitle: byId('whatsapp-call-history-title')
   };
 
   function createCallClientId() {
@@ -378,6 +379,8 @@
     const view = Core.callPermissionView(permission);
     state.permission = permission;
     refs.start.hidden = false;
+    delete refs.start.dataset.loading;
+    refs.start.removeAttribute('aria-busy');
     refs.start.disabled = state.status !== 'IDLE' && state.status !== 'PERMISSION';
     refs.start.title = view.action === 'CALL' ? 'Ligar pelo WhatsApp' : view.label;
     if (state.status === 'PERMISSION') {
@@ -679,35 +682,41 @@
     return `<article class="is-${escapeHtml(status)}"><i data-lucide="${direction === 'OUTBOUND' ? 'phone-outgoing' : 'phone-incoming'}" aria-hidden="true"></i><span>${global ? `<strong>${escapeHtml(person.name)}</strong>` : ''}<b>${escapeHtml(callLabel(item))}</b><small>${escapeHtml(details)}</small></span></article>`;
   }
 
-  async function loadHistory(conversation) {
+  function loadHistory(conversation) {
     if (!refs.history || !conversation?.id) return;
-    refs.history.innerHTML = '<p>Carregando chamadas...</p>';
-    try {
-      const payload = await api(`/conversations/${encodeURIComponent(conversation.id)}/calls?page=1&limit=30`);
-      const calls = normalizeCalls(payload);
-      refs.history.innerHTML = `<strong><i data-lucide="phone" aria-hidden="true"></i> Chamadas</strong>${calls.length
-        ? `<div class="chat-call-history-list">${calls.map((item) => callHistoryItem(item)).join('')}</div>` : '<p>Nenhuma chamada registrada.</p>'}`;
-      window.lucide?.createIcons();
-    } catch {
-      refs.history.innerHTML = '<strong>Chamadas</strong><p>Histórico temporariamente indisponível.</p>';
-    }
+    refs.history.innerHTML = `<button class="chat-call-history-button" type="button" data-chat-call-history-conversation="${escapeHtml(conversation.id)}">
+      <span><i data-lucide="history" aria-hidden="true"></i><span><b>Histórico de chamadas</b><small>Ver chamadas deste chat</small></span></span>
+      <i data-lucide="chevron-right" aria-hidden="true"></i>
+    </button>`;
+    window.lucide?.createIcons();
   }
 
-  async function openGlobalHistory() {
+  async function openHistory(conversation = null) {
     if (!refs.historyModal || !refs.historyGlobal) return;
+    const conversationId = String(conversation?.id || '');
+    const person = conversationId ? contact(conversation) : null;
+    if (refs.historyTitle) refs.historyTitle.textContent = conversationId
+      ? `Chamadas de ${person.name}` : 'Histórico de ligações';
     refs.historyModal.hidden = false;
     refs.historyGlobal.innerHTML = '<p>Carregando ligações...</p>';
     window.lucide?.createIcons();
     try {
-      const payload = await api('/calls?page=1&limit=100');
+      const endpoint = conversationId
+        ? `/conversations/${encodeURIComponent(conversationId)}/calls?page=1&limit=100`
+        : '/calls?page=1&limit=100';
+      const payload = await api(endpoint);
       const calls = normalizeCalls(payload);
       refs.historyGlobal.innerHTML = calls.length
-        ? `<div class="chat-call-history-list">${calls.map((item) => callHistoryItem(item, { global: true })).join('')}</div>`
+        ? `<div class="chat-call-history-list">${calls.map((item) => callHistoryItem(item, { global: !conversationId })).join('')}</div>`
         : '<div class="whatsapp-call-history-empty"><i data-lucide="phone-off" aria-hidden="true"></i><p>Nenhuma ligação registrada.</p></div>';
       window.lucide?.createIcons();
     } catch (error) {
       refs.historyGlobal.innerHTML = `<div class="whatsapp-call-history-empty"><p>${escapeHtml(error.message || 'Histórico temporariamente indisponível.')}</p></div>`;
     }
+  }
+
+  async function openGlobalHistory() {
+    await openHistory();
   }
 
   function closeGlobalHistory() {
@@ -722,13 +731,19 @@
     if (!requestedConversationId) {
       state.permission = null;
       refs.start.hidden = true;
+      delete refs.start.dataset.loading;
+      refs.start.removeAttribute('aria-busy');
       return;
     }
     const changedConversation = previousConversationId !== requestedConversationId;
     if (changedConversation) {
       state.permission = null;
-      refs.start.hidden = true;
-      loadHistory(conversation).catch(() => {});
+      refs.start.hidden = false;
+      refs.start.disabled = true;
+      refs.start.dataset.loading = 'true';
+      refs.start.setAttribute('aria-busy', 'true');
+      refs.start.title = 'Verificando disponibilidade de ligação...';
+      loadHistory(conversation);
     } else if (state.permission) {
       applyPermission(state.permission);
       refs.start.hidden = false;
@@ -743,7 +758,13 @@
         ? 'Ligar pelo WhatsApp' : Core.callPermissionView(permission).label;
     } catch {
       if (requestToken !== state.conversationLoadToken || String(state.conversation?.id || '') !== requestedConversationId) return;
-      if (!state.permission) refs.start.hidden = true;
+      if (!state.permission) {
+        refs.start.hidden = false;
+        refs.start.disabled = true;
+        delete refs.start.dataset.loading;
+        refs.start.removeAttribute('aria-busy');
+        refs.start.title = 'Ligação indisponível no momento';
+      }
     }
   }
 
@@ -757,6 +778,9 @@
   refs.permission?.addEventListener('click', permissionAction);
   refs.close?.addEventListener('click', () => cleanup());
   refs.start?.addEventListener('click', () => startOutbound(state.conversation));
+  refs.history?.addEventListener('click', (event) => {
+    if (event.target.closest('[data-chat-call-history-conversation]')) openHistory(state.conversation);
+  });
   refs.historyOpen?.addEventListener('click', openGlobalHistory);
   refs.historyClose?.addEventListener('click', closeGlobalHistory);
   refs.historyModal?.addEventListener('click', (event) => { if (event.target === refs.historyModal) closeGlobalHistory(); });
