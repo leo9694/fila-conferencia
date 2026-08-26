@@ -48,6 +48,37 @@
     return [id ? `id:${id}` : '', phone ? `phone:${phone}` : ''].filter(Boolean);
   }
 
+  function definedFields(value = {}) {
+    return Object.fromEntries(Object.entries(value || {}).filter(([, field]) => field !== undefined));
+  }
+
+  function mergeConversationSnapshot(current = {}, incoming = {}) {
+    const next = incoming?.conversation || incoming || {};
+    const merged = { ...current, ...definedFields(next) };
+    ['contact', 'assignment', 'serviceWindow', 'cadastroSankhya', 'bitrix'].forEach((field) => {
+      if (next[field] === null) merged[field] = null;
+      else if (next[field] && typeof next[field] === 'object' && !Array.isArray(next[field])) {
+        merged[field] = { ...(current[field] || {}), ...definedFields(next[field]) };
+      }
+    });
+    const relatedIds = [
+      current.id,
+      next.id,
+      ...(current.relatedConversationIds || []),
+      ...(next.relatedConversationIds || [])
+    ].map(Number).filter(Number.isInteger);
+    if (relatedIds.length) merged.relatedConversationIds = [...new Set(relatedIds)];
+    return merged;
+  }
+
+  function mergeConversationList(current = [], incoming = []) {
+    return incoming.map((conversation) => {
+      const keys = new Set(conversationIdentityKeys(conversation));
+      const existing = current.find((item) => conversationIdentityKeys(item).some((key) => keys.has(key)));
+      return existing ? mergeConversationSnapshot(existing, conversation) : conversation;
+    });
+  }
+
   function messagePreview(message = {}) {
     message = message || {};
     const reaction = reactionInfo(message);
@@ -238,17 +269,20 @@
     return { key: 'template-required', title: 'Inicie a conversa com um template aprovado.', subtitle: 'Mensagens livres serão liberadas após a resposta do contato.', window };
   }
 
-  function updateMessageStatus(items = [], update = {}) {
+  function messageMatchesUpdate(message = {}, update = {}) {
     const updateKeys = new Set([update.id, update.messageId, update.message_id, update.wamid]
       .map((value) => String(value ?? '').trim())
       .filter(Boolean));
+    return [message.id, message.messageId, message.message_id, message.wamid]
+      .map((value) => String(value ?? '').trim())
+      .some((value) => value && updateKeys.has(value));
+  }
+
+  function updateMessageStatus(items = [], update = {}) {
     const status = update.status || update.messageStatus || update.deliveryStatus || '';
     const statusRank = { SENT: 1, DELIVERED: 2, READ: 3 };
     return items.map((message) => {
-      const matches = [message.id, message.messageId, message.message_id, message.wamid]
-        .map((value) => String(value ?? '').trim())
-        .some((value) => value && updateKeys.has(value));
-      if (matches) {
+      if (messageMatchesUpdate(message, update)) {
         const atual = String(message.status || '').toUpperCase();
         const proximo = String(status || '').toUpperCase();
         if (statusRank[atual] && statusRank[proximo] && statusRank[proximo] < statusRank[atual]) return message;
@@ -291,18 +325,22 @@
       const existingTime = new Date(existing.lastMessageAt || existing.updatedAt || existing.createdAt || 0).getTime();
       const incomingTime = new Date(conversation.lastMessageAt || conversation.updatedAt || conversation.createdAt || 0).getTime();
       const recent = incomingTime > existingTime ? conversation : existing;
-      merged[index] = {
-        ...existing,
-        ...recent,
+      merged[index] = mergeConversationSnapshot(existing, {
+        ...conversation,
+        ...(recent === existing ? {
+          lastMessage: existing.lastMessage,
+          lastMessageAt: existing.lastMessageAt,
+          updatedAt: existing.updatedAt,
+          unreadCount: existing.unreadCount
+        } : {}),
         id: existing.id,
-        contact: { ...(conversation.contact || {}), ...(existing.contact || {}) },
-        relatedConversationIds: [...new Set([
+        relatedConversationIds: [
           existing.id,
           conversation.id,
           ...(existing.relatedConversationIds || []),
           ...(conversation.relatedConversationIds || [])
-        ].map(Number).filter(Number.isInteger))]
-      };
+        ]
+      });
     });
     return merged;
   }
@@ -378,7 +416,10 @@
     callTimestamp,
     mergeById,
     mergeTimeline,
+    mergeConversationList,
     mergeConversationPages,
+    mergeConversationSnapshot,
+    messageMatchesUpdate,
     messagePreview,
     normalizeCalls,
     normalizePhone,

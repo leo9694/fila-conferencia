@@ -221,3 +221,46 @@ test('distingue atualização direta de atualização de conversa relacionada', 
     conversation: { id: 21, relatedConversationIds: [22] }
   }), 'NONE');
 });
+
+test('mescla resumo assíncrono sem apagar os detalhes já carregados da conversa', () => {
+  const atual = {
+    id: 20,
+    contact: { name: 'Cliente completo', phone: '5566999990000', partnerCode: 8342 },
+    assignment: { agentId: 72, agentName: 'LEONARDO' },
+    serviceWindow: { canSendFreeform: true, expiresAt: '2026-08-26T12:00:00Z' },
+    bitrix: { cards: [{ id: 11048 }] }
+  };
+  const merged = ChatCore.mergeConversationSnapshot(atual, {
+    id: 20,
+    contact: { name: 'Cliente atualizado' },
+    assignment: undefined,
+    unreadCount: 3
+  });
+
+  assert.equal(merged.contact.name, 'Cliente atualizado');
+  assert.equal(merged.contact.phone, '5566999990000');
+  assert.equal(merged.contact.partnerCode, 8342);
+  assert.deepEqual(merged.assignment, atual.assignment);
+  assert.equal(merged.serviceWindow.canSendFreeform, true);
+  assert.equal(merged.bitrix.cards[0].id, 11048);
+  assert.equal(merged.unreadCount, 3);
+});
+
+test('atualiza a lista assíncrona preservando dados completos de cada card', () => {
+  const merged = ChatCore.mergeConversationList([
+    { id: 20, contact: { name: 'Cliente', phone: '5566999990000' }, serviceWindow: { canSendFreeform: true } }
+  ], [
+    { id: 20, contact: { name: 'Cliente' }, unreadCount: 2 }
+  ]);
+
+  assert.equal(merged.length, 1);
+  assert.equal(merged[0].contact.phone, '5566999990000');
+  assert.equal(merged[0].serviceWindow.canSendFreeform, true);
+  assert.equal(merged[0].unreadCount, 2);
+});
+
+test('identifica status de mensagem por qualquer id aceito pela integração', () => {
+  assert.equal(ChatCore.messageMatchesUpdate({ id: 12 }, { messageId: 12 }), true);
+  assert.equal(ChatCore.messageMatchesUpdate({ wamid: 'wamid.12' }, { message_id: 'wamid.12' }), true);
+  assert.equal(ChatCore.messageMatchesUpdate({ wamid: 'wamid.12' }, { messageId: 'wamid.99' }), false);
+});

@@ -86,8 +86,9 @@
     hiddenConversationIds: new Set(), selectedPartner: null, partnerSearchToken: 0,
     linkPartner: null, linkPartnerSearchToken: 0, pipelines: [], pipelinesPromise: null,
     mediaZoom: 1, replyingTo: null, conversationCache: new Map(),
-    messagesRenderFrame: null, messagesRenderPreserveScroll: true,
-    conversationsRenderFrame: null, uiCacheTimer: null, callsRefreshTimer: null
+    messagesRenderFrame: null, messagesRenderConversationId: null, messagesRenderPreserveScroll: true,
+    conversationsRenderFrame: null, uiCacheTimer: null, callsRefreshTimer: null, callsRefreshToken: 0,
+    sendToken: 0
   };
 
   const CONVERSATION_CACHE_LIMIT = 6;
@@ -483,6 +484,14 @@
   }
 
   function scheduleMessagesRender({ preserveScroll = true } = {}) {
+    const requestedId = String(state.conversationId || '');
+    if (!requestedId) return;
+    if (state.messagesRenderFrame && state.messagesRenderConversationId !== requestedId) {
+      cancelAnimationFrame(state.messagesRenderFrame);
+      state.messagesRenderFrame = null;
+      state.messagesRenderPreserveScroll = true;
+    }
+    state.messagesRenderConversationId = requestedId;
     state.messagesRenderPreserveScroll = state.messagesRenderFrame
       ? state.messagesRenderPreserveScroll && preserveScroll
       : preserveScroll;
@@ -490,7 +499,9 @@
     state.messagesRenderFrame = requestAnimationFrame(() => {
       const keepScroll = state.messagesRenderPreserveScroll;
       state.messagesRenderFrame = null;
+      state.messagesRenderConversationId = null;
       state.messagesRenderPreserveScroll = true;
+      if (requestedId !== String(state.conversationId || '')) return;
       renderMessages({ preserveScroll: keepScroll });
       cacheActiveConversation();
     });
@@ -500,6 +511,7 @@
     if (!state.messagesRenderFrame) return;
     cancelAnimationFrame(state.messagesRenderFrame);
     state.messagesRenderFrame = null;
+    state.messagesRenderConversationId = null;
     state.messagesRenderPreserveScroll = true;
   }
 
@@ -601,7 +613,9 @@
       const received = Array.isArray(payload?.data) ? payload.data : [];
       migrateHiddenConversationIds(received);
       const incoming = received.filter((item) => !isConversationHidden(item));
-      state.conversations = append ? Core.mergeConversationPages(state.conversations, incoming) : incoming;
+      state.conversations = append
+        ? Core.mergeConversationPages(state.conversations, incoming)
+        : Core.mergeConversationList(state.conversations, incoming);
       state.totalPages = Number(payload?.pagination?.totalPages || 1);
       state.totalConversations = Math.max(
         state.conversations.length,
@@ -1107,6 +1121,10 @@
     cancelScheduledMessagesRender();
     state.activeLoadToken += 1;
     state.activeRefreshToken += 1;
+    state.callsRefreshToken += 1;
+    state.sendToken += 1;
+    clearTimeout(state.callsRefreshTimer);
+    state.callsRefreshTimer = null;
     refs.workspace.classList.remove('has-conversation');
     state.conversationId = null;
     state.conversation = null;
@@ -1132,6 +1150,11 @@
     }
     const token = ++state.activeLoadToken;
     state.activeRefreshToken += 1;
+    state.callsRefreshToken += 1;
+    state.sendToken += 1;
+    clearTimeout(state.callsRefreshTimer);
+    state.callsRefreshTimer = null;
+    state.sending = false;
     cacheActiveConversation();
     cancelScheduledMessagesRender();
     state.conversationId = requestedId;
@@ -1157,7 +1180,7 @@
         api(`/conversations/${encodeURIComponent(requestedId)}/calls?page=1&limit=100`).catch(() => null)
       ]);
       if (token !== state.activeLoadToken || requestedId !== String(state.conversationId)) return;
-      state.conversation = conversation;
+      state.conversation = Core.mergeConversationSnapshot(state.conversation || {}, conversation);
       state.messages = Core.mergeById(Array.isArray(payload?.data) ? payload.data : [], state.messages);
       if (callsPayload !== null) state.calls = Core.normalizeCalls(callsPayload);
       state.messageTotalPages = Number(payload?.pagination?.totalPages || 1);
@@ -1187,21 +1210,22 @@
     if (state.loadingOlder || state.messagePage >= state.messageTotalPages) return;
     const conversationId = String(state.conversationId || '');
     if (!conversationId) return;
+    const selectionToken = state.activeLoadToken;
     const page = state.messagePage + 1;
     state.loadingOlder = true;
     refs.messages.classList.add('is-loading-history');
     try {
       const payload = await api(`/conversations/${encodeURIComponent(conversationId)}/messages?page=${page}&limit=${MESSAGE_PAGE_SIZE}`);
-      if (conversationId !== String(state.conversationId)) return;
+      if (conversationId !== String(state.conversationId) || selectionToken !== state.activeLoadToken) return;
       state.messagePage = page;
       state.messageTotalPages = Number(payload?.pagination?.totalPages || state.messageTotalPages || 1);
       state.messages = Core.mergeById(payload?.data || [], state.messages);
       renderMessages({ preserveScroll: true });
     } catch (error) { setFeedback(error.message, true); }
     finally {
-      state.loadingOlder = false;
-      refs.messages.classList.remove('is-loading-history');
-      if (conversationId === String(state.conversationId)) {
+      if (conversationId === String(state.conversationId) && selectionToken === state.activeLoadToken) {
+        state.loadingOlder = false;
+        refs.messages.classList.remove('is-loading-history');
         requestAnimationFrame(fillMessageViewport);
       }
     }
@@ -1272,19 +1296,33 @@
     event.preventDefault();
     const text = refs.input.value.trim();
     if (!state.conversationId || !Core.canSendText(text, state.sending)) return;
+    const conversationId = String(state.conversationId);
+    const selectionToken = state.activeLoadToken;
+    const sendToken = ++state.sendToken;
+    const replyToMessageId = state.replyingTo?.messageId || undefined;
     state.sending = true; updateComposer(); setFeedback('Enviando...');
     try {
-      const message = await api(`/conversations/${encodeURIComponent(state.conversationId)}/messages`, {
+      const message = await api(`/conversations/${encodeURIComponent(conversationId)}/messages`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, replyToMessageId: state.replyingTo?.messageId || undefined })
+        body: JSON.stringify({ text, replyToMessageId })
       });
+      if (conversationId !== String(state.conversationId) || selectionToken !== state.activeLoadToken) return;
       state.messages = Core.mergeById(state.messages, [message]); refs.input.value = ''; clearReply(); renderMessages();
       setFeedback();
     } catch (error) {
+      if (conversationId !== String(state.conversationId) || selectionToken !== state.activeLoadToken) return;
       const reconciled = await reconcileAssignmentConflict(error);
-      setFeedback(reconciled ? error.message : 'Não foi possível enviar a mensagem.', true);
+      if (conversationId === String(state.conversationId) && selectionToken === state.activeLoadToken) {
+        setFeedback(reconciled ? error.message : 'Não foi possível enviar a mensagem.', true);
+      }
     }
-    finally { state.sending = false; updateComposer(); refs.input.focus(); }
+    finally {
+      if (sendToken === state.sendToken) {
+        state.sending = false;
+        updateComposer();
+        refs.input.focus();
+      }
+    }
   }
 
   async function sendReaction(messageId, emoji) {
@@ -1293,14 +1331,18 @@
       setFeedback('Assuma o atendimento para reagir à mensagem.', true);
       return;
     }
+    const conversationId = String(state.conversationId);
+    const selectionToken = state.activeLoadToken;
+    const sendToken = ++state.sendToken;
     state.sending = true;
     updateComposer();
     try {
-      const response = await api(`/conversations/${encodeURIComponent(state.conversationId)}/messages/reaction`, {
+      const response = await api(`/conversations/${encodeURIComponent(conversationId)}/messages/reaction`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messageId, emoji })
       });
+      if (conversationId !== String(state.conversationId) || selectionToken !== state.activeLoadToken) return;
       const reaction = response?.message || response;
       if (reaction?.id || reaction?.wamid || reaction?.messageId) {
         state.messages = Core.mergeById(state.messages, [reaction]);
@@ -1308,23 +1350,40 @@
       renderMessages({ preserveScroll: true });
       setFeedback();
     } catch (error) {
-      setFeedback(error.message || 'Não foi possível enviar a reação.', true);
+      if (conversationId === String(state.conversationId) && selectionToken === state.activeLoadToken) {
+        setFeedback(error.message || 'Não foi possível enviar a reação.', true);
+      }
     } finally {
-      state.sending = false;
-      updateComposer();
+      if (sendToken === state.sendToken) {
+        state.sending = false;
+        updateComposer();
+      }
     }
   }
 
   async function sendFile(kind, file, fields = {}) {
     if (!state.conversationId || !file || state.sending || state.conversation?.requiresTemplate) return;
+    const conversationId = String(state.conversationId);
+    const selectionToken = state.activeLoadToken;
+    const sendToken = ++state.sendToken;
     const form = new FormData(); form.append('file', file);
     Object.entries(fields).forEach(([key, value]) => form.append(key, String(value)));
     state.sending = true; updateComposer(); setFeedback('Enviando arquivo...');
     try {
-      const payload = await api(`/conversations/${encodeURIComponent(state.conversationId)}/messages/${kind}`, { method: 'POST', body: form });
+      const payload = await api(`/conversations/${encodeURIComponent(conversationId)}/messages/${kind}`, { method: 'POST', body: form });
+      if (conversationId !== String(state.conversationId) || selectionToken !== state.activeLoadToken) return;
       state.messages = Core.mergeById(state.messages, [Core.unwrap(payload)]); renderMessages(); setFeedback();
-    } catch (error) { setFeedback(kind === 'audio' ? 'Falha ao enviar áudio.' : 'Não foi possível enviar o arquivo.', true); }
-    finally { state.sending = false; updateComposer(); }
+    } catch (error) {
+      if (conversationId === String(state.conversationId) && selectionToken === state.activeLoadToken) {
+        setFeedback(kind === 'audio' ? 'Falha ao enviar áudio.' : 'Não foi possível enviar o arquivo.', true);
+      }
+    }
+    finally {
+      if (sendToken === state.sendToken) {
+        state.sending = false;
+        updateComposer();
+      }
+    }
   }
 
   function closeMediaModal() {
@@ -1437,14 +1496,14 @@
     if (!id) return;
     if (isConversationHidden(incoming)) return;
     const index = state.conversations.findIndex((item) => String(item.id) === id);
-    const merged = index >= 0 ? { ...state.conversations[index], ...incoming, ...payload } : incoming;
+    const merged = Core.mergeConversationSnapshot(index >= 0 ? state.conversations[index] : {}, incoming);
     if (!matchesAssignment(merged)) {
       if (index >= 0) state.conversations.splice(index, 1);
       scheduleConversationsRender();
       return;
     }
     if (index >= 0) state.conversations[index] = merged;
-    else if (incoming.id) state.conversations.unshift(incoming);
+    else if (merged.id) state.conversations.unshift(merged);
     state.conversations.sort((a, b) => new Date(conversationTimestamp(b) || 0) - new Date(conversationTimestamp(a) || 0));
     scheduleConversationsRender();
   }
@@ -1454,7 +1513,10 @@
     upsertConversation(payload);
     const scope = Core.conversationUpdateScope(state.conversationId, payload, state.conversation);
     if (scope === 'DIRECT') {
-      state.conversation = { ...(state.conversation || {}), ...incoming, ...(payload.serviceWindow ? { serviceWindow: payload.serviceWindow } : {}) };
+      state.conversation = Core.mergeConversationSnapshot(state.conversation || {}, {
+        ...incoming,
+        ...(payload.serviceWindow !== undefined ? { serviceWindow: payload.serviceWindow } : {})
+      });
       renderConversationDetails();
       scheduleMessagesRender({ preserveScroll: true });
     } else if (scope === 'RELATED' && state.conversationId) {
@@ -1475,7 +1537,7 @@
         || selectionToken !== state.activeLoadToken
         || refreshToken !== state.activeRefreshToken
       ) return;
-      state.conversation = conversation;
+      state.conversation = Core.mergeConversationSnapshot(state.conversation || {}, conversation);
       upsertConversation(conversation);
       renderConversationDetails();
       scheduleMessagesRender({ preserveScroll: true });
@@ -1483,9 +1545,16 @@
   }
 
   async function refreshActiveCalls(id) {
+    const requestedId = String(id || '');
+    const selectionToken = state.activeLoadToken;
+    const refreshToken = ++state.callsRefreshToken;
     try {
-      const payload = await api(`/conversations/${encodeURIComponent(id)}/calls?page=1&limit=100`);
-      if (String(id) !== String(state.conversationId)) return;
+      const payload = await api(`/conversations/${encodeURIComponent(requestedId)}/calls?page=1&limit=100`);
+      if (
+        requestedId !== String(state.conversationId)
+        || selectionToken !== state.activeLoadToken
+        || refreshToken !== state.callsRefreshToken
+      ) return;
       state.calls = Core.normalizeCalls(payload);
       scheduleMessagesRender({ preserveScroll: true });
       cacheActiveConversation();
@@ -1521,12 +1590,17 @@
       const updates = Array.isArray(payload.statuses)
         ? payload.statuses
         : [payload.message || payload.statusUpdate || payload];
-      updates.forEach((update) => {
-        state.messages = Core.updateMessageStatus(state.messages, update);
-      });
-      scheduleMessagesRender({ preserveScroll: true });
-      const id = String(payload.conversationId || payload.message?.conversationId || '');
-      if (id === String(state.conversationId)) refreshActiveConversation(id);
+      const id = String(payload.conversationId || payload.message?.conversationId || payload.statusUpdate?.conversationId || '');
+      const belongsToActive = id
+        ? id === String(state.conversationId)
+        : updates.some((update) => state.messages.some((message) => Core.messageMatchesUpdate(message, update)));
+      if (belongsToActive) {
+        updates.forEach((update) => {
+          state.messages = Core.updateMessageStatus(state.messages, update);
+        });
+        scheduleMessagesRender({ preserveScroll: true });
+        if (id) refreshActiveConversation(id);
+      }
     } else if (event === 'conversation:new' || event === 'conversation:updated') {
       const incoming = payload.conversation || payload;
       const id = String(incoming.id ?? payload.conversationId ?? '');
@@ -1610,8 +1684,8 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
       });
       if (conversationId !== String(state.conversationId) || selectionToken !== state.activeLoadToken) return conversation;
-      state.conversation = { ...state.conversation, ...conversation };
-      upsertConversation({ ...state.conversation, ...conversation });
+      state.conversation = Core.mergeConversationSnapshot(state.conversation || {}, conversation);
+      upsertConversation(state.conversation);
       renderConversationDetails();
       return conversation;
     } catch (error) {
@@ -1688,7 +1762,7 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(choice)
       });
       if (conversationId !== String(state.conversationId) || selectionToken !== state.activeLoadToken) return;
-      state.conversation = { ...state.conversation, ...(result.conversation || {}) };
+      state.conversation = Core.mergeConversationSnapshot(state.conversation || {}, result.conversation || {});
       upsertConversation(state.conversation);
       renderConversationDetails();
       setFeedback(result.link?.reused ? 'Este pipeline já estava vinculado ao chat.' : 'Card criado e pipeline vinculado ao chat.');
@@ -1892,24 +1966,35 @@
 
   async function submitTemplate() {
     if (!state.selectedTemplate || !state.conversationId) return;
+    const conversationId = String(state.conversationId);
+    const selectionToken = state.activeLoadToken;
+    const sendToken = ++state.sendToken;
+    const selectedTemplate = state.selectedTemplate;
     const values = [...refs.templateConfig.querySelectorAll('[data-template-param]')].map((input) => input.value.trim());
     if (values.some((value) => !value)) { refs.templateFeedback.textContent = 'Preencha todas as variáveis.'; return; }
     const components = values.length ? [{ type: 'body', parameters: values.map((text) => ({ type: 'text', text })) }] : [];
     refs.templateSend.disabled = true; refs.templateFeedback.textContent = 'Enviando...';
     try {
-      const payload = await api(`/conversations/${encodeURIComponent(state.conversationId)}/messages/template`, {
+      const payload = await api(`/conversations/${encodeURIComponent(conversationId)}/messages/template`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ templateName: state.selectedTemplate.name, language: state.selectedTemplate.language, components })
+        body: JSON.stringify({ templateName: selectedTemplate.name, language: selectedTemplate.language, components })
       });
+      if (conversationId !== String(state.conversationId) || selectionToken !== state.activeLoadToken) return;
       const message = payload?.message || payload;
       if (!message?.id && !message?.wamid) throw new Error('Não foi possível enviar o template.');
       state.messages = Core.mergeById(state.messages, [message]);
       renderMessages();
       refs.templateModal.hidden = true;
       setFeedback('Template enviado.');
-      refreshActiveConversation(state.conversationId);
-    } catch (error) { refs.templateFeedback.textContent = error.message || 'Não foi possível enviar o template.'; }
-    finally { refs.templateSend.disabled = false; }
+      refreshActiveConversation(conversationId);
+    } catch (error) {
+      if (conversationId === String(state.conversationId) && selectionToken === state.activeLoadToken) {
+        refs.templateFeedback.textContent = error.message || 'Não foi possível enviar o template.';
+      }
+    }
+    finally {
+      if (sendToken === state.sendToken) refs.templateSend.disabled = false;
+    }
   }
 
   function resetPartnerSelection() {
@@ -2180,10 +2265,10 @@
       const conversation = result?.conversation;
       if (!conversation?.cadastroSankhya?.verificado) throw new Error('O Sankhya não confirmou o vínculo do telefone.');
       const isStillActive = String(state.conversationId) === String(conversationId);
-      if (isStillActive) state.conversation = { ...state.conversation, ...conversation };
+      if (isStillActive) state.conversation = Core.mergeConversationSnapshot(state.conversation || {}, conversation);
       const index = state.conversations.findIndex((item) => String(item.id) === String(conversationId));
-      if (index >= 0) state.conversations[index] = { ...state.conversations[index], ...conversation };
-      renderConversations();
+      if (index >= 0) state.conversations[index] = Core.mergeConversationSnapshot(state.conversations[index], conversation);
+      scheduleConversationsRender();
       if (isStillActive) renderConversationDetails();
       closeLinkPartner();
       setFeedback(result.vinculo?.criado ? 'Telefone incluído e vinculado ao parceiro no Sankhya.' : 'Telefone já estava cadastrado e foi vinculado ao parceiro.');
