@@ -176,6 +176,67 @@ body.has-global-sidebar .atualizacao-contato-app {
   margin-top: 14px;
 }
 
+.home-dashboard-nav-group {
+  min-width: 0;
+}
+
+.home-dashboard-nav-group:not(:has(.home-dashboard-nav-item:not([hidden]))) {
+  display: none;
+}
+
+.home-dashboard-nav-group summary {
+  display: flex;
+  min-height: 52px;
+  align-items: center;
+  gap: 14px;
+  border-radius: 11px;
+  padding: 0 16px;
+  color: rgba(255, 255, 255, 0.88);
+  cursor: pointer;
+  font-size: 0.92rem;
+  font-weight: 600;
+  list-style: none;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.home-dashboard-nav-group summary::-webkit-details-marker {
+  display: none;
+}
+
+.home-dashboard-nav-group summary:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.home-dashboard-nav-group summary > svg:first-child {
+  width: 21px;
+  height: 21px;
+  stroke-width: 1.9;
+}
+
+.home-dashboard-nav-group .home-dashboard-nav-chevron {
+  width: 17px;
+  height: 17px;
+  margin-left: auto;
+  transition: transform 160ms ease;
+}
+
+.home-dashboard-nav-group:not([open]) .home-dashboard-nav-chevron {
+  transform: rotate(-90deg);
+}
+
+.home-dashboard-nav-submenu {
+  display: grid;
+  gap: 3px;
+  padding: 2px 0 4px 18px;
+}
+
+.home-dashboard-nav-submenu .home-dashboard-nav-item {
+  min-height: 43px;
+  padding-left: 14px;
+  font-size: 0.86rem;
+}
+
 .home-dashboard-nav-item {
   position: relative;
   display: flex;
@@ -345,9 +406,22 @@ body.has-global-sidebar.home-sidebar-collapsed.home-sidebar-auto-expanded .scree
 }
 
 .home-dashboard.is-sidebar-collapsed .home-dashboard-nav-item span,
+.home-dashboard.is-sidebar-collapsed .home-dashboard-nav-group summary span,
+.home-dashboard.is-sidebar-collapsed .home-dashboard-nav-group summary .home-dashboard-nav-chevron,
 .home-dashboard.is-sidebar-collapsed .home-dashboard-user-copy,
 .home-dashboard.is-sidebar-collapsed .home-dashboard-logout span {
   display: none;
+}
+
+.home-dashboard.is-sidebar-collapsed .home-dashboard-nav-group summary {
+  display: flex;
+  justify-content: center;
+  gap: 0;
+  padding-inline: 0;
+}
+
+.home-dashboard.is-sidebar-collapsed .home-dashboard-nav-submenu {
+  padding-left: 0;
 }
 
 .home-dashboard.is-sidebar-collapsed .home-dashboard-nav-item {
@@ -398,13 +472,35 @@ body.has-global-sidebar.home-sidebar-collapsed.home-sidebar-auto-expanded .scree
   }
 
   .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:hover .home-dashboard-nav-item span,
+  .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:hover .home-dashboard-nav-group summary,
   .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:hover .home-dashboard-user-copy,
   .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:hover .home-dashboard-logout span,
   .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:focus-within .home-dashboard-nav-item span,
+  .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:focus-within .home-dashboard-nav-group summary,
   .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:focus-within .home-dashboard-user-copy,
   .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:focus-within .home-dashboard-logout span {
     display: block;
     animation: home-sidebar-label-in 150ms ease 55ms both;
+  }
+
+  .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:hover .home-dashboard-nav-group summary,
+  .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:focus-within .home-dashboard-nav-group summary {
+    display: flex;
+    justify-content: flex-start;
+    gap: 14px;
+    padding-inline: 16px;
+  }
+
+  .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:hover .home-dashboard-nav-group summary span,
+  .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:hover .home-dashboard-nav-group summary .home-dashboard-nav-chevron,
+  .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:focus-within .home-dashboard-nav-group summary span,
+  .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:focus-within .home-dashboard-nav-group summary .home-dashboard-nav-chevron {
+    display: block;
+  }
+
+  .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:hover .home-dashboard-nav-submenu,
+  .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:focus-within .home-dashboard-nav-submenu {
+    padding-left: 18px;
   }
 
   .home-dashboard.is-sidebar-collapsed .home-dashboard-sidebar:hover .home-dashboard-nav-item,
@@ -960,7 +1056,8 @@ body.has-global-sidebar.home-sidebar-collapsed.home-sidebar-auto-expanded .scree
     scrollbar-color: rgba(255, 255, 255, 0.24) transparent;
   }
 
-  .home-dashboard-nav-item {
+  .home-dashboard-nav-item,
+  .home-dashboard-nav-group summary {
     min-height: clamp(39px, 6.3dvh, 46px);
   }
 
@@ -991,9 +1088,26 @@ body.has-global-sidebar.home-sidebar-collapsed.home-sidebar-auto-expanded .scree
   }
 
   .home-dashboard.is-sidebar-collapsed .home-dashboard-nav-item span,
+  .home-dashboard.is-sidebar-collapsed .home-dashboard-nav-group summary,
   .home-dashboard.is-sidebar-collapsed .home-dashboard-user-copy,
   .home-dashboard.is-sidebar-collapsed .home-dashboard-logout span {
     display: block;
+  }
+
+  .home-dashboard.is-sidebar-collapsed .home-dashboard-nav-group summary {
+    display: flex;
+    justify-content: flex-start;
+    gap: 14px;
+    padding-inline: 16px;
+  }
+
+  .home-dashboard.is-sidebar-collapsed .home-dashboard-nav-group summary span,
+  .home-dashboard.is-sidebar-collapsed .home-dashboard-nav-group summary .home-dashboard-nav-chevron {
+    display: block;
+  }
+
+  .home-dashboard.is-sidebar-collapsed .home-dashboard-nav-submenu {
+    padding-left: 18px;
   }
 
   .home-dashboard.is-sidebar-collapsed .home-dashboard-nav-item {
@@ -1202,7 +1316,8 @@ body.has-global-sidebar.home-sidebar-collapsed.home-sidebar-auto-expanded .scree
     margin-top: 4px;
   }
 
-  .home-dashboard-nav-item {
+  .home-dashboard-nav-item,
+  .home-dashboard-nav-group summary {
     min-height: 44px;
     padding-inline: 14px;
   }

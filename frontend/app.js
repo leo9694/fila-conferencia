@@ -375,10 +375,15 @@ const consultaProdutoTitulo = document.getElementById('consulta-produto-titulo')
 const consultaProdutoLegenda = document.getElementById('consulta-produto-legenda');
 const consultaProdutoFoto = document.getElementById('consulta-produto-foto');
 const botaoConsultaProdutoEtiqueta = document.getElementById('consulta-produto-imprimir-etiqueta');
+const botaoConsultaProdutoEtiquetaReferencia = document.getElementById('consulta-produto-imprimir-etiqueta-referencia');
 const consultaEtiquetaModal = document.getElementById('consulta-etiqueta-modal');
 const consultaEtiquetaLote = document.getElementById('consulta-etiqueta-lote');
 const consultaEtiquetaCancelar = document.getElementById('consulta-etiqueta-cancelar');
 const consultaEtiquetaConfirmar = document.getElementById('consulta-etiqueta-confirmar');
+const consultaEtiquetaReferenciaModal = document.getElementById('consulta-etiqueta-referencia-modal');
+const consultaEtiquetaReferenciaQuantidade = document.getElementById('consulta-etiqueta-referencia-quantidade');
+const consultaEtiquetaReferenciaCancelar = document.getElementById('consulta-etiqueta-referencia-cancelar');
+const consultaEtiquetaReferenciaConfirmar = document.getElementById('consulta-etiqueta-referencia-confirmar');
 const consultaProdutoResumo = document.getElementById('consulta-produto-resumo');
 const consultaProdutoDetalhes = document.getElementById('consulta-produto-detalhes');
 const consultaProdutoStatus = document.getElementById('consulta-produto-status');
@@ -857,8 +862,10 @@ function atualizarItemAtivoNavegacaoGlobal(tela) {
       || (tela === 'transporte' && alvo === 'abrir-transporte')
       || (tela === 'chat' && alvo === 'abrir-chat');
     item.classList.toggle('is-active', ativo);
-    if (ativo) item.setAttribute('aria-current', 'page');
-    else item.removeAttribute('aria-current');
+    if (ativo) {
+      item.setAttribute('aria-current', 'page');
+      item.closest('.home-dashboard-nav-group')?.setAttribute('open', '');
+    } else item.removeAttribute('aria-current');
   });
 }
 
@@ -3957,6 +3964,7 @@ function renderizarConsultaVazia(mensagem = 'Digite o código do produto para vi
   consultaProdutoLegenda.textContent = 'Informe um código para consultar.';
   consultaProdutoFoto.innerHTML = '<div class="consulta-empty">Sem produto selecionado.</div>';
   botaoConsultaProdutoEtiqueta.disabled = true;
+  botaoConsultaProdutoEtiquetaReferencia.disabled = true;
   consultaProdutoResumo.innerHTML = `<div class="consulta-empty">${escaparHtml(mensagem)}</div>`;
   consultaProdutoDetalhes.innerHTML = '<div class="consulta-empty">Nenhum detalhe carregado.</div>';
   consultaProdutoStatus.textContent = 'Aguardando consulta';
@@ -3992,6 +4000,7 @@ function renderizarConsultaProduto(payload) {
 
   consultaProdutoTitulo.textContent = `${produto.CODPROD} - ${produto.DESCRPROD || 'Produto'}`;
   botaoConsultaProdutoEtiqueta.disabled = false;
+  botaoConsultaProdutoEtiquetaReferencia.disabled = false;
   consultaProdutoLegenda.textContent = `Grupo: ${produto.DESCRGRUPOPROD || produto.CODGRUPOPROD || '-'}`;
   consultaProdutoFoto.innerHTML = `
     <img
@@ -4047,6 +4056,199 @@ function imprimirEtiquetaProdutoConsultado() {
 
   const estoque = Array.isArray(produto.estoque) ? produto.estoque[0] : null;
   abrirEtiquetaProdutoParaImpressao(estoque);
+}
+
+function calcularDigitoEan13(codigoBase) {
+  const soma = [...codigoBase].reduce((total, digito, indice) => (
+    total + (Number(digito) * (indice % 2 === 0 ? 1 : 3))
+  ), 0);
+  return String((10 - (soma % 10)) % 10);
+}
+
+function montarEan13(referencia) {
+  const digitos = String(referencia ?? '').replace(/\D/g, '');
+  if (digitos.length < 12) return { codigo: '', svg: '' };
+
+  const codigoBase = digitos.slice(0, 12);
+  const codigo = `${codigoBase}${calcularDigitoEan13(codigoBase)}`;
+  const padroes = {
+    L: ['0001101', '0011001', '0010011', '0111101', '0100011', '0110001', '0101111', '0111011', '0110111', '0001011'],
+    G: ['0100111', '0110011', '0011011', '0100001', '0011101', '0111001', '0000101', '0010001', '0001001', '0010111'],
+    R: ['1110010', '1100110', '1101100', '1000010', '1011100', '1001110', '1010000', '1000100', '1001000', '1110100']
+  };
+  const paridades = ['LLLLLL', 'LLGLGG', 'LLGGLG', 'LLGGGL', 'LGLLGG', 'LGGLLG', 'LGGGLL', 'LGLGLG', 'LGLGGL', 'LGGLGL'];
+  const paridade = paridades[Number(codigo[0])];
+  const esquerda = [...codigo.slice(1, 7)]
+    .map((digito, indice) => padroes[paridade[indice]][Number(digito)])
+    .join('');
+  const direita = [...codigo.slice(7)]
+    .map((digito) => padroes.R[Number(digito)])
+    .join('');
+  const modulos = `101${esquerda}01010${direita}101`;
+  const barras = [...modulos]
+    .map((modulo, indice) => modulo === '1' ? `<rect x="${indice + 11}" y="0" width="1" height="34"/>` : '')
+    .join('');
+
+  return {
+    codigo,
+    svg: `<svg viewBox="0 0 113 34" preserveAspectRatio="none" role="img" aria-label="Código de barras EAN-13 ${codigo}" shape-rendering="geometricPrecision"><g fill="#000">${barras}</g></svg>`
+  };
+}
+
+function montarHtmlEtiquetaReferencia(produto, quantidade) {
+  const descricao = escaparHtml(produto.DESCRPROD || '-');
+  const codigoProduto = escaparHtml(produto.CODPROD ?? '-');
+  const ean13 = montarEan13(produto.REFERENCIA);
+  const referencia = escaparHtml(ean13.codigo || produto.REFERENCIA || '-');
+  const codigoBarras = ean13.svg;
+  const etiqueta = `
+    <section class="label">
+      <div class="descricao">${descricao}</div>
+      <div class="codigo">${codigoProduto}</div>
+      <div class="barcode">${codigoBarras}</div>
+      <div class="referencia">${referencia}</div>
+    </section>
+  `;
+  const paginas = Array.from({ length: Math.ceil(quantidade / 6) }, (_, pagina) => {
+    const etiquetasNaPagina = Math.min(6, quantidade - (pagina * 6));
+    return `<main class="sheet">${etiqueta.repeat(etiquetasNaPagina)}</main>`;
+  }).join('');
+
+  return `<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Etiqueta produto ${codigoProduto}</title>
+  <style>
+    @page { size: 100mm 50mm; margin: 0; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body { background: #eee; color: #000; font-family: Arial, Helvetica, sans-serif; }
+    .sheet {
+      display: grid;
+      width: 100mm;
+      height: 50mm;
+      grid-template-columns: repeat(3, 30mm);
+      grid-template-rows: repeat(2, 20mm);
+      padding: 5mm;
+      background: #fff;
+      break-after: page;
+      page-break-after: always;
+    }
+    .sheet:last-child {
+      break-after: auto;
+      page-break-after: auto;
+    }
+    .label {
+      position: relative;
+      width: 30mm;
+      height: 20mm;
+      overflow: hidden;
+      background: #fff;
+      break-inside: avoid;
+    }
+    .descricao,
+    .codigo,
+    .referencia {
+      position: absolute;
+      left: 0;
+      display: flex;
+      width: 25.15mm;
+      justify-content: center;
+      overflow: hidden;
+      text-align: center;
+      font-weight: 700;
+    }
+    .descricao {
+      top: 1.05mm;
+      height: 4.21mm;
+      align-items: flex-end;
+      font-size: 5pt;
+      line-height: 1.05;
+    }
+    .codigo {
+      top: 5.61mm;
+      height: 2.81mm;
+      align-items: center;
+      font-size: 5pt;
+      line-height: 1;
+    }
+    .barcode {
+      position: absolute;
+      top: 8.07mm;
+      left: 0.084mm;
+      width: 29.832mm;
+      height: 8.976mm;
+      overflow: hidden;
+    }
+    .barcode svg { display: block; width: 100%; height: 100%; }
+    .referencia {
+      top: 17.89mm;
+      height: 2.11mm;
+      align-items: flex-end;
+      font-size: 4pt;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    @media screen {
+      body { padding: 12px; }
+      .sheet { margin: 0 auto 12px; box-shadow: 0 5px 18px rgba(0, 0, 0, 0.24); }
+    }
+    @media print {
+      body { background: #fff; }
+    }
+  </style>
+</head>
+<body>
+  ${paginas}
+  <script>
+    window.addEventListener('load', () => {
+      window.focus();
+      setTimeout(() => window.print(), 180);
+    });
+  <\/script>
+</body>
+</html>`;
+}
+
+function imprimirEtiquetaReferenciaProdutoConsultado(quantidade) {
+  const produto = consultaProdutoAtual?.produto;
+  if (!produto) return;
+
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    consultaProdutoStatus.textContent = 'O navegador bloqueou a nova aba de impressão.';
+    return;
+  }
+
+  printWindow.document.write(montarHtmlEtiquetaReferencia(produto, quantidade));
+  printWindow.document.close();
+}
+
+function abrirQuantidadeEtiquetaReferencia() {
+  if (!consultaProdutoAtual?.produto) return;
+  consultaEtiquetaReferenciaQuantidade.value = '6';
+  consultaEtiquetaReferenciaModal.hidden = false;
+  consultaEtiquetaReferenciaQuantidade.focus();
+  consultaEtiquetaReferenciaQuantidade.select();
+}
+
+function fecharQuantidadeEtiquetaReferencia() {
+  consultaEtiquetaReferenciaModal.hidden = true;
+  botaoConsultaProdutoEtiquetaReferencia.focus();
+}
+
+function confirmarQuantidadeEtiquetaReferencia() {
+  const quantidade = Number(consultaEtiquetaReferenciaQuantidade.value);
+  if (!Number.isInteger(quantidade) || quantidade < 1 || quantidade > 999) {
+    consultaEtiquetaReferenciaQuantidade.reportValidity();
+    consultaEtiquetaReferenciaQuantidade.focus();
+    consultaEtiquetaReferenciaQuantidade.select();
+    return;
+  }
+
+  consultaEtiquetaReferenciaModal.hidden = true;
+  imprimirEtiquetaReferenciaProdutoConsultado(quantidade);
 }
 
 function montarItemEtiquetaProduto(estoque) {
@@ -4119,6 +4321,7 @@ async function buscarConsultaProduto() {
   botaoConsultaProdutoBuscar.disabled = true;
   consultaProdutoAtual = null;
   botaoConsultaProdutoEtiqueta.disabled = true;
+  botaoConsultaProdutoEtiquetaReferencia.disabled = true;
   consultaProdutoStatus.textContent = 'Consultando produto...';
   consultaProdutoResumo.innerHTML = '<div class="consulta-empty">Buscando informacoes de estoque...</div>';
   consultaProdutoDetalhes.innerHTML = '<div class="consulta-empty">Carregando detalhes...</div>';
@@ -4142,8 +4345,26 @@ async function buscarConsultaProduto() {
 }
 
 function abrirConsultaProdutos() {
-  const url = `${window.location.pathname}${window.location.search}#consulta-produtos`;
-  window.open(url, '_blank', 'noopener');
+  renderizarConsultaVazia();
+  consultaProdutosScreen.classList.add('active', 'is-modal');
+  consultaProdutosScreen.setAttribute('role', 'dialog');
+  consultaProdutosScreen.setAttribute('aria-modal', 'true');
+  consultaProdutosScreen.setAttribute('aria-labelledby', 'consulta-produtos-titulo');
+  document.body.classList.add('consulta-produtos-modal-open');
+  botaoConsultaProdutoVoltar.textContent = 'Fechar';
+  consultaProdutoCodigo.focus();
+}
+
+function fecharConsultaProdutosModal() {
+  if (!consultaProdutosScreen.classList.contains('is-modal')) return false;
+  consultaProdutosScreen.classList.remove('active', 'is-modal');
+  consultaProdutosScreen.removeAttribute('role');
+  consultaProdutosScreen.removeAttribute('aria-modal');
+  consultaProdutosScreen.removeAttribute('aria-labelledby');
+  document.body.classList.remove('consulta-produtos-modal-open');
+  botaoConsultaProdutoVoltar.textContent = 'Voltar';
+  botaoAbrirConsultaProdutos.focus();
+  return true;
 }
 
 function abrirConsultaProdutosMesmaTela() {
@@ -4154,6 +4375,8 @@ function abrirConsultaProdutosMesmaTela() {
 }
 
 function voltarConsultaProdutos() {
+  if (fecharConsultaProdutosModal()) return;
+
   if (history.state?.origem) {
     history.back();
     return;
@@ -9901,15 +10124,35 @@ document.addEventListener('keydown', (event) => {
     event.preventDefault();
     homeGlobalSearch?.focus();
   }
-  if (event.key === 'Escape') fecharSidebarHome();
+  if (event.key === 'Escape') {
+    if (!consultaEtiquetaReferenciaModal.hidden) fecharQuantidadeEtiquetaReferencia();
+    else if (!consultaEtiquetaModal.hidden) fecharSelecaoEtiquetaProduto();
+    else fecharConsultaProdutosModal();
+    fecharSidebarHome();
+  }
 });
 botaoAbrirConsultaProdutos.addEventListener('click', abrirConsultaProdutos);
+consultaProdutosScreen.addEventListener('click', (event) => {
+  if (event.target === consultaProdutosScreen) fecharConsultaProdutosModal();
+});
 botaoConsultaProdutoBuscar.addEventListener('click', buscarConsultaProduto);
 botaoConsultaProdutoEtiqueta.addEventListener('click', abrirSelecaoEtiquetaProduto);
+botaoConsultaProdutoEtiquetaReferencia.addEventListener('click', abrirQuantidadeEtiquetaReferencia);
 consultaEtiquetaCancelar.addEventListener('click', fecharSelecaoEtiquetaProduto);
 consultaEtiquetaConfirmar.addEventListener('click', confirmarSelecaoEtiquetaProduto);
 consultaEtiquetaModal.addEventListener('click', (event) => {
   if (event.target === consultaEtiquetaModal) fecharSelecaoEtiquetaProduto();
+});
+consultaEtiquetaReferenciaCancelar.addEventListener('click', fecharQuantidadeEtiquetaReferencia);
+consultaEtiquetaReferenciaConfirmar.addEventListener('click', confirmarQuantidadeEtiquetaReferencia);
+consultaEtiquetaReferenciaModal.addEventListener('click', (event) => {
+  if (event.target === consultaEtiquetaReferenciaModal) fecharQuantidadeEtiquetaReferencia();
+});
+consultaEtiquetaReferenciaQuantidade.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') {
+    event.preventDefault();
+    confirmarQuantidadeEtiquetaReferencia();
+  }
 });
 botaoConsultaProdutoVoltar.addEventListener('click', voltarConsultaProdutos);
 consultaProdutoCodigo.addEventListener('keydown', (event) => {

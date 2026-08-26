@@ -34,6 +34,7 @@
     }
 
     body.chat-contingency-mode .home-dashboard-nav-item:not(#home-nav-chat),
+    body.chat-contingency-mode .home-dashboard-nav-group,
     body.chat-contingency-mode #voltar-home-chat {
       display: none !important;
     }
@@ -2768,6 +2769,42 @@
       padding: 12px;
     }
 
+    body.consulta-produtos-modal-open {
+      overflow: hidden;
+    }
+
+    body.has-global-sidebar .consulta-produtos-screen.is-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 4100;
+      width: 100%;
+      min-height: 100dvh;
+      margin-left: 0;
+      padding: 16px;
+      overflow: auto;
+      background: rgba(7, 48, 71, 0.58);
+      backdrop-filter: blur(4px);
+    }
+
+    .consulta-produtos-screen.is-modal .consulta-produtos-app {
+      width: min(1480px, calc(100vw - 32px));
+      min-height: min(820px, calc(100dvh - 32px));
+      max-height: calc(100dvh - 32px);
+      overflow: auto;
+      border: 1px solid rgba(255, 255, 255, 0.72);
+      border-radius: 20px;
+      padding: 12px;
+      background:
+        radial-gradient(circle at top right, rgba(24, 167, 216, 0.14), transparent 28%),
+        linear-gradient(180deg, #eff9f7 0%, #e7f2ef 100%);
+      box-shadow: 0 28px 70px rgba(7, 48, 71, 0.34);
+    }
+
+    body.consulta-produtos-modal-open .consulta-etiqueta-modal,
+    body.consulta-produtos-modal-open .consulta-etiqueta-referencia-modal {
+      z-index: 4200;
+    }
+
     .consulta-produtos-app,
     .atualizacao-contato-app {
       width: min(1480px, 100%);
@@ -3008,6 +3045,12 @@
 
     .consulta-foto-heading > div {
       min-width: 0;
+    }
+
+    .consulta-etiqueta-actions {
+      display: grid;
+      flex: 0 0 auto;
+      gap: 6px;
     }
 
     .btn-consulta-etiqueta {
@@ -10872,30 +10915,50 @@
           <button class="home-dashboard-nav-item is-active" type="button" data-home-screen="home" aria-current="page" title="Visão geral">
             <i data-lucide="house" aria-hidden="true"></i><span>Visão geral</span>
           </button>
-          <button class="home-dashboard-nav-item" id="home-nav-vendas-gerais" type="button" data-home-target="abrir-vendas-gerais" title="Vendas gerais" hidden>
-            <i data-lucide="badge-dollar-sign" aria-hidden="true"></i><span>Vendas gerais</span>
-          </button>
-          <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-conferencia" title="Fila de conferência">
-            <i data-lucide="list-checks" aria-hidden="true"></i><span>Fila de conferência</span>
-          </button>
-          <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-acompanhamento" title="Acompanhamento">
-            <i data-lucide="chart-no-axes-combined" aria-hidden="true"></i><span>Acompanhamento</span>
-          </button>
-          <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-consulta-home" title="Consulta de produtos">
-            <i data-lucide="search" aria-hidden="true"></i><span>Consulta de produtos</span>
-          </button>
-          <button class="home-dashboard-nav-item" id="home-nav-contagem-estoque" type="button" data-home-target="abrir-contagem-estoque" title="Contagem de estoque" hidden>
-            <i data-lucide="package-search" aria-hidden="true"></i><span>Contagem de estoque</span>
-          </button>
-          <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-atualizacao-contato" title="Atualização de contato">
-            <i data-lucide="contact-round" aria-hidden="true"></i><span>Atualização de contato</span>
-          </button>
-          <button class="home-dashboard-nav-item" id="home-nav-relatorios" type="button" data-home-target="abrir-relatorios" title="Relatórios" hidden>
-            <i data-lucide="file-spreadsheet" aria-hidden="true"></i><span>Relatórios</span>
-          </button>
-          <button class="home-dashboard-nav-item" id="home-nav-transporte" type="button" data-home-target="abrir-transporte" title="Transporte" hidden>
-            <i data-lucide="map-pinned" aria-hidden="true"></i><span>Transporte</span>
-          </button>
+          <details class="home-dashboard-nav-group">
+            <summary><i data-lucide="badge-dollar-sign" aria-hidden="true"></i><span>Vendas</span><i class="home-dashboard-nav-chevron" data-lucide="chevron-down" aria-hidden="true"></i></summary>
+            <div class="home-dashboard-nav-submenu">
+              <button class="home-dashboard-nav-item" id="home-nav-vendas-gerais" type="button" data-home-target="abrir-vendas-gerais" title="Vendas gerais" hidden>
+                <i data-lucide="badge-dollar-sign" aria-hidden="true"></i><span>Vendas gerais</span>
+              </button>
+              <button class="home-dashboard-nav-item" id="home-nav-transporte" type="button" data-home-target="abrir-transporte" title="Transporte" hidden>
+                <i data-lucide="map-pinned" aria-hidden="true"></i><span>Transporte</span>
+              </button>
+            </div>
+          </details>
+          <details class="home-dashboard-nav-group">
+            <summary><i data-lucide="truck" aria-hidden="true"></i><span>Logística</span><i class="home-dashboard-nav-chevron" data-lucide="chevron-down" aria-hidden="true"></i></summary>
+            <div class="home-dashboard-nav-submenu">
+              <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-conferencia" title="Fila de conferência">
+                <i data-lucide="list-checks" aria-hidden="true"></i><span>Fila de conferência</span>
+              </button>
+              <button class="home-dashboard-nav-item" id="home-nav-contagem-estoque" type="button" data-home-target="abrir-contagem-estoque" title="Contagem de estoque" hidden>
+                <i data-lucide="package-search" aria-hidden="true"></i><span>Contagem de estoque</span>
+              </button>
+              <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-acompanhamento" title="Acompanhamento">
+                <i data-lucide="chart-no-axes-combined" aria-hidden="true"></i><span>Acompanhamento</span>
+              </button>
+            </div>
+          </details>
+          <details class="home-dashboard-nav-group">
+            <summary><i data-lucide="search" aria-hidden="true"></i><span>Consultas</span><i class="home-dashboard-nav-chevron" data-lucide="chevron-down" aria-hidden="true"></i></summary>
+            <div class="home-dashboard-nav-submenu">
+              <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-consulta-home" title="Consulta de produtos">
+                <i data-lucide="search" aria-hidden="true"></i><span>Consulta de produtos</span>
+              </button>
+              <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-atualizacao-contato" title="Atualização de contato">
+                <i data-lucide="contact-round" aria-hidden="true"></i><span>Atualização de contato</span>
+              </button>
+            </div>
+          </details>
+          <details class="home-dashboard-nav-group">
+            <summary><i data-lucide="file-spreadsheet" aria-hidden="true"></i><span>Relatórios</span><i class="home-dashboard-nav-chevron" data-lucide="chevron-down" aria-hidden="true"></i></summary>
+            <div class="home-dashboard-nav-submenu">
+              <button class="home-dashboard-nav-item" id="home-nav-relatorios" type="button" data-home-target="abrir-relatorios" title="Relatórios" hidden>
+                <i data-lucide="file-spreadsheet" aria-hidden="true"></i><span>Relatórios</span>
+              </button>
+            </div>
+          </details>
           <button class="home-dashboard-nav-item" id="home-nav-chat" type="button" data-home-target="abrir-chat" title="Chat" hidden>
             <i data-lucide="messages-square" aria-hidden="true"></i><span>Chat</span>
           </button>
@@ -12055,7 +12118,7 @@
       <div class="consulta-toolbar">
         <div>
           <div class="home-kicker">Consulta Operacional</div>
-          <h1>Consulta de Produtos</h1>
+          <h1 id="consulta-produtos-titulo">Consulta de Produtos</h1>
         </div>
         <div class="fila-field">
           <label for="consulta-produto-codigo">Código do produto</label>
@@ -12072,9 +12135,14 @@
               <strong id="consulta-produto-titulo">Produto</strong>
               <div class="consulta-status" id="consulta-produto-legenda">Informe um codigo para consultar.</div>
             </div>
-            <button class="btn-consulta-etiqueta" id="consulta-produto-imprimir-etiqueta" type="button" disabled>
-              Imprimir etiqueta
-            </button>
+            <div class="consulta-etiqueta-actions">
+              <button class="btn-consulta-etiqueta" id="consulta-produto-imprimir-etiqueta" type="button" disabled>
+                Imprimir etiqueta
+              </button>
+              <button class="btn-consulta-etiqueta" id="consulta-produto-imprimir-etiqueta-referencia" type="button" disabled>
+                Etiqueta com código de barras
+              </button>
+            </div>
           </div>
           <div class="consulta-foto-frame" id="consulta-produto-foto">
             <div class="consulta-empty">Sem produto selecionado.</div>
@@ -12113,6 +12181,21 @@
       <div class="pos-conferencia-actions">
         <button class="btn-back" id="consulta-etiqueta-cancelar" type="button">Cancelar</button>
         <button class="btn-start" id="consulta-etiqueta-confirmar" type="button">Imprimir etiqueta</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="pos-conferencia-modal consulta-etiqueta-referencia-modal" id="consulta-etiqueta-referencia-modal" hidden>
+    <div class="pos-conferencia-dialog" role="dialog" aria-modal="true" aria-labelledby="consulta-etiqueta-referencia-titulo">
+      <h3 id="consulta-etiqueta-referencia-titulo">Quantidade de etiquetas</h3>
+      <p>Informe quantas etiquetas de 3 × 2 cm deseja imprimir. Cada folha comporta 6 etiquetas, em 3 colunas e 2 linhas. Imprima em tamanho real (100%), sem margens.</p>
+      <div class="fila-field">
+        <label for="consulta-etiqueta-referencia-quantidade">Quantidade</label>
+        <input id="consulta-etiqueta-referencia-quantidade" type="number" min="1" max="999" step="1" value="6" inputmode="numeric">
+      </div>
+      <div class="pos-conferencia-actions">
+        <button class="btn-back" id="consulta-etiqueta-referencia-cancelar" type="button">Cancelar</button>
+        <button class="btn-start" id="consulta-etiqueta-referencia-confirmar" type="button">Imprimir etiquetas</button>
       </div>
     </div>
   </section>
