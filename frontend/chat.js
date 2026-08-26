@@ -1382,7 +1382,7 @@
 
   function prepareFile(kind, file) {
     if (!file || !state.conversationId || state.conversation?.requiresTemplate) return;
-    const limits = { image: 5 * 1024 * 1024, document: 100 * 1024 * 1024, video: 16 * 1024 * 1024 };
+    const limits = { image: 40 * 1024 * 1024, document: 100 * 1024 * 1024, video: 16 * 1024 * 1024 };
     if (file.size > limits[kind]) {
       setFeedback(`O arquivo excede o limite de ${Math.round(limits[kind] / 1024 / 1024)} MB.`, true);
       return;

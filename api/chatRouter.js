@@ -17,7 +17,7 @@ const upload = multer({
   limits: { fileSize: 100 * 1024 * 1024, files: 1 }
 });
 const MEDIA_LIMITS = {
-  image: 5 * 1024 * 1024,
+  image: 40 * 1024 * 1024,
   document: 100 * 1024 * 1024,
   video: 16 * 1024 * 1024,
   audio: 16 * 1024 * 1024
