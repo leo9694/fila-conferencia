@@ -2802,7 +2802,8 @@
 
     body.consulta-produtos-modal-open .consulta-etiqueta-modal,
     body.consulta-produtos-modal-open .consulta-etiqueta-referencia-modal,
-    body.consulta-produtos-modal-open .consulta-etiqueta-duas-colunas-modal {
+    body.consulta-produtos-modal-open .consulta-etiqueta-duas-colunas-modal,
+    body.consulta-produtos-modal-open .consulta-etiquetas-modal {
       z-index: 4200;
     }
 
@@ -3075,6 +3076,126 @@
     .btn-consulta-etiqueta:disabled {
       opacity: 0.5;
       cursor: not-allowed;
+    }
+
+    .consulta-etiquetas-dialog {
+      width: min(660px, calc(100vw - 28px));
+    }
+
+    .consulta-etiquetas-modelos {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin: 14px 0;
+    }
+
+    .consulta-etiqueta-modelo {
+      display: grid;
+      gap: 10px;
+      min-width: 0;
+      padding: 10px;
+      border: 1px solid rgba(0, 143, 118, 0.24);
+      border-radius: 12px;
+      background: #fff;
+      color: var(--text, #123f4b);
+      font: inherit;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    .consulta-etiqueta-modelo:hover {
+      border-color: var(--primary, #008f76);
+      background: var(--primary-soft, #e8f7f3);
+      transform: translateY(-1px);
+    }
+
+    .consulta-etiqueta-modelo strong {
+      font-size: 0.78rem;
+      font-weight: 900;
+    }
+
+    .consulta-etiqueta-modelo small {
+      color: var(--text-soft, #64748b);
+      font-size: 0.68rem;
+      font-weight: 800;
+    }
+
+    .etiqueta-modelo-preview {
+      display: grid;
+      place-items: center;
+      min-height: 88px;
+      padding: 8px;
+      border: 1px solid #d7e2df;
+      border-radius: 7px;
+      background: #fff;
+      color: #111;
+      font-family: Arial, Helvetica, sans-serif;
+      overflow: hidden;
+    }
+
+    .etiqueta-modelo-preview span {
+      display: block;
+    }
+
+    .etiqueta-modelo-padrao {
+      font-size: 0.6rem;
+      font-weight: 900;
+      line-height: 1.35;
+      text-align: center;
+    }
+
+    .etiqueta-modelo-barras {
+      align-content: center;
+      gap: 4px;
+    }
+
+    .etiqueta-modelo-barras .barras,
+    .etiqueta-modelo-validade .barras {
+      width: 78%;
+      height: 28px;
+      background: repeating-linear-gradient(90deg, #111 0 2px, transparent 2px 4px, #111 4px 5px, transparent 5px 8px);
+    }
+
+    .etiqueta-modelo-barras .codigo-barras {
+      font-size: 0.5rem;
+      font-weight: 900;
+    }
+
+    .etiqueta-modelo-validade {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 5px;
+      padding: 7px;
+    }
+
+    .etiqueta-modelo-validade .mini-etiqueta {
+      display: grid;
+      place-items: center;
+      gap: 3px;
+      min-height: 60px;
+      border: 1px solid #e2e8f0;
+      font-size: 0.42rem;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .etiqueta-modelo-validade .barras {
+      width: 76%;
+      height: 16px;
+    }
+
+    @media (max-width: 620px) {
+      .consulta-etiquetas-modelos {
+        grid-template-columns: 1fr;
+      }
+
+      .consulta-etiqueta-modelo {
+        grid-template-columns: 116px minmax(0, 1fr);
+        align-items: center;
+      }
+
+      .etiqueta-modelo-preview {
+        min-height: 74px;
+      }
     }
 
     .consulta-foto-frame {
@@ -12137,14 +12258,8 @@
               <div class="consulta-status" id="consulta-produto-legenda">Informe um codigo para consultar.</div>
             </div>
             <div class="consulta-etiqueta-actions">
-              <button class="btn-consulta-etiqueta" id="consulta-produto-imprimir-etiqueta" type="button" disabled>
-                Imprimir etiqueta
-              </button>
-              <button class="btn-consulta-etiqueta" id="consulta-produto-imprimir-etiqueta-referencia" type="button" disabled>
-                Etiqueta com código de barras
-              </button>
-              <button class="btn-consulta-etiqueta" id="consulta-produto-imprimir-etiqueta-duas-colunas" type="button" disabled>
-                Etiqueta com validade — 2 colunas
+              <button class="btn-consulta-etiqueta" id="consulta-produto-etiquetas" type="button" disabled>
+                Etiquetas
               </button>
             </div>
           </div>
@@ -12170,6 +12285,40 @@
             <div class="consulta-empty">Nenhum detalhe carregado.</div>
           </div>
         </section>
+      </div>
+    </div>
+  </section>
+
+  <section class="pos-conferencia-modal consulta-etiquetas-modal" id="consulta-etiquetas-modal" hidden>
+    <div class="pos-conferencia-dialog consulta-etiquetas-dialog" role="dialog" aria-modal="true" aria-labelledby="consulta-etiquetas-titulo">
+      <h3 id="consulta-etiquetas-titulo">Escolha o modelo da etiqueta</h3>
+      <p>Selecione o tipo de etiqueta que deseja imprimir.</p>
+      <div class="consulta-etiquetas-modelos">
+        <button class="consulta-etiqueta-modelo" type="button" data-modelo-etiqueta="padrao">
+          <span class="etiqueta-modelo-preview etiqueta-modelo-padrao" aria-hidden="true">
+            <span>PRODUTO</span>
+            <span>LOTE: 001</span>
+            <span>VALIDADE: 01/04/2028</span>
+          </span>
+          <span><strong>Etiqueta padrão</strong><small>Produto, lote e validade</small></span>
+        </button>
+        <button class="consulta-etiqueta-modelo" type="button" data-modelo-etiqueta="barras">
+          <span class="etiqueta-modelo-preview etiqueta-modelo-barras" aria-hidden="true">
+            <span class="barras"></span>
+            <span class="codigo-barras">7896061733758</span>
+          </span>
+          <span><strong>Código de barras</strong><small>3 × 2 cm · 6 por folha</small></span>
+        </button>
+        <button class="consulta-etiqueta-modelo" type="button" data-modelo-etiqueta="validade">
+          <span class="etiqueta-modelo-preview etiqueta-modelo-validade" aria-hidden="true">
+            <span class="mini-etiqueta">PRODUTO<span class="barras"></span>Venc: 01/04</span>
+            <span class="mini-etiqueta">PRODUTO<span class="barras"></span>Venc: 01/04</span>
+          </span>
+          <span><strong>Validade · 2 colunas</strong><small>Produto, barras e validade</small></span>
+        </button>
+      </div>
+      <div class="pos-conferencia-actions">
+        <button class="btn-back" id="consulta-etiquetas-cancelar" type="button">Cancelar</button>
       </div>
     </div>
   </section>
