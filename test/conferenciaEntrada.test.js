@@ -12,6 +12,7 @@ const {
   validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,
   conferenciaEntradaPodeSerReaberta,
+  erroProntidaoConferenciaEntrada,
   statusVisualConferencia,
   documentosAuxiliaresConferencia,
   retornoPossuiDocumentosAuxiliares
@@ -59,6 +60,12 @@ test('permite reabrir conferencia de entrada finalizada divergente', () => {
   assert.equal(conferenciaEntradaPodeSerReaberta('D'), true);
   assert.equal(conferenciaEntradaPodeSerReaberta('A'), true);
   assert.equal(conferenciaEntradaPodeSerReaberta('F'), false);
+});
+
+test('impede iniciar entrada sem liberação ou sem itens importados', () => {
+  assert.match(erroProntidaoConferenciaEntrada({ libConf: null, qtdItens: 6 }), /não foi liberada/i);
+  assert.match(erroProntidaoConferenciaEntrada({ libConf: 'S', qtdItens: 0 }), /não possui itens/i);
+  assert.equal(erroProntidaoConferenciaEntrada({ libConf: 'S', qtdItens: 6 }), '');
 });
 
 test('identifica o status visual finalizado divergente sem tratar como novo', () => {

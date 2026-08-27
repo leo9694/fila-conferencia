@@ -24,6 +24,7 @@ const {
   validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,
   conferenciaEntradaPodeSerReaberta,
+  erroProntidaoConferenciaEntrada,
   statusVisualConferencia,
   documentosAuxiliaresConferencia,
   retornoPossuiDocumentosAuxiliares
@@ -3007,7 +3008,9 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         AND CAB.TIPMOV = '${tipMov}'
         AND ${condicaoStatusConferencia(modo)}
         ${modo === 'entrada' ? `AND TOP_ATUAL.NUCCO IS NOT NULL
-        AND NVL(CCO_ATUAL.EXPLODIRLOTE, 'N') = 'N'` : ''}
+        AND NVL(CCO_ATUAL.EXPLODIRLOTE, 'N') = 'N'
+        AND (CAB.LIBCONF = 'S' OR CONF.STATUS IN ('D', 'F'))
+        AND EXISTS (SELECT 1 FROM TGFITE ITE_PRONTA WHERE ITE_PRONTA.NUNOTA = CAB.NUNOTA)` : ''}
       GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.NUMNOTA, CAB.CODEMP, CAB.CODTIPOPER, CAB.TIPMOV, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA, CAB.QTDVOL,
         CAB.NUCONFATUAL, CONF.STATUS, CONF.DHINICONF, CONF.DHFINCONF, USU.NOMEUSU
       ORDER BY
@@ -6223,7 +6226,8 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
 
   try {
     const pedidoRows = await executeQuery(`
-      SELECT CAB.NUNOTA, CAB.NUCONFATUAL, CAB.QTDVOL, CONF.STATUS,
+      SELECT CAB.NUNOTA, CAB.NUCONFATUAL, CAB.QTDVOL, CAB.LIBCONF, CONF.STATUS,
+             (SELECT COUNT(*) FROM TGFITE ITE WHERE ITE.NUNOTA = CAB.NUNOTA) AS QTD_ITENS,
              TOP.NUCCO, NVL(CCO.EXPLODIRLOTE, 'N') AS EXPLODIRLOTE
       FROM TGFCAB CAB
       LEFT JOIN TGFCON2 CONF
@@ -6243,6 +6247,17 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
     if (!pedido) {
       res.status(404).json({ erro: 'Pedido nao encontrado ou nao esta liberado para conferencia' });
       return;
+    }
+
+    if (modo === 'entrada') {
+      const erroProntidao = erroProntidaoConferenciaEntrada({
+        libConf: pedido.LIBCONF,
+        qtdItens: pedido.QTD_ITENS
+      });
+      if (erroProntidao) {
+        res.status(409).json({ erro: erroProntidao });
+        return;
+      }
     }
 
     if (modo === 'entrada' && !pedido.NUCCO) {
@@ -6416,7 +6431,8 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
   try {
     const [pedido] = await executeQuery(`
       SELECT CAB.NUNOTA, CAB.NUCONFATUAL, CAB.CODTIPOPER, CAB.TIPMOV,
-             CAB.STATUSNOTA, CAB.LIBCONF, CONF.STATUS
+             CAB.STATUSNOTA, CAB.LIBCONF, CONF.STATUS,
+             (SELECT COUNT(*) FROM TGFITE ITE WHERE ITE.NUNOTA = CAB.NUNOTA) AS QTD_ITENS
       FROM TGFCAB CAB
       LEFT JOIN TGFCON2 CONF
         ON CONF.NUCONF = CAB.NUCONFATUAL
@@ -6435,6 +6451,17 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
     )) {
       res.status(409).json({ erro: 'A nota não está liberada para conferência de entrada no Sankhya' });
       return;
+    }
+
+    if (modo === 'entrada') {
+      const erroProntidao = erroProntidaoConferenciaEntrada({
+        libConf: pedido.LIBCONF,
+        qtdItens: pedido.QTD_ITENS
+      });
+      if (erroProntidao) {
+        res.status(409).json({ erro: erroProntidao });
+        return;
+      }
     }
 
     const statusProgressoPermitido = modo === 'entrada'
@@ -6558,6 +6585,8 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
         CAB.NUCONFATUAL,
         CAB.QTDVOL,
         CAB.TIPMOV,
+        CAB.LIBCONF,
+        (SELECT COUNT(*) FROM TGFITE ITE WHERE ITE.NUNOTA = CAB.NUNOTA) AS QTD_ITENS,
         TOP.NUCCO,
         NVL(CCO.EXPLODIRLOTE, 'N') AS EXPLODIRLOTE,
         CONF.STATUS,
@@ -6582,6 +6611,17 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     if (!pedido) {
       res.status(404).json({ erro: 'Pedido não encontrado ou não está liberado para conferência' });
       return;
+    }
+
+    if (modo === 'entrada') {
+      const erroProntidao = erroProntidaoConferenciaEntrada({
+        libConf: pedido.LIBCONF,
+        qtdItens: pedido.QTD_ITENS
+      });
+      if (erroProntidao) {
+        res.status(409).json({ erro: erroProntidao });
+        return;
+      }
     }
 
     if (modo === 'entrada' && !pedido.NUCCO) {

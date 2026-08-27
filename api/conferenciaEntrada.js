@@ -434,6 +434,16 @@ function conferenciaEntradaPodeSerReaberta(status) {
   return ['A', 'D'].includes(String(status || '').trim().toUpperCase());
 }
 
+function erroProntidaoConferenciaEntrada({ libConf, qtdItens } = {}) {
+  if (String(libConf || '').trim().toUpperCase() !== 'S') {
+    return 'A nota de entrada ainda não foi liberada para conferência no Sankhya.';
+  }
+  if (Number(qtdItens || 0) <= 0) {
+    return 'A nota de entrada não possui itens importados no Sankhya.';
+  }
+  return '';
+}
+
 function statusVisualConferencia(status, possuiConferencia = true) {
   if (!possuiConferencia) return 'AGUARDANDO CONFERENCIA';
 
@@ -474,6 +484,7 @@ module.exports = {
   validarDetalhesConferenciaEntrada,
   deveAplicarDivergenciaEntrada,
   conferenciaEntradaPodeSerReaberta,
+  erroProntidaoConferenciaEntrada,
   statusVisualConferencia,
   documentosAuxiliaresConferencia,
   retornoPossuiDocumentosAuxiliares
