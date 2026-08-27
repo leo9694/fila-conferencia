@@ -128,6 +128,10 @@ async function getConversations(params) {
   return request(`/api/conversations${queryString(params)}`);
 }
 
+async function getChannels() {
+  return request('/api/whatsapp/channels');
+}
+
 async function getConversation(id) {
   return request(`/api/conversations/${encodeURIComponent(id)}`);
 }
@@ -358,6 +362,7 @@ module.exports = {
   getConversation,
   getConversationCalls,
   getConversations,
+  getChannels,
   getCallPermission,
   getCallAgents,
   getCalls,

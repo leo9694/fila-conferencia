@@ -7,7 +7,7 @@
   const byId = (id) => document.getElementById(id);
   const refs = {
     overlay: byId('whatsapp-call-overlay'), panel: byId('whatsapp-call-panel'), title: byId('whatsapp-call-title'),
-    contact: byId('whatsapp-call-contact'), phone: byId('whatsapp-call-phone'), status: byId('whatsapp-call-status'),
+    contact: byId('whatsapp-call-contact'), phone: byId('whatsapp-call-phone'), channel: byId('whatsapp-call-channel'), status: byId('whatsapp-call-status'),
     duration: byId('whatsapp-call-duration'), accept: byId('whatsapp-call-accept'), reject: byId('whatsapp-call-reject'),
     mute: byId('whatsapp-call-mute'), end: byId('whatsapp-call-end'), permission: byId('whatsapp-call-permission'),
     transfer: byId('whatsapp-call-transfer'), transferPicker: byId('whatsapp-call-transfer-picker'),
@@ -112,6 +112,10 @@
     });
   }
 
+  function channel(payload = {}) {
+    return payload.channel || payload.call?.channel || payload.conversation?.channel || null;
+  }
+
   function setStatus(status, text) {
     state.status = status;
     refs.panel.dataset.status = status;
@@ -133,6 +137,11 @@
     const person = contact(payload);
     refs.contact.textContent = person.name;
     refs.phone.textContent = person.phone;
+    const source = channel(payload) || channel(state.call);
+    refs.channel.hidden = !source;
+    refs.channel.textContent = source
+      ? `${String(state.call?.direction || '').toUpperCase() === 'OUTBOUND' ? 'Via' : 'Recebida em'}: ${source.displayName || source.name || 'Canal não identificado'}${source.displayPhoneNumber ? ` · ${source.displayPhoneNumber}` : ''}`
+      : '';
     refs.overlay.hidden = false;
     setStatus(status, status === 'RINGING' ? 'Chamada recebida pelo WhatsApp' : 'Preparando chamada...');
     window.lucide?.createIcons();
@@ -444,7 +453,7 @@
   }
 
   async function beginOutbound(conversation) {
-    state.call = { conversationId: conversation.id, direction: 'OUTBOUND', contact: conversation.contact };
+    state.call = { conversationId: conversation.id, direction: 'OUTBOUND', contact: conversation.contact, channel: conversation.channel };
     openOverlay(conversation, 'INITIATING');
     refs.title.textContent = 'Ligação pelo WhatsApp';
     refs.status.textContent = `Ligando para ${contact(conversation).name}...`;

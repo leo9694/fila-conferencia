@@ -41,11 +41,35 @@
     return String(value || '').replace(/\D/g, '');
   }
 
+  function channel(conversation = {}) {
+    return conversation.channel || conversation.Channel || null;
+  }
+
+  function channelIdentity(conversation = {}) {
+    const value = channel(conversation) || {};
+    const id = String(value.id ?? conversation.channelId ?? '').trim();
+    if (id) return `id:${id}`;
+    const phoneNumberId = String(value.phoneNumberId ?? conversation.phoneNumberId ?? '').trim();
+    return phoneNumberId ? `phone-number:${phoneNumberId}` : 'legacy';
+  }
+
+  function channelLabel(conversation = {}) {
+    const value = channel(conversation);
+    return String(value?.displayName || value?.name || 'Canal não identificado').trim();
+  }
+
+  function normalizeChannels(payload) {
+    const value = unwrap(payload);
+    if (Array.isArray(value)) return value;
+    return Array.isArray(value?.data) ? value.data : [];
+  }
+
   function conversationIdentityKeys(conversation = {}) {
     const value = contact(conversation);
     const id = String(conversation.id ?? conversation.conversationId ?? '').trim();
     const phone = normalizePhone(value.waId || value.phone || conversation.waId || conversation.phone);
-    return [id ? `id:${id}` : '', phone ? `phone:${phone}` : ''].filter(Boolean);
+    const channelKey = channelIdentity(conversation);
+    return [id ? `id:${id}` : '', phone && channelKey !== 'legacy' ? `channel:${channelKey}:phone:${phone}` : ''].filter(Boolean);
   }
 
   function definedFields(value = {}) {
@@ -414,6 +438,9 @@
     conversationUpdateScope,
     callTimelineInfo,
     callTimestamp,
+    channel,
+    channelIdentity,
+    channelLabel,
     mergeById,
     mergeTimeline,
     mergeConversationList,
@@ -422,6 +449,7 @@
     messageMatchesUpdate,
     messagePreview,
     normalizeCalls,
+    normalizeChannels,
     normalizePhone,
     reactionInfo,
     reactionTarget,

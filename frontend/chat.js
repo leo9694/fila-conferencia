@@ -9,6 +9,7 @@
   const MESSAGE_FILL_RATIO = 1.25;
   const HIDDEN_CONVERSATIONS_KEY = 'fila-conferencia.chat.hidden-conversations';
   const UI_CACHE_KEY = 'fila-conferencia.chat.ui-cache.v1';
+  const CHANNEL_FILTER_KEY = 'fila-conferencia.chat.channel-filter';
   const UI_CACHE_TTL = 10 * 60 * 1000;
   const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
   const MORE_REACTIONS = ['👏', '🔥', '🎉', '✅', '😊', '😍', '🤔', '😅', '🤝', '👀', '💯', '🙌', '👎', '😡', '🤩', '🥳'];
@@ -17,6 +18,7 @@
   const refs = {
     screen: byId('chat-screen'), workspace: byId('chat-workspace'), list: byId('chat-conversation-list'),
     count: byId('chat-conversation-count'), search: byId('chat-search-input'), filters: byId('chat-filters'),
+    channelFilter: byId('chat-channel-filter'),
     agentFilterToggle: byId('chat-agent-filter-toggle'), agentFilter: byId('chat-agent-filter'),
     agentFilterSelect: byId('chat-agent-filter-select'), agentFilterClear: byId('chat-agent-filter-clear'),
     refresh: byId('chat-refresh'), newContact: byId('chat-new-contact'), more: byId('chat-load-more'), empty: byId('chat-empty-state'),
@@ -24,12 +26,12 @@
     form: byId('chat-composer'), send: byId('chat-send'), feedback: byId('chat-composer-feedback'),
     composerReply: byId('chat-composer-reply'), composerReplyAuthor: byId('chat-composer-reply-author'),
     composerReplyText: byId('chat-composer-reply-text'), composerReplyCancel: byId('chat-composer-reply-cancel'),
-    contactName: byId('chat-contact-name'), contactPhone: byId('chat-contact-phone'),
+    contactName: byId('chat-contact-name'), contactPhone: byId('chat-contact-phone'), contactChannel: byId('chat-contact-channel'),
     contactAvatar: byId('chat-contact-avatar'), details: byId('chat-details-panel'),
     detailsToggle: byId('chat-details-toggle'), detailsClose: byId('chat-details-close'),
     detailsEmpty: byId('chat-details-empty'), detailsContent: byId('chat-details-content'),
     detailsAvatar: byId('chat-details-avatar'), detailsName: byId('chat-details-name'),
-    detailsPhone: byId('chat-details-phone'), detailsWaid: byId('chat-details-waid'),
+    detailsPhone: byId('chat-details-phone'), detailsWaid: byId('chat-details-waid'), detailsChannel: byId('chat-details-channel'),
     sankhyaData: byId('chat-sankhya-data'),
     bitrixData: byId('chat-bitrix-data'),
     detailsLast: byId('chat-details-last'), detailsUnread: byId('chat-details-unread'),
@@ -57,7 +59,7 @@
     newSankhyaContactClose: byId('chat-new-sankhya-contact-close'), newSankhyaContactName: byId('chat-new-sankhya-contact-name'),
     newSankhyaContactPhone: byId('chat-new-sankhya-contact-phone'), newSankhyaContactRole: byId('chat-new-sankhya-contact-role'),
     newSankhyaContactFeedback: byId('chat-new-sankhya-contact-feedback'), newSankhyaContactSave: byId('chat-new-sankhya-contact-save'),
-    newPipelineField: byId('chat-new-pipeline-field'), newPipeline: byId('chat-new-pipeline'),
+    newPipelineField: byId('chat-new-pipeline-field'), newPipeline: byId('chat-new-pipeline'), newChannel: byId('chat-new-channel'),
     contactFeedback: byId('chat-contact-feedback'), contactSubmit: byId('chat-contact-submit'), contactCancel: byId('chat-contact-cancel'),
     linkPartnerModal: byId('chat-link-partner-modal'), linkPartnerForm: byId('chat-link-partner-form'),
     linkPartnerClose: byId('chat-link-partner-close'), linkPartnerPhone: byId('chat-link-partner-phone'),
@@ -74,7 +76,7 @@
   };
 
   const state = {
-    conversations: [], conversation: null, conversationId: null, page: 1, totalPages: 1,
+    conversations: [], conversation: null, conversationId: null, page: 1, totalPages: 1, channels: [], selectedChannelId: '',
     status: '', search: '', messages: [], calls: [], messagePage: 1, messageTotalPages: 1,
     loading: false, loadingOlder: false, sending: false, initialized: false, eventSource: null,
     mediaUrls: new Map(), mediaRequests: new Map(), templates: [], selectedTemplate: null,
@@ -215,8 +217,7 @@
       || (String(state.conversationId) === String(id) ? state.conversation : null)
       || { id };
     const keys = Core.conversationIdentityKeys(conversation);
-    const phoneKey = keys.find((key) => key.startsWith('phone:'));
-    state.hiddenConversationIds.add(phoneKey || keys[0] || String(id));
+    state.hiddenConversationIds.add(keys.find((key) => key.startsWith('id:')) || String(id));
     saveHiddenConversationIds();
   }
 
@@ -236,10 +237,8 @@
     conversations.forEach((conversation) => {
       const rawId = String(conversation.id ?? '');
       if (!rawId || !state.hiddenConversationIds.has(rawId)) return;
-      const phoneKey = Core.conversationIdentityKeys(conversation).find((key) => key.startsWith('phone:'));
-      if (!phoneKey) return;
       state.hiddenConversationIds.delete(rawId);
-      state.hiddenConversationIds.add(phoneKey);
+      state.hiddenConversationIds.add(`id:${rawId}`);
       changed = true;
     });
     if (changed) saveHiddenConversationIds();
@@ -390,8 +389,39 @@
     ).join('');
   }
 
+  function channelText(value = {}) {
+    const name = String(value.displayName || value.name || 'Canal não identificado').trim();
+    const phone = String(value.displayPhoneNumber || '').trim();
+    return phone ? `${name} · ${phone}` : name;
+  }
+
+  function conversationMatchesChannel(conversation = {}) {
+    if (!state.selectedChannelId) return true;
+    return String(Core.channel(conversation)?.id ?? conversation.channelId ?? '') === String(state.selectedChannelId);
+  }
+
+  function fillChannelSelects() {
+    const options = state.channels.map((channel) => `<option value="${escapeHtml(channel.id)}">${escapeHtml(channelText(channel))}</option>`).join('');
+    refs.channelFilter.innerHTML = `<option value="">Todos os números</option>${options}`;
+    refs.channelFilter.value = state.selectedChannelId;
+    refs.channelFilter.disabled = false;
+    const defaultChannel = state.channels.find((channel) => channel.isDefault) || state.channels[0];
+    refs.newChannel.innerHTML = `<option value="">Selecione um número...</option>${options}`;
+    refs.newChannel.value = defaultChannel ? String(defaultChannel.id) : '';
+    refs.newChannel.disabled = false;
+  }
+
+  async function loadChannels() {
+    const payload = await api('/channels');
+    state.channels = Core.normalizeChannels(payload);
+    const saved = localStorage.getItem(CHANNEL_FILTER_KEY) || '';
+    state.selectedChannelId = state.channels.some((channel) => String(channel.id) === saved) ? saved : '';
+    fillChannelSelects();
+    if (state.selectedChannelId) state.conversations = state.conversations.filter(conversationMatchesChannel);
+  }
+
   function updateNewContactSubmit() {
-    refs.contactSubmit.disabled = !state.selectedPartner || !refs.partnerContact.value || refs.newPipeline?.value === '';
+    refs.contactSubmit.disabled = !state.selectedPartner || !refs.partnerContact.value || !refs.newChannel?.value || refs.newPipeline?.value === '';
   }
 
   function renderConversationSkeleton() {
@@ -528,11 +558,12 @@
       const unread = Number(item.unreadCount || 0);
       const active = String(item.id) === String(state.conversationId);
       const agent = assignedUser(item);
+      const channel = Core.channel(item);
       return `<button class="chat-conversation${active ? ' is-active' : ''}${unread ? ' has-unread' : ''}" type="button" data-conversation-id="${escapeHtml(item.id)}">
         <span class="chat-list-avatar">${escapeHtml(Core.initials(name))}</span>
         <span class="chat-list-copy"><span class="chat-list-line"><span class="chat-list-name"><strong>${escapeHtml(name)}</strong>${sankhyaBadge(item)}${pipelineBadges(item)}</span><time>${escapeHtml(formatDate(conversationTimestamp(item), true))}</time></span>
         <span class="chat-list-line"><small>${escapeHtml(Core.messagePreview(item.lastMessage))}</small>${unread ? `<b>${unread > 99 ? '99+' : unread}</b>` : ''}</span>
-        <span class="chat-list-agent${agent ? '' : ' is-unassigned'}">${escapeHtml(agent?.name || 'Sem atendente')}</span></span>
+        <span class="chat-list-meta"><span class="chat-list-agent${agent ? '' : ' is-unassigned'}">${escapeHtml(agent?.name || 'Sem atendente')}</span><span class="chat-channel-badge">${escapeHtml(Core.channelLabel(item))}</span></span></span>
       </button>`;
     }).join('');
     refs.list.querySelectorAll('[data-conversation-id]').forEach(bindConversationItem);
@@ -606,6 +637,7 @@
       const query = new URLSearchParams({ page: String(state.page), limit: '30' });
       if (state.search) query.set('search', state.search);
       if (state.status) query.set('status', state.status);
+      if (state.selectedChannelId) query.set('channelId', state.selectedChannelId);
       query.set('assignment', state.assignment);
       if (state.access?.diretor === true && state.agentId) query.set('agentId', state.agentId);
       const payload = await api(`/conversations?${query}`);
@@ -1047,10 +1079,13 @@
     const name = Core.contactName(item);
     const phone = contact.phone || contact.waId || '-';
     const initials = Core.initials(name);
+    const channel = Core.channel(item);
     refs.contactName.innerHTML = `${escapeHtml(name)}${sankhyaBadge(item, false)}`; refs.contactPhone.textContent = phone; refs.contactAvatar.textContent = initials;
+    refs.contactChannel.textContent = channel ? `via ${channelText(channel)}` : 'Canal não identificado';
     refs.detailsEmpty.hidden = true; refs.detailsContent.hidden = false;
     refs.detailsAvatar.textContent = initials; refs.detailsName.innerHTML = `${escapeHtml(name)}${sankhyaBadge(item, false)}`; refs.detailsPhone.textContent = phone;
     refs.detailsWaid.textContent = contact.waId || '-'; refs.detailsLast.textContent = formatDate(item.lastMessageAt || item.updatedAt) || '-';
+    refs.detailsChannel.textContent = channel ? channelText(channel) : 'Canal não identificado';
     refs.detailsUnread.textContent = String(item.unreadCount || 0);
     const cadastro = sankhyaCadastro(item);
     if (refs.sankhyaData) {
@@ -1497,6 +1532,11 @@
     if (isConversationHidden(incoming)) return;
     const index = state.conversations.findIndex((item) => String(item.id) === id);
     const merged = Core.mergeConversationSnapshot(index >= 0 ? state.conversations[index] : {}, incoming);
+    if (!conversationMatchesChannel(merged)) {
+      if (index >= 0) state.conversations.splice(index, 1);
+      scheduleConversationsRender();
+      return;
+    }
     if (!matchesAssignment(merged)) {
       if (index >= 0) state.conversations.splice(index, 1);
       scheduleConversationsRender();
@@ -2138,6 +2178,7 @@
     refs.partnerResults.hidden = true;
     refs.partnerResults.innerHTML = '';
     refs.contactFeedback.textContent = '';
+    fillChannelSelects();
     if (refs.newPipeline) {
       refs.newPipeline.innerHTML = '<option value="">Carregando pipelines...</option>';
       loadPipelines().then(() => {
@@ -2283,13 +2324,14 @@
     const codParc = Number(state.selectedPartner?.codParc);
     const contactKey = refs.partnerContact.value;
     const pipelineValue = refs.newPipeline?.value ?? '';
-    if (!Number.isInteger(codParc) || !contactKey || pipelineValue === '') return;
+    const channelId = Number(refs.newChannel?.value);
+    if (!Number.isInteger(codParc) || !contactKey || !Number.isInteger(channelId) || pipelineValue === '') return;
     const pipelineId = Number(pipelineValue);
     refs.contactSubmit.disabled = true;
     refs.contactFeedback.textContent = 'Criando contato...';
     try {
       const result = await api('/conversations', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codParc, contactKey, pipelineId })
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codParc, contactKey, pipelineId, channelId })
       });
       const created = result?.conversation || result;
       if (!created?.id) throw new Error('Não foi possível criar a conversa.');
@@ -2453,6 +2495,13 @@
     refs.input.addEventListener('blur', () => syncRestingViewportHeight(280));
     refs.input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); refs.form.requestSubmit(); } });
     refs.refresh.addEventListener('click', () => { state.page = 1; loadConversations(); });
+    refs.channelFilter?.addEventListener('change', () => {
+      state.selectedChannelId = refs.channelFilter.value;
+      localStorage.setItem(CHANNEL_FILTER_KEY, state.selectedChannelId);
+      state.page = 1;
+      state.conversations = [];
+      loadConversations();
+    });
     refs.agentFilterToggle?.addEventListener('click', (event) => { event.stopPropagation(); toggleAgentFilter(); });
     refs.agentFilter?.addEventListener('click', (event) => event.stopPropagation());
     refs.agentFilterSelect?.addEventListener('change', () => applyAgentFilter(refs.agentFilterSelect.value));
@@ -2549,6 +2598,7 @@
     refs.newSankhyaContactClose.addEventListener('click', closeNewSankhyaContact);
     refs.newSankhyaContactSave.addEventListener('click', saveNewSankhyaContact);
     refs.newPipeline?.addEventListener('change', updateNewContactSubmit);
+    refs.newChannel?.addEventListener('change', updateNewContactSubmit);
     refs.partnerContacts.addEventListener('click', (event) => {
       const button = event.target.closest('[data-chat-contact]');
       if (!button) return;
@@ -2595,6 +2645,12 @@
     if (!state.initialized) { bindEvents(); connectRealtime(); state.initialized = true; }
     else if (!state.eventSource) connectRealtime();
     restoreUiCache();
+    await loadChannels().catch(() => {
+      state.channels = [];
+      refs.channelFilter.innerHTML = '<option value="">Números indisponíveis</option>';
+      refs.channelFilter.disabled = true;
+      refs.newChannel.innerHTML = '<option value="">Números indisponíveis</option>';
+    });
     const refresh = state.conversations.length ? loadConversations() : null;
     if (!refresh) await loadConversations();
     if (conversationId) await openConversation(conversationId, { historyMode: 'none' });

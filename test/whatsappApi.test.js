@@ -64,17 +64,22 @@ test('envia a reação para a mensagem da conversa sem montar URL manualmente', 
 
 test('normaliza o envelope da API ao criar uma conversa', async () => {
   const originalFetch = global.fetch;
-  global.fetch = async () => new Response(JSON.stringify({
+  let requestOptions = {};
+  global.fetch = async (_url, options) => {
+    requestOptions = options;
+    return new Response(JSON.stringify({
     success: true,
     data: { conversation: { id: 91, contact: { waId: '5566999990000' } }, created: true }
   }), {
     status: 201,
     headers: { 'content-type': 'application/json' }
-  });
+    });
+  };
   try {
-    const result = await whatsappApi.createConversation({ name: 'Cliente Teste', phone: '5566999990000' });
+    const result = await whatsappApi.createConversation({ name: 'Cliente Teste', phone: '5566999990000', channelId: 2 });
     assert.equal(result.conversation.id, 91);
     assert.equal(result.created, true);
+    assert.equal(JSON.parse(requestOptions.body).channelId, 2);
   } finally {
     global.fetch = originalFetch;
   }
@@ -94,6 +99,25 @@ test('consulta a permissão pelo endpoint canônico da conversa', async () => {
     const result = await whatsappApi.getCallPermission(44, { id: 7, name: 'Ana' });
     assert.match(requestUrl, /\/api\/conversations\/44\/call-permission/);
     assert.equal(result.data.canCall, true);
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test('consulta os canais pelo endpoint público da API de atendimento', async () => {
+  const originalFetch = global.fetch;
+  let requestUrl = '';
+  global.fetch = async (url) => {
+    requestUrl = String(url);
+    return new Response(JSON.stringify({ data: [{ id: 1, displayName: 'Norte Sul Sementes' }] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    });
+  };
+  try {
+    const result = await whatsappApi.getChannels();
+    assert.match(requestUrl, /\/api\/whatsapp\/channels$/);
+    assert.equal(result.data[0].id, 1);
   } finally {
     global.fetch = originalFetch;
   }

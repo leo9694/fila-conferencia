@@ -319,13 +319,27 @@ function telefoneDaConversa(conversa = {}) {
   return contato.waId || contato.phone || conversa.waId || conversa.phone || '';
 }
 
+function identidadeCanalConversa(conversa = {}) {
+  const channel = conversa.channel || conversa.Channel || {};
+  const id = String(channel.id ?? conversa.channelId ?? '').trim();
+  if (id) return `id:${id}`;
+  const phoneNumberId = String(channel.phoneNumberId ?? conversa.phoneNumberId ?? '').trim();
+  return phoneNumberId ? `phone-number:${phoneNumberId}` : 'legacy';
+}
+
+function chaveCanalTelefoneConversa(conversa = {}) {
+  if (identidadeCanalConversa(conversa) === 'legacy') return '';
+  const phone = identidadeTelefoneWhatsapp(telefoneDaConversa(conversa));
+  return phone ? `channel:${identidadeCanalConversa(conversa)}:phone:${phone}` : '';
+}
+
 function chavesIdentidadeConversa(conversa = {}) {
   const ids = [conversa.id, conversa.conversationId, ...(conversa.relatedConversationIds || [])]
     .map(Number)
     .filter(Number.isInteger)
     .map((item) => `id:${item}`);
-  const phone = identidadeTelefoneWhatsapp(telefoneDaConversa(conversa));
-  return [...new Set([...ids, ...(phone ? [`phone:${phone}`] : [])])];
+  const channelPhone = chaveCanalTelefoneConversa(conversa);
+  return [...new Set([...ids, ...(channelPhone ? [channelPhone] : [])])];
 }
 
 function instanteUltimaMensagem(conversa = {}) {
@@ -553,16 +567,16 @@ function registrarGrupoConversa(canonica, itens) {
   const canonicalId = Number(canonica.id);
   ids.forEach((conversationId) => gruposConversaPorId.set(conversationId, { canonicalId, ids }));
   gruposConversaPorId.set(canonicalId, { canonicalId, ids });
-  const phone = identidadeTelefoneWhatsapp(telefoneDaConversa(canonica));
-  if (phone) conversaCanonicaPorTelefone.set(phone, canonicalId);
+  const channelPhone = chaveCanalTelefoneConversa(canonica);
+  if (channelPhone) conversaCanonicaPorTelefone.set(channelPhone, canonicalId);
   cacheConversaCanonica.set(canonicalId, canonica);
 }
 
 function consolidarConversas(conversas = []) {
   const groups = new Map();
   conversas.map(comAtribuicao).forEach((conversa) => {
-    const phone = identidadeTelefoneWhatsapp(telefoneDaConversa(conversa));
-    const key = phone ? `phone:${phone}` : `id:${conversa.id}`;
+    const channelPhone = chaveCanalTelefoneConversa(conversa);
+    const key = channelPhone || `id:${conversa.id}`;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(conversa);
   });
@@ -631,17 +645,23 @@ async function idConversaParaMensagem(conversationId) {
   return (conversas.find((item) => item.serviceWindow?.canSendFreeform) || conversas[0]).id;
 }
 
-async function buscarConversaPorTelefone(telefone) {
+async function buscarConversasPorTelefone(telefone, channelId = '') {
   const identity = identidadeTelefoneWhatsapp(telefone);
-  if (!identity) return null;
+  if (!identity) return [];
   const respostas = await Promise.all(variantesTelefoneWhatsapp(telefone).map((search) => (
-    whatsappApi.getConversations({ page: 1, limit: 30, search, assignment: 'ALL' })
+    whatsappApi.getConversations({ page: 1, limit: 30, search, assignment: 'ALL', channelId })
   )));
   const unique = new Map();
   respostas.flatMap((item) => item?.data || []).forEach((conversa) => {
-    if (identidadeTelefoneWhatsapp(telefoneDaConversa(conversa)) === identity) unique.set(String(conversa.id), conversa);
+    const sameChannel = !channelId || String(conversa.channel?.id ?? conversa.channelId ?? '') === String(channelId);
+    if (sameChannel && identidadeTelefoneWhatsapp(telefoneDaConversa(conversa)) === identity) unique.set(String(conversa.id), conversa);
   });
-  return consolidarConversas([...unique.values()])[0] || null;
+  return consolidarConversas([...unique.values()]);
+}
+
+async function buscarConversaPorTelefone(telefone, channelId = '') {
+  const conversas = await buscarConversasPorTelefone(telefone, channelId);
+  return conversas[0] || null;
 }
 
 async function buscarConversasPorCodigoParceiro(codParc) {
@@ -661,19 +681,15 @@ async function buscarConversasPorCodigoParceiro(codParc) {
 
   // A conversa atual já pode estar consolidada no processo, mesmo quando a
   // integração externa não aplica corretamente o filtro por telefone.
-  identidades.forEach((identidade) => {
-    const conversationId = conversaCanonicaPorTelefone.get(identidade);
-    const conversa = conversationId ? cacheConversaCanonica.get(conversationId) : null;
-    if (conversa) registrar(conversa);
-  });
+  cacheConversaCanonica.forEach(registrar);
 
   const tamanhoLote = 5;
   for (let inicio = 0; inicio < resultado.contatos.length; inicio += tamanhoLote) {
     const lote = resultado.contatos.slice(inicio, inicio + tamanhoLote);
     const conversas = await Promise.all(lote.map((contato) => (
-      buscarConversaPorTelefone(contato.telefone).catch(() => null)
+      buscarConversasPorTelefone(contato.telefone).catch(() => [])
     )));
-    conversas.filter(Boolean).forEach(registrar);
+    conversas.flat().forEach(registrar);
   }
 
   const pendentes = [...identidades].filter((identidade) => !encontradasPorTelefone.has(identidade));
@@ -695,8 +711,8 @@ async function buscarConversasPorCodigoParceiro(codParc) {
 async function normalizarEventoAtendimento(event, payload = {}) {
   if (event === 'conversation:new' || event === 'conversation:updated') {
     const incoming = payload.conversation || payload;
-    const phone = identidadeTelefoneWhatsapp(telefoneDaConversa(incoming));
-    const knownId = phone ? conversaCanonicaPorTelefone.get(phone) : null;
+    const channelPhone = chaveCanalTelefoneConversa(incoming);
+    const knownId = channelPhone ? conversaCanonicaPorTelefone.get(channelPhone) : null;
     const cached = knownId ? cacheConversaCanonica.get(knownId) : null;
     const conversation = consolidarConversas(cached ? [cached, incoming] : [incoming])[0];
     return { ...payload, conversationId: conversation.id, conversation: comAtribuicao(conversation) };
@@ -707,8 +723,8 @@ async function normalizarEventoAtendimento(event, payload = {}) {
   if (group.ids.length === 1 && !cacheConversaCanonica.has(rawId) && event === 'message:new') {
     try {
       const incoming = await whatsappApi.getConversation(rawId);
-      const phone = identidadeTelefoneWhatsapp(telefoneDaConversa(incoming));
-      const knownId = phone ? conversaCanonicaPorTelefone.get(phone) : null;
+      const channelPhone = chaveCanalTelefoneConversa(incoming);
+      const knownId = channelPhone ? conversaCanonicaPorTelefone.get(channelPhone) : null;
       const cached = knownId ? cacheConversaCanonica.get(knownId) : null;
       consolidarConversas(cached ? [cached, incoming] : [incoming]);
       group = grupoConversa(rawId);
@@ -1283,6 +1299,8 @@ router.get('/conversations', asyncRoute(async (req, res) => {
     limit: filtroLocalAtivo ? 100 : limit,
     search: req.query.search,
     status: req.query.status,
+    channelId: req.query.channelId,
+    phoneNumberId: req.query.phoneNumberId,
     // A distribuição é local ao aplicativo; a API externa sempre entrega a fila completa.
     assignment: 'ALL'
   };
@@ -1306,6 +1324,8 @@ router.get('/conversations', asyncRoute(async (req, res) => {
     console.error('Falha ao enriquecer a fila do chat em segundo plano:', error.message);
   });
   const filtradas = consolidadas.filter((conversa) => {
+    if (req.query.channelId && String(conversa.channel?.id ?? conversa.channelId ?? '') !== String(req.query.channelId)) return false;
+    if (req.query.phoneNumberId && String(conversa.channel?.phoneNumberId ?? conversa.phoneNumberId ?? '') !== String(req.query.phoneNumberId)) return false;
     if (conversaOcultaParaUsuario(req.usuario.codUsu, conversa)) return false;
     return conversaCorrespondeFiltroAtendente(conversa, {
       assignment,
@@ -1330,21 +1350,36 @@ router.get('/conversations', asyncRoute(async (req, res) => {
   });
 }));
 
+router.get('/channels', asyncRoute(async (_req, res) => {
+  const resposta = await whatsappApi.getChannels();
+  res.json({ success: true, data: Array.isArray(resposta?.data) ? resposta.data : [] });
+}));
+
 router.post('/conversations', asyncRoute(async (req, res) => {
   const codParc = Number(req.body?.codParc);
   const contactKey = String(req.body?.contactKey || '').trim();
   const pipelineId = idPipelineBitrix(req.body?.pipelineId);
+  const requestedChannelId = String(req.body?.channelId ?? '').trim();
   if (!Number.isInteger(codParc) || codParc <= 0 || !contactKey || pipelineId === null) {
     return res.status(400).json({ erro: 'Selecione um parceiro, um contato e um pipeline do Bitrix.' });
   }
+  const respostaCanais = await whatsappApi.getChannels();
+  const canais = Array.isArray(respostaCanais?.data) ? respostaCanais.data : [];
+  const canal = requestedChannelId
+    ? canais.find((item) => String(item.id) === requestedChannelId)
+    : canais.find((item) => item.isDefault === true);
+  if (!canal) {
+    return res.status(409).json({ erro: 'Este número de atendimento não está disponível no momento.' });
+  }
+  const channelId = Number(canal.id);
   const resultado = await contatosDoParceiro(codParc);
   if (!resultado) return res.status(404).json({ erro: 'Parceiro ativo não encontrado no Sankhya.' });
   const contato = resultado.contatos.find((item) => item.key === contactKey);
   if (!contato) return res.status(400).json({ erro: 'O contato selecionado não possui um telefone ativo no Sankhya.' });
-  const existente = await buscarConversaPorTelefone(contato.telefone);
+  const existente = await buscarConversaPorTelefone(contato.telefone, channelId);
   const resposta = existente
     ? { conversation: existente, reused: true }
-    : await whatsappApi.createConversation({ name: contato.nome, phone: identidadeTelefoneWhatsapp(contato.telefone) });
+    : await whatsappApi.createConversation({ name: contato.nome, phone: identidadeTelefoneWhatsapp(contato.telefone), channelId });
   const conversationBase = consolidarConversas([resposta.conversation])[0];
   const contactMatch = contactKey.match(/^CTT:(\d+):/);
   const conversation = {

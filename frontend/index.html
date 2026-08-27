@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="/transporte-dashboard.css?v=20260810-3">
-  <link rel="stylesheet" href="/chat.css?v=20260825-4">
+  <link rel="stylesheet" href="/chat.css?v=20260827-1">
 
   <style>
     :root {
@@ -12704,6 +12704,12 @@
               </button>
             </div>
           </div>
+          <label class="chat-channel-filter" for="chat-channel-filter">
+            <i data-lucide="phone-call" aria-hidden="true"></i>
+            <select id="chat-channel-filter" aria-label="Filtrar por número de atendimento">
+              <option value="">Todos os números</option>
+            </select>
+          </label>
           <div class="chat-agent-filter" id="chat-agent-filter" hidden>
             <label for="chat-agent-filter-select">Atendente</label>
             <div>
@@ -12746,6 +12752,7 @@
               <div class="chat-contact-heading">
                 <strong id="chat-contact-name">-</strong>
                 <span><span id="chat-contact-phone">-</span><b id="chat-assignment-label">Sem atendente</b></span>
+                <small id="chat-contact-channel">Canal não identificado</small>
               </div>
               <button class="chat-assignment-button" id="chat-claim" type="button">Assumir</button>
               <button class="chat-assignment-button" id="chat-transfer" type="button" hidden>Transferir</button>
@@ -12825,6 +12832,7 @@
             <p id="chat-details-phone">-</p>
             <dl class="chat-details-list">
               <div><dt>WA ID</dt><dd id="chat-details-waid">-</dd></div>
+              <div><dt>Número de atendimento</dt><dd id="chat-details-channel">Canal não identificado</dd></div>
               <div><dt>Último atendimento</dt><dd id="chat-details-last">-</dd></div>
               <div><dt>Não lidas</dt><dd id="chat-details-unread">0</dd></div>
               <div><dt>Atendente</dt><dd id="chat-details-agent">Sem atendente</dd></div>
@@ -12852,6 +12860,7 @@
       <h2 id="whatsapp-call-title">Chamada pelo WhatsApp</h2>
       <strong id="whatsapp-call-contact">Contato do WhatsApp</strong>
       <span id="whatsapp-call-phone"></span>
+      <span id="whatsapp-call-channel" hidden></span>
       <p class="whatsapp-call-status" id="whatsapp-call-status">Chamada recebida</p>
       <time id="whatsapp-call-duration">00:00</time>
       <div class="whatsapp-call-actions">
@@ -12946,6 +12955,11 @@
           </div>
           <div class="chat-new-sankhya-contact-actions"><span id="chat-new-sankhya-contact-feedback"></span><button id="chat-new-sankhya-contact-save" type="button"><i data-lucide="save" aria-hidden="true"></i>Salvar contato</button></div>
         </div>
+        <label class="chat-channel-field">Enviar por
+          <select id="chat-new-channel" required>
+            <option value="">Carregando números...</option>
+          </select>
+        </label>
         <label class="chat-pipeline-field" id="chat-new-pipeline-field">Pipeline do Bitrix
           <select id="chat-new-pipeline" required>
             <option value="">Carregando pipelines...</option>
@@ -13156,10 +13170,10 @@
   <script src="vendas-dashboard.js?v=20260820-1"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="transporte-dashboard.js?v=20260820-1"></script>
-  <script src="chat-core.js?v=20260825-2"></script>
+  <script src="chat-core.js?v=20260827-2"></script>
   <script src="whatsapp-call-core.js?v=20260825-5"></script>
-  <script src="whatsapp-call.js?v=20260825-8"></script>
-  <script src="chat.js?v=20260825-5"></script>
+  <script src="whatsapp-call.js?v=20260827-1"></script>
+  <script src="chat.js?v=20260827-2"></script>
   <script src="app.js?v=20260805-5"></script>
 </body>
 </html>

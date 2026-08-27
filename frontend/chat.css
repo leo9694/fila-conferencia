@@ -37,6 +37,9 @@
 .chat-agent-filter button { display:grid; place-items:center; flex:0 0 30px; width:30px; height:30px; border:0; border-radius:8px; background:#e4f2ee; color:#087f6d; }
 .chat-agent-filter button[hidden] { display:none; }
 .chat-agent-filter button svg { width:14px; height:14px; }
+.chat-channel-filter { height:36px; margin:0 12px 9px; padding:0 9px; display:flex; align-items:center; gap:7px; border:1px solid #d3e2df; border-radius:10px; background:#fff; color:#087f6d; }
+.chat-channel-filter svg { flex:0 0 auto; width:15px; }
+.chat-channel-filter select { flex:1; min-width:0; height:100%; border:0; outline:0; background:transparent; color:#274752; font-size:.7rem; font-weight:700; }
 .chat-search { height:40px; margin:0 12px 9px; padding:0 11px; display:flex; align-items:center; gap:8px; border:1px solid #d3e2df; border-radius:10px; background:#fff; }
 .chat-search:focus-within { border-color:#20a88e; box-shadow:0 0 0 3px rgba(32,168,142,.1); }
 .chat-search svg { width:16px; color:#6b818b; }
@@ -63,6 +66,9 @@
 .chat-list-line time { flex:none; color:#8698a0; font-size:.62rem; }
 .chat-list-line small { color:#687e88; font-size:.69rem; }
 .chat-list-line b { display:grid; place-items:center; min-width:20px; height:20px; padding:0 5px; border-radius:999px; background:#10a37f; color:#fff; font-size:.6rem; }
+.chat-list-meta { margin-top:4px; display:flex; align-items:center; justify-content:space-between; gap:6px; }
+.chat-list-meta .chat-list-agent { margin-top:0; }
+.chat-channel-badge { max-width:58%; padding:2px 6px; overflow:hidden; border-radius:999px; background:#e7f4f1; color:#087f6d; font-size:.56rem; font-weight:800; text-overflow:ellipsis; white-space:nowrap; }
 .chat-sankhya-badge { display:inline-grid; place-items:center; flex:none; width:18px; height:18px; border-radius:999px; background:#e2f6ef; color:#07836f; vertical-align:middle; }
 .chat-sankhya-badge.is-compact { width:15px; height:15px; }
 .chat-sankhya-badge svg { width:12px; height:12px; stroke-width:2.4; }
@@ -85,6 +91,7 @@
 .chat-active-view { height:100%; min-height:0; overflow:hidden; display:flex; flex-direction:column; background:#eef5f3; }
 .chat-active-header { min-height:60px; padding:9px 13px; display:flex; align-items:center; gap:10px; border-bottom:1px solid #dce8e6; background:#fff; }
 .chat-contact-avatar { width:38px; height:38px; font-size:.72rem; }.chat-contact-heading { flex:1; min-width:0; display:flex; flex-direction:column; }.chat-contact-heading strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.82rem; }.chat-contact-heading span { color:#6d828c; font-size:.66rem; }
+.chat-contact-heading>small { margin-top:2px; overflow:hidden; color:#087f6d; font-size:.58rem; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
 .chat-details-toggle,.chat-mobile-back { display:grid; place-items:center; width:34px; height:34px; border:0; border-radius:9px; background:transparent; color:#52707b; }.chat-details-toggle:hover,.chat-mobile-back:hover { background:#e8f3f0; color:#087f6d; }.chat-details-toggle svg,.chat-mobile-back svg { width:18px; }.chat-mobile-back { display:none; }
 .chat-call-start { display:grid; place-items:center; flex:0 0 36px; width:36px; height:36px; border:1px solid #b9d9d2; border-radius:10px; background:#edf8f5; color:#087f6d; cursor:pointer; transition:.15s ease; }
 .chat-call-start:hover { border-color:#087f6d; background:#dff3ed; transform:translateY(-1px); }
@@ -128,6 +135,7 @@
 .whatsapp-call-avatar { width:78px; height:78px; display:grid; place-items:center; margin-bottom:13px; border-radius:50%; background:rgba(255,255,255,.14); box-shadow:0 0 0 8px rgba(255,255,255,.06); }.whatsapp-call-avatar svg { width:32px; height:32px; }
 .whatsapp-call-eyebrow { margin:0 0 6px; color:#8ee0cb; font-size:.69rem; font-weight:800; letter-spacing:.15em; }.whatsapp-call-panel h2 { margin:0 0 18px; font-size:1.18rem; }.whatsapp-call-panel>strong { max-width:100%; overflow-wrap:anywhere; font-size:1.35rem; }.whatsapp-call-panel>span:not(.whatsapp-call-avatar) { margin-top:5px; color:#bdd8d3; font-size:.78rem; }
 .whatsapp-call-status { min-height:20px; margin:20px 0 5px; color:#d8ebe7; font-size:.82rem; }.whatsapp-call-panel time { font-size:1.25rem; font-variant-numeric:tabular-nums; font-weight:800; }
+.whatsapp-call-panel #whatsapp-call-channel { max-width:100%; font-size:.7rem; font-weight:700; }
 .whatsapp-call-actions { width:100%; display:flex; justify-content:center; gap:14px; margin-top:25px; }.whatsapp-call-actions button { min-width:104px; min-height:54px; padding:8px 14px; display:flex; align-items:center; justify-content:center; gap:7px; border:0; border-radius:15px; color:#fff; cursor:pointer; font:700 .76rem Inter,sans-serif; transition:.15s ease; }.whatsapp-call-actions button:hover { transform:translateY(-2px); filter:brightness(1.08); }.whatsapp-call-actions button svg { width:19px; height:19px; }.whatsapp-call-actions .is-primary { background:#14a17e; }.whatsapp-call-actions .is-danger { background:#d64941; }.whatsapp-call-actions button:not(.is-primary):not(.is-danger) { background:rgba(255,255,255,.15); }.whatsapp-call-actions button.is-active { background:#e09a2b; }.whatsapp-call-actions .is-wide { width:100%; }
 .whatsapp-call-transfer-picker { width:100%; margin-top:16px; padding:13px; border-radius:14px; background:rgba(255,255,255,.1); text-align:left; }.whatsapp-call-transfer-picker[hidden] { display:none!important; }.whatsapp-call-transfer-picker label { display:block; margin-bottom:7px; color:#d8ebe7; font-size:.7rem; font-weight:800; }.whatsapp-call-transfer-picker select { width:100%; min-height:42px; border:0; border-radius:9px; padding:0 10px; background:#fff; color:#173843; }.whatsapp-call-transfer-picker>div { display:flex; gap:8px; margin-top:10px; }.whatsapp-call-transfer-picker button { min-height:38px; flex:1; border:0; border-radius:9px; padding:7px 9px; cursor:pointer; font-size:.7rem; font-weight:800; }.whatsapp-call-transfer-picker button:last-child { color:#fff; background:#14a17e; }
 .whatsapp-call-toast { position:fixed; z-index:5100; left:50%; bottom:25px; max-width:min(420px,calc(100vw - 30px)); transform:translateX(-50%); padding:12px 16px; border-radius:11px; background:#173a47; box-shadow:0 12px 32px rgba(0,0,0,.25); color:#fff; font:700 .75rem Inter,sans-serif; }

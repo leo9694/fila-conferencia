@@ -124,6 +124,7 @@ test('consolida conversas duplicadas pelo telefone e preserva histórico e janel
   const [conversation] = chatRouter._internals.consolidarConversas([
     {
       id: 34,
+      channel: { id: 1 },
       contact: { name: 'Parceiro Sankhya', phone: '5566999633482' },
       lastMessage: { id: 1, text: 'Template' },
       lastMessageAt: '2026-08-17T17:15:00.000Z',
@@ -131,6 +132,7 @@ test('consolida conversas duplicadas pelo telefone e preserva histórico e janel
     },
     {
       id: 35,
+      channel: { id: 1 },
       contact: { name: 'Perfil Meta', phone: '556699633482' },
       lastMessage: { id: 2, text: 'Olá' },
       lastMessageAt: '2026-08-17T17:24:00.000Z',
@@ -144,15 +146,24 @@ test('consolida conversas duplicadas pelo telefone e preserva histórico e janel
   assert.deepEqual(conversation.relatedConversationIds, [34, 35]);
 });
 
-test('gera identidades persistentes para todos os canais consolidados do contato', () => {
+test('gera identidades persistentes somente para o canal consolidado do contato', () => {
   assert.deepEqual(
     new Set(chatRouter._internals.chavesIdentidadeConversa({
       id: 19,
+      channel: { id: 2 },
       relatedConversationIds: [19, 20],
       contact: { phone: '556692339094' }
     })),
-    new Set(['id:19', 'id:20', 'phone:556692339094'])
+    new Set(['id:19', 'id:20', 'channel:id:2:phone:556692339094'])
   );
+});
+
+test('não consolida o mesmo cliente quando as conversas pertencem a canais diferentes', () => {
+  const conversations = chatRouter._internals.consolidarConversas([
+    { id: 41, channel: { id: 1 }, contact: { phone: '5566999990000' } },
+    { id: 42, channel: { id: 2 }, contact: { phone: '5566999990000' } }
+  ]);
+  assert.deepEqual(conversations.map((item) => item.id), [41, 42]);
 });
 
 test('considera a liberação mais recente acima de uma atribuição antiga de ID relacionado', () => {
@@ -179,8 +190,8 @@ test('considera a liberação mais recente acima de uma atribuição antiga de I
 
 test('resolve todos os ids relacionados de uma conversa consolidada', () => {
   const [conversation] = chatRouter._internals.consolidarConversas([
-    { id: 71, contact: { phone: '5566999990000' } },
-    { id: 72, contact: { phone: '5566999990000' } }
+    { id: 71, channel: { id: 1 }, contact: { phone: '5566999990000' } },
+    { id: 72, channel: { id: 1 }, contact: { phone: '5566999990000' } }
   ]);
   assert.deepEqual(new Set(chatRouter._internals.idsRelacionadosConversa(conversation)), new Set([71, 72]));
   assert.deepEqual(new Set(chatRouter._internals.idsRelacionadosConversa({ id: 72 })), new Set([71, 72]));

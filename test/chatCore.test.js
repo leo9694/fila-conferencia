@@ -15,12 +15,15 @@ test('exibe nome do contato e usa telefone como fallback', () => {
   }), 'Emilly Financeiro');
 });
 
-test('identifica a mesma conversa pelo telefone mesmo quando o id muda', () => {
-  assert.deepEqual(ChatCore.conversationIdentityKeys({ id: 12, contact: { phone: '+55 (66) 99999-0000' } }), [
+test('identifica a mesma conversa pelo telefone somente dentro do mesmo canal', () => {
+  assert.deepEqual(ChatCore.conversationIdentityKeys({ id: 12, channel: { id: 2 }, contact: { phone: '+55 (66) 99999-0000' } }), [
     'id:12',
-    'phone:5566999990000'
+    'channel:id:2:phone:5566999990000'
   ]);
-  assert.equal(ChatCore.conversationIdentityKeys({ id: 99, contact: { waId: '5566999990000' } })[1], 'phone:5566999990000');
+  assert.notEqual(
+    ChatCore.conversationIdentityKeys({ id: 99, channel: { id: 1 }, contact: { waId: '5566999990000' } })[1],
+    ChatCore.conversationIdentityKeys({ id: 100, channel: { id: 2 }, contact: { waId: '5566999990000' } })[1]
+  );
 });
 
 test('gera prévias seguras para texto e mídias suportadas', () => {
@@ -191,12 +194,12 @@ test('carrega mais conversas ao chegar ao fim da lista ou quando o lote não pre
   assert.equal(ChatCore.shouldLoadMoreConversations({ scrollTop: 100, scrollHeight: 1200, clientHeight: 400 }), false);
 });
 
-test('mescla páginas de conversas sem repetir o mesmo telefone', () => {
+test('mescla páginas sem repetir telefone no mesmo canal e preserva outro canal', () => {
   const result = ChatCore.mergeConversationPages([
-    { id: 10, contact: { phone: '5566999990000', name: 'Cliente' }, lastMessageAt: '2026-08-20T10:00:00Z' }
+    { id: 10, channel: { id: 1 }, contact: { phone: '5566999990000', name: 'Cliente' }, lastMessageAt: '2026-08-20T10:00:00Z' }
   ], [
-    { id: 11, contact: { phone: '+55 (66) 99999-0000' }, lastMessageAt: '2026-08-19T10:00:00Z' },
-    { id: 12, contact: { phone: '5566988880000', name: 'Outro' } }
+    { id: 11, channel: { id: 1 }, contact: { phone: '+55 (66) 99999-0000' }, lastMessageAt: '2026-08-19T10:00:00Z' },
+    { id: 12, channel: { id: 2 }, contact: { phone: '5566999990000', name: 'Cliente' } }
   ]);
   assert.equal(result.length, 2);
   assert.equal(result[0].id, 10);
@@ -207,6 +210,12 @@ test('só reutiliza a conversa quando id ativo e objeto carregado pertencem ao m
   assert.equal(ChatCore.isLoadedConversation(20, { id: 20 }, 20), true);
   assert.equal(ChatCore.isLoadedConversation(20, { id: 19 }, 20), false);
   assert.equal(ChatCore.isLoadedConversation(20, null, 20), false);
+});
+
+test('normaliza a lista de canais no formato real e no envelope padronizado', () => {
+  const channels = [{ id: 1, displayName: 'Norte Sul Sementes' }];
+  assert.deepEqual(ChatCore.normalizeChannels({ data: channels }), channels);
+  assert.deepEqual(ChatCore.normalizeChannels({ success: true, data: channels }), channels);
 });
 
 test('distingue atualização direta de atualização de conversa relacionada', () => {
