@@ -204,6 +204,42 @@
     });
   }
 
+  function mergeOptimisticMessage(items = [], incoming = {}, clientMessageId = '') {
+    const clientId = String(clientMessageId || incoming.clientMessageId || '').trim();
+    const incomingText = String(incoming.text || '');
+    const incomingDirection = String(incoming.direction || '').toUpperCase();
+    const optimisticIndex = items.findIndex((message) => {
+      if (message.optimistic !== true) return false;
+      if (clientId && String(message.clientMessageId || message.id || '') === clientId) return true;
+      return incomingDirection === 'OUTBOUND'
+        && String(message.direction || '').toUpperCase() === 'OUTBOUND'
+        && String(message.text || '') === incomingText;
+    });
+    if (optimisticIndex < 0) return mergeById(items, [incoming]);
+    const optimistic = items[optimisticIndex];
+    const remaining = items.filter((_message, index) => index !== optimisticIndex);
+    return mergeById(remaining, [{
+      ...optimistic,
+      ...incoming,
+      optimistic: false,
+      clientMessageId: optimistic.clientMessageId || clientId
+    }]);
+  }
+
+  function failOptimisticMessage(items = [], clientMessageId, reason = '') {
+    const clientId = String(clientMessageId || '').trim();
+    return items.map((message) => (
+      message.optimistic === true && String(message.clientMessageId || message.id || '') === clientId
+        ? {
+          ...message,
+          optimistic: false,
+          status: 'FAILED',
+          failureDetails: [{ message: String(reason || 'Não foi possível enviar a mensagem.') }]
+        }
+        : message
+    ));
+  }
+
   function normalizeCalls(payload) {
     if (Array.isArray(payload)) return payload;
     const direct = payload?.calls || payload?.items || payload?.data;
@@ -395,6 +431,7 @@
 
   function statusSymbol(status) {
     const normalized = String(status || '').toUpperCase();
+    if (normalized === 'PENDING') return { symbol: '◷', label: 'Enviando', pending: true };
     if (normalized === 'FAILED') return { symbol: '!', label: 'Falha no envio', failed: true };
     if (normalized === 'READ') return { symbol: '✓✓', label: 'Lida', read: true };
     if (normalized === 'DELIVERED') return { symbol: '✓✓', label: 'Entregue', delivered: true };
@@ -441,7 +478,9 @@
     channel,
     channelIdentity,
     channelLabel,
+    failOptimisticMessage,
     mergeById,
+    mergeOptimisticMessage,
     mergeTimeline,
     mergeConversationList,
     mergeConversationPages,

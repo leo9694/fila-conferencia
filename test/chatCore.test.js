@@ -81,6 +81,37 @@ test('deduplica template pela wamid quando a atualização chega com outro id', 
   assert.equal(messages[0].status, 'DELIVERED');
 });
 
+test('substitui mensagem otimista pela confirmação sem duplicar no chat', () => {
+  const pending = {
+    id: 'pending-1', clientMessageId: 'pending-1', optimistic: true,
+    direction: 'OUTBOUND', type: 'text', text: '*Leo:*\nOlá', status: 'PENDING'
+  };
+  const confirmed = {
+    id: 91, wamid: 'wamid.91', direction: 'OUTBOUND', type: 'text',
+    text: '*Leo:*\nOlá', status: 'SENT'
+  };
+  const messages = ChatCore.mergeOptimisticMessage([pending], confirmed);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].id, 91);
+  assert.equal(messages[0].status, 'SENT');
+  assert.equal(messages[0].optimistic, false);
+});
+
+test('mantém mensagem visível e marca falha quando envio otimista não conclui', () => {
+  const [message] = ChatCore.failOptimisticMessage([{
+    id: 'pending-2', clientMessageId: 'pending-2', optimistic: true, status: 'PENDING'
+  }], 'pending-2', 'Integração indisponível');
+  assert.equal(message.status, 'FAILED');
+  assert.equal(message.optimistic, false);
+  assert.equal(ChatCore.messageFailureReason(message).text, 'Integração indisponível');
+});
+
+test('identifica visualmente mensagem que ainda está sendo enviada', () => {
+  assert.deepEqual(ChatCore.statusSymbol('PENDING'), {
+    symbol: '◷', label: 'Enviando', pending: true
+  });
+});
+
 test('mostra o corpo do template como prévia da conversa', () => {
   assert.equal(ChatCore.messagePreview({ type: 'template', template: { body: 'Olá Maria' } }), 'Olá Maria');
 });

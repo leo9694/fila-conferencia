@@ -90,7 +90,7 @@
     mediaZoom: 1, replyingTo: null, conversationCache: new Map(),
     messagesRenderFrame: null, messagesRenderConversationId: null, messagesRenderPreserveScroll: true,
     conversationsRenderFrame: null, uiCacheTimer: null, callsRefreshTimer: null, callsRefreshToken: 0,
-    sendToken: 0
+    sendToken: 0, optimisticMessageSequence: 0
   };
 
   const CONVERSATION_CACHE_LIMIT = 6;
@@ -537,6 +537,14 @@
     scheduleUiCachePersist();
   }
 
+  function updateCachedConversationMessages(conversationId, updater) {
+    const key = String(conversationId || '');
+    const cached = state.conversationCache.get(key);
+    if (!cached || typeof updater !== 'function') return;
+    cached.messages = updater(cached.messages || []).slice(-CACHED_MESSAGES_LIMIT);
+    scheduleUiCachePersist();
+  }
+
   function scheduleConversationsRender() {
     if (state.conversationsRenderFrame) return;
     state.conversationsRenderFrame = requestAnimationFrame(() => {
@@ -815,6 +823,7 @@
   }
 
   function renderReactionActions(message) {
+    if (message.optimistic === true || String(message.id || '').startsWith('pending-')) return '';
     const target = messageReactionTarget(message);
     const serviceWindow = Core.serviceWindow(state.conversation || {});
     const reactionAvailable = target && serviceWindow.canSendFreeform === true;
@@ -880,7 +889,7 @@
       const reactionBadge = reactions.length
         ? `<span class="chat-reaction-badge" title="Reação recebida">${reactions.map((emoji) => escapeHtml(emoji)).join('')}</span>`
         : '';
-      const statusClass = status.failed ? ' is-failed' : status.read ? ' is-read' : status.delivered ? ' is-delivered' : '';
+      const statusClass = status.failed ? ' is-failed' : status.pending ? ' is-pending' : status.read ? ' is-read' : status.delivered ? ' is-delivered' : '';
       const failureReason = status.failed ? Core.messageFailureReason(message) : null;
       const failureAlert = outbound && status.failed
         ? `<div class="chat-message-failure" role="alert"><span aria-hidden="true">!</span><div><strong>Falha no envio</strong><small>${failureReason.code ? `Erro ${escapeHtml(failureReason.code)}: ` : ''}${escapeHtml(failureReason.text)}</small></div></div>`
@@ -1316,7 +1325,7 @@
   }
 
   function updateComposer() {
-    refs.send.disabled = !ownsConversation() || !Core.canSendText(refs.input.value, state.sending);
+    refs.send.disabled = !ownsConversation() || !Core.canSendText(refs.input.value);
     refs.input.style.height = 'auto'; refs.input.style.height = `${Math.min(refs.input.scrollHeight, 128)}px`;
   }
 
@@ -1363,32 +1372,54 @@
   async function sendText(event) {
     event.preventDefault();
     const text = refs.input.value.trim();
-    if (!state.conversationId || !Core.canSendText(text, state.sending)) return;
+    if (!state.conversationId || !Core.canSendText(text)) return;
     const conversationId = String(state.conversationId);
     const selectionToken = state.activeLoadToken;
-    const sendToken = ++state.sendToken;
+    const clientMessageId = `pending-${Date.now()}-${++state.optimisticMessageSequence}`;
     const replyToMessageId = state.replyingTo?.messageId || undefined;
-    state.sending = true; updateComposer(); setFeedback('Enviando...');
+    const signature = String(state.profile?.signature || '').trim();
+    const optimisticMessage = {
+      id: clientMessageId,
+      clientMessageId,
+      conversationId: Number(conversationId),
+      type: 'text',
+      direction: 'OUTBOUND',
+      status: 'PENDING',
+      text: signature ? `*${signature}:*\n${text}` : text,
+      messageTimestamp: new Date().toISOString(),
+      optimistic: true,
+      ...(state.replyingTo ? { replyContext: { ...state.replyingTo } } : {})
+    };
+    state.messages = Core.mergeById(state.messages, [optimisticMessage]);
+    refs.input.value = '';
+    clearReply();
+    updateComposer();
+    setFeedback();
+    scheduleMessagesRender({ preserveScroll: false });
+    requestAnimationFrame(() => scrollBottom());
+    refs.input.focus();
     try {
       const message = await api(`/conversations/${encodeURIComponent(conversationId)}/messages`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text, replyToMessageId })
       });
+      updateCachedConversationMessages(conversationId, (messages) => (
+        Core.mergeOptimisticMessage(messages, message, clientMessageId)
+      ));
       if (conversationId !== String(state.conversationId) || selectionToken !== state.activeLoadToken) return;
-      state.messages = Core.mergeById(state.messages, [message]); refs.input.value = ''; clearReply(); renderMessages();
+      state.messages = Core.mergeOptimisticMessage(state.messages, message, clientMessageId);
+      scheduleMessagesRender({ preserveScroll: true });
       setFeedback();
     } catch (error) {
+      updateCachedConversationMessages(conversationId, (messages) => (
+        Core.failOptimisticMessage(messages, clientMessageId, error.message)
+      ));
       if (conversationId !== String(state.conversationId) || selectionToken !== state.activeLoadToken) return;
       const reconciled = await reconcileAssignmentConflict(error);
       if (conversationId === String(state.conversationId) && selectionToken === state.activeLoadToken) {
+        state.messages = Core.failOptimisticMessage(state.messages, clientMessageId, error.message);
+        scheduleMessagesRender({ preserveScroll: true });
         setFeedback(reconciled ? error.message : 'Não foi possível enviar a mensagem.', true);
-      }
-    }
-    finally {
-      if (sendToken === state.sendToken) {
-        state.sending = false;
-        updateComposer();
-        refs.input.focus();
       }
     }
   }
@@ -1647,13 +1678,14 @@
       const id = String(payload.conversationId || payload.message?.conversationId || '');
       if (id === String(state.conversationId)) {
         const shouldScroll = nearBottom();
-        state.messages = Core.mergeById(state.messages, [payload.message]); scheduleMessagesRender({ preserveScroll: !shouldScroll });
+        state.messages = Core.mergeOptimisticMessage(state.messages, payload.message); scheduleMessagesRender({ preserveScroll: !shouldScroll });
         if (shouldScroll) requestAnimationFrame(() => scrollBottom('smooth')); else refs.newMessage.hidden = false;
         if (ownsConversation() && String(payload.message?.direction).toUpperCase() === 'INBOUND') {
           markRead(id);
           refreshActiveConversation(id);
         }
       } else {
+        updateCachedConversationMessages(id, (messages) => Core.mergeOptimisticMessage(messages, payload.message));
         const item = state.conversations.find((conversation) => String(conversation.id) === id);
         if (item) { item.lastMessage = payload.message; item.lastMessageAt = payload.message?.messageTimestamp || new Date().toISOString(); item.unreadCount = Number(item.unreadCount || 0) + 1; }
         else loadConversations();
