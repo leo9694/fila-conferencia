@@ -176,6 +176,28 @@ test('restringe os canais do chat ao perfil configurado do atendente', () => {
   assert.equal(atendentePodeAcessarCanal({ director: false, channelIds: null }, '202'), true);
 });
 
+test('faz chamada direta tocar somente para atendente liberado no número', () => {
+  const { atendentePodeReceberEventoChamada } = chatRouter._internals;
+  const zenaide = { id: '81', director: false, channelIds: ['101'] };
+  assert.equal(atendentePodeReceberEventoChamada(zenaide, 'call:incoming', {
+    callId: 'call-1', channel: { id: '101' }
+  }), true);
+  assert.equal(atendentePodeReceberEventoChamada(zenaide, 'call:incoming', {
+    callId: 'call-2', channel: { id: '202' }
+  }), false);
+});
+
+test('permite transferência de chamada mesmo quando o número não está liberado', () => {
+  const { atendentePodeReceberEventoChamada } = chatRouter._internals;
+  const zenaide = { id: '81', director: false, channelIds: ['101'] };
+  assert.equal(atendentePodeReceberEventoChamada(zenaide, 'call:transfer:incoming', {
+    callId: 'call-2', conversationId: 50, toAgent: { id: '81' }
+  }), true);
+  assert.equal(atendentePodeReceberEventoChamada(zenaide, 'call:active', {
+    callId: 'call-2', channel: { id: '202' }, currentAgent: { id: '81' }
+  }), true);
+});
+
 test('não consolida o mesmo cliente quando as conversas pertencem a canais diferentes', () => {
   const conversations = chatRouter._internals.consolidarConversas([
     { id: 41, channel: { id: 1 }, contact: { phone: '5566999990000' } },

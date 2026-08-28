@@ -127,6 +127,21 @@ function atendentePodeAcessarConversa(atendente = {}, conversa = {}) {
   return atendentePodeAcessarCanal(atendente, idCanalConversa(conversa));
 }
 
+function eventoTransferenciaChamada(event) {
+  const nome = String(event || '');
+  return nome.startsWith('call:transfer:') || nome === 'call:transferred:away';
+}
+
+function atendentePodeReceberEventoChamada(atendente = {}, event, payload = {}) {
+  if (eventoTransferenciaChamada(event)) return true;
+  const chamada = payload.call || payload;
+  const atendenteAtual = chamada.currentAgent?.id ?? chamada.currentAgentId;
+  if (atendenteAtual && String(atendenteAtual) === String(atendente.id)) return true;
+  const channelId = idCanalConversa(chamada);
+  if (!channelId) return null;
+  return atendentePodeAcessarCanal(atendente, channelId);
+}
+
 function erroCanalNaoPermitido() {
   const error = new Error('Você não possui acesso a este número de atendimento.');
   error.status = 403;
@@ -1834,6 +1849,7 @@ for (const action of ['accept', 'reject', 'cancel']) {
 }
 
 function reivindicarChamada(callId, conversation, atendente) {
+  if (!atendentePodeAcessarConversa(atendente, conversation)) throw erroCanalNaoPermitido();
   const resultado = controleChamadas.reivindicar(callId, conversation.id, atendente);
   if (!resultado.criado) return resultado.atendimento;
 
@@ -2006,7 +2022,20 @@ router.get('/events', (req, res) => {
     if (['call:ended', 'call:failed', 'call:rejected', 'call:transferred:away'].includes(String(event))) {
       controleChamadas.liberar(idChamadaWhatsapp(payload?.callId || payload?.call?.id || payload?.id));
     }
-    write(event, payload);
+    const permitido = atendentePodeReceberEventoChamada(req.atendente, event, payload);
+    if (permitido === true) {
+      write(event, payload);
+      return;
+    }
+    if (permitido === false) return;
+    const conversationId = Number(payload?.conversationId || payload?.call?.conversationId);
+    if (!Number.isInteger(conversationId)) return;
+    obterConversaConsolidada(conversationId)
+      .then((conversation) => {
+        if (atendentePodeAcessarConversa(req.atendente, conversation)) write(event, payload);
+      })
+      // Sem identificar o número, a chamada direta não deve tocar para o atendente.
+      .catch(() => {});
   });
   const keepAlive = setInterval(() => res.write(': keep-alive\n\n'), 25000);
   req.on('close', () => {
@@ -2057,6 +2086,8 @@ router._internals = {
   agenteChamada,
   atendentePodeAcessarCanal,
   atendentePodeAcessarConversa,
+  atendentePodeReceberEventoChamada,
+  eventoTransferenciaChamada,
   criarControleChamadas,
   idsRelacionadosConversa,
   obterAtribuicaoMaisRecente,
