@@ -101,7 +101,12 @@
       api: clientApi(),
       mediaDevices: navigator.mediaDevices,
       PeerConnection: window.RTCPeerConnection || window.webkitRTCPeerConnection,
+      AudioContext: window.AudioContext || window.webkitAudioContext,
       remoteAudio: refs.remoteAudio,
+      onMediaError: () => {
+        refs.status.textContent = 'Áudio conectado, mas a saída de som foi bloqueada pelo navegador.';
+        toast('Clique novamente no painel da chamada para liberar o som.');
+      },
       onRemoteMedia: () => {
         if (String(state.call?.direction || '').toUpperCase() !== 'OUTBOUND'
           || !['INITIATING', 'RINGING', 'CONNECTING'].includes(state.status)) return;
@@ -265,6 +270,7 @@
     setStatus('CONNECTING', 'Conectando áudio...');
     try {
       state.client = makeClient();
+      state.client.unlockRemoteAudio();
       if (state.transfer) {
         setStatus('TRANSFER_CONNECTING', 'Aceitando transferência...');
         await state.client.prepareLocalMedia();
@@ -458,7 +464,8 @@
     refs.title.textContent = 'Ligação pelo WhatsApp';
     refs.status.textContent = `Ligando para ${contact(conversation).name}...`;
     try {
-      state.client = makeClient();
+      state.client ||= makeClient();
+      state.client.unlockRemoteAudio();
       const created = await state.client.startOutgoing({ conversationId: conversation.id });
       state.call = { ...state.call, ...(created?.call || created || {}) };
       setStatus('RINGING', 'Chamando...');
@@ -784,9 +791,18 @@
   refs.transfer?.addEventListener('click', openTransferPicker);
   refs.transferSend?.addEventListener('click', sendTransfer);
   refs.transferCancel?.addEventListener('click', () => { refs.transferPicker.hidden = true; });
-  refs.permission?.addEventListener('click', permissionAction);
+  refs.permission?.addEventListener('click', () => {
+    state.client ||= makeClient();
+    state.client.unlockRemoteAudio();
+    permissionAction();
+  });
   refs.close?.addEventListener('click', () => cleanup());
-  refs.start?.addEventListener('click', () => startOutbound(state.conversation));
+  refs.start?.addEventListener('click', () => {
+    state.client ||= makeClient();
+    state.client.unlockRemoteAudio();
+    startOutbound(state.conversation);
+  });
+  refs.panel?.addEventListener('click', () => state.client?.playRemoteStream());
   refs.history?.addEventListener('click', (event) => {
     if (event.target.closest('[data-chat-call-history-conversation]')) openHistory(state.conversation);
   });

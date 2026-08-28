@@ -194,6 +194,37 @@
     });
   }
 
+  function hasOutboundAudioPackets(report) {
+    let started = false;
+    report?.forEach?.((stat) => {
+      const kind = String(stat?.kind || stat?.mediaType || '').toLowerCase();
+      if (stat?.type === 'outbound-rtp' && stat?.isRemote !== true
+        && (!kind || kind === 'audio')
+        && (Number(stat.packetsSent) > 0 || Number(stat.bytesSent) > 0)) started = true;
+    });
+    return started;
+  }
+
+  async function waitForOutboundAudio(peer, options = {}) {
+    if (!peer?.getStats) return true;
+    const timeoutMs = options.timeoutMs ?? 8000;
+    const intervalMs = options.intervalMs ?? 200;
+    const now = options.now || Date.now;
+    const sleep = options.sleep || ((milliseconds) => new Promise((resolve) => setTimeout(resolve, milliseconds)));
+    const deadline = now() + timeoutMs;
+    do {
+      if (hasOutboundAudioPackets(await peer.getStats())) return true;
+      if (['failed', 'closed'].includes(peer.connectionState)
+        || ['failed', 'closed'].includes(peer.iceConnectionState)) {
+        throw new Error('A conexão de áudio foi interrompida antes de enviar o microfone.');
+      }
+      const remaining = deadline - now();
+      if (remaining <= 0) break;
+      await sleep(Math.min(intervalMs, remaining));
+    } while (true);
+    throw new Error('O microfone foi liberado, mas não começou a transmitir áudio.');
+  }
+
   function eventUiStatus(event, currentStatus, hasClient) {
     if (!['call:ringing', 'call:connecting'].includes(event)) return null;
     if (currentStatus === 'RINGING' && !hasClient) return 'RINGING';
@@ -222,18 +253,69 @@
   }
 
   class WhatsAppCallClient {
-    constructor({ api, mediaDevices, PeerConnection, remoteAudio, onRemoteMedia, rtcConfig = {} } = {}) {
+    constructor({
+      api, mediaDevices, PeerConnection, AudioContext, remoteAudio, onRemoteMedia, onMediaError,
+      rtcConfig = {}, mediaReadyWaitOptions = {}
+    } = {}) {
       this.api = api;
       this.mediaDevices = mediaDevices;
       this.PeerConnection = PeerConnection;
+      this.AudioContext = AudioContext;
       this.remoteAudio = remoteAudio || null;
       this.onRemoteMedia = typeof onRemoteMedia === 'function' ? onRemoteMedia : null;
+      this.onMediaError = typeof onMediaError === 'function' ? onMediaError : null;
       this.rtcConfig = rtcConfig;
+      this.mediaReadyWaitOptions = mediaReadyWaitOptions;
       this.peer = null;
       this.localStream = null;
       this.remoteStream = null;
+      this.audioContext = null;
+      this.remoteAudioSource = null;
       this.muted = false;
       this.remoteMediaNotified = false;
+    }
+
+    unlockRemoteAudio() {
+      if (!this.AudioContext) return;
+      try {
+        this.audioContext ||= new this.AudioContext();
+        Promise.resolve(this.audioContext.resume?.()).catch(() => {});
+      } catch {}
+    }
+
+    notifyRemoteMedia() {
+      if (this.remoteMediaNotified) return;
+      this.remoteMediaNotified = true;
+      this.onRemoteMedia?.();
+    }
+
+    async playRemoteStream() {
+      if (!this.remoteStream) return false;
+      if (this.remoteAudio) {
+        this.remoteAudio.autoplay = true;
+        this.remoteAudio.playsInline = true;
+        this.remoteAudio.muted = false;
+        this.remoteAudio.volume = 1;
+        this.remoteAudio.srcObject = this.remoteStream;
+        try {
+          await this.remoteAudio.play?.();
+          this.remoteAudioSource?.disconnect?.();
+          this.remoteAudioSource = null;
+          return true;
+        } catch {}
+      }
+      try {
+        this.audioContext ||= this.AudioContext ? new this.AudioContext() : null;
+        if (!this.audioContext) throw new Error('Saída de áudio indisponível.');
+        await this.audioContext.resume?.();
+        this.remoteAudioSource?.disconnect?.();
+        this.remoteAudioSource = this.audioContext.createMediaStreamSource(this.remoteStream);
+        this.remoteAudioSource.connect(this.audioContext.destination);
+        return true;
+      } catch (error) {
+        this.onMediaError?.(error);
+        return false;
+      }
     }
 
     async preparePeer() {
@@ -246,16 +328,10 @@
           this.remoteStream ||= new MediaStream();
           if (event.track) this.remoteStream.addTrack(event.track);
         }
-        if (this.remoteAudio && this.remoteStream) {
-          this.remoteAudio.srcObject = this.remoteStream;
-          Promise.resolve(this.remoteAudio.play?.()).catch(() => {});
-        }
+        void this.playRemoteStream();
+        if (event.track?.muted === false) this.notifyRemoteMedia();
         if (event.track?.addEventListener) {
-          event.track.addEventListener('unmute', () => {
-            if (this.remoteMediaNotified) return;
-            this.remoteMediaNotified = true;
-            this.onRemoteMedia?.();
-          }, { once: true });
+          event.track.addEventListener('unmute', () => this.notifyRemoteMedia(), { once: true });
         }
       };
       return this.peer;
@@ -285,6 +361,7 @@
       const answer = response?.session || response;
       await this.peer.setRemoteDescription({ type: answer.sdpType || answer.type || 'answer', sdp: answer.sdp });
       await waitForPeerConnected(this.peer);
+      await waitForOutboundAudio(this.peer, this.mediaReadyWaitOptions);
       await retryMediaAction(() => this.api.mediaReady(callId, transferId ? { transferId } : {}));
       return answer;
     }
@@ -313,6 +390,7 @@
         const answer = media?.session || media;
         await this.peer.setRemoteDescription({ type: answer.sdpType || answer.type || 'answer', sdp: answer.sdp });
         await waitForPeerConnected(this.peer);
+        await waitForOutboundAudio(this.peer, this.mediaReadyWaitOptions);
         return retryMediaAction(() => this.api.create(conversationId, { mediaSessionId: media.mediaSessionId }));
       } catch (error) {
         this.cleanup();
@@ -346,9 +424,13 @@
         this.remoteAudio.pause?.();
         this.remoteAudio.srcObject = null;
       }
+      this.remoteAudioSource?.disconnect?.();
+      Promise.resolve(this.audioContext?.close?.()).catch(() => {});
       this.peer = null;
       this.localStream = null;
       this.remoteStream = null;
+      this.remoteAudioSource = null;
+      this.audioContext = null;
       this.muted = false;
       this.remoteMediaNotified = false;
     }
@@ -357,8 +439,8 @@
   return {
     CALL_STATES, TERMINAL_STATES, WhatsAppCallClient, agentAvailability, callControls,
     canRequestCallPermission,
-    callPermissionView, callUpdateUiStatus, eventUiStatus, formatDuration, friendlyCallError, normalizeAgentList,
+    callPermissionView, callUpdateUiStatus, eventUiStatus, formatDuration, friendlyCallError, hasOutboundAudioPackets, normalizeAgentList,
     normalizeCallPermission, sessionFrom,
-    retryMediaAction, shouldPlayOutboundRingback, waitForIceGathering, waitForPeerConnected
+    retryMediaAction, shouldPlayOutboundRingback, waitForIceGathering, waitForOutboundAudio, waitForPeerConnected
   };
 }));

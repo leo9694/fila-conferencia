@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const {
   WhatsAppCallClient, agentAvailability, callControls, callPermissionView, callUpdateUiStatus, eventUiStatus,
   formatDuration, friendlyCallError, normalizeAgentList, normalizeCallPermission,
-  shouldPlayOutboundRingback
+  shouldPlayOutboundRingback, waitForOutboundAudio
 } = require('../frontend/whatsapp-call-core');
 
 class PeerMock {
@@ -210,4 +210,47 @@ test('propaga transferId ao conectar mídia e confirmar media-ready', async () =
   assert.equal(item.calls[0][2].transferId, 'transfer-1');
   assert.deepEqual(item.calls[1][2], { transferId: 'transfer-1' });
   assert.equal(item.microphoneRequests(), 1);
+});
+
+test('aguarda pacotes RTP do microfone antes de confirmar a mídia', async () => {
+  let checks = 0;
+  const peer = {
+    connectionState: 'connected',
+    async getStats() {
+      checks += 1;
+      return new Map([['audio', {
+        type: 'outbound-rtp', kind: 'audio', packetsSent: checks >= 3 ? 1 : 0, bytesSent: 0
+      }]]);
+    }
+  };
+  let now = 0;
+  const result = await waitForOutboundAudio(peer, {
+    timeoutMs: 1000,
+    intervalMs: 100,
+    now: () => now,
+    sleep: async (milliseconds) => { now += milliseconds; }
+  });
+  assert.equal(result, true);
+  assert.equal(checks, 3);
+});
+
+test('usa Web Audio quando o navegador bloqueia o elemento de áudio remoto', async () => {
+  let connected = false;
+  class AudioContextMock {
+    constructor() { this.destination = {}; }
+    async resume() {}
+    createMediaStreamSource(stream) {
+      assert.equal(stream.id, 'remote-stream');
+      return { connect() { connected = true; }, disconnect() {} };
+    }
+    async close() {}
+  }
+  const client = new WhatsAppCallClient({
+    api: {}, PeerConnection: PeerMock, AudioContext: AudioContextMock,
+    remoteAudio: { play: async () => { throw new Error('autoplay bloqueado'); }, pause() {} }
+  });
+  client.remoteStream = { id: 'remote-stream', getTracks: () => [] };
+  assert.equal(await client.playRemoteStream(), true);
+  assert.equal(connected, true);
+  client.cleanup();
 });
