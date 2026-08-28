@@ -158,6 +158,24 @@ test('gera identidades persistentes somente para o canal consolidado do contato'
   );
 });
 
+test('preserva o next em middleware assíncrono de autorização', async () => {
+  let nextCalled = false;
+  const middleware = chatRouter._internals.asyncRoute(async (_req, _res, next) => next());
+  await middleware({}, {}, () => { nextCalled = true; });
+  assert.equal(nextCalled, true);
+});
+
+test('restringe os canais do chat ao perfil configurado do atendente', () => {
+  const { atendentePodeAcessarCanal, atendentePodeAcessarConversa } = chatRouter._internals;
+  const atendente = { director: false, channelIds: ['101'] };
+  assert.equal(atendentePodeAcessarCanal(atendente, '101'), true);
+  assert.equal(atendentePodeAcessarCanal(atendente, '202'), false);
+  assert.equal(atendentePodeAcessarConversa(atendente, { channel: { id: '101' } }), true);
+  assert.equal(atendentePodeAcessarConversa(atendente, { channelId: '202' }), false);
+  assert.equal(atendentePodeAcessarCanal({ director: true, channelIds: [] }, '202'), true);
+  assert.equal(atendentePodeAcessarCanal({ director: false, channelIds: null }, '202'), true);
+});
+
 test('não consolida o mesmo cliente quando as conversas pertencem a canais diferentes', () => {
   const conversations = chatRouter._internals.consolidarConversas([
     { id: 41, channel: { id: 1 }, contact: { phone: '5566999990000' } },

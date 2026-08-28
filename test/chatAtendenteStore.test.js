@@ -13,11 +13,13 @@ test('persiste acesso e perfil do atendente sem guardar credenciais', () => {
     habilitado: true,
     nome: 'LEONARDO',
     nomeExibicao: 'Leonardo Gabriel',
-    assinatura: 'Leonardo | Norte Sul'
+    assinatura: 'Leonardo | Norte Sul',
+    canaisPermitidos: ['101', '101', '202', 'invalido com espaço']
   }, 1);
   const recarregado = criarChatAtendenteStore({ filePath });
   assert.equal(recarregado.permitido(72), true);
   assert.equal(recarregado.obter(72).assinatura, 'Leonardo | Norte Sul');
+  assert.deepEqual(recarregado.obter(72).canaisPermitidos, ['101', '202']);
   assert.deepEqual(recarregado.listarHabilitados().map((item) => item.codUsu), [72]);
   fs.rmSync(dir, { recursive: true, force: true });
 });

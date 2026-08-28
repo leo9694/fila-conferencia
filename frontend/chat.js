@@ -18,7 +18,7 @@
   const refs = {
     screen: byId('chat-screen'), workspace: byId('chat-workspace'), list: byId('chat-conversation-list'),
     count: byId('chat-conversation-count'), search: byId('chat-search-input'), filters: byId('chat-filters'),
-    channelFilter: byId('chat-channel-filter'),
+    channelTabs: byId('chat-channel-tabs'),
     agentFilterToggle: byId('chat-agent-filter-toggle'), agentFilter: byId('chat-agent-filter'),
     agentFilterSelect: byId('chat-agent-filter-select'), agentFilterClear: byId('chat-agent-filter-clear'),
     refresh: byId('chat-refresh'), newContact: byId('chat-new-contact'), more: byId('chat-load-more'), empty: byId('chat-empty-state'),
@@ -395,6 +395,29 @@
     return phone ? `${name} · ${phone}` : name;
   }
 
+  function channelTabText(value = {}) {
+    const name = String(value.displayName || value.name || 'Canal não identificado').trim();
+    const phone = String(value.displayPhoneNumber || '').trim();
+    return phone ? `${phone} · ${name}` : name;
+  }
+
+  function channelAvatarUrl(value = {}) {
+    const profile = value.profile && typeof value.profile === 'object' ? value.profile : {};
+    const avatar = value.avatar && typeof value.avatar === 'object' ? value.avatar : {};
+    const candidates = [
+      value.profilePictureUrl, value.profileImageUrl, value.avatarUrl, value.photoUrl, value.imageUrl,
+      value.profilePicture, value.image, profile.pictureUrl, profile.imageUrl, profile.photoUrl, avatar.url
+    ];
+    const source = candidates.find((item) => typeof item === 'string' && item.trim());
+    if (!source) return '';
+    try {
+      const url = new URL(source, window.location.origin);
+      return /^https?:$/.test(url.protocol) ? url.href : '';
+    } catch {
+      return '';
+    }
+  }
+
   function conversationMatchesChannel(conversation = {}) {
     if (!state.selectedChannelId) return true;
     return String(Core.channel(conversation)?.id ?? conversation.channelId ?? '') === String(state.selectedChannelId);
@@ -402,9 +425,16 @@
 
   function fillChannelSelects() {
     const options = state.channels.map((channel) => `<option value="${escapeHtml(channel.id)}">${escapeHtml(channelText(channel))}</option>`).join('');
-    refs.channelFilter.innerHTML = `<option value="">Todos os números</option>${options}`;
-    refs.channelFilter.value = state.selectedChannelId;
-    refs.channelFilter.disabled = false;
+    refs.channelTabs.innerHTML = state.channels.map((channel) => {
+      const avatarUrl = channelAvatarUrl(channel);
+      const avatar = avatarUrl
+        ? `<img class="chat-channel-avatar" data-channel-avatar src="${escapeHtml(avatarUrl)}" alt=""><i class="chat-channel-avatar-fallback" data-lucide="phone-call" aria-hidden="true"></i>`
+        : '<i data-lucide="phone-call" aria-hidden="true"></i>';
+      return `<button type="button" role="tab" data-chat-channel="${escapeHtml(channel.id)}" aria-selected="${String(String(channel.id) === String(state.selectedChannelId))}" class="${String(channel.id) === String(state.selectedChannelId) ? 'is-active' : ''}">${avatar}<span>${escapeHtml(channelTabText(channel))}</span></button>`;
+    }).join('');
+    refs.channelTabs.querySelectorAll('[data-channel-avatar]').forEach((image) => image.addEventListener('error', () => {
+      image.closest('[data-chat-channel]')?.classList.add('has-no-avatar');
+    }, { once: true }));
     const defaultChannel = state.channels.find((channel) => channel.isDefault) || state.channels[0];
     refs.newChannel.innerHTML = `<option value="">Selecione um número...</option>${options}`;
     refs.newChannel.value = defaultChannel ? String(defaultChannel.id) : '';
@@ -415,7 +445,10 @@
     const payload = await api('/channels');
     state.channels = Core.normalizeChannels(payload);
     const saved = localStorage.getItem(CHANNEL_FILTER_KEY) || '';
-    state.selectedChannelId = state.channels.some((channel) => String(channel.id) === saved) ? saved : '';
+    const defaultChannel = state.channels.find((channel) => channel.isDefault) || state.channels[0];
+    state.selectedChannelId = state.channels.some((channel) => String(channel.id) === saved)
+      ? saved
+      : String(defaultChannel?.id || '');
     fillChannelSelects();
     if (state.selectedChannelId) state.conversations = state.conversations.filter(conversationMatchesChannel);
   }
@@ -1894,11 +1927,33 @@
       const payload = await api('/settings/users');
       const users = payload.usuarios || [];
       const dialog = modal.querySelector('.chat-agent-dialog');
-      dialog.querySelector('p').outerHTML = `<div class="chat-agent-users">${users.map((user) => `<form data-user="${user.codUsu}"><label class="chat-agent-enabled"><input type="checkbox" name="habilitado" ${user.habilitado ? 'checked' : ''}> <span><strong>${escapeHtml(user.nome)}</strong><small>${escapeHtml(user.grupo || 'Sem grupo')}</small></span></label><input name="nomeExibicao" maxlength="160" value="${escapeHtml(user.nomeExibicao)}" aria-label="Nome exibido"><input name="assinatura" maxlength="80" value="${escapeHtml(user.assinatura)}" placeholder="Assinatura"><button type="submit">Salvar</button><em></em></form>`).join('')}</div>`;
+      const channels = Array.isArray(payload.canais) ? payload.canais : [];
+      dialog.querySelector('p').outerHTML = `<p class="chat-settings-intro">Defina quem atende e quais números cada pessoa pode visualizar. As conversas permanecem separadas por número.</p><label class="chat-settings-search"><i data-lucide="search" aria-hidden="true"></i><input type="search" placeholder="Pesquisar por nome de usuário" aria-label="Pesquisar por nome de usuário"></label><div class="chat-agent-users">${users.map((user) => {
+        const allowed = Array.isArray(user.canaisPermitidos) ? user.canaisPermitidos.map(String) : channels.map((channel) => String(channel.id));
+        const channelChoices = user.diretor
+          ? '<p class="chat-agent-all-channels">Diretoria possui acesso a todos os números.</p>'
+          : `<fieldset><legend>Números liberados</legend><div class="chat-agent-channel-options">${channels.map((channel) => `<label><input type="checkbox" name="canaisPermitidos" value="${escapeHtml(channel.id)}" ${allowed.includes(String(channel.id)) ? 'checked' : ''}><span>${escapeHtml(channelText(channel))}</span></label>`).join('') || '<small>Nenhum número disponível.</small>'}</div></fieldset>`;
+        const searchText = [user.nome, user.nomeExibicao, user.grupo].join(' ').toLocaleLowerCase('pt-BR');
+        return `<form data-user="${user.codUsu}" data-user-search="${escapeHtml(searchText)}"><div class="chat-agent-user-head"><label class="chat-agent-enabled"><input type="checkbox" name="habilitado" ${user.habilitado ? 'checked' : ''} ${user.diretor ? 'disabled' : ''}> <span><strong>${escapeHtml(user.nome)}</strong><small>${escapeHtml(user.grupo || 'Sem grupo')}</small></span></label>${user.diretor ? '<b>Diretoria</b>' : ''}</div>${channelChoices}<div class="chat-agent-profile-fields"><input name="nomeExibicao" maxlength="160" value="${escapeHtml(user.nomeExibicao)}" aria-label="Nome exibido"><input name="assinatura" maxlength="80" value="${escapeHtml(user.assinatura)}" placeholder="Assinatura"></div><footer><em></em><button type="submit">Salvar</button></footer></form>`;
+      }).join('')}<p class="chat-settings-empty" hidden>Nenhum usuário encontrado.</p></div>`;
+      window.lucide?.createIcons();
+      const search = dialog.querySelector('.chat-settings-search input');
+      const empty = dialog.querySelector('.chat-settings-empty');
+      search.addEventListener('input', () => {
+        const term = search.value.trim().toLocaleLowerCase('pt-BR');
+        let visible = 0;
+        dialog.querySelectorAll('[data-user]').forEach((form) => {
+          const matches = !term || form.dataset.userSearch.includes(term);
+          form.hidden = !matches;
+          if (matches) visible += 1;
+        });
+        empty.hidden = visible > 0;
+      });
       dialog.querySelectorAll('[data-user]').forEach((form) => form.addEventListener('submit', async (event) => {
         event.preventDefault();
         const data = Object.fromEntries(new FormData(form));
         data.habilitado = form.elements.habilitado.checked;
+        data.canaisPermitidos = [...new FormData(form).getAll('canaisPermitidos')];
         const feedback = form.querySelector('em');
         try { await api(`/settings/users/${form.dataset.user}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) }); feedback.textContent = 'Salvo'; await loadAgents(); }
         catch (error) { feedback.textContent = error.message; }
@@ -2495,9 +2550,13 @@
     refs.input.addEventListener('blur', () => syncRestingViewportHeight(280));
     refs.input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); refs.form.requestSubmit(); } });
     refs.refresh.addEventListener('click', () => { state.page = 1; loadConversations(); });
-    refs.channelFilter?.addEventListener('change', () => {
-      state.selectedChannelId = refs.channelFilter.value;
+    refs.channelTabs?.addEventListener('click', (event) => {
+      const tab = event.target.closest('[data-chat-channel]');
+      if (!tab || String(tab.dataset.chatChannel) === String(state.selectedChannelId)) return;
+      state.selectedChannelId = tab.dataset.chatChannel;
       localStorage.setItem(CHANNEL_FILTER_KEY, state.selectedChannelId);
+      fillChannelSelects();
+      showConversationList({ replaceHistory: true });
       state.page = 1;
       state.conversations = [];
       loadConversations();
@@ -2647,8 +2706,7 @@
     restoreUiCache();
     await loadChannels().catch(() => {
       state.channels = [];
-      refs.channelFilter.innerHTML = '<option value="">Números indisponíveis</option>';
-      refs.channelFilter.disabled = true;
+      refs.channelTabs.innerHTML = '<span class="chat-channel-tabs-empty">Números indisponíveis</span>';
       refs.newChannel.innerHTML = '<option value="">Números indisponíveis</option>';
     });
     const refresh = state.conversations.length ? loadConversations() : null;

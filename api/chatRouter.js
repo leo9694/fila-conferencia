@@ -105,8 +105,33 @@ function perfilAtendente(usuario = {}) {
     codUsu: Number(usuario.codUsu),
     name: salvo.nomeExibicao || usuario.nome || `Usuario ${usuario.codUsu}`,
     signature: salvo.assinatura || salvo.nomeExibicao || usuario.nome || '',
-    director: pertenceDiretoria(usuario)
+    director: pertenceDiretoria(usuario),
+    channelIds: Array.isArray(salvo.canaisPermitidos) ? salvo.canaisPermitidos : null
   };
+}
+
+function idCanalConversa(conversa = {}) {
+  const canal = conversa.channel || conversa.Channel || {};
+  return String(canal.id ?? conversa.channelId ?? '').trim();
+}
+
+function atendentePodeAcessarCanal(atendente = {}, channelId) {
+  if (atendente.director === true) return true;
+  const permitidos = atendente.channelIds;
+  // Registros anteriores à configuração por número mantêm o acesso já existente.
+  if (!Array.isArray(permitidos)) return true;
+  return permitidos.includes(String(channelId || '').trim());
+}
+
+function atendentePodeAcessarConversa(atendente = {}, conversa = {}) {
+  return atendentePodeAcessarCanal(atendente, idCanalConversa(conversa));
+}
+
+function erroCanalNaoPermitido() {
+  const error = new Error('Você não possui acesso a este número de atendimento.');
+  error.status = 403;
+  error.localAuthorization = true;
+  return error;
 }
 
 function acessoPermitido(usuario = {}) {
@@ -1101,9 +1126,9 @@ function sendError(res, error) {
 sendError.reportedConfigurationErrors = new Set();
 
 function asyncRoute(handler) {
-  return async (req, res) => {
+  return async (req, res, next) => {
     try {
-      await handler(req, res);
+      await handler(req, res, next);
     } catch (error) {
       sendError(res, error);
     }
@@ -1120,15 +1145,20 @@ router.get('/access', (req, res) => {
 });
 
 router.get('/settings/users', exigirDiretoria, asyncRoute(async (_req, res) => {
-  const rows = await executeQuery(`
+  const [rows, respostaCanais] = await Promise.all([
+    executeQuery(`
     SELECT USU.CODUSU, TRIM(USU.NOMEUSU) AS NOMEUSU,
            TRIM(GRU.NOMEGRUPO) AS NOMEGRUPO
     FROM TSIUSU USU
     LEFT JOIN TSIGRU GRU ON GRU.CODGRUPO = USU.CODGRUPO
     WHERE ${filtroAcessoAtivo('USU')}
     ORDER BY USU.NOMEUSU
-  `);
+  `),
+    whatsappApi.getChannels()
+  ]);
+  const canais = Array.isArray(respostaCanais?.data) ? respostaCanais.data : [];
   res.json({
+    canais,
     usuarios: rows.map((row) => {
       const salvo = atendentes.obter(row.CODUSU);
       const diretor = String(row.NOMEGRUPO || '').trim().toLocaleUpperCase('pt-BR') === 'DIRETORIA';
@@ -1139,7 +1169,8 @@ router.get('/settings/users', exigirDiretoria, asyncRoute(async (_req, res) => {
         habilitado: diretor || salvo?.habilitado === true,
         diretor,
         nomeExibicao: salvo?.nomeExibicao || String(row.NOMEUSU || '').trim(),
-        assinatura: salvo?.assinatura || ''
+        assinatura: salvo?.assinatura || '',
+        canaisPermitidos: diretor ? canais.map((canal) => String(canal.id)) : (salvo?.canaisPermitidos ?? null)
       };
     })
   });
@@ -1155,11 +1186,20 @@ router.put('/settings/users/:codUsu', exigirDiretoria, asyncRoute(async (req, re
       AND ${filtroAcessoAtivo('USU')}
   `);
   if (!usuario) return res.status(404).json({ erro: 'Usuario Sankhya nao encontrado.' });
+  const respostaCanais = await whatsappApi.getChannels();
+  const canaisDisponiveis = new Set((respostaCanais?.data || []).map((canal) => String(canal.id)));
+  const canaisInformados = Array.isArray(req.body?.canaisPermitidos)
+    ? [...new Set(req.body.canaisPermitidos.map((canal) => String(canal || '').trim()).filter(Boolean))]
+    : [];
+  if (canaisInformados.some((canal) => !canaisDisponiveis.has(canal))) {
+    return res.status(400).json({ erro: 'Um dos números selecionados não está disponível.' });
+  }
   const perfil = atendentes.salvar(codUsu, {
     habilitado: req.body?.habilitado === true,
     nome: usuario.NOMEUSU,
     nomeExibicao: req.body?.nomeExibicao || usuario.NOMEUSU,
-    assinatura: req.body?.assinatura || ''
+    assinatura: req.body?.assinatura || '',
+    canaisPermitidos: canaisInformados
   }, req.usuario.codUsu);
   res.json({ perfil });
 }));
@@ -1324,6 +1364,7 @@ router.get('/conversations', asyncRoute(async (req, res) => {
     console.error('Falha ao enriquecer a fila do chat em segundo plano:', error.message);
   });
   const filtradas = consolidadas.filter((conversa) => {
+    if (!atendentePodeAcessarConversa(req.atendente, conversa)) return false;
     if (req.query.channelId && String(conversa.channel?.id ?? conversa.channelId ?? '') !== String(req.query.channelId)) return false;
     if (req.query.phoneNumberId && String(conversa.channel?.phoneNumberId ?? conversa.phoneNumberId ?? '') !== String(req.query.phoneNumberId)) return false;
     if (conversaOcultaParaUsuario(req.usuario.codUsu, conversa)) return false;
@@ -1350,9 +1391,10 @@ router.get('/conversations', asyncRoute(async (req, res) => {
   });
 }));
 
-router.get('/channels', asyncRoute(async (_req, res) => {
+router.get('/channels', asyncRoute(async (req, res) => {
   const resposta = await whatsappApi.getChannels();
-  res.json({ success: true, data: Array.isArray(resposta?.data) ? resposta.data : [] });
+  const canais = Array.isArray(resposta?.data) ? resposta.data : [];
+  res.json({ success: true, data: canais.filter((canal) => atendentePodeAcessarCanal(req.atendente, canal.id)) });
 }));
 
 router.post('/conversations', asyncRoute(async (req, res) => {
@@ -1371,6 +1413,7 @@ router.post('/conversations', asyncRoute(async (req, res) => {
   if (!canal) {
     return res.status(409).json({ erro: 'Este número de atendimento não está disponível no momento.' });
   }
+  if (!atendentePodeAcessarCanal(req.atendente, canal.id)) throw erroCanalNaoPermitido();
   const channelId = Number(canal.id);
   const resultado = await contatosDoParceiro(codParc);
   if (!resultado) return res.status(404).json({ erro: 'Parceiro ativo não encontrado no Sankhya.' });
@@ -1424,6 +1467,13 @@ router.post('/conversations', asyncRoute(async (req, res) => {
     bitrixError,
     selectedContact: { ...contato, codParc, parceiro: resultado.parceiro.nome }
   });
+}));
+
+router.use('/conversations/:id', asyncRoute(async (req, _res, next) => {
+  const conversation = await obterConversaConsolidada(id(req.params.id));
+  if (!atendentePodeAcessarConversa(req.atendente, conversation)) throw erroCanalNaoPermitido();
+  req.conversaAutorizada = conversation;
+  next();
 }));
 
 router.get('/conversations/:id', asyncRoute(async (req, res) => {
@@ -1893,7 +1943,9 @@ router.get('/events', (req, res) => {
     res.write(`event: ${event}\n`);
     res.write(`data: ${JSON.stringify(payload)}\n\n`);
   };
-  const onAssignment = (payload) => write('conversation:assignment', payload);
+  const onAssignment = (payload) => {
+    if (atendentePodeAcessarConversa(req.atendente, payload?.conversation || {})) write('conversation:assignment', payload);
+  };
   const onCall = ({ event, payload }) => {
     const attendantId = payload?.attendant?.id;
     if (!attendantId || String(attendantId) === String(req.atendente.id)) write(event, payload);
@@ -1901,7 +1953,8 @@ router.get('/events', (req, res) => {
   const onDeleted = (payload) => write('conversation:deleted', payload);
   const onUpdated = (payload) => {
     const conversation = payload?.conversation || payload || {};
-    if (!conversaOcultaParaUsuario(req.usuario.codUsu, conversation)) write('conversation:updated', payload);
+    if (atendentePodeAcessarConversa(req.atendente, conversation)
+      && !conversaOcultaParaUsuario(req.usuario.codUsu, conversation)) write('conversation:updated', payload);
   };
   eventosAtendimento.on('assignment', onAssignment);
   eventosAtendimento.on('call', onCall);
@@ -1922,9 +1975,12 @@ router.get('/events', (req, res) => {
             id: normalizado.conversationId,
             ...(normalizado.message ? { lastMessage: normalizado.message, lastMessageAt: normalizado.message.messageTimestamp } : {})
           };
-          if (!conversaOcultaParaUsuario(req.usuario.codUsu, conversation)) write(event, normalizado);
+          if (atendentePodeAcessarConversa(req.atendente, conversation)
+            && !conversaOcultaParaUsuario(req.usuario.codUsu, conversation)) write(event, normalizado);
         })
-        .catch(() => write(event, payload));
+        // Sem a conversa normalizada não é possível confirmar o número de origem.
+        // O evento é descartado para não expor uma conversa de canal não liberado.
+        .catch(() => {});
     },
     (payload) => write('connection', payload)
   );
@@ -1972,6 +2028,7 @@ router.use((error, _req, res, next) => {
 });
 
 router._internals = {
+  asyncRoute,
   acessoPermitido,
   atribuicaoExpirada,
   buscarCadastrosSankhyaPorTelefones,
@@ -1998,6 +2055,8 @@ router._internals = {
   idClienteChamada,
   atendenteChamada,
   agenteChamada,
+  atendentePodeAcessarCanal,
+  atendentePodeAcessarConversa,
   criarControleChamadas,
   idsRelacionadosConversa,
   obterAtribuicaoMaisRecente,

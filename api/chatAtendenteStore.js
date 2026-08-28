@@ -10,6 +10,13 @@ function normalizarTexto(valor, limite = 160) {
   return String(valor || '').trim().slice(0, limite);
 }
 
+function normalizarCanais(valores) {
+  if (!Array.isArray(valores)) return null;
+  return [...new Set(valores
+    .map((valor) => String(valor || '').trim())
+    .filter((valor) => /^[A-Za-z0-9_-]{1,80}$/.test(valor)))];
+}
+
 function estadoVazio() {
   return { usuarios: {}, conversas: {}, ocultas: {}, ocultasGlobais: {} };
 }
@@ -69,6 +76,9 @@ function criarChatAtendenteStore(options = {}) {
       nome: normalizarTexto(dados.nome ?? anterior.nome),
       nomeExibicao: normalizarTexto(dados.nomeExibicao ?? anterior.nomeExibicao ?? dados.nome ?? anterior.nome),
       assinatura: normalizarTexto(dados.assinatura ?? anterior.assinatura, 80),
+      canaisPermitidos: dados.canaisPermitidos === undefined
+        ? (Array.isArray(anterior.canaisPermitidos) ? anterior.canaisPermitidos : undefined)
+        : normalizarCanais(dados.canaisPermitidos),
       atualizadoEm: new Date().toISOString(),
       atualizadoPor: Number.isInteger(Number(atualizadoPor)) ? Number(atualizadoPor) : anterior.atualizadoPor || null
     };
@@ -335,4 +345,4 @@ function criarChatAtendenteStore(options = {}) {
   };
 }
 
-module.exports = { criarChatAtendenteStore, normalizarCodigo };
+module.exports = { criarChatAtendenteStore, normalizarCodigo, normalizarCanais };
