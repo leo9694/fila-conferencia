@@ -3,6 +3,8 @@ const express = require('express');
 const path = require('path');
 const routes = require('./routes');
 const chatRouter = require('./api/chatRouter');
+const { criarChatContingencyStore } = require('./api/chatContingencyStore');
+const { autenticarContingenciaRemota } = require('./api/chatContingencyRemote');
 const {
   cookieContingencia,
   cookieLogout,
@@ -16,10 +18,37 @@ const {
   sankhyaIndisponivel,
   serializarCredencialContingencia,
   serializarSessao,
+  usuarioParaContingencia,
   validarUsuarioSankhya
 } = require('./api/auth');
 
 const app = express();
+const chatContingency = criarChatContingencyStore();
+
+function registrarContingencia(login, senha, usuario) {
+  try {
+    chatContingency.salvar(login, senha, usuarioParaContingencia(usuario));
+  } catch (error) {
+    console.error('Não foi possível atualizar a contingência do Chat:', error.message);
+  }
+}
+
+function removerContingencia(login) {
+  try {
+    chatContingency.remover(login);
+  } catch (error) {
+    console.error('Não foi possível revogar a contingência do Chat:', error.message);
+  }
+}
+
+function chamadaRecebidaDaContingencia(req) {
+  return req.get('X-Chat-Contingency-Hop') === '1';
+}
+
+async function consultarContingenciaCentral(req) {
+  if (chamadaRecebidaDaContingencia(req)) return null;
+  return autenticarContingenciaRemota(req.body?.usuario, req.body?.senha);
+}
 
 // Conferencias grandes enviam o progresso completo para manter leituras e lotes
 // consistentes entre dispositivos. O limite padrao do Express (100 KB) descartava
@@ -66,32 +95,65 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const usuario = await validarUsuarioSankhya(req.body?.usuario, req.body?.senha);
     const cookies = [cookieSessao(serializarSessao(usuario))];
-    if (chatRouter._internals?.acessoPermitido(usuario)) {
+    const chatPermitido = Boolean(chatRouter._internals?.acessoPermitido(usuario));
+    if (chatPermitido) {
+      registrarContingencia(req.body?.usuario, req.body?.senha, usuario);
       cookies.push(cookieContingencia(serializarCredencialContingencia(
         usuario,
         req.body?.usuario,
         req.body?.senha
       )));
     } else {
+      removerContingencia(req.body?.usuario);
       cookies.push(cookieLogoutContingencia());
     }
+    if (!chamadaRecebidaDaContingencia(req)) {
+      try {
+        await consultarContingenciaCentral(req);
+      } catch (error) {
+        console.error('Não foi possível sincronizar a contingência central do Chat:', error.message);
+      }
+    }
     res.setHeader('Set-Cookie', cookies);
-    res.json({ ok: true, usuario });
+    res.json({ ok: true, usuario, chatPermitido });
   } catch (err) {
     if (sankhyaIndisponivel(err)) {
-      const usuario = lerCredencialContingencia(req, req.body?.usuario, req.body?.senha);
+      const usuarioCookie = lerCredencialContingencia(req, req.body?.usuario, req.body?.senha);
+      const usuarioCache = chatContingency.validar(req.body?.usuario, req.body?.senha);
+      let usuarioRemoto = null;
+      let erroRemoto = null;
+      if (!usuarioCookie && !usuarioCache) {
+        try {
+          usuarioRemoto = await consultarContingenciaCentral(req);
+        } catch (error) {
+          erroRemoto = error;
+        }
+      }
+      const usuarioBase = usuarioCookie || usuarioCache || usuarioRemoto;
+      const usuario = usuarioBase ? {
+        ...usuarioParaContingencia(usuarioBase),
+        chatAcessoCentral: Boolean(usuarioRemoto || usuarioBase.chatAcessoCentral),
+        modoContingencia: true,
+        escopo: 'CHAT'
+      } : null;
       if (usuario && chatRouter._internals?.acessoPermitido(usuario)) {
+        if (!usuarioCache) registrarContingencia(req.body?.usuario, req.body?.senha, usuario);
         res.setHeader('Set-Cookie', cookieSessao(serializarSessao(usuario)));
         res.json({
           ok: true,
           contingencia: true,
+          chatPermitido: true,
           usuario,
           aviso: 'Sankhya indisponível. Acesso liberado somente ao Chat.'
         });
         return;
       }
+      if ([401, 403].includes(Number(erroRemoto?.status))) {
+        res.status(Number(erroRemoto.status)).json({ erro: erroRemoto.message });
+        return;
+      }
       res.status(503).json({
-        erro: 'O Sankhya está indisponível e este navegador não possui um acesso de contingência válido para o Chat.'
+        erro: 'O Sankhya está indisponível e este usuário ainda não possui uma credencial de contingência válida para o Chat.'
       });
       return;
     }

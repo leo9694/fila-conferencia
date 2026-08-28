@@ -79,6 +79,7 @@ function usuarioParaContingencia(usuario = {}) {
     nome: String(usuario.nome || '').trim(),
     grupos: Array.isArray(usuario.grupos) ? usuario.grupos : [],
     gruposConfirmados: usuario.gruposConfirmados === true,
+    chatAcessoCentral: usuario.chatAcessoCentral === true,
     permissoes: {
       vendasGerais: false,
       transporte: false,
@@ -304,6 +305,7 @@ module.exports = {
   sankhyaIndisponivel,
   serializarCredencialContingencia,
   serializarSessao,
+  usuarioParaContingencia,
   validarCredencialContingencia,
   validarUsuarioSankhya
 };

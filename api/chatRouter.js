@@ -150,7 +150,9 @@ function erroCanalNaoPermitido() {
 }
 
 function acessoPermitido(usuario = {}) {
-  return pertenceDiretoria(usuario) || atendentes.permitido(usuario.codUsu);
+  return (usuario.modoContingencia === true && usuario.chatAcessoCentral === true)
+    || pertenceDiretoria(usuario)
+    || atendentes.permitido(usuario.codUsu);
 }
 
 function conversaCorrespondeFiltroAtendente(conversa = {}, filtros = {}) {
