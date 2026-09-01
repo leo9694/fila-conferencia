@@ -700,10 +700,47 @@ function grupoConversa(conversationId) {
   return gruposConversaPorId.get(numericId) || { canonicalId: numericId, ids: [numericId] };
 }
 
+function mensagemInternaAtribuicao(evento = {}, conversationId) {
+  const acao = String(evento.acao || '').toUpperCase();
+  const em = new Date(evento.em || 0);
+  if (acao !== 'CLAIM' || Number.isNaN(em.getTime())) return null;
+  const atendenteId = String(evento.destinoId || evento.atorId || '').trim();
+  const atendenteNome = String(evento.destinoNome || evento.atorNome || 'Atendente').trim();
+  return {
+    id: `internal-claim:${em.toISOString()}:${atendenteId}`,
+    conversationId: Number(conversationId),
+    type: 'internal',
+    internal: true,
+    internalType: 'ASSIGNMENT_CLAIM',
+    direction: 'INTERNAL',
+    text: `Atendente ${atendenteNome} assumiu o atendimento`,
+    attendant: { id: atendenteId, name: atendenteNome },
+    messageTimestamp: em.toISOString(),
+    createdAt: em.toISOString()
+  };
+}
+
+function mensagensInternasAtendimento(conversationId) {
+  const group = grupoConversa(conversationId);
+  const unique = new Map();
+  group.ids.forEach((itemId) => {
+    const historico = atendentes.obterConversa(itemId)?.historico;
+    if (!Array.isArray(historico)) return;
+    historico.forEach((evento) => {
+      const message = mensagemInternaAtribuicao(evento, group.canonicalId);
+      if (message) unique.set(message.id, message);
+    });
+  });
+  return [...unique.values()];
+}
+
 async function mensagensConsolidadas(conversationId, params = {}) {
   const group = grupoConversa(conversationId);
   const respostas = await Promise.all(group.ids.map((itemId) => whatsappApi.getMessages(itemId, params)));
-  const messages = respostas.flatMap((resposta) => Array.isArray(resposta?.data) ? resposta.data : []);
+  const messages = [
+    ...respostas.flatMap((resposta) => Array.isArray(resposta?.data) ? resposta.data : []),
+    ...mensagensInternasAtendimento(conversationId)
+  ];
   const unique = new Map();
   messages.forEach((message) => unique.set(String(message.id ?? message.wamid), message));
   const data = [...unique.values()].sort((a, b) => {
@@ -1673,10 +1710,9 @@ router.post('/conversations/:id/claim', asyncRoute(async (req, res) => {
   const pipelineId = idPipelineBitrix(req.body?.pipelineId);
   const withoutPipeline = req.body?.withoutPipeline === true;
   const atual = obterAtribuicaoConversa(conversation);
-  if (atual?.userId && String(atual.userId) !== req.atendente.id) {
-    return res.status(409).json({ erro: `Conversa em atendimento por ${atual.userName || 'outro atendente'}.` });
-  }
   const assignment = atribuirGrupoConversa(conversation, { acao: 'CLAIM', ator: req.atendente, destino: req.atendente });
+  const ultimoEvento = assignment?.historico?.[assignment.historico.length - 1];
+  const internalMessage = mensagemInternaAtribuicao(ultimoEvento, conversationId);
   let bitrixError = '';
   if (pipelineId !== null) {
     try {
@@ -1698,10 +1734,11 @@ router.post('/conversations/:id/claim', asyncRoute(async (req, res) => {
   }
   const resultado = {
     ...comAtribuicao(conversation),
+    internalMessage,
     readConfirmed,
     ...(bitrixError ? { bitrixError } : {})
   };
-  eventosAtendimento.emit('assignment', { conversationId, conversation: resultado, assignment });
+  eventosAtendimento.emit('assignment', { conversationId, conversation: resultado, assignment, internalMessage });
   res.json(resultado);
 }));
 
@@ -2165,6 +2202,7 @@ router._internals = {
   eventoTransferenciaChamada,
   criarControleChamadas,
   idsRelacionadosConversa,
+  mensagemInternaAtribuicao,
   obterAtribuicaoMaisRecente,
   textoContatoChat,
   textoSql,

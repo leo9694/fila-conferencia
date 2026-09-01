@@ -158,6 +158,24 @@ test('gera identidades persistentes somente para o canal consolidado do contato'
   );
 });
 
+test('converte uma tomada de atendimento em registro interno sem mensagem para a Meta', () => {
+  const message = chatRouter._internals.mensagemInternaAtribuicao({
+    acao: 'CLAIM',
+    atorId: '72',
+    atorNome: 'Leonardo',
+    destinoId: '72',
+    destinoNome: 'Leonardo',
+    em: '2026-09-01T14:30:00.000Z'
+  }, 15);
+  assert.equal(message.type, 'internal');
+  assert.equal(message.direction, 'INTERNAL');
+  assert.equal(message.text, 'Atendente Leonardo assumiu o atendimento');
+  assert.equal(message.messageTimestamp, '2026-09-01T14:30:00.000Z');
+  assert.equal(chatRouter._internals.mensagemInternaAtribuicao({
+    acao: 'TRANSFER', em: '2026-09-01T14:30:00.000Z'
+  }, 15), null);
+});
+
 test('preserva o next em middleware assíncrono de autorização', async () => {
   let nextCalled = false;
   const middleware = chatRouter._internals.asyncRoute(async (_req, _res, next) => next());

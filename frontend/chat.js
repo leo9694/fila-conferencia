@@ -884,6 +884,16 @@
     </article>`;
   }
 
+  function renderInternalTimelineItem(message) {
+    const date = new Date(message.messageTimestamp || message.createdAt || 0);
+    const timestamp = Number.isNaN(date.getTime()) ? '' : date.toLocaleString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+    return `<article class="chat-internal-event">
+      <span><i data-lucide="user-check" aria-hidden="true"></i><strong>${escapeHtml(message.text || 'Atendimento assumido')}</strong>${timestamp ? `<time>${escapeHtml(timestamp)}</time>` : ''}</span>
+    </article>`;
+  }
+
   function renderMessages({ preserveScroll = false } = {}) {
     const oldHeight = refs.messages.scrollHeight;
     const oldTop = refs.messages.scrollTop;
@@ -910,6 +920,7 @@
     refs.messages.innerHTML = `${state.messagePage < state.messageTotalPages ? '<div class="chat-history-loader" aria-hidden="true"><span></span><span></span><span></span></div>' : ''}${renderMetaSessionNotice()}${timeline.map((entry) => {
       if (entry.kind === 'call') return renderCallTimelineItem(entry.value);
       const message = entry.value;
+      if (message.internal === true || String(message.type).toLowerCase() === 'internal') return renderInternalTimelineItem(message);
       const outbound = String(message.direction).toUpperCase() === 'OUTBOUND';
       const status = Core.statusSymbol(message.status);
       const reactions = [...new Set([message.id, message.wamid, message.messageId, messageReactionTarget(message)]
@@ -1185,7 +1196,7 @@
     const owner = ownsConversation(item);
     refs.assignmentLabel.textContent = agent?.name || 'Sem atendente';
     refs.detailsAgent.textContent = agent?.name || 'Sem atendente';
-    refs.claim.hidden = Boolean(agent);
+    refs.claim.hidden = false;
     refs.transfer.hidden = !canTransferConversation(item);
     refs.release.hidden = !owner;
     const session = Core.serviceWindow(item);
@@ -1739,7 +1750,20 @@
       const id = String(incoming.id ?? payload.conversationId ?? '');
       applyConversationUpdate(payload);
     }
-    else if (event === 'conversation:read' || event === 'conversation:status' || event === 'conversation:assignment') applyConversationUpdate(payload);
+    else if (event === 'conversation:read' || event === 'conversation:status' || event === 'conversation:assignment') {
+      if (event === 'conversation:assignment' && payload.internalMessage) {
+        const id = String(payload.conversationId || payload.conversation?.id || '');
+        if (id === String(state.conversationId)) {
+          const shouldScroll = nearBottom();
+          state.messages = Core.mergeById(state.messages, [payload.internalMessage]);
+          scheduleMessagesRender({ preserveScroll: !shouldScroll });
+          if (shouldScroll) requestAnimationFrame(() => scrollBottom('smooth'));
+        } else {
+          updateCachedConversationMessages(id, (messages) => Core.mergeById(messages, [payload.internalMessage]));
+        }
+      }
+      applyConversationUpdate(payload);
+    }
     else if (event === 'conversation:deleted') {
       const ids = new Set([payload.conversationId, ...(payload.relatedConversationIds || [])].map(String));
       state.conversations = state.conversations.filter((item) => !ids.has(String(item.id)));
@@ -1854,7 +1878,10 @@
   async function claimConversation(id = state.conversationId, options = {}) {
     if (!id) return null;
     if (String(id) !== String(state.conversationId)) state.conversationId = String(id);
-    const choice = options.prompt === false
+    const replacingAgent = Boolean(assignedUser(state.conversation));
+    const choice = replacingAgent
+      ? {}
+      : options.prompt === false
       ? { pipelineId: options.pipelineId }
       : await choosePipeline({
         allowNone: true,
@@ -1864,16 +1891,25 @@
     if (!choice) return null;
     try {
       const conversation = await changeAssignment('CLAIM', null, choice);
+      if (conversation.internalMessage) {
+        state.messages = Core.mergeById(state.messages, [conversation.internalMessage]);
+        renderMessages();
+        scrollBottom('smooth');
+      }
       if (conversation.readConfirmed) {
         const item = state.conversations.find((entry) => String(entry.id) === String(id));
         if (item) item.unreadCount = 0;
         if (state.conversation) state.conversation.unreadCount = 0;
       }
       renderConversations();
-      setFeedback(conversation.bitrixError
-        ? `Atendimento assumido. O pipeline ficou pendente: ${conversation.bitrixError}`
-        : choice.withoutPipeline ? 'Atendimento assumido sem pipeline. Vincule-o depois nos dados do contato.' : 'Atendimento assumido e card do Bitrix vinculado.',
-      Boolean(conversation.bitrixError));
+      const feedback = replacingAgent
+        ? 'Atendimento assumido e registrado no histórico interno.'
+        : conversation.bitrixError
+          ? `Atendimento assumido. O pipeline ficou pendente: ${conversation.bitrixError}`
+          : choice.withoutPipeline
+            ? 'Atendimento assumido sem pipeline. Vincule-o depois nos dados do contato.'
+            : 'Atendimento assumido e card do Bitrix vinculado.';
+      setFeedback(feedback, Boolean(conversation.bitrixError));
       return conversation;
     } catch (error) {
       setFeedback(error.message, true);
