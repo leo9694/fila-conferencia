@@ -124,7 +124,28 @@ function atendentePodeAcessarCanal(atendente = {}, channelId) {
 }
 
 function atendentePodeAcessarConversa(atendente = {}, conversa = {}) {
-  return atendentePodeAcessarCanal(atendente, idCanalConversa(conversa));
+  if (atendentePodeAcessarCanal(atendente, idCanalConversa(conversa))) return true;
+  return acessoTemporarioPorTransferencia(atendente, conversa);
+}
+
+function acaoAtualAtribuicao(atribuicao = {}) {
+  const historico = Array.isArray(atribuicao.historico) ? atribuicao.historico : [];
+  return String(atribuicao.assignmentAction || historico[historico.length - 1]?.acao || '').toUpperCase();
+}
+
+function atribuicaoRecebidaPorTransferencia(atribuicao = {}) {
+  return Boolean(atribuicao?.userId)
+    && ['TRANSFER', 'CALL_TRANSFER'].includes(acaoAtualAtribuicao(atribuicao));
+}
+
+function atribuicaoTransferidaParaAtendente(atribuicao = {}, atendente = {}) {
+  return atribuicaoRecebidaPorTransferencia(atribuicao)
+    && String(atribuicao.userId) === String(atendente.id || '');
+}
+
+function acessoTemporarioPorTransferencia(atendente = {}, conversa = {}) {
+  const atribuicao = liberarAtribuicaoExpirada(conversa);
+  return atribuicaoTransferidaParaAtendente(atribuicao, atendente);
 }
 
 function eventoTransferenciaChamada(event) {
@@ -167,11 +188,22 @@ function conversaCorrespondeFiltroAtendente(conversa = {}, filtros = {}) {
 
 function atribuicaoExpirada(atribuicao = {}, conversa = {}, agora = Date.now()) {
   if (!atribuicao?.userId) return false;
+  const ultimaInteracao = instanteUltimaInteracaoAtribuicao(atribuicao, conversa);
+  return ultimaInteracao > 0 && agora - ultimaInteracao >= ATRIBUICAO_SEM_INTERACAO_MS;
+}
+
+function instanteUltimaInteracaoAtribuicao(atribuicao = {}, conversa = {}) {
   const momentos = [atribuicao.assignedAt, atribuicao.lastInteractionAt, instanteUltimaMensagem(conversa)]
     .map((value) => new Date(value || 0).getTime())
     .filter(Number.isFinite);
-  const ultimaInteracao = Math.max(...momentos, 0);
-  return ultimaInteracao > 0 && agora - ultimaInteracao >= ATRIBUICAO_SEM_INTERACAO_MS;
+  return Math.max(...momentos, 0);
+}
+
+function expiracaoAcessoTemporario(atribuicao = {}, conversa = {}) {
+  const ultimaInteracao = instanteUltimaInteracaoAtribuicao(atribuicao, conversa);
+  return ultimaInteracao > 0
+    ? new Date(ultimaInteracao + ATRIBUICAO_SEM_INTERACAO_MS).toISOString()
+    : null;
 }
 
 function idsRelacionadosConversa(conversa = {}) {
@@ -195,8 +227,10 @@ function obterAtribuicaoConversa(conversa = {}) {
 function instanteEstadoAtribuicao(atribuicao = {}) {
   const historico = Array.isArray(atribuicao.historico) ? atribuicao.historico : [];
   const ultimoEvento = historico[historico.length - 1]?.em;
-  const instante = new Date(ultimoEvento || atribuicao.assignedAt || 0).getTime();
-  return Number.isFinite(instante) ? instante : 0;
+  const instantes = [ultimoEvento, atribuicao.assignedAt, atribuicao.lastInteractionAt]
+    .map((value) => new Date(value || 0).getTime())
+    .filter(Number.isFinite);
+  return Math.max(...instantes, 0);
 }
 
 function obterAtribuicaoMaisRecente(atribuicoes = []) {
@@ -235,7 +269,8 @@ function comAtribuicao(conversa = {}) {
     assignment: atribuicao?.userId ? {
       userId: String(atribuicao.userId),
       userName: atribuicao.userName || 'Atendente',
-      assignedAt: atribuicao.assignedAt || null
+      assignedAt: atribuicao.assignedAt || null,
+      action: acaoAtualAtribuicao(atribuicao) || null
     } : null,
     bitrix: {
       pipelines,
@@ -244,6 +279,19 @@ function comAtribuicao(conversa = {}) {
       pendingReason: atribuicao?.bitrixPendingReason || '',
       updatedAt: atribuicao?.bitrixUpdatedAt || null
     }
+  };
+}
+
+function comAcessoAtendente(conversa = {}, atendente = {}) {
+  const resultado = comAtribuicao(conversa);
+  const canalPermitido = atendentePodeAcessarCanal(atendente, idCanalConversa(resultado));
+  const atribuicao = obterAtribuicaoConversa(resultado);
+  const acessoTemporario = !canalPermitido
+    && atribuicaoTransferidaParaAtendente(atribuicao, atendente);
+  return {
+    ...resultado,
+    crossChannelTransfer: acessoTemporario,
+    temporaryAccessExpiresAt: acessoTemporario ? expiracaoAcessoTemporario(atribuicao, resultado) : null
   };
 }
 
@@ -1351,13 +1399,14 @@ router.get('/conversations', asyncRoute(async (req, res) => {
   const busca = String(req.query.search || '').trim();
   const codParcBusca = /^\d+$/.test(busca) ? Number(busca) : null;
   const filtroLocalAtivo = Boolean(agentId || assignment !== 'ALL' || codParcBusca);
+  const incluirTransferenciasEntreCanais = assignment === 'MINE' && !agentId;
   const parametros = {
     page: filtroLocalAtivo ? 1 : page,
     limit: filtroLocalAtivo ? 100 : limit,
     search: req.query.search,
     status: req.query.status,
-    channelId: req.query.channelId,
-    phoneNumberId: req.query.phoneNumberId,
+    channelId: incluirTransferenciasEntreCanais ? undefined : req.query.channelId,
+    phoneNumberId: incluirTransferenciasEntreCanais ? undefined : req.query.phoneNumberId,
     // A distribuição é local ao aplicativo; a API externa sempre entrega a fila completa.
     assignment: 'ALL'
   };
@@ -1382,8 +1431,11 @@ router.get('/conversations', asyncRoute(async (req, res) => {
   });
   const filtradas = consolidadas.filter((conversa) => {
     if (!atendentePodeAcessarConversa(req.atendente, conversa)) return false;
-    if (req.query.channelId && String(conversa.channel?.id ?? conversa.channelId ?? '') !== String(req.query.channelId)) return false;
-    if (req.query.phoneNumberId && String(conversa.channel?.phoneNumberId ?? conversa.phoneNumberId ?? '') !== String(req.query.phoneNumberId)) return false;
+    const acessoTemporario = acessoTemporarioPorTransferencia(req.atendente, conversa);
+    if (req.query.channelId && !acessoTemporario
+      && String(conversa.channel?.id ?? conversa.channelId ?? '') !== String(req.query.channelId)) return false;
+    if (req.query.phoneNumberId && !acessoTemporario
+      && String(conversa.channel?.phoneNumberId ?? conversa.phoneNumberId ?? '') !== String(req.query.phoneNumberId)) return false;
     if (conversaOcultaParaUsuario(req.usuario.codUsu, conversa)) return false;
     return conversaCorrespondeFiltroAtendente(conversa, {
       assignment,
@@ -1391,7 +1443,8 @@ router.get('/conversations', asyncRoute(async (req, res) => {
       currentAgentId: req.atendente.id
     });
   });
-  const data = filtroLocalAtivo ? filtradas.slice((page - 1) * limit, page * limit) : filtradas;
+  const visiveis = filtradas.map((conversa) => comAcessoAtendente(conversa, req.atendente));
+  const data = filtroLocalAtivo ? visiveis.slice((page - 1) * limit, page * limit) : visiveis;
   const pagination = resposta.pagination || {};
   res.json({
     ...resposta,
@@ -1400,9 +1453,9 @@ router.get('/conversations', asyncRoute(async (req, res) => {
       ...pagination,
       page,
       limit,
-      total: filtroLocalAtivo ? filtradas.length : Number(pagination.total || data.length),
+      total: filtroLocalAtivo ? visiveis.length : Number(pagination.total || data.length),
       totalPages: filtroLocalAtivo
-        ? Math.max(1, Math.ceil(filtradas.length / limit))
+        ? Math.max(1, Math.ceil(visiveis.length / limit))
         : Math.max(1, Number(pagination.totalPages || 1))
     }
   });
@@ -1496,7 +1549,7 @@ router.use('/conversations/:id', asyncRoute(async (req, _res, next) => {
 router.get('/conversations/:id', asyncRoute(async (req, res) => {
   const conversation = await obterConversaConsolidada(id(req.params.id));
   await sincronizarPipelinesBitrix([conversation]);
-  const atualizado = comAtribuicao(conversation);
+  const atualizado = comAcessoAtendente(conversation, req.atendente);
   const [vinculada] = await vincularCadastrosSankhya([atualizado], { force: true });
   res.json(vinculada);
 }));
@@ -1962,7 +2015,13 @@ router.get('/events', (req, res) => {
     res.write(`data: ${JSON.stringify(payload)}\n\n`);
   };
   const onAssignment = (payload) => {
-    if (atendentePodeAcessarConversa(req.atendente, payload?.conversation || {})) write('conversation:assignment', payload);
+    const conversation = payload?.conversation || {};
+    if (atendentePodeAcessarConversa(req.atendente, conversation)) {
+      write('conversation:assignment', {
+        ...payload,
+        conversation: comAcessoAtendente(conversation, req.atendente)
+      });
+    }
   };
   const onCall = ({ event, payload }) => {
     const attendantId = payload?.attendant?.id;
@@ -1972,7 +2031,12 @@ router.get('/events', (req, res) => {
   const onUpdated = (payload) => {
     const conversation = payload?.conversation || payload || {};
     if (atendentePodeAcessarConversa(req.atendente, conversation)
-      && !conversaOcultaParaUsuario(req.usuario.codUsu, conversation)) write('conversation:updated', payload);
+      && !conversaOcultaParaUsuario(req.usuario.codUsu, conversation)) {
+      write('conversation:updated', {
+        ...payload,
+        conversation: comAcessoAtendente(conversation, req.atendente)
+      });
+    }
   };
   eventosAtendimento.on('assignment', onAssignment);
   eventosAtendimento.on('call', onCall);
@@ -1994,7 +2058,12 @@ router.get('/events', (req, res) => {
             ...(normalizado.message ? { lastMessage: normalizado.message, lastMessageAt: normalizado.message.messageTimestamp } : {})
           };
           if (atendentePodeAcessarConversa(req.atendente, conversation)
-            && !conversaOcultaParaUsuario(req.usuario.codUsu, conversation)) write(event, normalizado);
+            && !conversaOcultaParaUsuario(req.usuario.codUsu, conversation)) {
+            write(event, normalizado.conversation ? {
+              ...normalizado,
+              conversation: comAcessoAtendente(normalizado.conversation, req.atendente)
+            } : normalizado);
+          }
         })
         // Sem a conversa normalizada não é possível confirmar o número de origem.
         // O evento é descartado para não expor uma conversa de canal não liberado.
@@ -2061,7 +2130,11 @@ router.use((error, _req, res, next) => {
 router._internals = {
   asyncRoute,
   acessoPermitido,
+  acaoAtualAtribuicao,
+  acessoTemporarioPorTransferencia,
   atribuicaoExpirada,
+  atribuicaoRecebidaPorTransferencia,
+  atribuicaoTransferidaParaAtendente,
   buscarCadastrosSankhyaPorTelefones,
   cadastroSankhyaSelecionado,
   chavesIdentidadeConversa,

@@ -176,6 +176,22 @@ test('restringe os canais do chat ao perfil configurado do atendente', () => {
   assert.equal(atendentePodeAcessarCanal({ director: false, channelIds: null }, '202'), true);
 });
 
+test('reconhece somente o destinatário atual de uma transferência entre números', () => {
+  const { atribuicaoTransferidaParaAtendente } = chatRouter._internals;
+  const transferencia = {
+    userId: '81',
+    assignmentAction: 'TRANSFER',
+    assignedAt: '2026-08-31T12:00:00.000Z'
+  };
+  assert.equal(atribuicaoTransferidaParaAtendente(transferencia, { id: '81' }), true);
+  assert.equal(atribuicaoTransferidaParaAtendente(transferencia, { id: '72' }), false);
+  assert.equal(atribuicaoTransferidaParaAtendente({ ...transferencia, assignmentAction: 'CLAIM' }, { id: '81' }), false);
+  assert.equal(atribuicaoTransferidaParaAtendente({
+    userId: '81',
+    historico: [{ acao: 'CALL_TRANSFER' }]
+  }, { id: '81' }), true);
+});
+
 test('faz chamada direta tocar somente para atendente liberado no número', () => {
   const { atendentePodeReceberEventoChamada } = chatRouter._internals;
   const zenaide = { id: '81', director: false, channelIds: ['101'] };

@@ -122,6 +122,7 @@ function criarChatAtendenteStore(options = {}) {
     const registro = {
       ...atual,
       ...proximo,
+      assignmentAction: liberar ? null : normalizarTexto(acao, 20).toUpperCase(),
       historico: [...historico, {
         acao: normalizarTexto(acao, 20),
         atorId: String(ator?.id || ''),

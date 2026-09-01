@@ -90,6 +90,7 @@
     mediaZoom: 1, replyingTo: null, conversationCache: new Map(),
     messagesRenderFrame: null, messagesRenderConversationId: null, messagesRenderPreserveScroll: true,
     conversationsRenderFrame: null, uiCacheTimer: null, callsRefreshTimer: null, callsRefreshToken: 0,
+    temporaryAccessTimer: null,
     sendToken: 0, optimisticMessageSequence: 0
   };
 
@@ -419,6 +420,7 @@
   }
 
   function conversationMatchesChannel(conversation = {}) {
+    if (state.assignment === 'MINE' && conversation.crossChannelTransfer === true) return true;
     if (!state.selectedChannelId) return true;
     return String(Core.channel(conversation)?.id ?? conversation.channelId ?? '') === String(state.selectedChannelId);
   }
@@ -592,6 +594,7 @@
     if (!state.conversations.length) {
       refs.list.innerHTML = '<div class="chat-list-empty"><i data-lucide="message-circle-off"></i><strong>Nenhuma conversa encontrada</strong><span>Tente ajustar a busca ou o filtro.</span></div>';
       window.lucide?.createIcons();
+      scheduleTemporaryAccessExpiry();
       return;
     }
     refs.list.innerHTML = state.conversations.map((item) => {
@@ -600,15 +603,40 @@
       const active = String(item.id) === String(state.conversationId);
       const agent = assignedUser(item);
       const channel = Core.channel(item);
-      return `<button class="chat-conversation${active ? ' is-active' : ''}${unread ? ' has-unread' : ''}" type="button" data-conversation-id="${escapeHtml(item.id)}">
+      const transferidoOutroNumero = item.crossChannelTransfer === true;
+      return `<button class="chat-conversation${active ? ' is-active' : ''}${unread ? ' has-unread' : ''}${transferidoOutroNumero ? ' is-cross-channel-transfer' : ''}" type="button" data-conversation-id="${escapeHtml(item.id)}">
         <span class="chat-list-avatar">${escapeHtml(Core.initials(name))}</span>
         <span class="chat-list-copy"><span class="chat-list-line"><span class="chat-list-name"><strong>${escapeHtml(name)}</strong>${sankhyaBadge(item)}${pipelineBadges(item)}</span><time>${escapeHtml(formatDate(conversationTimestamp(item), true))}</time></span>
         <span class="chat-list-line"><small>${escapeHtml(Core.messagePreview(item.lastMessage))}</small>${unread ? `<b>${unread > 99 ? '99+' : unread}</b>` : ''}</span>
-        <span class="chat-list-meta"><span class="chat-list-agent${agent ? '' : ' is-unassigned'}">${escapeHtml(agent?.name || 'Sem atendente')}</span><span class="chat-channel-badge">${escapeHtml(Core.channelLabel(item))}</span></span></span>
+        <span class="chat-list-meta"><span class="chat-list-agent${agent ? '' : ' is-unassigned'}">${escapeHtml(agent?.name || 'Sem atendente')}</span>${transferidoOutroNumero ? '<span class="chat-transfer-badge">Transferido</span>' : ''}<span class="chat-channel-badge">${escapeHtml(Core.channelLabel(item))}</span></span></span>
       </button>`;
     }).join('');
     refs.list.querySelectorAll('[data-conversation-id]').forEach(bindConversationItem);
     window.lucide?.createIcons();
+    scheduleTemporaryAccessExpiry();
+  }
+
+  function scheduleTemporaryAccessExpiry() {
+    clearTimeout(state.temporaryAccessTimer);
+    state.temporaryAccessTimer = null;
+    const expiracoes = state.conversations
+      .filter((item) => item.crossChannelTransfer === true)
+      .map((item) => new Date(item.temporaryAccessExpiresAt || 0).getTime())
+      .filter((value) => Number.isFinite(value) && value > Date.now());
+    if (!expiracoes.length) return;
+    const proxima = Math.min(...expiracoes);
+    state.temporaryAccessTimer = setTimeout(() => {
+      const agora = Date.now();
+      const expiradas = new Set(state.conversations
+        .filter((item) => item.crossChannelTransfer === true
+          && new Date(item.temporaryAccessExpiresAt || 0).getTime() <= agora)
+        .map((item) => String(item.id)));
+      state.conversations = state.conversations.filter((item) => !expiradas.has(String(item.id)));
+      if (expiradas.has(String(state.conversationId || ''))) showConversationList({ replaceHistory: true });
+      state.page = 1;
+      renderConversations();
+      loadConversations().catch(() => {});
+    }, Math.min(2147483647, Math.max(100, proxima - Date.now() + 100)));
   }
 
   function closeConversationMenu() {
@@ -2764,6 +2792,8 @@
     state.conversationsRenderFrame = null;
     clearTimeout(state.uiCacheTimer);
     state.uiCacheTimer = null;
+    clearTimeout(state.temporaryAccessTimer);
+    state.temporaryAccessTimer = null;
     try { sessionStorage.removeItem(UI_CACHE_KEY); } catch {}
     state.loadingOlder = false;
     state.page = 1;

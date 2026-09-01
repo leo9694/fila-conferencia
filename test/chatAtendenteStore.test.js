@@ -35,8 +35,10 @@ test('mantém a atribuição do atendimento localmente, sem depender da API exte
   });
   const recarregado = criarChatAtendenteStore({ filePath });
   assert.equal(recarregado.obterConversa(123).userName, 'Leonardo');
+  assert.equal(recarregado.obterConversa(123).assignmentAction, 'CLAIM');
   recarregado.atribuirConversa(123, { acao: 'RELEASE', ator: { id: '72', name: 'Leonardo' } });
   assert.equal(recarregado.obterConversa(123).userId, null);
+  assert.equal(recarregado.obterConversa(123).assignmentAction, null);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -88,6 +90,7 @@ test('mantém mais de um pipeline Bitrix vinculado ao mesmo chat', () => {
     ator: { id: '72', name: 'Leonardo' },
     destino: { id: '80', name: 'Erick' }
   });
+  assert.equal(recarregado.obterConversa(123).assignmentAction, 'TRANSFER');
   assert.deepEqual(recarregado.obterConversa(123).bitrixPipelines.map((item) => item.categoryId), [4, 7]);
   recarregado.marcarPipelinePendente(123, 'Assumido sem pipeline');
   assert.equal(recarregado.obterConversa(123).bitrixPending, true);

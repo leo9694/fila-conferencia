@@ -61,6 +61,9 @@
 .chat-conversation { width:100%; padding:11px 12px; display:flex; align-items:center; gap:10px; border:0; border-bottom:1px solid #edf2f1; background:transparent; text-align:left; transition:.15s ease; }
 .chat-conversation:hover { background:#f0f8f6; }
 .chat-conversation.is-active { background:#e4f4ef; box-shadow:inset 3px 0 #087f6d; }
+.chat-conversation.is-cross-channel-transfer { background:#fff6df; box-shadow:inset 3px 0 #d88716; }
+.chat-conversation.is-cross-channel-transfer:hover { background:#ffefc7; }
+.chat-conversation.is-cross-channel-transfer.is-active { background:#ffe9b5; box-shadow:inset 4px 0 #c66f0a; }
 .chat-list-avatar,.chat-contact-avatar,.chat-details-avatar { display:grid; place-items:center; flex:0 0 auto; border-radius:50%; background:linear-gradient(145deg,#d9f1ea,#bee3d9); color:#087f6d; font-weight:800; }
 .chat-list-avatar { width:39px; height:39px; font-size:.75rem; }
 .chat-list-copy { flex:1; min-width:0; }
@@ -209,6 +212,7 @@
 /* Atendimento por agente, fila sem atendente e administração de acesso. */
 .chat-list-agent { display:block; margin-top:3px; overflow:hidden; color:#087f6d; font-size:.58rem; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
 .chat-list-agent.is-unassigned { color:#b87914; }
+.chat-transfer-badge { flex:0 0 auto; padding:2px 6px; border-radius:999px; background:#f4c36b; color:#74420a; font-size:.54rem; font-weight:800; }
 .chat-pipeline-badge { flex:0 0 auto; width:16px; height:16px; display:inline-grid; place-items:center; border-radius:5px; }
 .chat-pipeline-badge svg { width:11px; height:11px; stroke-width:2.25; }
 .chat-pipeline-badge.is-pending { background:#fff2cf; color:#b87914; }
