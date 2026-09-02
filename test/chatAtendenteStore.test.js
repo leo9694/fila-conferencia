@@ -71,6 +71,20 @@ test('persiste o nome personalizado exibido na conversa', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('persiste contato avulso sem vínculo Sankhya e conversa sem pipeline', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-avulso-'));
+  const filePath = path.join(dir, 'atendimentos.json');
+  const store = criarChatAtendenteStore({ filePath });
+  store.marcarConversaAvulsa(123);
+  store.marcarConversaSemPipeline(123);
+  const recarregado = criarChatAtendenteStore({ filePath });
+  const conversa = recarregado.obterConversa(123);
+  assert.equal(conversa.contatoAvulso, true);
+  assert.equal(conversa.bitrixWithoutPipeline, true);
+  assert.equal(conversa.bitrixPending, false);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('mantém mais de um pipeline Bitrix vinculado ao mesmo chat', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-pipelines-'));
   const filePath = path.join(dir, 'atendimentos.json');

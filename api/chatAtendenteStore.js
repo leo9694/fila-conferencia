@@ -162,6 +162,34 @@ function criarChatAtendenteStore(options = {}) {
     return obterConversa(chave);
   }
 
+  function marcarConversaAvulsa(id) {
+    const chave = normalizarConversa(id);
+    if (!chave) throw new TypeError('Conversa inválida.');
+    const atual = state.conversas[chave] || {};
+    state.conversas[chave] = {
+      ...atual,
+      contatoAvulso: true,
+      atualizadoEm: new Date().toISOString()
+    };
+    persistir();
+    return obterConversa(chave);
+  }
+
+  function marcarConversaSemPipeline(id) {
+    const chave = normalizarConversa(id);
+    if (!chave) throw new TypeError('Conversa inválida.');
+    const atual = state.conversas[chave] || {};
+    state.conversas[chave] = {
+      ...atual,
+      bitrixPending: false,
+      bitrixPendingReason: '',
+      bitrixWithoutPipeline: true,
+      bitrixUpdatedAt: new Date().toISOString()
+    };
+    persistir();
+    return obterConversa(chave);
+  }
+
   function vincularPipeline(id, pipeline = {}) {
     const chave = normalizarConversa(id);
     const categoryId = Number(pipeline.categoryId);
@@ -187,6 +215,7 @@ function criarChatAtendenteStore(options = {}) {
       bitrixPipelines: pipelines,
       bitrixPending: false,
       bitrixPendingReason: '',
+      bitrixWithoutPipeline: false,
       bitrixUpdatedAt: new Date().toISOString()
     };
     persistir();
@@ -220,6 +249,7 @@ function criarChatAtendenteStore(options = {}) {
         .slice(0, 100),
       bitrixPending: ativos.length ? false : atual.bitrixPending === true,
       bitrixPendingReason: ativos.length ? '' : atual.bitrixPendingReason || '',
+      bitrixWithoutPipeline: ativos.length ? false : atual.bitrixWithoutPipeline === true,
       bitrixUpdatedAt: new Date().toISOString()
     };
     persistir();
@@ -234,6 +264,7 @@ function criarChatAtendenteStore(options = {}) {
       ...atual,
       bitrixPending: true,
       bitrixPendingReason: normalizarTexto(motivo, 240),
+      bitrixWithoutPipeline: false,
       bitrixUpdatedAt: new Date().toISOString()
     };
     persistir();
@@ -334,6 +365,8 @@ function criarChatAtendenteStore(options = {}) {
     atribuirConversa,
     registrarInteracao,
     renomearConversa,
+    marcarConversaAvulsa,
+    marcarConversaSemPipeline,
     vincularPipeline,
     arquivarPipelinesConcluidos,
     marcarPipelinePendente,

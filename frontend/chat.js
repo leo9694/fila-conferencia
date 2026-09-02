@@ -59,6 +59,9 @@
     newSankhyaContactClose: byId('chat-new-sankhya-contact-close'), newSankhyaContactName: byId('chat-new-sankhya-contact-name'),
     newSankhyaContactPhone: byId('chat-new-sankhya-contact-phone'), newSankhyaContactRole: byId('chat-new-sankhya-contact-role'),
     newSankhyaContactFeedback: byId('chat-new-sankhya-contact-feedback'), newSankhyaContactSave: byId('chat-new-sankhya-contact-save'),
+    sankhyaContactSource: byId('chat-sankhya-contact-source'), manualContactToggle: byId('chat-manual-contact-toggle'),
+    manualContactFields: byId('chat-manual-contact-fields'), manualContactName: byId('chat-manual-contact-name'),
+    manualContactPhone: byId('chat-manual-contact-phone'),
     newPipelineField: byId('chat-new-pipeline-field'), newPipeline: byId('chat-new-pipeline'), newChannel: byId('chat-new-channel'),
     contactFeedback: byId('chat-contact-feedback'), contactSubmit: byId('chat-contact-submit'), contactCancel: byId('chat-contact-cancel'),
     linkPartnerModal: byId('chat-link-partner-modal'), linkPartnerForm: byId('chat-link-partner-form'),
@@ -85,7 +88,7 @@
     recordingStartedAt: 0, recordingTimer: null, pendingUpload: null, loadToken: 0, activeLoadToken: 0,
     activeRefreshToken: 0,
     totalConversations: 0, assignment: 'ALL', agentId: '', access: null, profile: null, agents: [],
-    hiddenConversationIds: new Set(), selectedPartner: null, partnerSearchToken: 0,
+    hiddenConversationIds: new Set(), selectedPartner: null, manualContact: false, partnerSearchToken: 0,
     linkPartner: null, linkPartnerSearchToken: 0, pipelines: [], pipelinesPromise: null,
     mediaZoom: 1, replyingTo: null, conversationCache: new Map(),
     messagesRenderFrame: null, messagesRenderConversationId: null, messagesRenderPreserveScroll: true,
@@ -383,9 +386,9 @@
     return state.pipelinesPromise;
   }
 
-  function fillPipelineSelect(select, selected = '') {
+  function fillPipelineSelect(select, selected = '', { allowEmpty = false } = {}) {
     if (!select) return;
-    select.innerHTML = '<option value="">Selecione um pipeline...</option>' + state.pipelines.map((pipeline) =>
+    select.innerHTML = `<option value="">${allowEmpty ? 'Sem pipeline por enquanto' : 'Selecione um pipeline...'}</option>` + state.pipelines.map((pipeline) =>
       `<option value="${escapeHtml(pipeline.categoryId)}"${String(pipeline.categoryId) === String(selected) ? ' selected' : ''}>${escapeHtml(pipeline.name)}</option>`
     ).join('');
   }
@@ -456,7 +459,10 @@
   }
 
   function updateNewContactSubmit() {
-    refs.contactSubmit.disabled = !state.selectedPartner || !refs.partnerContact.value || !refs.newChannel?.value || refs.newPipeline?.value === '';
+    const contatoValido = state.manualContact
+      ? Boolean(refs.manualContactName?.value.trim() && refs.manualContactPhone?.value.trim())
+      : Boolean(state.selectedPartner && refs.partnerContact.value);
+    refs.contactSubmit.disabled = !contatoValido || !refs.newChannel?.value;
   }
 
   function renderConversationSkeleton() {
@@ -1179,7 +1185,9 @@
         }).join('')}</div>`;
       } else {
         refs.sankhyaData.classList.remove('is-verified');
-        refs.sankhyaData.innerHTML = '<strong>Telefone não localizado no Sankhya</strong><p>Este número não está vinculado a um parceiro ou contato ativo.</p><button type="button" class="chat-link-partner-button" data-chat-link-partner><i data-lucide="link" aria-hidden="true"></i>Vincular parceiro</button>';
+        refs.sankhyaData.innerHTML = item.contatoAvulso === true
+          ? '<strong>Contato avulso</strong><p>Este contato foi criado sem vínculo com o Sankhya.</p>'
+          : '<strong>Telefone não localizado no Sankhya</strong><p>Este número não está vinculado a um parceiro ou contato ativo.</p><button type="button" class="chat-link-partner-button" data-chat-link-partner><i data-lucide="link" aria-hidden="true"></i>Vincular parceiro</button>';
       }
     }
     if (refs.bitrixData) {
@@ -2198,6 +2206,24 @@
     updateNewContactSubmit();
   }
 
+  function setManualContact(enabled) {
+    state.manualContact = enabled === true;
+    refs.sankhyaContactSource.hidden = state.manualContact;
+    refs.manualContactFields.hidden = !state.manualContact;
+    refs.manualContactToggle.classList.toggle('is-active', state.manualContact);
+    refs.manualContactToggle.setAttribute('aria-pressed', String(state.manualContact));
+    refs.manualContactToggle.innerHTML = state.manualContact
+      ? '<i data-lucide="building-2" aria-hidden="true"></i>Usar parceiro do Sankhya'
+      : '<i data-lucide="user-round-plus" aria-hidden="true"></i>Contato avulso';
+    if (state.manualContact) {
+      closeNewSankhyaContact();
+      resetPartnerSelection();
+      requestAnimationFrame(() => refs.manualContactName.focus());
+    }
+    updateNewContactSubmit();
+    window.lucide?.createIcons();
+  }
+
   async function searchPartners() {
     const term = refs.partnerSearch.value.trim();
     const token = ++state.partnerSearchToken;
@@ -2324,6 +2350,14 @@
   function openNewContact() {
     state.partnerSearchToken += 1;
     resetPartnerSelection();
+    state.manualContact = false;
+    refs.manualContactName.value = '';
+    refs.manualContactPhone.value = '';
+    refs.sankhyaContactSource.hidden = false;
+    refs.manualContactFields.hidden = true;
+    refs.manualContactToggle.classList.remove('is-active');
+    refs.manualContactToggle.setAttribute('aria-pressed', 'false');
+    refs.manualContactToggle.innerHTML = '<i data-lucide="user-round-plus" aria-hidden="true"></i>Contato avulso';
     refs.partnerSearch.hidden = false;
     refs.partnerSearch.closest('label').hidden = false;
     refs.partnerResults.hidden = true;
@@ -2333,7 +2367,7 @@
     if (refs.newPipeline) {
       refs.newPipeline.innerHTML = '<option value="">Carregando pipelines...</option>';
       loadPipelines().then(() => {
-        fillPipelineSelect(refs.newPipeline);
+        fillPipelineSelect(refs.newPipeline, '', { allowEmpty: true });
         updateNewContactSubmit();
       }).catch((error) => {
         refs.newPipeline.innerHTML = '<option value="">Pipelines indisponíveis</option>';
@@ -2342,6 +2376,7 @@
       });
     }
     refs.contactModal.hidden = false;
+    window.lucide?.createIcons();
     requestAnimationFrame(() => refs.partnerSearch.focus());
   }
 
@@ -2349,6 +2384,7 @@
     state.partnerSearchToken += 1;
     refs.contactModal.hidden = true;
     refs.contactForm.reset();
+    state.manualContact = false;
     closeNewSankhyaContact();
     resetPartnerSelection();
     refs.contactFeedback.textContent = '';
@@ -2364,7 +2400,7 @@
   }
 
   function openLinkPartner() {
-    if (!state.conversationId || sankhyaCadastro(state.conversation)) return;
+    if (!state.conversationId || sankhyaCadastro(state.conversation) || state.conversation?.contatoAvulso === true) return;
     state.linkPartnerSearchToken += 1;
     resetLinkPartnerSelection();
     refs.linkPartnerSearch.value = '';
@@ -2476,13 +2512,19 @@
     const contactKey = refs.partnerContact.value;
     const pipelineValue = refs.newPipeline?.value ?? '';
     const channelId = Number(refs.newChannel?.value);
-    if (!Number.isInteger(codParc) || !contactKey || !Number.isInteger(channelId) || pipelineValue === '') return;
-    const pipelineId = Number(pipelineValue);
+    const manualContact = state.manualContact === true;
+    const nome = refs.manualContactName?.value.trim() || '';
+    const telefone = refs.manualContactPhone?.value.trim() || '';
+    if (!Number.isInteger(channelId) || (manualContact ? !nome || !telefone : !Number.isInteger(codParc) || !contactKey)) return;
+    const pipelineId = pipelineValue === '' ? null : Number(pipelineValue);
     refs.contactSubmit.disabled = true;
     refs.contactFeedback.textContent = 'Criando contato...';
     try {
       const result = await api('/conversations', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codParc, contactKey, pipelineId, channelId })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(manualContact
+          ? { contatoAvulso: true, nome, telefone, pipelineId, channelId }
+          : { codParc, contactKey, pipelineId, channelId })
       });
       const created = result?.conversation || result;
       if (!created?.id) throw new Error('Não foi possível criar a conversa.');
@@ -2752,6 +2794,8 @@
     refs.newSankhyaContact.addEventListener('click', openNewSankhyaContact);
     refs.newSankhyaContactClose.addEventListener('click', closeNewSankhyaContact);
     refs.newSankhyaContactSave.addEventListener('click', saveNewSankhyaContact);
+    refs.manualContactToggle.addEventListener('click', () => setManualContact(!state.manualContact));
+    [refs.manualContactName, refs.manualContactPhone].forEach((input) => input.addEventListener('input', updateNewContactSubmit));
     refs.newPipeline?.addEventListener('change', updateNewContactSubmit);
     refs.newChannel?.addEventListener('change', updateNewContactSubmit);
     refs.partnerContacts.addEventListener('click', (event) => {

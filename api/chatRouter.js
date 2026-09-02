@@ -224,6 +224,11 @@ function obterAtribuicaoConversa(conversa = {}) {
     .filter(Boolean));
 }
 
+function conversaEhAvulsa(conversa = {}) {
+  return idsRelacionadosConversa(conversa)
+    .some((conversationId) => atendentes.obterConversa(conversationId)?.contatoAvulso === true);
+}
+
 function instanteEstadoAtribuicao(atribuicao = {}) {
   const historico = Array.isArray(atribuicao.historico) ? atribuicao.historico : [];
   const ultimoEvento = historico[historico.length - 1]?.em;
@@ -261,11 +266,13 @@ function liberarAtribuicaoExpirada(conversa = {}) {
 
 function comAtribuicao(conversa = {}) {
   const atribuicao = liberarAtribuicaoExpirada(conversa);
+  const contatoAvulso = conversaEhAvulsa(conversa);
   const pipelines = Array.isArray(atribuicao?.bitrixPipelines) ? atribuicao.bitrixPipelines : [];
   const pipelineHistory = Array.isArray(atribuicao?.bitrixPipelineHistory) ? atribuicao.bitrixPipelineHistory : [];
   return {
     ...conversa,
     displayName: atribuicao?.nomeExibicao || null,
+    contatoAvulso,
     assignment: atribuicao?.userId ? {
       userId: String(atribuicao.userId),
       userName: atribuicao.userName || 'Atendente',
@@ -275,7 +282,7 @@ function comAtribuicao(conversa = {}) {
     bitrix: {
       pipelines,
       history: pipelineHistory,
-      pending: atribuicao?.bitrixPending === true || (!pipelines.length && !pipelineHistory.length),
+      pending: atribuicao?.bitrixPending === true || (!pipelines.length && !pipelineHistory.length && atribuicao?.bitrixWithoutPipeline !== true),
       pendingReason: atribuicao?.bitrixPendingReason || '',
       updatedAt: atribuicao?.bitrixUpdatedAt || null
     }
@@ -537,7 +544,8 @@ async function criarContatoWhatsappNoSankhya({ codParc, nomeContato, cargo, tele
 }
 
 async function buscarCadastrosSankhyaPorTelefones(conversas = [], { force = false } = {}) {
-  const identities = [...new Set(conversas.map((item) => identidadeTelefoneWhatsapp(telefoneDaConversa(item))).filter(Boolean))];
+  const pesquisaveis = conversas.filter((conversa) => !conversaEhAvulsa(conversa));
+  const identities = [...new Set(pesquisaveis.map((item) => identidadeTelefoneWhatsapp(telefoneDaConversa(item))).filter(Boolean))];
   const now = Date.now();
   const missing = identities.filter((identity) => {
     if (force) return true;
@@ -613,6 +621,7 @@ async function buscarCadastrosSankhyaPorTelefones(conversas = [], { force = fals
     }
   }
   return conversas.map((conversa) => {
+    if (conversaEhAvulsa(conversa)) return { ...conversa, cadastroSankhya: null };
     const identity = identidadeTelefoneWhatsapp(telefoneDaConversa(conversa));
     const cadastroSankhya = cacheCadastroSankhyaPorTelefone.get(identity)?.cadastro || null;
     return { ...conversa, cadastroSankhya };
@@ -631,6 +640,7 @@ async function vincularCadastrosSankhya(conversas = [], options = {}) {
 function vincularCadastrosSankhyaDoCache(conversas = []) {
   const now = Date.now();
   return conversas.map((conversa) => {
+    if (conversaEhAvulsa(conversa)) return { ...conversa, cadastroSankhya: null };
     const identity = identidadeTelefoneWhatsapp(telefoneDaConversa(conversa));
     const cached = cacheCadastroSankhyaPorTelefone.get(identity);
     if (cached?.expiresAt <= now) cacheCadastroSankhyaPorTelefone.delete(identity);
@@ -1507,10 +1517,23 @@ router.get('/channels', asyncRoute(async (req, res) => {
 router.post('/conversations', asyncRoute(async (req, res) => {
   const codParc = Number(req.body?.codParc);
   const contactKey = String(req.body?.contactKey || '').trim();
+  const contatoAvulso = req.body?.contatoAvulso === true;
+  const nomeAvulso = textoContatoChat(req.body?.nome, 160);
+  const telefoneAvulso = normalizarTelefoneWhatsapp(req.body?.telefone);
   const pipelineId = idPipelineBitrix(req.body?.pipelineId);
+  const pipelineInformado = req.body?.pipelineId !== undefined
+    && req.body?.pipelineId !== null
+    && String(req.body.pipelineId).trim() !== '';
   const requestedChannelId = String(req.body?.channelId ?? '').trim();
-  if (!Number.isInteger(codParc) || codParc <= 0 || !contactKey || pipelineId === null) {
-    return res.status(400).json({ erro: 'Selecione um parceiro, um contato e um pipeline do Bitrix.' });
+  if (pipelineInformado && pipelineId === null) {
+    return res.status(400).json({ erro: 'Selecione um pipeline válido do Bitrix.' });
+  }
+  if (contatoAvulso) {
+    if (!nomeAvulso || !/^55\d{10,11}$/.test(telefoneAvulso)) {
+      return res.status(400).json({ erro: 'Informe o nome e um telefone/WhatsApp brasileiro válido.' });
+    }
+  } else if (!Number.isInteger(codParc) || codParc <= 0 || !contactKey) {
+    return res.status(400).json({ erro: 'Selecione um parceiro e um contato do Sankhya.' });
   }
   const respostaCanais = await whatsappApi.getChannels();
   const canais = Array.isArray(respostaCanais?.data) ? respostaCanais.data : [];
@@ -1522,10 +1545,16 @@ router.post('/conversations', asyncRoute(async (req, res) => {
   }
   if (!atendentePodeAcessarCanal(req.atendente, canal.id)) throw erroCanalNaoPermitido();
   const channelId = Number(canal.id);
-  const resultado = await contatosDoParceiro(codParc);
-  if (!resultado) return res.status(404).json({ erro: 'Parceiro ativo não encontrado no Sankhya.' });
-  const contato = resultado.contatos.find((item) => item.key === contactKey);
-  if (!contato) return res.status(400).json({ erro: 'O contato selecionado não possui um telefone ativo no Sankhya.' });
+  let resultado = null;
+  let contato;
+  if (contatoAvulso) {
+    contato = { key: 'AVULSO', nome: nomeAvulso, telefone: telefoneAvulso };
+  } else {
+    resultado = await contatosDoParceiro(codParc);
+    if (!resultado) return res.status(404).json({ erro: 'Parceiro ativo não encontrado no Sankhya.' });
+    contato = resultado.contatos.find((item) => item.key === contactKey);
+    if (!contato) return res.status(400).json({ erro: 'O contato selecionado não possui um telefone ativo no Sankhya.' });
+  }
   const existente = await buscarConversaPorTelefone(contato.telefone, channelId);
   const resposta = existente
     ? { conversation: existente, reused: true }
@@ -1534,7 +1563,7 @@ router.post('/conversations', asyncRoute(async (req, res) => {
   const contactMatch = contactKey.match(/^CTT:(\d+):/);
   const conversation = {
     ...conversationBase,
-    cadastroSankhya: cadastroSankhyaSelecionado([{
+    cadastroSankhya: contatoAvulso ? null : cadastroSankhyaSelecionado([{
       codParc,
       nomeParc: resultado.parceiro.nome,
       codContato: contactMatch ? Number(contactMatch[1]) : null,
@@ -1543,6 +1572,7 @@ router.post('/conversations', asyncRoute(async (req, res) => {
       telefone: contato.telefone
     }])
   };
+  if (contatoAvulso && !resposta.reused) atendentes.marcarConversaAvulsa(conversation.id);
   atendentes.revelarConversa(req.usuario.codUsu, chavesIdentidadeConversa(conversation));
   const atribuicaoAtual = comAtribuicao(conversation).assignment;
   let atribuicaoCriada = null;
@@ -1554,11 +1584,15 @@ router.post('/conversations', asyncRoute(async (req, res) => {
     });
   }
   let bitrixError = '';
-  try {
-    await vincularPipelineBitrix(conversation, pipelineId);
-  } catch (error) {
-    bitrixError = error.message || 'Não foi possível criar o card no Bitrix.';
-    atendentes.marcarPipelinePendente(conversation.id, bitrixError);
+  if (pipelineId !== null) {
+    try {
+      await vincularPipelineBitrix(conversation, pipelineId);
+    } catch (error) {
+      bitrixError = error.message || 'Não foi possível criar o card no Bitrix.';
+      atendentes.marcarPipelinePendente(conversation.id, bitrixError);
+    }
+  } else if (!resposta.reused) {
+    atendentes.marcarConversaSemPipeline(conversation.id);
   }
   const conversationWithAssignment = comAtribuicao(conversation);
   if (atribuicaoCriada) {
@@ -1572,7 +1606,9 @@ router.post('/conversations', asyncRoute(async (req, res) => {
     ...resposta,
     conversation: conversationWithAssignment,
     bitrixError,
-    selectedContact: { ...contato, codParc, parceiro: resultado.parceiro.nome }
+    selectedContact: contatoAvulso
+      ? { ...contato, avulso: true }
+      : { ...contato, codParc, parceiro: resultado.parceiro.nome }
   });
 }));
 
