@@ -206,8 +206,6 @@
     if (!refs.activeFilters || !refs.activeFiltersText) return;
     const labels = [];
     if (state.unreadOnly) labels.push('Não visualizadas');
-    if (state.assignment === 'MINE') labels.push('Meus atendimentos');
-    if (state.assignment === 'UNASSIGNED') labels.push('Sem atendente');
     if (state.agentId) {
       const agent = state.agents.find((item) => String(item.id) === String(state.agentId));
       labels.push(`Atendente: ${agent?.name || state.agentId}`);
