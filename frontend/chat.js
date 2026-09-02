@@ -10,6 +10,7 @@
   const HIDDEN_CONVERSATIONS_KEY = 'fila-conferencia.chat.hidden-conversations';
   const UI_CACHE_KEY = 'fila-conferencia.chat.ui-cache.v1';
   const CHANNEL_FILTER_KEY = 'fila-conferencia.chat.channel-filter';
+  const NOTIFICATION_SOUND_URLS = ['/chat-notification-primary.mp3', '/chat-notification-secondary.mp3'];
   const UI_CACHE_TTL = 10 * 60 * 1000;
   const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
   const MORE_REACTIONS = ['👏', '🔥', '🎉', '✅', '😊', '😍', '🤔', '😅', '🤝', '👀', '💯', '🙌', '👎', '😡', '🤩', '🥳'];
@@ -19,6 +20,7 @@
     screen: byId('chat-screen'), workspace: byId('chat-workspace'), list: byId('chat-conversation-list'),
     count: byId('chat-conversation-count'), search: byId('chat-search-input'), filters: byId('chat-filters'),
     channelTabs: byId('chat-channel-tabs'),
+    unreadAlert: byId('chat-unread-alert'), unreadTotal: byId('chat-unread-total'),
     agentFilterToggle: byId('chat-agent-filter-toggle'), agentFilter: byId('chat-agent-filter'),
     agentFilterSelect: byId('chat-agent-filter-select'), agentFilterClear: byId('chat-agent-filter-clear'),
     refresh: byId('chat-refresh'), newContact: byId('chat-new-contact'), more: byId('chat-load-more'), empty: byId('chat-empty-state'),
@@ -94,7 +96,8 @@
     messagesRenderFrame: null, messagesRenderConversationId: null, messagesRenderPreserveScroll: true,
     conversationsRenderFrame: null, uiCacheTimer: null, callsRefreshTimer: null, callsRefreshToken: 0,
     temporaryAccessTimer: null,
-    sendToken: 0, optimisticMessageSequence: 0
+    sendToken: 0, optimisticMessageSequence: 0, unreadLoadToken: 0,
+    unreadConversations: new Map(), notifiedMessageIds: new Set(), notificationAudio: [], notificationAudioUnlocked: false
   };
 
   const CONVERSATION_CACHE_LIMIT = 6;
@@ -156,6 +159,141 @@
   function ownsConversation(item = state.conversation) {
     const assigned = assignedUser(item);
     return Boolean(assigned && state.profile && assigned.id === String(state.profile.id));
+  }
+
+  function canReceiveMessageNotification(item = {}) {
+    return Core.shouldNotifyConversation(item, state.profile?.id);
+  }
+
+  function conversationChannelId(item = {}) {
+    return String(Core.channel(item)?.id ?? item.channelId ?? item.phoneNumberId ?? '');
+  }
+
+  function renderUnreadAlert() {
+    if (!refs.unreadAlert || !refs.unreadTotal) return;
+    const total = [...state.unreadConversations.values()]
+      .reduce((sum, item) => sum + Math.max(0, Number(item.count || 0)), 0);
+    refs.unreadTotal.textContent = total > 999 ? '999+' : String(total);
+    refs.unreadAlert.classList.toggle('has-unread', total > 0);
+    refs.unreadAlert.title = total
+      ? `${total} ${total === 1 ? 'mensagem ainda não visualizada' : 'mensagens ainda não visualizadas'}`
+      : 'Nenhuma mensagem não visualizada';
+    refs.channelTabs?.querySelectorAll('[data-chat-channel]').forEach((tab) => {
+      const channelId = String(tab.dataset.chatChannel || '');
+      const channelTotal = [...state.unreadConversations.values()]
+        .filter((item) => String(item.channelId || '') === channelId)
+        .reduce((sum, item) => sum + Math.max(0, Number(item.count || 0)), 0);
+      const badge = tab.querySelector('[data-channel-unread]');
+      if (!badge) return;
+      badge.textContent = channelTotal > 99 ? '99+' : String(channelTotal);
+      badge.hidden = channelTotal === 0;
+      tab.classList.toggle('has-unread', channelTotal > 0);
+    });
+  }
+
+  function syncUnreadConversation(item = {}, { count = item.unreadCount, render = true } = {}) {
+    const id = String(item.id || item.conversationId || '');
+    if (!id) return;
+    const unread = Math.max(0, Number(count || 0));
+    if (!unread || !canReceiveMessageNotification(item) || isConversationHidden(item)) {
+      state.unreadConversations.delete(id);
+    } else {
+      state.unreadConversations.set(id, {
+        count: unread,
+        channelId: conversationChannelId(item),
+        conversation: item
+      });
+    }
+    if (render) renderUnreadAlert();
+  }
+
+  function ensureNotificationAudio() {
+    if (state.notificationAudio.length) return state.notificationAudio;
+    state.notificationAudio = NOTIFICATION_SOUND_URLS.map((url) => {
+      const audio = new Audio(url);
+      audio.preload = 'auto';
+      return audio;
+    });
+    return state.notificationAudio;
+  }
+
+  async function unlockNotificationAudio() {
+    if (state.notificationAudioUnlocked) return;
+    const audios = ensureNotificationAudio();
+    const audio = audios[0];
+    if (!audio) return;
+    const volume = audio.volume;
+    try {
+      audio.volume = 0.01;
+      await audio.play();
+      audio.pause();
+      audio.currentTime = 0;
+      state.notificationAudioUnlocked = true;
+    } catch {
+      state.notificationAudioUnlocked = false;
+    } finally {
+      audio.volume = volume;
+    }
+  }
+
+  document.addEventListener('pointerdown', unlockNotificationAudio);
+  document.addEventListener('keydown', unlockNotificationAudio);
+
+  function playMessageNotification(item = {}) {
+    const channelId = conversationChannelId(item);
+    const channelIndex = Math.max(0, state.channels.findIndex((channel) => String(channel.id) === channelId));
+    const sources = ensureNotificationAudio();
+    const template = sources[channelIndex % sources.length] || sources[0];
+    if (!template) return;
+    const audio = template.cloneNode();
+    audio.volume = 0.78;
+    audio.play().catch(() => {});
+  }
+
+  function hasAssignmentSnapshot(item = {}) {
+    return Object.prototype.hasOwnProperty.call(item, 'assignment')
+      || Object.prototype.hasOwnProperty.call(item, 'assignedUserId');
+  }
+
+  async function notifyIncomingMessage(payload = {}, conversationId) {
+    const message = payload.message || {};
+    if (String(message.direction || '').toUpperCase() !== 'INBOUND') return;
+    const messageId = String(message.id || message.wamid || `${conversationId}:${message.messageTimestamp || ''}`);
+    if (!messageId || state.notifiedMessageIds.has(messageId)) return;
+    state.notifiedMessageIds.add(messageId);
+    if (state.notifiedMessageIds.size > 500) state.notifiedMessageIds.delete(state.notifiedMessageIds.values().next().value);
+
+    let conversation = payload.conversation
+      || state.conversations.find((item) => String(item.id) === String(conversationId))
+      || (String(state.conversationId) === String(conversationId) ? state.conversation : null);
+    if (!conversation || !hasAssignmentSnapshot(conversation)) {
+      try {
+        const fresh = await api(`/conversations/${encodeURIComponent(conversationId)}`);
+        conversation = Core.mergeConversationSnapshot(conversation || {}, fresh);
+      } catch {
+        return;
+      }
+    }
+    if (!canReceiveMessageNotification(conversation)) {
+      state.unreadConversations.delete(String(conversationId));
+      renderUnreadAlert();
+      return;
+    }
+
+    const beingViewed = String(state.conversationId) === String(conversationId)
+      && ownsConversation(conversation)
+      && document.visibilityState === 'visible';
+    if (beingViewed) {
+      state.unreadConversations.delete(String(conversationId));
+    } else {
+      const current = Number(state.unreadConversations.get(String(conversationId))?.count || 0);
+      syncUnreadConversation(conversation, {
+        count: Math.max(current + 1, Number(conversation.unreadCount || 0)),
+        render: false
+      });
+    }
+    renderUnreadAlert();
+    playMessageNotification(conversation);
   }
 
   function canTransferConversation(item = state.conversation) {
@@ -435,15 +573,17 @@
       const avatar = avatarUrl
         ? `<img class="chat-channel-avatar" data-channel-avatar src="${escapeHtml(avatarUrl)}" alt=""><i class="chat-channel-avatar-fallback" data-lucide="phone-call" aria-hidden="true"></i>`
         : '<i data-lucide="phone-call" aria-hidden="true"></i>';
-      return `<button type="button" role="tab" data-chat-channel="${escapeHtml(channel.id)}" aria-selected="${String(String(channel.id) === String(state.selectedChannelId))}" class="${String(channel.id) === String(state.selectedChannelId) ? 'is-active' : ''}">${avatar}<span>${escapeHtml(channelTabText(channel))}</span></button>`;
+      return `<button type="button" role="tab" data-chat-channel="${escapeHtml(channel.id)}" aria-selected="${String(String(channel.id) === String(state.selectedChannelId))}" class="${String(channel.id) === String(state.selectedChannelId) ? 'is-active' : ''}">${avatar}<span>${escapeHtml(channelTabText(channel))}</span><b class="chat-channel-unread" data-channel-unread hidden>0</b></button>`;
     }).join('');
     refs.channelTabs.querySelectorAll('[data-channel-avatar]').forEach((image) => image.addEventListener('error', () => {
       image.closest('[data-chat-channel]')?.classList.add('has-no-avatar');
     }, { once: true }));
-    const defaultChannel = state.channels.find((channel) => channel.isDefault) || state.channels[0];
+    const selectedChannel = state.channels.find((channel) => String(channel.id) === String(state.selectedChannelId));
+    const defaultChannel = selectedChannel || state.channels.find((channel) => channel.isDefault) || state.channels[0];
     refs.newChannel.innerHTML = `<option value="">Selecione um número...</option>${options}`;
     refs.newChannel.value = defaultChannel ? String(defaultChannel.id) : '';
     refs.newChannel.disabled = false;
+    renderUnreadAlert();
   }
 
   async function loadChannels() {
@@ -701,6 +841,41 @@
     ['pointerup', 'pointercancel', 'pointermove', 'pointerleave'].forEach((eventName) => button.addEventListener(eventName, clearPress));
   }
 
+  async function loadUnreadSummary() {
+    const token = ++state.unreadLoadToken;
+    if (!state.channels.length) {
+      state.unreadConversations.clear();
+      renderUnreadAlert();
+      return;
+    }
+    try {
+      const pagesByChannel = await Promise.all(state.channels.map(async (channel) => {
+        const conversations = [];
+        let page = 1;
+        let totalPages = 1;
+        do {
+          const query = new URLSearchParams({
+            page: String(page),
+            limit: '100',
+            assignment: 'ALL',
+            channelId: String(channel.id)
+          });
+          const payload = await api(`/conversations?${query}`);
+          conversations.push(...(Array.isArray(payload?.data) ? payload.data : []));
+          totalPages = Math.max(1, Number(payload?.pagination?.totalPages || 1));
+          page += 1;
+        } while (page <= totalPages);
+        return conversations;
+      }));
+      if (token !== state.unreadLoadToken) return;
+      state.unreadConversations.clear();
+      pagesByChannel.flat().forEach((item) => syncUnreadConversation(item, { render: false }));
+      renderUnreadAlert();
+    } catch {
+      // Mantém o último total conhecido quando a integração estiver temporariamente indisponível.
+    }
+  }
+
   async function loadConversations({ append = false } = {}) {
     if (append && state.loading) return;
     state.loading = true;
@@ -719,6 +894,7 @@
       if (token !== state.loadToken) return;
       const received = Array.isArray(payload?.data) ? payload.data : [];
       migrateHiddenConversationIds(received);
+      received.forEach((item) => syncUnreadConversation(item, { render: false }));
       const incoming = received.filter((item) => !isConversationHidden(item));
       state.conversations = append
         ? Core.mergeConversationPages(state.conversations, incoming)
@@ -1362,6 +1538,8 @@
       state.conversation.unreadCount = 0;
       renderConversationDetails();
     }
+    state.unreadConversations.delete(String(id));
+    renderUnreadAlert();
     renderConversations();
     try { await api(`/conversations/${encodeURIComponent(id)}/read`, { method: 'POST' }); } catch {}
   }
@@ -1661,6 +1839,8 @@
 
   function applyConversationUpdate(payload = {}) {
     const incoming = payload.conversation || payload;
+    syncUnreadConversation(incoming, { render: false });
+    renderUnreadAlert();
     upsertConversation(payload);
     const scope = Core.conversationUpdateScope(state.conversationId, payload, state.conversation);
     if (scope === 'DIRECT') {
@@ -1723,6 +1903,7 @@
       if (id && id === String(state.conversationId)) scheduleActiveCallsRefresh(id);
     } else if (event === 'message:new') {
       const id = String(payload.conversationId || payload.message?.conversationId || '');
+      notifyIncomingMessage(payload, id);
       if (id === String(state.conversationId)) {
         const shouldScroll = nearBottom();
         state.messages = Core.mergeOptimisticMessage(state.messages, payload.message); scheduleMessagesRender({ preserveScroll: !shouldScroll });
@@ -1775,6 +1956,8 @@
     else if (event === 'conversation:deleted') {
       const ids = new Set([payload.conversationId, ...(payload.relatedConversationIds || [])].map(String));
       state.conversations = state.conversations.filter((item) => !ids.has(String(item.id)));
+      ids.forEach((id) => state.unreadConversations.delete(id));
+      renderUnreadAlert();
       if (ids.has(String(state.conversationId))) showConversationList({ replaceHistory: true });
       scheduleConversationsRender();
     }
@@ -1908,8 +2091,11 @@
         const item = state.conversations.find((entry) => String(entry.id) === String(id));
         if (item) item.unreadCount = 0;
         if (state.conversation) state.conversation.unreadCount = 0;
+        state.unreadConversations.delete(String(id));
+        renderUnreadAlert();
       }
       renderConversations();
+      renderUnreadAlert();
       const feedback = replacingAgent
         ? 'Atendimento assumido e registrado no histórico interno.'
         : conversation.bitrixError
@@ -2687,7 +2873,7 @@
     });
     refs.input.addEventListener('blur', () => syncRestingViewportHeight(280));
     refs.input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); refs.form.requestSubmit(); } });
-    refs.refresh.addEventListener('click', () => { state.page = 1; loadConversations(); });
+    refs.refresh.addEventListener('click', () => { state.page = 1; loadConversations(); loadUnreadSummary(); });
     refs.channelTabs?.addEventListener('click', (event) => {
       const tab = event.target.closest('[data-chat-channel]');
       if (!tab || String(tab.dataset.chatChannel) === String(state.selectedChannelId)) return;
@@ -2849,6 +3035,7 @@
       refs.channelTabs.innerHTML = '<span class="chat-channel-tabs-empty">Números indisponíveis</span>';
       refs.newChannel.innerHTML = '<option value="">Números indisponíveis</option>';
     });
+    loadUnreadSummary();
     const refresh = state.conversations.length ? loadConversations() : null;
     if (!refresh) await loadConversations();
     if (conversationId) await openConversation(conversationId, { historyMode: 'none' });
@@ -2867,6 +3054,10 @@
     state.conversationId = null;
     state.messages = [];
     state.conversationCache.clear();
+    state.unreadLoadToken += 1;
+    state.unreadConversations.clear();
+    state.notifiedMessageIds.clear();
+    renderUnreadAlert();
     cancelScheduledMessagesRender();
     if (state.conversationsRenderFrame) cancelAnimationFrame(state.conversationsRenderFrame);
     state.conversationsRenderFrame = null;

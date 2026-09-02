@@ -304,3 +304,11 @@ test('identifica status de mensagem por qualquer id aceito pela integração', (
   assert.equal(ChatCore.messageMatchesUpdate({ wamid: 'wamid.12' }, { message_id: 'wamid.12' }), true);
   assert.equal(ChatCore.messageMatchesUpdate({ wamid: 'wamid.12' }, { messageId: 'wamid.99' }), false);
 });
+
+test('notifica somente conversa sem atendente ou atribuída ao usuário atual', () => {
+  assert.equal(ChatCore.shouldNotifyConversation({ assignment: null }, 72), true);
+  assert.equal(ChatCore.shouldNotifyConversation({ assignment: { userId: 72 } }, 72), true);
+  assert.equal(ChatCore.shouldNotifyConversation({ assignment: { userId: 91 } }, 72), false);
+  assert.equal(ChatCore.shouldNotifyConversation({ assignedUserId: 72 }, 72), true);
+  assert.equal(ChatCore.shouldNotifyConversation({ assignedUserId: 91 }, 72), false);
+});

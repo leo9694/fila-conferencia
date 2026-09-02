@@ -439,6 +439,14 @@
     return { symbol: '', label: normalized || '' };
   }
 
+  function shouldNotifyConversation(conversation = {}, currentUserId = '') {
+    const hasAssignment = Object.prototype.hasOwnProperty.call(conversation, 'assignment');
+    const assignedUserId = hasAssignment
+      ? conversation.assignment?.userId
+      : conversation.assignedUserId;
+    return !assignedUserId || String(assignedUserId) === String(currentUserId || '');
+  }
+
   function messageFailureReason(message = {}) {
     const details = Array.isArray(message.failureDetails)
       ? message.failureDetails[0]
@@ -498,6 +506,7 @@
     serviceWindowState,
     shouldLoadMoreConversations,
     shouldLoadOlderMessages,
+    shouldNotifyConversation,
     statusSymbol,
     messageFailureReason,
     unwrap,

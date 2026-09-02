@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="/transporte-dashboard.css?v=20260810-3">
-  <link rel="stylesheet" href="/chat.css?v=20260828-1">
+  <link rel="stylesheet" href="/chat.css?v=20260902-2">
 
   <style>
     :root {
@@ -12674,6 +12674,11 @@
         </div>
         <div class="chat-heading-actions">
           <div class="chat-channel-tabs" id="chat-channel-tabs" role="tablist" aria-label="Números de atendimento"></div>
+          <div class="chat-unread-alert" id="chat-unread-alert" aria-live="polite" title="Nenhuma mensagem não visualizada">
+            <i data-lucide="bell" aria-hidden="true"></i>
+            <span>Não visualizadas</span>
+            <strong id="chat-unread-total">0</strong>
+          </div>
           <span class="chat-realtime-status" id="chat-realtime-status" data-state="idle">
             <span aria-hidden="true"></span><strong>Conectando...</strong>
           </span>
@@ -13174,10 +13179,10 @@
   <script src="vendas-dashboard.js?v=20260820-1"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="transporte-dashboard.js?v=20260820-1"></script>
-  <script src="chat-core.js?v=20260828-1"></script>
+  <script src="chat-core.js?v=20260902-1"></script>
   <script src="whatsapp-call-core.js?v=20260825-5"></script>
   <script src="whatsapp-call.js?v=20260827-1"></script>
-  <script src="chat.js?v=20260828-1"></script>
+  <script src="chat.js?v=20260902-2"></script>
   <script src="app.js?v=20260805-5"></script>
 </body>
 </html>
