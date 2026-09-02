@@ -782,6 +782,12 @@ async function idConversaParaMensagem(conversationId) {
   return (conversas.find((item) => item.serviceWindow?.canSendFreeform) || conversas[0]).id;
 }
 
+async function marcarGrupoConversaComoLida(conversationId) {
+  const conversationIds = [...new Set(grupoConversa(conversationId).ids.map(Number).filter(Number.isInteger))];
+  const resultados = await Promise.all(conversationIds.map((itemId) => whatsappApi.markConversationRead(itemId)));
+  return resultados[0];
+}
+
 async function buscarConversasPorTelefone(telefone, channelId = '') {
   const identity = identidadeTelefoneWhatsapp(telefone);
   if (!identity) return [];
@@ -1762,8 +1768,7 @@ router.post('/conversations/:id/claim', asyncRoute(async (req, res) => {
   }
   let readConfirmed = false;
   try {
-    const messageConversationId = await idConversaParaMensagem(conversationId);
-    await whatsappApi.markConversationRead(messageConversationId);
+    await marcarGrupoConversaComoLida(conversationId);
     readConfirmed = true;
   } catch {
     // A atribuição local continua válida mesmo se a Meta não confirmar a leitura.
@@ -1829,8 +1834,7 @@ router.post('/conversations/:id/read', asyncRoute(async (req, res) => {
   const conversationId = id(req.params.id);
   const conversation = await obterConversaConsolidada(conversationId);
   podeAtender(conversation, req.atendente);
-  const messageConversationId = await idConversaParaMensagem(conversationId);
-  res.json(await whatsappApi.markConversationRead(messageConversationId));
+  res.json(await marcarGrupoConversaComoLida(conversationId));
 }));
 
 router.patch('/conversations/:id/status', asyncRoute(async (req, res) => {
@@ -2239,6 +2243,7 @@ router._internals = {
   criarControleChamadas,
   idsRelacionadosConversa,
   mensagemInternaAtribuicao,
+  marcarGrupoConversaComoLida,
   obterAtribuicaoMaisRecente,
   textoContatoChat,
   textoSql,

@@ -447,6 +447,14 @@
     return !assignedUserId || String(assignedUserId) === String(currentUserId || '');
   }
 
+  function isInboundMessage(message = {}) {
+    const direction = String(message.direction || '').toUpperCase();
+    if (direction) return direction === 'INBOUND';
+    if (typeof message.fromMe === 'boolean') return message.fromMe === false;
+    if (typeof message.isFromMe === 'boolean') return message.isFromMe === false;
+    return false;
+  }
+
   function messageFailureReason(message = {}) {
     const details = Array.isArray(message.failureDetails)
       ? message.failureDetails[0]
@@ -478,6 +486,7 @@
     conversationIdentityKeys,
     debounce,
     initials,
+    isInboundMessage,
     interactiveReplyText,
     isLoadedConversation,
     conversationUpdateScope,

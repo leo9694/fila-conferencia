@@ -97,7 +97,8 @@
     conversationsRenderFrame: null, uiCacheTimer: null, callsRefreshTimer: null, callsRefreshToken: 0,
     temporaryAccessTimer: null,
     sendToken: 0, optimisticMessageSequence: 0, unreadLoadToken: 0,
-    unreadConversations: new Map(), notifiedMessageIds: new Set(), notificationAudio: [], notificationAudioUnlocked: false
+    unreadConversations: new Map(), notifiedMessageIds: new Set(), processedRealtimeMessageIds: new Set(),
+    notificationAudio: [], notificationAudioUnlocked: false
   };
 
   const CONVERSATION_CACHE_LIMIT = 6;
@@ -257,8 +258,9 @@
 
   async function notifyIncomingMessage(payload = {}, conversationId) {
     const message = payload.message || {};
-    if (String(message.direction || '').toUpperCase() !== 'INBOUND') return;
-    const messageId = String(message.id || message.wamid || `${conversationId}:${message.messageTimestamp || ''}`);
+    if (!Core.isInboundMessage(message)) return;
+    const messageIdentifier = message.id || message.wamid || message.messageTimestamp || '';
+    const messageId = messageIdentifier ? `${conversationId}:${messageIdentifier}` : '';
     if (!messageId || state.notifiedMessageIds.has(messageId)) return;
     state.notifiedMessageIds.add(messageId);
     if (state.notifiedMessageIds.size > 500) state.notifiedMessageIds.delete(state.notifiedMessageIds.values().next().value);
@@ -1903,19 +1905,34 @@
       if (id && id === String(state.conversationId)) scheduleActiveCallsRefresh(id);
     } else if (event === 'message:new') {
       const id = String(payload.conversationId || payload.message?.conversationId || '');
+      const message = payload.message || {};
+      const inbound = Core.isInboundMessage(message);
+      const messageIdentifier = message.id || message.wamid || message.messageTimestamp || '';
+      const messageId = messageIdentifier ? `${id}:${messageIdentifier}` : '';
+      if (inbound && messageId && state.processedRealtimeMessageIds.has(messageId)) return;
+      if (inbound && messageId) {
+        state.processedRealtimeMessageIds.add(messageId);
+        if (state.processedRealtimeMessageIds.size > 500) {
+          state.processedRealtimeMessageIds.delete(state.processedRealtimeMessageIds.values().next().value);
+        }
+      }
       notifyIncomingMessage(payload, id);
       if (id === String(state.conversationId)) {
         const shouldScroll = nearBottom();
         state.messages = Core.mergeOptimisticMessage(state.messages, payload.message); scheduleMessagesRender({ preserveScroll: !shouldScroll });
         if (shouldScroll) requestAnimationFrame(() => scrollBottom('smooth')); else refs.newMessage.hidden = false;
-        if (ownsConversation() && String(payload.message?.direction).toUpperCase() === 'INBOUND') {
+        if (ownsConversation() && inbound) {
           markRead(id);
           refreshActiveConversation(id);
         }
       } else {
         updateCachedConversationMessages(id, (messages) => Core.mergeOptimisticMessage(messages, payload.message));
         const item = state.conversations.find((conversation) => String(conversation.id) === id);
-        if (item) { item.lastMessage = payload.message; item.lastMessageAt = payload.message?.messageTimestamp || new Date().toISOString(); item.unreadCount = Number(item.unreadCount || 0) + 1; }
+        if (item) {
+          item.lastMessage = payload.message;
+          item.lastMessageAt = payload.message?.messageTimestamp || new Date().toISOString();
+          if (inbound) item.unreadCount = Number(item.unreadCount || 0) + 1;
+        }
         else loadConversations();
         scheduleConversationsRender();
       }
@@ -3057,6 +3074,7 @@
     state.unreadLoadToken += 1;
     state.unreadConversations.clear();
     state.notifiedMessageIds.clear();
+    state.processedRealtimeMessageIds.clear();
     renderUnreadAlert();
     cancelScheduledMessagesRender();
     if (state.conversationsRenderFrame) cancelAnimationFrame(state.conversationsRenderFrame);

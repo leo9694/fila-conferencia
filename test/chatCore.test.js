@@ -312,3 +312,10 @@ test('notifica somente conversa sem atendente ou atribuída ao usuário atual', 
   assert.equal(ChatCore.shouldNotifyConversation({ assignedUserId: 72 }, 72), true);
   assert.equal(ChatCore.shouldNotifyConversation({ assignedUserId: 91 }, 72), false);
 });
+
+test('incrementa não lidas somente para mensagens recebidas do cliente', () => {
+  assert.equal(ChatCore.isInboundMessage({ direction: 'INBOUND' }), true);
+  assert.equal(ChatCore.isInboundMessage({ direction: 'OUTBOUND' }), false);
+  assert.equal(ChatCore.isInboundMessage({ fromMe: false }), true);
+  assert.equal(ChatCore.isInboundMessage({ fromMe: true }), false);
+});

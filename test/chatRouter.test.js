@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const chatRouter = require('../api/chatRouter');
+const whatsappApi = require('../api/whatsappApi');
 
 test('não transforma falha de autenticação do WhatsApp em sessão local expirada', () => {
   assert.equal(chatRouter._internals.responseStatus({ status: 401 }), 502);
@@ -269,6 +270,25 @@ test('resolve todos os ids relacionados de uma conversa consolidada', () => {
   ]);
   assert.deepEqual(new Set(chatRouter._internals.idsRelacionadosConversa(conversation)), new Set([71, 72]));
   assert.deepEqual(new Set(chatRouter._internals.idsRelacionadosConversa({ id: 72 })), new Set([71, 72]));
+});
+
+test('marca todos os registros relacionados da conversa como lidos', async () => {
+  chatRouter._internals.consolidarConversas([
+    { id: 171, channel: { id: 1 }, contact: { phone: '5566999990171' }, unreadCount: 4 },
+    { id: 172, channel: { id: 1 }, contact: { phone: '5566999990171' }, unreadCount: 6 }
+  ]);
+  const original = whatsappApi.markConversationRead;
+  const calls = [];
+  whatsappApi.markConversationRead = async (conversationId) => {
+    calls.push(conversationId);
+    return { success: true };
+  };
+  try {
+    await chatRouter._internals.marcarGrupoConversaComoLida(171);
+  } finally {
+    whatsappApi.markConversationRead = original;
+  }
+  assert.deepEqual(new Set(calls), new Set([171, 172]));
 });
 
 test('escapa texto usado nas buscas de parceiros', () => {
