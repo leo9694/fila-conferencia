@@ -305,6 +305,12 @@ test('identifica status de mensagem por qualquer id aceito pela integração', (
   assert.equal(ChatCore.messageMatchesUpdate({ wamid: 'wamid.12' }, { messageId: 'wamid.99' }), false);
 });
 
+test('deduplica evento em tempo real pelo wamid antes do id interno', () => {
+  assert.equal(ChatCore.realtimeMessageIdentity({ id: 91, wamid: 'wamid.mensagem-1' }), 'wamid.mensagem-1');
+  assert.equal(ChatCore.realtimeMessageIdentity({ id: 92, messageId: 'wamid.mensagem-2' }), 'wamid.mensagem-2');
+  assert.equal(ChatCore.realtimeMessageIdentity({ id: 93 }), '93');
+});
+
 test('notifica somente conversa sem atendente ou atribuída ao usuário atual', () => {
   assert.equal(ChatCore.shouldNotifyConversation({ assignment: null }, 72), true);
   assert.equal(ChatCore.shouldNotifyConversation({ assignment: { userId: 72 } }, 72), true);

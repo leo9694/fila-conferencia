@@ -177,6 +177,7 @@ function acessoPermitido(usuario = {}) {
 }
 
 function conversaCorrespondeFiltroAtendente(conversa = {}, filtros = {}) {
+  if (filtros.unreadOnly === true && Number(conversa.unreadCount || 0) <= 0) return false;
   const agentId = String(filtros.agentId || '').trim();
   const assignedId = String(conversa.assignment?.userId || '');
   if (agentId) return assignedId === agentId;
@@ -1444,15 +1445,16 @@ router.get('/conversations', asyncRoute(async (req, res) => {
   // A fila inicial precisa exibir os atendimentos existentes. A posse só limita
   // ações de atendimento, não a visualização da conversa.
   const assignment = String(req.query.assignment || 'ALL').toUpperCase();
-  const agentId = pertenceDiretoria(req.usuario) && /^\d+$/.test(String(req.query.agentId || ''))
+  const agentId = /^\d+$/.test(String(req.query.agentId || ''))
     ? String(req.query.agentId)
     : '';
   const page = Math.max(1, Number(req.query.page || 1));
   const limit = Math.max(1, Math.min(100, Number(req.query.limit || 30)));
   const busca = String(req.query.search || '').trim();
   const codParcBusca = /^\d+$/.test(busca) ? Number(busca) : null;
-  const filtroLocalAtivo = Boolean(agentId || assignment !== 'ALL' || codParcBusca);
-  const incluirTransferenciasEntreCanais = assignment === 'MINE' && !agentId;
+  const unreadOnly = ['1', 'true'].includes(String(req.query.unreadOnly || '').toLowerCase());
+  const filtroLocalAtivo = Boolean(agentId || assignment !== 'ALL' || codParcBusca || unreadOnly);
+  const incluirTransferenciasEntreCanais = assignment === 'MINE' && !agentId && !unreadOnly;
   const parametros = {
     page: filtroLocalAtivo ? 1 : page,
     limit: filtroLocalAtivo ? 100 : limit,
@@ -1485,14 +1487,15 @@ router.get('/conversations', asyncRoute(async (req, res) => {
   const filtradas = consolidadas.filter((conversa) => {
     if (!atendentePodeAcessarConversa(req.atendente, conversa)) return false;
     const acessoTemporario = acessoTemporarioPorTransferencia(req.atendente, conversa);
-    if (req.query.channelId && !acessoTemporario
+    if (req.query.channelId && (!acessoTemporario || unreadOnly)
       && String(conversa.channel?.id ?? conversa.channelId ?? '') !== String(req.query.channelId)) return false;
-    if (req.query.phoneNumberId && !acessoTemporario
+    if (req.query.phoneNumberId && (!acessoTemporario || unreadOnly)
       && String(conversa.channel?.phoneNumberId ?? conversa.phoneNumberId ?? '') !== String(req.query.phoneNumberId)) return false;
     if (conversaOcultaParaUsuario(req.usuario.codUsu, conversa)) return false;
     return conversaCorrespondeFiltroAtendente(conversa, {
       assignment,
       agentId,
+      unreadOnly,
       currentAgentId: req.atendente.id
     });
   });

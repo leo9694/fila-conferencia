@@ -103,6 +103,11 @@
     });
   }
 
+  function realtimeMessageIdentity(message = {}) {
+    const identifier = message.wamid || message.messageId || message.message_id || message.id || message.messageTimestamp;
+    return String(identifier || '').trim();
+  }
+
   function messagePreview(message = {}) {
     message = message || {};
     const reaction = reactionInfo(message);
@@ -502,6 +507,7 @@
     mergeConversationList,
     mergeConversationPages,
     mergeConversationSnapshot,
+    realtimeMessageIdentity,
     messageMatchesUpdate,
     messagePreview,
     normalizeCalls,

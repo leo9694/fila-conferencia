@@ -21,6 +21,8 @@
     count: byId('chat-conversation-count'), search: byId('chat-search-input'), filters: byId('chat-filters'),
     channelTabs: byId('chat-channel-tabs'),
     unreadAlert: byId('chat-unread-alert'), unreadTotal: byId('chat-unread-total'),
+    activeFilters: byId('chat-active-filters'), activeFiltersText: byId('chat-active-filters-text'),
+    clearFilters: byId('chat-clear-filters'),
     agentFilterToggle: byId('chat-agent-filter-toggle'), agentFilter: byId('chat-agent-filter'),
     agentFilterSelect: byId('chat-agent-filter-select'), agentFilterClear: byId('chat-agent-filter-clear'),
     refresh: byId('chat-refresh'), newContact: byId('chat-new-contact'), more: byId('chat-load-more'), empty: byId('chat-empty-state'),
@@ -89,7 +91,7 @@
     recorder: null, recordingStream: null, recordingChunks: [], recordingBlob: null,
     recordingStartedAt: 0, recordingTimer: null, pendingUpload: null, loadToken: 0, activeLoadToken: 0,
     activeRefreshToken: 0,
-    totalConversations: 0, assignment: 'ALL', agentId: '', access: null, profile: null, agents: [],
+    totalConversations: 0, assignment: 'ALL', agentId: '', unreadOnly: false, access: null, profile: null, agents: [],
     hiddenConversationIds: new Set(), selectedPartner: null, manualContact: false, partnerSearchToken: 0,
     linkPartner: null, linkPartnerSearchToken: 0, pipelines: [], pipelinesPromise: null,
     mediaZoom: 1, replyingTo: null, conversationCache: new Map(),
@@ -98,6 +100,7 @@
     temporaryAccessTimer: null,
     sendToken: 0, optimisticMessageSequence: 0, unreadLoadToken: 0,
     unreadConversations: new Map(), notifiedMessageIds: new Set(), processedRealtimeMessageIds: new Set(),
+    unreadRefreshTimers: new Map(), unreadRefreshTokens: new Map(),
     notificationAudio: [], notificationAudioUnlocked: false
   };
 
@@ -176,9 +179,15 @@
       .reduce((sum, item) => sum + Math.max(0, Number(item.count || 0)), 0);
     refs.unreadTotal.textContent = total > 999 ? '999+' : String(total);
     refs.unreadAlert.classList.toggle('has-unread', total > 0);
-    refs.unreadAlert.title = total
-      ? `${total} ${total === 1 ? 'mensagem ainda não visualizada' : 'mensagens ainda não visualizadas'}`
-      : 'Nenhuma mensagem não visualizada';
+    refs.unreadAlert.classList.toggle('is-active', state.unreadOnly);
+    refs.unreadAlert.setAttribute('aria-pressed', String(state.unreadOnly));
+    const unreadLabel = refs.unreadAlert.querySelector('span');
+    if (unreadLabel) unreadLabel.textContent = state.unreadOnly ? 'Filtrando não visualizadas' : 'Não visualizadas';
+    refs.unreadAlert.title = state.unreadOnly
+      ? 'Mostrar todas as conversas'
+      : total
+        ? `Filtrar ${total} ${total === 1 ? 'mensagem ainda não visualizada' : 'mensagens ainda não visualizadas'}`
+        : 'Filtrar mensagens não visualizadas';
     refs.channelTabs?.querySelectorAll('[data-chat-channel]').forEach((tab) => {
       const channelId = String(tab.dataset.chatChannel || '');
       const channelTotal = [...state.unreadConversations.values()]
@@ -190,6 +199,44 @@
       badge.hidden = channelTotal === 0;
       tab.classList.toggle('has-unread', channelTotal > 0);
     });
+    renderActiveFilters();
+  }
+
+  function renderActiveFilters() {
+    if (!refs.activeFilters || !refs.activeFiltersText) return;
+    const labels = [];
+    if (state.unreadOnly) labels.push('Não visualizadas');
+    if (state.assignment === 'MINE') labels.push('Meus atendimentos');
+    if (state.assignment === 'UNASSIGNED') labels.push('Sem atendente');
+    if (state.agentId) {
+      const agent = state.agents.find((item) => String(item.id) === String(state.agentId));
+      labels.push(`Atendente: ${agent?.name || state.agentId}`);
+    }
+    if (state.search) labels.push(`Busca: ${state.search}`);
+    refs.activeFilters.hidden = labels.length === 0;
+    refs.activeFiltersText.textContent = labels.length ? `Filtros ativos: ${labels.join(' · ')}` : '';
+  }
+
+  function clearConversationFilters() {
+    state.search = '';
+    state.status = '';
+    state.assignment = 'ALL';
+    state.agentId = '';
+    state.unreadOnly = false;
+    state.page = 1;
+    state.conversations = [];
+    refs.search.value = '';
+    refs.agentFilterSelect.value = '';
+    refs.agentFilterClear.hidden = true;
+    refs.agentFilterToggle.classList.remove('is-active');
+    refs.agentFilterToggle.title = 'Filtrar por atendente';
+    refs.agentFilter.hidden = true;
+    refs.agentFilterToggle.setAttribute('aria-expanded', 'false');
+    refs.filters.querySelectorAll('[data-chat-assignment]').forEach((button) => {
+      button.classList.toggle('is-active', button.dataset.chatAssignment === 'ALL');
+    });
+    renderUnreadAlert();
+    loadConversations();
   }
 
   function syncUnreadConversation(item = {}, { count = item.unreadCount, render = true } = {}) {
@@ -259,7 +306,7 @@
   async function notifyIncomingMessage(payload = {}, conversationId) {
     const message = payload.message || {};
     if (!Core.isInboundMessage(message)) return;
-    const messageIdentifier = message.id || message.wamid || message.messageTimestamp || '';
+    const messageIdentifier = Core.realtimeMessageIdentity(message);
     const messageId = messageIdentifier ? `${conversationId}:${messageIdentifier}` : '';
     if (!messageId || state.notifiedMessageIds.has(messageId)) return;
     state.notifiedMessageIds.add(messageId);
@@ -287,15 +334,37 @@
       && document.visibilityState === 'visible';
     if (beingViewed) {
       state.unreadConversations.delete(String(conversationId));
-    } else {
-      const current = Number(state.unreadConversations.get(String(conversationId))?.count || 0);
-      syncUnreadConversation(conversation, {
-        count: Math.max(current + 1, Number(conversation.unreadCount || 0)),
-        render: false
-      });
+    } else if (Number(conversation.unreadCount || 0) > 0) {
+      syncUnreadConversation(conversation, { render: false });
     }
     renderUnreadAlert();
     playMessageNotification(conversation);
+  }
+
+  function scheduleUnreadReconciliation(conversationId, delay = 180) {
+    const id = String(conversationId || '');
+    if (!id) return;
+    clearTimeout(state.unreadRefreshTimers.get(id));
+    const token = Number(state.unreadRefreshTokens.get(id) || 0) + 1;
+    state.unreadRefreshTokens.set(id, token);
+    state.unreadRefreshTimers.set(id, setTimeout(async () => {
+      state.unreadRefreshTimers.delete(id);
+      try {
+        const conversation = await api(`/conversations/${encodeURIComponent(id)}`);
+        if (Number(state.unreadRefreshTokens.get(id)) !== token) return;
+        const index = state.conversations.findIndex((item) => String(item.id) === id);
+        if (index >= 0) state.conversations[index] = Core.mergeConversationSnapshot(state.conversations[index], conversation);
+        if (String(state.conversationId) === id) {
+          state.conversation = Core.mergeConversationSnapshot(state.conversation || {}, conversation);
+        }
+        syncUnreadConversation(conversation, { render: false });
+        renderUnreadAlert();
+        scheduleConversationsRender();
+        scheduleUiCachePersist();
+      } catch {
+        // O próximo evento ou recarregamento reconcilia novamente com a API.
+      }
+    }, delay));
   }
 
   function canTransferConversation(item = state.conversation) {
@@ -319,7 +388,7 @@
       state.hiddenConversationIds = new Set(readHiddenConversationIds());
       if (menu) menu.hidden = payload?.permitido !== true;
       if (refs.settingsOpen) refs.settingsOpen.hidden = payload?.diretor !== true;
-      if (refs.agentFilterToggle) refs.agentFilterToggle.hidden = payload?.diretor !== true;
+      if (refs.agentFilterToggle) refs.agentFilterToggle.hidden = payload?.permitido !== true;
       if (payload?.permitido === true) window.whatsappCallController?.start(payload.perfil);
       else window.whatsappCallController?.stop();
       return payload?.permitido === true;
@@ -881,6 +950,7 @@
   async function loadConversations({ append = false } = {}) {
     if (append && state.loading) return;
     state.loading = true;
+    renderActiveFilters();
     const requestedPage = state.page;
     const token = ++state.loadToken;
     if (!append && !state.conversations.length) renderConversationSkeleton();
@@ -891,7 +961,8 @@
       if (state.status) query.set('status', state.status);
       if (state.selectedChannelId) query.set('channelId', state.selectedChannelId);
       query.set('assignment', state.assignment);
-      if (state.access?.diretor === true && state.agentId) query.set('agentId', state.agentId);
+      if (state.unreadOnly) query.set('unreadOnly', 'true');
+      if (state.agentId) query.set('agentId', state.agentId);
       const payload = await api(`/conversations?${query}`);
       if (token !== state.loadToken) return;
       const received = Array.isArray(payload?.data) ? payload.data : [];
@@ -1542,6 +1613,9 @@
     }
     state.unreadConversations.delete(String(id));
     renderUnreadAlert();
+    if (state.unreadOnly) {
+      state.conversations = state.conversations.filter((conversation) => String(conversation.id) !== String(id));
+    }
     renderConversations();
     try { await api(`/conversations/${encodeURIComponent(id)}/read`, { method: 'POST' }); } catch {}
   }
@@ -1828,6 +1902,11 @@
       scheduleConversationsRender();
       return;
     }
+    if (state.unreadOnly && Number(merged.unreadCount || 0) <= 0) {
+      if (index >= 0) state.conversations.splice(index, 1);
+      scheduleConversationsRender();
+      return;
+    }
     if (!matchesAssignment(merged)) {
       if (index >= 0) state.conversations.splice(index, 1);
       scheduleConversationsRender();
@@ -1907,7 +1986,7 @@
       const id = String(payload.conversationId || payload.message?.conversationId || '');
       const message = payload.message || {};
       const inbound = Core.isInboundMessage(message);
-      const messageIdentifier = message.id || message.wamid || message.messageTimestamp || '';
+      const messageIdentifier = Core.realtimeMessageIdentity(message);
       const messageId = messageIdentifier ? `${id}:${messageIdentifier}` : '';
       if (inbound && messageId && state.processedRealtimeMessageIds.has(messageId)) return;
       if (inbound && messageId) {
@@ -1916,6 +1995,8 @@
           state.processedRealtimeMessageIds.delete(state.processedRealtimeMessageIds.values().next().value);
         }
       }
+      const viewedByCurrentAgent = id === String(state.conversationId) && ownsConversation();
+      if (inbound && !viewedByCurrentAgent) scheduleUnreadReconciliation(id);
       notifyIncomingMessage(payload, id);
       if (id === String(state.conversationId)) {
         const shouldScroll = nearBottom();
@@ -1931,7 +2012,11 @@
         if (item) {
           item.lastMessage = payload.message;
           item.lastMessageAt = payload.message?.messageTimestamp || new Date().toISOString();
-          if (inbound) item.unreadCount = Number(item.unreadCount || 0) + 1;
+          if (inbound) {
+            item.unreadCount = Number(item.unreadCount || 0) + 1;
+            syncUnreadConversation(item, { render: false });
+            renderUnreadAlert();
+          }
         }
         else loadConversations();
         scheduleConversationsRender();
@@ -2005,7 +2090,7 @@
   }
 
   async function toggleAgentFilter() {
-    if (state.access?.diretor !== true || !refs.agentFilter) return;
+    if (!refs.agentFilter) return;
     const opening = refs.agentFilter.hidden;
     refs.agentFilter.hidden = !opening;
     refs.agentFilterToggle.setAttribute('aria-expanded', String(opening));
@@ -2891,6 +2976,14 @@
     refs.input.addEventListener('blur', () => syncRestingViewportHeight(280));
     refs.input.addEventListener('keydown', (event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); refs.form.requestSubmit(); } });
     refs.refresh.addEventListener('click', () => { state.page = 1; loadConversations(); loadUnreadSummary(); });
+    refs.unreadAlert?.addEventListener('click', () => {
+      state.unreadOnly = !state.unreadOnly;
+      state.page = 1;
+      state.conversations = [];
+      renderUnreadAlert();
+      loadConversations();
+    });
+    refs.clearFilters?.addEventListener('click', clearConversationFilters);
     refs.channelTabs?.addEventListener('click', (event) => {
       const tab = event.target.closest('[data-chat-channel]');
       if (!tab || String(tab.dataset.chatChannel) === String(state.selectedChannelId)) return;
@@ -3075,6 +3168,9 @@
     state.unreadConversations.clear();
     state.notifiedMessageIds.clear();
     state.processedRealtimeMessageIds.clear();
+    state.unreadRefreshTimers.forEach((timer) => clearTimeout(timer));
+    state.unreadRefreshTimers.clear();
+    state.unreadRefreshTokens.clear();
     renderUnreadAlert();
     cancelScheduledMessagesRender();
     if (state.conversationsRenderFrame) cancelAnimationFrame(state.conversationsRenderFrame);
@@ -3089,6 +3185,7 @@
     state.totalPages = 1;
     state.totalConversations = 0;
     state.agentId = '';
+    state.unreadOnly = false;
     state.access = null;
     state.profile = null;
     state.agents = [];

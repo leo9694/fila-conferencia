@@ -41,6 +41,12 @@ test('filtra conversas por atendente sem alterar os filtros existentes', () => {
   assert.equal(chatRouter._internals.conversaCorrespondeFiltroAtendente(conversa, {
     assignment: 'MINE', currentAgentId: '72'
   }), true);
+  assert.equal(chatRouter._internals.conversaCorrespondeFiltroAtendente({ unreadCount: 2 }, {
+    assignment: 'ALL', unreadOnly: true
+  }), true);
+  assert.equal(chatRouter._internals.conversaCorrespondeFiltroAtendente({ unreadCount: 0 }, {
+    assignment: 'ALL', unreadOnly: true
+  }), false);
 });
 
 test('normaliza telefone brasileiro para o formato internacional do WhatsApp', () => {
