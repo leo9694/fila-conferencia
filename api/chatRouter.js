@@ -248,9 +248,10 @@ function obterAtribuicaoMaisRecente(atribuicoes = []) {
 function atribuirGrupoConversa(conversa = {}, dados = {}) {
   const ids = idsRelacionadosConversa(conversa);
   if (!ids.length) throw new TypeError('Conversa inválida.');
+  const eventoEm = dados.em || new Date().toISOString();
   let resultado = null;
   ids.forEach((conversationId) => {
-    const atribuicao = atendentes.atribuirConversa(conversationId, dados);
+    const atribuicao = atendentes.atribuirConversa(conversationId, { ...dados, em: eventoEm });
     if (conversationId === Number(conversa?.id ?? conversa)) resultado = atribuicao;
   });
   return resultado || atendentes.obterConversa(ids[0]);
@@ -259,10 +260,19 @@ function atribuirGrupoConversa(conversa = {}, dados = {}) {
 function liberarAtribuicaoExpirada(conversa = {}) {
   const atribuicao = obterAtribuicaoConversa(conversa);
   if (!atribuicaoExpirada(atribuicao, conversa)) return atribuicao;
-  return atribuirGrupoConversa(conversa, {
+  const expirada = atribuirGrupoConversa(conversa, {
     acao: 'EXPIRE',
     ator: { id: 'SISTEMA', name: 'Sistema' }
   });
+  const ultimoEvento = expirada?.historico?.[expirada.historico.length - 1];
+  const internalMessage = mensagemInternaAtribuicao(ultimoEvento, Number(conversa.id || conversa.conversationId));
+  eventosAtendimento.emit('assignment', {
+    conversationId: Number(conversa.id || conversa.conversationId),
+    conversation: conversa,
+    assignment: expirada,
+    internalMessage
+  });
+  return expirada;
 }
 
 function comAtribuicao(conversa = {}) {
@@ -415,6 +425,15 @@ function variantesTelefoneSankhya(value) {
 function telefoneDaConversa(conversa = {}) {
   const contato = conversa.contact || conversa.Contact || {};
   return contato.waId || contato.phone || conversa.waId || conversa.phone || '';
+}
+
+function impedirReassumirAtendimento(atribuicao = {}, atendente = {}) {
+  if (atribuicao?.userId && String(atribuicao.userId) === String(atendente.id || '')) {
+    const error = new Error('Este atendimento já está atribuído a você.');
+    error.status = 409;
+    error.localAuthorization = true;
+    throw error;
+  }
 }
 
 function identidadeCanalConversa(conversa = {}) {
@@ -714,35 +733,68 @@ function grupoConversa(conversationId) {
 function mensagemInternaAtribuicao(evento = {}, conversationId) {
   const acao = String(evento.acao || '').toUpperCase();
   const em = new Date(evento.em || 0);
-  if (acao !== 'CLAIM' || Number.isNaN(em.getTime())) return null;
+  if (Number.isNaN(em.getTime())) return null;
+  const origemNome = String(evento.origemNome || '').trim();
+  const atorNome = String(evento.atorNome || 'Atendente').trim();
   const atendenteId = String(evento.destinoId || evento.atorId || '').trim();
-  const atendenteNome = String(evento.destinoNome || evento.atorNome || 'Atendente').trim();
+  const atendenteNome = String(evento.destinoNome || atorNome || 'Atendente').trim();
+  const textos = {
+    START: `Atendente ${atendenteNome} iniciou o atendimento`,
+    CLAIM: `Atendente ${atendenteNome} assumiu o atendimento`,
+    TRANSFER: `Atendente ${atorNome} transferiu o atendimento para ${atendenteNome}`,
+    CALL_TRANSFER: `Atendente ${atorNome} transferiu a ligação para ${atendenteNome}`,
+    CALL_ACCEPT: `Atendente ${atendenteNome} assumiu o atendimento ao atender a ligação`,
+    RELEASE: `Atendente ${atorNome} liberou o atendimento`,
+    EXPIRE: origemNome
+      ? `Atendimento de ${origemNome} ficou sem atendente após 24 horas sem interação`
+      : 'O atendimento ficou sem atendente após 24 horas sem interação'
+  };
+  if (!textos[acao]) return null;
   return {
-    id: `internal-claim:${em.toISOString()}:${atendenteId}`,
+    id: `internal-assignment:${em.toISOString()}:${acao}:${evento.atorId || ''}:${evento.destinoId || ''}`,
     conversationId: Number(conversationId),
     type: 'internal',
     internal: true,
-    internalType: 'ASSIGNMENT_CLAIM',
+    internalType: `ASSIGNMENT_${acao}`,
     direction: 'INTERNAL',
-    text: `Atendente ${atendenteNome} assumiu o atendimento`,
+    text: textos[acao],
     attendant: { id: atendenteId, name: atendenteNome },
     messageTimestamp: em.toISOString(),
     createdAt: em.toISOString()
   };
 }
 
+function mensagensInternasDeEventos(eventos = [], conversationId) {
+  eventos.sort((a, b) => new Date(a.em || 0).getTime() - new Date(b.em || 0).getTime());
+  const mensagens = [];
+  let responsavelId = null;
+  let estadoConhecido = false;
+  eventos.forEach((evento) => {
+    const acao = String(evento.acao || '').toUpperCase();
+    const destinoId = String(evento.destinoId || evento.atorId || '').trim();
+    const atribui = ['START', 'CLAIM', 'TRANSFER', 'CALL_TRANSFER', 'CALL_ACCEPT'].includes(acao);
+    const libera = ['RELEASE', 'EXPIRE'].includes(acao);
+    if (atribui && estadoConhecido && responsavelId === destinoId) return;
+    if (libera && estadoConhecido && !responsavelId) return;
+    const message = mensagemInternaAtribuicao(evento, conversationId);
+    if (!message) return;
+    mensagens.push(message);
+    if (atribui) responsavelId = destinoId;
+    else if (libera) responsavelId = null;
+    estadoConhecido = true;
+  });
+  return mensagens;
+}
+
 function mensagensInternasAtendimento(conversationId) {
   const group = grupoConversa(conversationId);
-  const unique = new Map();
+  const eventos = [];
   group.ids.forEach((itemId) => {
     const historico = atendentes.obterConversa(itemId)?.historico;
     if (!Array.isArray(historico)) return;
-    historico.forEach((evento) => {
-      const message = mensagemInternaAtribuicao(evento, group.canonicalId);
-      if (message) unique.set(message.id, message);
-    });
+    historico.forEach((evento) => eventos.push(evento));
   });
-  return [...unique.values()];
+  return mensagensInternasDeEventos(eventos, group.canonicalId);
 }
 
 async function mensagensConsolidadas(conversationId, params = {}) {
@@ -1605,10 +1657,13 @@ router.post('/conversations', asyncRoute(async (req, res) => {
   }
   const conversationWithAssignment = comAtribuicao(conversation);
   if (atribuicaoCriada) {
+    const ultimoEvento = atribuicaoCriada?.historico?.[atribuicaoCriada.historico.length - 1];
+    const internalMessage = mensagemInternaAtribuicao(ultimoEvento, conversation.id);
     eventosAtendimento.emit('assignment', {
       conversationId: conversation.id,
       conversation: conversationWithAssignment,
-      assignment: atribuicaoCriada
+      assignment: atribuicaoCriada,
+      internalMessage
     });
   }
   res.status(existente ? 200 : 201).json({
@@ -1755,6 +1810,7 @@ router.post('/conversations/:id/claim', asyncRoute(async (req, res) => {
   const pipelineId = idPipelineBitrix(req.body?.pipelineId);
   const withoutPipeline = req.body?.withoutPipeline === true;
   const atual = obterAtribuicaoConversa(conversation);
+  impedirReassumirAtendimento(atual, req.atendente);
   const assignment = atribuirGrupoConversa(conversation, { acao: 'CLAIM', ator: req.atendente, destino: req.atendente });
   const ultimoEvento = assignment?.historico?.[assignment.historico.length - 1];
   const internalMessage = mensagemInternaAtribuicao(ultimoEvento, conversationId);
@@ -1805,9 +1861,11 @@ router.post('/conversations/:id/release', asyncRoute(async (req, res) => {
   const conversation = await obterConversaConsolidada(conversationId);
   podeAtender(conversation, req.atendente, true);
   const assignment = atribuirGrupoConversa(conversation, { acao: 'RELEASE', ator: req.atendente });
+  const ultimoEvento = assignment?.historico?.[assignment.historico.length - 1];
+  const internalMessage = mensagemInternaAtribuicao(ultimoEvento, conversationId);
   const resultado = comAtribuicao(conversation);
-  eventosAtendimento.emit('assignment', { conversationId, conversation: resultado, assignment });
-  res.json(resultado);
+  eventosAtendimento.emit('assignment', { conversationId, conversation: resultado, assignment, internalMessage });
+  res.json({ ...resultado, internalMessage });
 }));
 
 router.post('/conversations/:id/transfer', asyncRoute(async (req, res) => {
@@ -1828,9 +1886,11 @@ router.post('/conversations/:id/transfer', asyncRoute(async (req, res) => {
     acao: 'TRANSFER', ator: req.atendente,
     destino: { id: String(codUsu), name: destino?.nomeExibicao || usuario.NOMEUSU }
   });
+  const ultimoEvento = assignment?.historico?.[assignment.historico.length - 1];
+  const internalMessage = mensagemInternaAtribuicao(ultimoEvento, conversationId);
   const resultado = comAtribuicao(conversation);
-  eventosAtendimento.emit('assignment', { conversationId, conversation: resultado, assignment });
-  res.json(resultado);
+  eventosAtendimento.emit('assignment', { conversationId, conversation: resultado, assignment, internalMessage });
+  res.json({ ...resultado, internalMessage });
 }));
 
 router.post('/conversations/:id/read', asyncRoute(async (req, res) => {
@@ -1994,10 +2054,13 @@ function reivindicarChamada(callId, conversation, atendente) {
       const assignment = atribuirGrupoConversa(conversation, {
         acao: 'CALL_ACCEPT', ator: atendente, destino: atendente
       });
+      const ultimoEvento = assignment?.historico?.[assignment.historico.length - 1];
+      const internalMessage = mensagemInternaAtribuicao(ultimoEvento, conversation.id);
       eventosAtendimento.emit('assignment', {
         conversationId: conversation.id,
         conversation: comAtribuicao(conversation),
-        assignment
+        assignment,
+        internalMessage
       });
     } catch (error) {
       controleChamadas.liberar(callId, atendente);
@@ -2163,10 +2226,13 @@ router.get('/events', (req, res) => {
           ator: payload.fromAgent || { id: 'SISTEMA', name: 'Sistema' },
           destino: req.atendente
         });
+        const ultimoEvento = assignment?.historico?.[assignment.historico.length - 1];
+        const internalMessage = mensagemInternaAtribuicao(ultimoEvento, payload.conversationId);
         eventosAtendimento.emit('assignment', {
           conversationId: Number(payload.conversationId),
           conversation: comAtribuicao({ id: Number(payload.conversationId) }),
-          assignment
+          assignment,
+          internalMessage
         });
       }
     }
@@ -2246,6 +2312,8 @@ router._internals = {
   criarControleChamadas,
   idsRelacionadosConversa,
   mensagemInternaAtribuicao,
+  mensagensInternasDeEventos,
+  impedirReassumirAtendimento,
   marcarGrupoConversaComoLida,
   obterAtribuicaoMaisRecente,
   textoContatoChat,

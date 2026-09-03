@@ -103,11 +103,12 @@ function criarChatAtendenteStore(options = {}) {
     return registro ? { conversationId: Number(chave), ...registro } : null;
   }
 
-  function atribuirConversa(id, { acao, ator, destino } = {}) {
+  function atribuirConversa(id, { acao, ator, destino, em } = {}) {
     const chave = normalizarConversa(id);
     if (!chave) throw new TypeError('Conversa inválida.');
     const atual = state.conversas[chave] || {};
-    const agora = new Date().toISOString();
+    const instante = em ? new Date(em) : new Date();
+    const agora = Number.isNaN(instante.getTime()) ? new Date().toISOString() : instante.toISOString();
     const historico = Array.isArray(atual.historico) ? atual.historico.slice(-49) : [];
     const liberar = ['RELEASE', 'EXPIRE'].includes(String(acao || '').toUpperCase());
     const proximo = liberar
@@ -127,6 +128,8 @@ function criarChatAtendenteStore(options = {}) {
         acao: normalizarTexto(acao, 20),
         atorId: String(ator?.id || ''),
         atorNome: normalizarTexto(ator?.name || 'Atendente'),
+        origemId: String(atual.userId || ''),
+        origemNome: normalizarTexto(atual.userName || ''),
         destinoId: proximo.userId,
         destinoNome: proximo.userName,
         em: agora

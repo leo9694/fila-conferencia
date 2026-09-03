@@ -165,8 +165,9 @@ test('gera identidades persistentes somente para o canal consolidado do contato'
   );
 });
 
-test('converte uma tomada de atendimento em registro interno sem mensagem para a Meta', () => {
-  const message = chatRouter._internals.mensagemInternaAtribuicao({
+test('converte todos os eventos de atendimento em registros internos', () => {
+  const { mensagemInternaAtribuicao } = chatRouter._internals;
+  const message = mensagemInternaAtribuicao({
     acao: 'CLAIM',
     atorId: '72',
     atorNome: 'Leonardo',
@@ -178,9 +179,41 @@ test('converte uma tomada de atendimento em registro interno sem mensagem para a
   assert.equal(message.direction, 'INTERNAL');
   assert.equal(message.text, 'Atendente Leonardo assumiu o atendimento');
   assert.equal(message.messageTimestamp, '2026-09-01T14:30:00.000Z');
-  assert.equal(chatRouter._internals.mensagemInternaAtribuicao({
-    acao: 'TRANSFER', em: '2026-09-01T14:30:00.000Z'
-  }, 15), null);
+  assert.equal(mensagemInternaAtribuicao({
+    acao: 'TRANSFER', atorNome: 'Leonardo', destinoNome: 'Nataly', destinoId: '81', em: '2026-09-01T14:31:00.000Z'
+  }, 15).text, 'Atendente Leonardo transferiu o atendimento para Nataly');
+  assert.equal(mensagemInternaAtribuicao({
+    acao: 'CALL_TRANSFER', atorNome: 'Nataly', destinoNome: 'Michele', destinoId: '90', em: '2026-09-01T14:32:00.000Z'
+  }, 15).text, 'Atendente Nataly transferiu a ligação para Michele');
+  assert.equal(mensagemInternaAtribuicao({
+    acao: 'RELEASE', atorNome: 'Michele', origemNome: 'Michele', em: '2026-09-01T14:33:00.000Z'
+  }, 15).text, 'Atendente Michele liberou o atendimento');
+  assert.equal(mensagemInternaAtribuicao({
+    acao: 'EXPIRE', atorNome: 'Sistema', origemNome: 'Michele', em: '2026-09-02T14:33:00.000Z'
+  }, 15).text, 'Atendimento de Michele ficou sem atendente após 24 horas sem interação');
+});
+
+test('remove eventos repetidos que não alteram o responsável', () => {
+  const mensagens = chatRouter._internals.mensagensInternasDeEventos([
+    { acao: 'CLAIM', destinoId: '72', destinoNome: 'Leonardo', em: '2026-09-01T14:30:00.000Z' },
+    { acao: 'CLAIM', destinoId: '72', destinoNome: 'Leonardo', em: '2026-09-01T14:30:00.003Z' },
+    { acao: 'TRANSFER', atorId: '72', atorNome: 'Leonardo', destinoId: '81', destinoNome: 'Nataly', em: '2026-09-01T14:31:00.000Z' },
+    { acao: 'TRANSFER', atorId: '72', atorNome: 'Leonardo', destinoId: '81', destinoNome: 'Nataly', em: '2026-09-01T14:31:00.004Z' },
+    { acao: 'EXPIRE', origemId: '81', origemNome: 'Nataly', em: '2026-09-02T14:31:00.000Z' }
+  ], 15);
+  assert.deepEqual(mensagens.map((item) => item.text), [
+    'Atendente Leonardo assumiu o atendimento',
+    'Atendente Leonardo transferiu o atendimento para Nataly',
+    'Atendimento de Nataly ficou sem atendente após 24 horas sem interação'
+  ]);
+});
+
+test('impede o atendente de assumir novamente o próprio atendimento', () => {
+  assert.throws(
+    () => chatRouter._internals.impedirReassumirAtendimento({ userId: '72' }, { id: '72' }),
+    (error) => error.status === 409 && /já está atribuído a você/.test(error.message)
+  );
+  assert.doesNotThrow(() => chatRouter._internals.impedirReassumirAtendimento({ userId: '81' }, { id: '72' }));
 });
 
 test('preserva o next em middleware assíncrono de autorização', async () => {

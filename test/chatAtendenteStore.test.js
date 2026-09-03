@@ -61,6 +61,25 @@ test('renova a interação sem trocar o responsável do atendimento', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('registra origem e horário informado nos eventos de atendimento', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-eventos-'));
+  const store = criarChatAtendenteStore({ filePath: path.join(dir, 'atendimentos.json') });
+  store.atribuirConversa(123, {
+    acao: 'CLAIM', ator: { id: '72', name: 'Leonardo' }, destino: { id: '72', name: 'Leonardo' },
+    em: '2026-09-01T14:30:00.000Z'
+  });
+  const transferida = store.atribuirConversa(123, {
+    acao: 'TRANSFER', ator: { id: '72', name: 'Leonardo' }, destino: { id: '81', name: 'Nataly' },
+    em: '2026-09-01T14:31:00.000Z'
+  });
+  const evento = transferida.historico.at(-1);
+  assert.equal(evento.origemId, '72');
+  assert.equal(evento.origemNome, 'Leonardo');
+  assert.equal(evento.destinoId, '81');
+  assert.equal(evento.em, '2026-09-01T14:31:00.000Z');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('persiste o nome personalizado exibido na conversa', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-renomear-'));
   const filePath = path.join(dir, 'atendimentos.json');

@@ -1451,7 +1451,7 @@
     const owner = ownsConversation(item);
     refs.assignmentLabel.textContent = agent?.name || 'Sem atendente';
     refs.detailsAgent.textContent = agent?.name || 'Sem atendente';
-    refs.claim.hidden = false;
+    refs.claim.hidden = owner;
     refs.transfer.hidden = !canTransferConversation(item);
     refs.release.hidden = !owner;
     const session = Core.serviceWindow(item);
@@ -2169,6 +2169,10 @@
   async function claimConversation(id = state.conversationId, options = {}) {
     if (!id) return null;
     if (String(id) !== String(state.conversationId)) state.conversationId = String(id);
+    if (ownsConversation(state.conversation)) {
+      setFeedback('Este atendimento já está atribuído a você.', true);
+      return null;
+    }
     const replacingAgent = Boolean(assignedUser(state.conversation));
     const choice = replacingAgent
       ? {}
