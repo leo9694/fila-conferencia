@@ -13,6 +13,7 @@ const {
 } = require('./api/sankhyaApi');
 const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
 const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
+const { garantirContaItauEmpresa8 } = require('./api/faturamentoBanco');
 const {
   consolidarLeiturasEntrada,
   planejarDatasEstoqueEntrada,
@@ -1100,6 +1101,14 @@ async function gerarPrevisualizacaoBoleto(nunota) {
 }
 
 async function gerarDocumentoFiscalSankhya(nunota, tipo) {
+  if (tipo === 'boleto') {
+    await garantirContaItauEmpresa8({
+      nunota,
+      executeQuery,
+      atualizarRegistro: atualizarRegistroApi
+    });
+  }
+
   if (tipo === 'boleto' && process.env.SANKHYA_OM_BASE_URL) {
     const pdfBoleto = await gerarPrevisualizacaoBoleto(nunota);
     if (!pdfBoleto.subarray(0, 4).equals(Buffer.from('%PDF'))) {
@@ -6952,6 +6961,19 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     conferenciaProgressStore.remover(nunota);
 
     const notaFaturada = await consultarFaturamentoExistente(nunota);
+    let contaBancariaFaturamento = null;
+    let erroContaBancariaFaturamento = null;
+    if (notaFaturada) {
+      try {
+        contaBancariaFaturamento = await garantirContaItauEmpresa8({
+          nunota: notaFaturada.NUNOTA,
+          executeQuery,
+          atualizarRegistro: atualizarRegistroApi
+        });
+      } catch (err) {
+        erroContaBancariaFaturamento = err;
+      }
+    }
     const faturamentoAutomatico = pedido.FATAOCONCLUIR === 'S';
     const detalhesFaturamento = notaFaturada || !faturamentoAutomatico
       ? []
@@ -6959,12 +6981,20 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
           erroFinalizacaoNativa?.message,
           ...coletarDetalhesSankhya(resultadoFinalizacao)
         ].filter(Boolean);
-    const faturamento = notaFaturada
+    const faturamento = notaFaturada && erroContaBancariaFaturamento
+      ? {
+          status: 'ERRO',
+          automatico: faturamentoAutomatico,
+          nota: notaFaturada,
+          detalhes: [erroContaBancariaFaturamento.message]
+        }
+      : notaFaturada
       ? {
           status: 'FATURADO',
           automatico: faturamentoAutomatico,
           nota: notaFaturada,
-          detalhes: []
+          detalhes: [],
+          contaBancaria: contaBancariaFaturamento
         }
       : faturamentoAutomatico
         ? {
