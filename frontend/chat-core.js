@@ -343,6 +343,12 @@
       .some((value) => value && updateKeys.has(value));
   }
 
+  function replyTargetMessage(messages = [], messageId = '') {
+    const targetId = String(messageId || '').trim();
+    if (!targetId) return null;
+    return messages.find((message) => messageMatchesUpdate(message, { messageId: targetId })) || null;
+  }
+
   function updateMessageStatus(items = [], update = {}) {
     const status = update.status || update.messageStatus || update.deliveryStatus || '';
     const statusRank = { SENT: 1, DELIVERED: 2, READ: 3 };
@@ -523,6 +529,7 @@
     reactionInfo,
     reactionTarget,
     replyContext,
+    replyTargetMessage,
     sharedContact,
     serviceWindow,
     serviceWindowState,

@@ -1067,7 +1067,9 @@
     const reply = Core.replyContext(message);
     if (!reply) return '';
     const author = reply.senderName || (reply.direction === 'OUTBOUND' ? 'Você' : Core.contactName(state.conversation || {}));
-    return `<div class="chat-message-reply-quote"><strong>${escapeHtml(author)}</strong><span>${escapeHtml(reply.text)}</span></div>`;
+    const content = `<strong>${escapeHtml(author)}</strong><span>${escapeHtml(reply.text)}</span>`;
+    if (!reply.messageId) return `<div class="chat-message-reply-quote">${content}</div>`;
+    return `<button class="chat-message-reply-quote" type="button" data-chat-reply-target="${escapeHtml(reply.messageId)}" title="Ir para a mensagem original" aria-label="Ir para a mensagem original">${content}</button>`;
   }
 
   function renderTemplateMessage(message) {
@@ -1301,6 +1303,9 @@
     });
     refs.messages.querySelectorAll('[data-chat-message-reply]').forEach((button) => {
       button.addEventListener('click', () => startReply(button.dataset.messageId));
+    });
+    refs.messages.querySelectorAll('[data-chat-reply-target]').forEach((button) => {
+      button.addEventListener('click', () => navigateToReplyTarget(button.dataset.chatReplyTarget));
     });
     window.lucide?.createIcons();
     if (preserveScroll) refs.messages.scrollTop = refs.messages.scrollHeight - oldHeight + oldTop;
@@ -1579,9 +1584,9 @@
   }
 
   async function loadOlderMessages() {
-    if (state.loadingOlder || state.messagePage >= state.messageTotalPages) return;
+    if (state.loadingOlder || state.messagePage >= state.messageTotalPages) return false;
     const conversationId = String(state.conversationId || '');
-    if (!conversationId) return;
+    if (!conversationId) return false;
     const selectionToken = state.activeLoadToken;
     const page = state.messagePage + 1;
     state.loadingOlder = true;
@@ -1593,7 +1598,11 @@
       state.messageTotalPages = Number(payload?.pagination?.totalPages || state.messageTotalPages || 1);
       state.messages = Core.mergeById(payload?.data || [], state.messages);
       renderMessages({ preserveScroll: true });
-    } catch (error) { setFeedback(error.message, true); }
+      return true;
+    } catch (error) {
+      setFeedback(error.message, true);
+      return false;
+    }
     finally {
       if (conversationId === String(state.conversationId) && selectionToken === state.activeLoadToken) {
         state.loadingOlder = false;
@@ -1742,6 +1751,33 @@
         setFeedback(reconciled ? error.message : 'Não foi possível enviar a mensagem.', true);
       }
     }
+  }
+
+  async function navigateToReplyTarget(messageId) {
+    const conversationId = String(state.conversationId || '');
+    if (!conversationId || !messageId) return;
+    while (state.loadingOlder) {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      if (conversationId !== String(state.conversationId)) return;
+    }
+    let target = Core.replyTargetMessage(state.messages, messageId);
+    while (!target && state.messagePage < state.messageTotalPages) {
+      const loaded = await loadOlderMessages();
+      if (!loaded || conversationId !== String(state.conversationId)) return;
+      target = Core.replyTargetMessage(state.messages, messageId);
+    }
+    if (!target) {
+      setFeedback('A mensagem original não está mais disponível neste histórico.', true);
+      return;
+    }
+    const targetId = String(target.id || '');
+    const article = [...refs.messages.querySelectorAll('.chat-message[data-message-id]')]
+      .find((element) => element.dataset.messageId === targetId);
+    if (!article) return;
+    article.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    article.classList.remove('is-reply-target');
+    requestAnimationFrame(() => article.classList.add('is-reply-target'));
+    article.addEventListener('animationend', () => article.classList.remove('is-reply-target'), { once: true });
   }
 
   async function sendReaction(messageId, emoji) {

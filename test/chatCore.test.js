@@ -168,6 +168,16 @@ test('normaliza o contexto de uma mensagem respondida', () => {
   assert.equal(ChatCore.replyContext({}), null);
 });
 
+test('localiza a mensagem original de uma resposta pelo id interno ou wamid', () => {
+  const messages = [
+    { id: 10, wamid: 'wamid.original' },
+    { id: 11, wamid: 'wamid.outra' }
+  ];
+  assert.equal(ChatCore.replyTargetMessage(messages, 'wamid.original'), messages[0]);
+  assert.equal(ChatCore.replyTargetMessage(messages, '11'), messages[1]);
+  assert.equal(ChatCore.replyTargetMessage(messages, 'wamid.removida'), null);
+});
+
 test('extrai nome e telefone de um contato compartilhado pela Meta', () => {
   const message = {
     type: 'contacts',
