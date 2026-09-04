@@ -101,6 +101,7 @@
     sendToken: 0, optimisticMessageSequence: 0, unreadLoadToken: 0,
     unreadConversations: new Map(), notifiedMessageIds: new Set(), processedRealtimeMessageIds: new Set(),
     unreadRefreshTimers: new Map(), unreadRefreshTokens: new Map(),
+    typingLastSentAt: new Map(),
     notificationAudio: [], notificationAudioUnlocked: false
   };
 
@@ -1628,6 +1629,25 @@
     refs.input.style.height = 'auto'; refs.input.style.height = `${Math.min(refs.input.scrollHeight, 128)}px`;
   }
 
+  function updateTypingIndicator() {
+    updateComposer();
+    const conversationId = String(state.conversationId || '');
+    if (!conversationId) return;
+    const now = Date.now();
+    if (!Core.shouldSendTypingIndicator({
+      text: refs.input.value,
+      owner: ownsConversation(),
+      canSendFreeform: Core.serviceWindow(state.conversation).canSendFreeform === true,
+      lastSentAt: state.typingLastSentAt.get(conversationId),
+      now
+    })) return;
+    state.typingLastSentAt.set(conversationId, now);
+    api(`/conversations/${encodeURIComponent(conversationId)}/typing`, { method: 'POST' })
+      .catch(() => {
+        if (state.typingLastSentAt.get(conversationId) === now) state.typingLastSentAt.delete(conversationId);
+      });
+  }
+
   function renderComposerReply() {
     if (!refs.composerReply) return;
     const reply = state.replyingTo;
@@ -1673,6 +1693,7 @@
     const text = refs.input.value.trim();
     if (!state.conversationId || !Core.canSendText(text)) return;
     const conversationId = String(state.conversationId);
+    state.typingLastSentAt.delete(conversationId);
     const selectionToken = state.activeLoadToken;
     const clientMessageId = `pending-${Date.now()}-${++state.optimisticMessageSequence}`;
     const replyToMessageId = state.replyingTo?.messageId || undefined;
@@ -2969,7 +2990,7 @@
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') persistUiCache();
     });
-    refs.form.addEventListener('submit', sendText); refs.input.addEventListener('input', updateComposer);
+    refs.form.addEventListener('submit', sendText); refs.input.addEventListener('input', updateTypingIndicator);
     refs.input.addEventListener('paste', pasteImage);
     refs.composerReplyCancel?.addEventListener('click', () => {
       clearReply();
@@ -3173,6 +3194,7 @@
     state.unreadRefreshTimers.forEach((timer) => clearTimeout(timer));
     state.unreadRefreshTimers.clear();
     state.unreadRefreshTokens.clear();
+    state.typingLastSentAt.clear();
     renderUnreadAlert();
     cancelScheduledMessagesRender();
     if (state.conversationsRenderFrame) cancelAnimationFrame(state.conversationsRenderFrame);

@@ -166,6 +166,10 @@ async function markConversationRead(id) {
   return request(`/api/conversations/${encodeURIComponent(id)}/read`, { method: 'POST', headers: {} });
 }
 
+async function sendTypingIndicator(id) {
+  return request(`/api/conversations/${encodeURIComponent(id)}/typing`, { method: 'POST', headers: {} });
+}
+
 async function updateConversationStatus(id, status) {
   return request(`/api/conversations/${encodeURIComponent(id)}/status`, json('PATCH', { status }));
 }
@@ -378,6 +382,7 @@ module.exports = {
   sendReaction,
   sendTemplate,
   sendTextMessage,
+  sendTypingIndicator,
   updateAssignment,
   updateCall,
   updateCallTransfer,

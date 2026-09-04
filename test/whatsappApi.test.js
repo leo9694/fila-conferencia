@@ -104,6 +104,27 @@ test('consulta a permissão pelo endpoint canônico da conversa', async () => {
   }
 });
 
+test('solicita o indicador de digitação pela conversa', async () => {
+  const originalFetch = global.fetch;
+  let requestUrl = '';
+  let requestOptions = {};
+  global.fetch = async (url, options) => {
+    requestUrl = String(url);
+    requestOptions = options;
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    });
+  };
+  try {
+    await whatsappApi.sendTypingIndicator(44);
+    assert.match(requestUrl, /\/api\/conversations\/44\/typing$/);
+    assert.equal(requestOptions.method, 'POST');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('consulta os canais pelo endpoint público da API de atendimento', async () => {
   const originalFetch = global.fetch;
   let requestUrl = '';

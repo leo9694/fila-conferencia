@@ -81,6 +81,16 @@ test('deduplica template pela wamid quando a atualização chega com outro id', 
   assert.equal(messages[0].status, 'DELIVERED');
 });
 
+test('limita o indicador de digitação ao responsável e renova após o intervalo', () => {
+  const base = { text: 'Olá', owner: true, canSendFreeform: true, now: 20000, interval: 18000 };
+  assert.equal(ChatCore.shouldSendTypingIndicator({ ...base, lastSentAt: 0 }), true);
+  assert.equal(ChatCore.shouldSendTypingIndicator({ ...base, lastSentAt: 5000 }), false);
+  assert.equal(ChatCore.shouldSendTypingIndicator({ ...base, lastSentAt: 2000 }), true);
+  assert.equal(ChatCore.shouldSendTypingIndicator({ ...base, owner: false }), false);
+  assert.equal(ChatCore.shouldSendTypingIndicator({ ...base, canSendFreeform: false }), false);
+  assert.equal(ChatCore.shouldSendTypingIndicator({ ...base, text: '  ' }), false);
+});
+
 test('substitui mensagem otimista pela confirmação sem duplicar no chat', () => {
   const pending = {
     id: 'pending-1', clientMessageId: 'pending-1', optimistic: true,

@@ -1900,6 +1900,14 @@ router.post('/conversations/:id/read', asyncRoute(async (req, res) => {
   res.json(await marcarGrupoConversaComoLida(conversationId));
 }));
 
+router.post('/conversations/:id/typing', asyncRoute(async (req, res) => {
+  const conversationId = id(req.params.id);
+  const conversation = await obterConversaConsolidada(conversationId);
+  podeAtender(conversation, req.atendente);
+  const messageConversationId = await idConversaParaMensagem(conversationId);
+  res.json(await whatsappApi.sendTypingIndicator(messageConversationId));
+}));
+
 router.patch('/conversations/:id/status', asyncRoute(async (req, res) => {
   const status = String(req.body?.status || '').toUpperCase();
   if (!['OPEN', 'CLOSED', 'ARCHIVED'].includes(status)) {

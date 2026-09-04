@@ -365,6 +365,13 @@
     return !sending && Boolean(String(value || '').trim());
   }
 
+  function shouldSendTypingIndicator({ text, owner, canSendFreeform, lastSentAt = 0, now = Date.now(), interval = 18000 } = {}) {
+    return owner === true
+      && canSendFreeform === true
+      && Boolean(String(text || '').trim())
+      && Number(now) - Number(lastSentAt || 0) >= Number(interval);
+  }
+
   function shouldLoadOlderMessages({ scrollTop = 0, scrollHeight = 0, clientHeight = 0 } = {}, options = {}) {
     const threshold = Number(options.threshold ?? 80);
     const fillRatio = Number(options.fillRatio ?? 1.25);
@@ -522,6 +529,7 @@
     shouldLoadMoreConversations,
     shouldLoadOlderMessages,
     shouldNotifyConversation,
+    shouldSendTypingIndicator,
     statusSymbol,
     messageFailureReason,
     unwrap,
