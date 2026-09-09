@@ -45,6 +45,27 @@ function fixture() {
   return { api, calls, client, stream, track, microphoneRequests: () => microphoneRequests };
 }
 
+test('encerra microfone que termina de abrir após o cancelamento da chamada', async () => {
+  const item = fixture();
+  let resolveMedia;
+  item.client.mediaDevices.getUserMedia = () => new Promise((resolve) => { resolveMedia = resolve; });
+  await item.client.preparePeer();
+  const pending = item.client.captureMicrophone();
+  item.client.cleanup();
+  resolveMedia(item.stream);
+  await assert.rejects(pending, /encerrada/);
+  assert.equal(item.track.stopped, true);
+  assert.equal(item.client.localStream, null);
+});
+
+test('libera microfone quando a criação da chamada de saída falha', async () => {
+  const item = fixture();
+  item.api.create = async () => { throw new Error('Falha ao criar chamada'); };
+  await assert.rejects(item.client.startOutgoing({ conversationId: 12 }), /Falha ao criar/);
+  assert.equal(item.track.stopped, true);
+  assert.equal(item.client.peer, null);
+});
+
 test('solicita microfone somente ao aceitar e conecta pelo gateway antes de ativar', async () => {
   const item = fixture();
   assert.equal(item.microphoneRequests(), 0);

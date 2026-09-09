@@ -273,6 +273,7 @@
       this.remoteAudioSource = null;
       this.muted = false;
       this.remoteMediaNotified = false;
+      this.closed = false;
     }
 
     unlockRemoteAudio() {
@@ -319,6 +320,7 @@
     }
 
     async preparePeer() {
+      if (this.closed) throw new Error('A chamada foi encerrada.');
       if (!this.PeerConnection) throw new Error('Este navegador não oferece suporte a chamadas WebRTC.');
       this.peer = new this.PeerConnection(this.rtcConfig);
       this.peer.ontrack = (event) => {
@@ -339,7 +341,13 @@
 
     async captureMicrophone() {
       if (!this.mediaDevices?.getUserMedia) throw new Error('Não foi possível acessar o microfone neste navegador.');
-      this.localStream = await this.mediaDevices.getUserMedia({ audio: true });
+      const peer = this.peer;
+      const stream = await this.mediaDevices.getUserMedia({ audio: true });
+      if (this.closed || this.peer !== peer) {
+        stream.getTracks().forEach((track) => track.stop());
+        throw new Error('A chamada foi encerrada durante a abertura do microfone.');
+      }
+      this.localStream = stream;
       this.localStream.getTracks().forEach((track) => this.peer.addTrack(track, this.localStream));
     }
 
@@ -391,7 +399,7 @@
         await this.peer.setRemoteDescription({ type: answer.sdpType || answer.type || 'answer', sdp: answer.sdp });
         await waitForPeerConnected(this.peer);
         await waitForOutboundAudio(this.peer, this.mediaReadyWaitOptions);
-        return retryMediaAction(() => this.api.create(conversationId, { mediaSessionId: media.mediaSessionId }));
+        return await retryMediaAction(() => this.api.create(conversationId, { mediaSessionId: media.mediaSessionId }));
       } catch (error) {
         this.cleanup();
         throw error;
@@ -414,6 +422,7 @@
     }
 
     cleanup() {
+      this.closed = true;
       this.localStream?.getTracks?.().forEach((track) => track.stop());
       this.remoteStream?.getTracks?.().forEach((track) => track.stop());
       if (this.peer) {
