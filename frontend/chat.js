@@ -286,15 +286,23 @@
   document.addEventListener('pointerdown', unlockNotificationAudio);
   document.addEventListener('keydown', unlockNotificationAudio);
 
-  function playMessageNotification(item = {}) {
+  function playChatSound(item = {}, volume = 0.78) {
     const channelId = conversationChannelId(item);
     const channelIndex = Math.max(0, state.channels.findIndex((channel) => String(channel.id) === channelId));
     const sources = ensureNotificationAudio();
     const template = sources[channelIndex % sources.length] || sources[0];
     if (!template) return;
     const audio = template.cloneNode();
-    audio.volume = 0.78;
+    audio.volume = volume;
     audio.play().catch(() => {});
+  }
+
+  function playMessageNotification(item = {}) {
+    playChatSound(item);
+  }
+
+  function playMessageSentConfirmation(item = {}) {
+    playChatSound(item, 0.38);
   }
 
   function hasAssignmentSnapshot(item = {}) {
@@ -1739,6 +1747,7 @@
       state.messages = Core.mergeOptimisticMessage(state.messages, message, clientMessageId);
       scheduleMessagesRender({ preserveScroll: true });
       setFeedback();
+      playMessageSentConfirmation(state.conversation || {});
     } catch (error) {
       updateCachedConversationMessages(conversationId, (messages) => (
         Core.failOptimisticMessage(messages, clientMessageId, error.message)
@@ -1828,6 +1837,7 @@
       const payload = await api(`/conversations/${encodeURIComponent(conversationId)}/messages/${kind}`, { method: 'POST', body: form });
       if (conversationId !== String(state.conversationId) || selectionToken !== state.activeLoadToken) return;
       state.messages = Core.mergeById(state.messages, [Core.unwrap(payload)]); renderMessages(); setFeedback();
+      playMessageSentConfirmation(state.conversation || {});
     } catch (error) {
       if (conversationId === String(state.conversationId) && selectionToken === state.activeLoadToken) {
         setFeedback(kind === 'audio' ? 'Falha ao enviar áudio.' : 'Não foi possível enviar o arquivo.', true);
@@ -2532,6 +2542,7 @@
       renderMessages();
       refs.templateModal.hidden = true;
       setFeedback('Template enviado.');
+      playMessageSentConfirmation(state.conversation || {});
       refreshActiveConversation(conversationId);
     } catch (error) {
       if (conversationId === String(state.conversationId) && selectionToken === state.activeLoadToken) {

@@ -3,6 +3,7 @@
 
   const Core = window.WhatsAppCallCore;
   if (!Core) return;
+  const CALL_RINGTONE_URL = '/whatsapp-call-ringtone.mp3';
 
   const byId = (id) => document.getElementById(id);
   const refs = {
@@ -27,7 +28,7 @@
 
   const state = {
     status: 'IDLE', call: null, conversation: null, profile: null, source: null, client: null,
-    signal: null, timer: null, startedAt: 0, ringtone: null, reconnecting: false,
+    signal: null, timer: null, startedAt: 0, ringtone: null, ringtoneTemplate: null, ringtoneUnlocked: false, reconnecting: false,
     transfer: null, outgoingTransfer: null, permission: null, conversationLoadToken: 0,
     clientId: createCallClientId()
   };
@@ -156,20 +157,41 @@
     refs.overlay.hidden = true;
   }
 
+  function ensureRingtoneTemplate() {
+    if (state.ringtoneTemplate) return state.ringtoneTemplate;
+    const audio = new Audio(CALL_RINGTONE_URL);
+    audio.preload = 'auto';
+    state.ringtoneTemplate = audio;
+    return audio;
+  }
+
+  async function unlockRingtone() {
+    if (state.ringtoneUnlocked) return;
+    const audio = ensureRingtoneTemplate();
+    const volume = audio.volume;
+    try {
+      audio.volume = 0.01;
+      await audio.play();
+      audio.pause();
+      audio.currentTime = 0;
+      state.ringtoneUnlocked = true;
+    } catch {
+      state.ringtoneUnlocked = false;
+    } finally {
+      audio.volume = volume;
+    }
+  }
+
+  document.addEventListener('pointerdown', unlockRingtone, { passive: true });
+  document.addEventListener('keydown', unlockRingtone);
+
   function startRingtone() {
     stopRingtone();
-    const Context = window.AudioContext || window.webkitAudioContext;
-    if (!Context) return;
-    try {
-      const context = new Context();
-      const gain = context.createGain();
-      const oscillator = context.createOscillator();
-      gain.gain.value = 0.035;
-      oscillator.frequency.value = 520;
-      oscillator.connect(gain); gain.connect(context.destination); oscillator.start();
-      const pulse = setInterval(() => { gain.gain.value = gain.gain.value ? 0 : 0.035; }, 450);
-      state.ringtone = { kind: 'incoming', context, oscillator, pulse };
-    } catch {}
+    const audio = ensureRingtoneTemplate().cloneNode();
+    audio.loop = true;
+    audio.volume = 0.5;
+    state.ringtone = { kind: 'incoming', audio, stopped: false };
+    audio.play().catch(() => { state.ringtoneUnlocked = false; });
   }
 
   function startRingback() {
@@ -213,8 +235,10 @@
     clearInterval(tone.pulse);
     clearTimeout(tone.timer);
     try {
+      tone.audio?.pause?.();
+      if (tone.audio) tone.audio.currentTime = 0;
       (tone.oscillators || [tone.oscillator]).filter(Boolean).forEach((oscillator) => oscillator.stop());
-      tone.context.close();
+      tone.context?.close?.();
     } catch {}
     state.ringtone = null;
   }
