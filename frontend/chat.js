@@ -10,7 +10,8 @@
   const HIDDEN_CONVERSATIONS_KEY = 'fila-conferencia.chat.hidden-conversations';
   const UI_CACHE_KEY = 'fila-conferencia.chat.ui-cache.v1';
   const CHANNEL_FILTER_KEY = 'fila-conferencia.chat.channel-filter';
-  const NOTIFICATION_SOUND_URLS = ['/chat-notification-primary.mp3', '/chat-notification-secondary.mp3'];
+  const NOTIFICATION_SOUND_URLS = ['/chat-message-notification.mp3'];
+  const SENT_MESSAGE_SOUND_URL = '/chat-message-sent.mp3';
   const UI_CACHE_TTL = 10 * 60 * 1000;
   const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
   const MORE_REACTIONS = ['👏', '🔥', '🎉', '✅', '😊', '😍', '🤔', '😅', '🤝', '👀', '💯', '🙌', '👎', '😡', '🤩', '🥳'];
@@ -102,7 +103,7 @@
     unreadConversations: new Map(), notifiedMessageIds: new Set(), processedRealtimeMessageIds: new Set(),
     unreadRefreshTimers: new Map(), unreadRefreshTokens: new Map(),
     typingLastSentAt: new Map(),
-    notificationAudio: [], notificationAudioUnlocked: false
+    notificationAudio: [], sentMessageAudio: null, notificationAudioUnlocked: false
   };
 
   const CONVERSATION_CACHE_LIMIT = 6;
@@ -264,22 +265,33 @@
     return state.notificationAudio;
   }
 
+  function ensureSentMessageAudio() {
+    if (state.sentMessageAudio) return state.sentMessageAudio;
+    const audio = new Audio(SENT_MESSAGE_SOUND_URL);
+    audio.preload = 'auto';
+    state.sentMessageAudio = audio;
+    return audio;
+  }
+
   async function unlockNotificationAudio() {
     if (state.notificationAudioUnlocked) return;
-    const audios = ensureNotificationAudio();
-    const audio = audios[0];
-    if (!audio) return;
-    const volume = audio.volume;
+    const audios = [...ensureNotificationAudio(), ensureSentMessageAudio()];
+    const volumes = audios.map((audio) => audio.volume);
     try {
-      audio.volume = 0.01;
-      await audio.play();
-      audio.pause();
-      audio.currentTime = 0;
+      audios.forEach((audio) => {
+        audio.volume = 0.01;
+        audio.currentTime = 0;
+      });
+      await Promise.all(audios.map((audio) => audio.play()));
+      audios.forEach((audio) => {
+        audio.pause();
+        audio.currentTime = 0;
+      });
       state.notificationAudioUnlocked = true;
     } catch {
       state.notificationAudioUnlocked = false;
     } finally {
-      audio.volume = volume;
+      audios.forEach((audio, index) => { audio.volume = volumes[index]; });
     }
   }
 
@@ -301,8 +313,10 @@
     playChatSound(item);
   }
 
-  function playMessageSentConfirmation(item = {}) {
-    playChatSound(item, 0.38);
+  function playMessageSentConfirmation() {
+    const audio = ensureSentMessageAudio().cloneNode();
+    audio.volume = 0.48;
+    audio.play().catch(() => {});
   }
 
   function hasAssignmentSnapshot(item = {}) {
