@@ -2,6 +2,36 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { garantirContaItauEmpresa8 } = require('../api/faturamentoBanco');
 
+test('prepara financeiro do pedido Itaú que veio com a conta Sicoob sem duplicar correção', async () => {
+  const titulo = { NUFIN: 516287, CODCTABCOINT: 51, CODBCO: 756, CODTIPTIT: 19, RECDESP: 1, DHBAIXA: null };
+  const atualizacoes = [];
+  const dependencias = {
+    nunota: 3882540,
+    executeQuery: async (sql) => sql.includes('FROM TGFCAB')
+      ? [{ NUNOTA: 3882540, CODEMP: 8, AD_BANCO: '71' }]
+      : [{ ...titulo }],
+    atualizarRegistro: async (entidade, chave, campos) => {
+      atualizacoes.push({ entidade, chave, campos });
+      Object.assign(titulo, campos);
+    }
+  };
+  assert.deepEqual(await garantirContaItauEmpresa8(dependencias), { aplicavel: true, corrigidos: 1 });
+  assert.deepEqual(atualizacoes, [{
+    entidade: 'Financeiro', chave: { NUFIN: 516287 },
+    campos: { CODCTABCOINT: 71, CODBCO: 341 }
+  }]);
+  assert.deepEqual(await garantirContaItauEmpresa8(dependencias), { aplicavel: true, corrigidos: 0 });
+  assert.equal(atualizacoes.length, 1);
+});
+
+test('preserva banco selecionado diferente de Itaú mesmo na empresa 8', async () => {
+  await garantirContaItauEmpresa8({
+    nunota: 100,
+    executeQuery: async () => [{ NUNOTA: 100, CODEMP: 8, AD_BANCO: '50' }],
+    atualizarRegistro: async () => assert.fail('Não deveria alterar outra conta')
+  });
+});
+
 test('corrige para o Itaú os títulos de boleto da empresa 8 e confirma a gravação', async () => {
   const consultas = [
     [{ NUNOTA: 100, CODEMP: 8, AD_BANCO: 71 }],

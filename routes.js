@@ -6874,6 +6874,16 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       );
     }
 
+    // A finalização nativa pode faturar imediatamente e copiar o financeiro do
+    // pedido. Corrigir antes dela; falhas não podem cair no fechamento alternativo.
+    if (modo === 'saida') {
+      await garantirContaItauEmpresa8({
+        nunota,
+        executeQuery,
+        atualizarRegistro: atualizarRegistroApi
+      });
+    }
+
     let resultadoFinalizacao = null;
     let resultadoDivergenciaEntrada = null;
     let erroFinalizacaoNativa = null;
