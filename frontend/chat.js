@@ -111,6 +111,18 @@
 
   let viewportSyncTimer = null;
   const AUTO_MEDIA_CONCURRENCY = 4;
+  const boundMessageElements = new Map();
+  const boundConversationElements = new WeakSet();
+  const conversationListCache = new Map();
+  function unboundMessageElements(selector) {
+    const bound = boundMessageElements.get(selector) || new WeakSet();
+    boundMessageElements.set(selector, bound);
+    return Array.from(refs.messages.querySelectorAll(selector)).filter((element) => {
+      if (bound.has(element)) return false;
+      bound.add(element);
+      return true;
+    });
+  }
 
   function drainAutoMediaQueue() {
     while (state.autoMediaActive < AUTO_MEDIA_CONCURRENCY && state.autoMediaQueue.length) {
@@ -835,7 +847,7 @@
       scheduleTemporaryAccessExpiry();
       return;
     }
-    refs.list.innerHTML = state.conversations.map((item) => {
+    window.ChatDOM.render(refs.list, state.conversations.map((item) => {
       const name = Core.contactName(item);
       const unread = Number(item.unreadCount || 0);
       const active = String(item.id) === String(state.conversationId);
@@ -848,7 +860,7 @@
         <span class="chat-list-line"><small>${escapeHtml(Core.messagePreview(item.lastMessage))}</small>${unread ? `<b>${unread > 99 ? '99+' : unread}</b>` : ''}</span>
         <span class="chat-list-meta"><span class="chat-list-agent${agent ? '' : ' is-unassigned'}">${escapeHtml(agent?.name || 'Sem atendente')}</span>${transferidoOutroNumero ? '<span class="chat-transfer-badge">Transferido</span>' : ''}<span class="chat-channel-badge">${escapeHtml(Core.channelLabel(item))}</span></span></span>
       </button>`;
-    }).join('');
+    }).join(''));
     refs.list.querySelectorAll('[data-conversation-id]').forEach(bindConversationItem);
     window.lucide?.createIcons();
     scheduleTemporaryAccessExpiry();
@@ -910,6 +922,8 @@
   }
 
   function bindConversationItem(button) {
+    if (boundConversationElements.has(button)) return;
+    boundConversationElements.add(button);
     let pressTimer = null;
     let contextOpenedAt = 0;
     const clearPress = () => { clearTimeout(pressTimer); pressTimer = null; };
@@ -974,6 +988,16 @@
     renderActiveFilters();
     const requestedPage = state.page;
     const token = ++state.loadToken;
+    const listKey = JSON.stringify([state.profile?.id, state.selectedChannelId, state.search, state.status, state.assignment, state.agentId, state.unreadOnly]);
+    if (!append && !state.conversations.length) {
+      const cachedList = conversationListCache.get(listKey);
+      if (cachedList) {
+        state.conversations = cachedList.items.filter((item) => !isConversationHidden(item));
+        state.totalConversations = cachedList.total;
+        state.totalPages = cachedList.pages;
+        renderConversations();
+      }
+    }
     if (!append && !state.conversations.length) renderConversationSkeleton();
     else refs.list.classList.add('is-refreshing');
     try {
@@ -999,6 +1023,11 @@
         Number(payload?.pagination?.total || state.conversations.length) - state.hiddenConversationIds.size
       );
       renderConversations();
+      if (!append && requestedPage === 1) {
+        conversationListCache.delete(listKey);
+        conversationListCache.set(listKey, { items: state.conversations.slice(), total: state.totalConversations, pages: state.totalPages });
+        while (conversationListCache.size > 8) conversationListCache.delete(conversationListCache.keys().next().value);
+      }
       scheduleUiCachePersist();
       requestAnimationFrame(loadMoreConversationsIfNeeded);
     } catch (error) {
@@ -1195,7 +1224,7 @@
       return !reaction || !messageKeys.has(reaction.messageId);
     });
     const timeline = Core.mergeTimeline(messages, state.calls);
-    refs.messages.innerHTML = `${state.messagePage < state.messageTotalPages ? '<div class="chat-history-loader" aria-hidden="true"><span></span><span></span><span></span></div>' : ''}${renderMetaSessionNotice()}${timeline.map((entry) => {
+    window.ChatDOM.render(refs.messages, `${state.messagePage < state.messageTotalPages ? '<div class="chat-history-loader" aria-hidden="true"><span></span><span></span><span></span></div>' : ''}${renderMetaSessionNotice()}${timeline.map((entry) => {
       if (entry.kind === 'call') return renderCallTimelineItem(entry.value);
       const message = entry.value;
       if (message.internal === true || String(message.type).toLowerCase() === 'internal') return renderInternalTimelineItem(message);
@@ -1214,8 +1243,8 @@
       return `<article class="chat-message ${outbound ? 'is-outbound' : 'is-inbound'}" data-message-id="${escapeHtml(message.id)}">
         <div class="chat-bubble${reactions.length ? ' has-reaction' : ''}">${renderReplyContext(message)}${renderMessageContent(message)}<footer><time>${escapeHtml(messageTime(message))}</time>${outbound && status.symbol ? `<span class="chat-message-status${statusClass}" title="${escapeHtml(status.label)}" aria-label="${escapeHtml(status.label)}">${status.symbol}</span>` : ''}</footer>${failureAlert}${reactionBadge}${renderReactionActions(message)}</div>
       </article>`;
-    }).join('')}`;
-    refs.messages.querySelectorAll('[data-chat-media]').forEach((element) => {
+    }).join('')}`);
+    unboundMessageElements('[data-chat-media]').forEach((element) => {
       element.addEventListener('click', () => activateMedia(element));
       const mediaKind = element.dataset.chatMedia;
       const shouldLoadAutomatically = ['audio', 'video'].includes(mediaKind)
@@ -1224,7 +1253,7 @@
       if (mediaPreviewObserver) mediaPreviewObserver.observe(element);
       else queueAutomaticMedia(element);
     });
-    refs.messages.querySelectorAll('[data-chat-start-contact]').forEach((button) => {
+    unboundMessageElements('[data-chat-start-contact]').forEach((button) => {
       button.addEventListener('click', () => startChatFromSharedContact(button));
     });
     const closeReactionMenus = (except = null) => {
@@ -1250,13 +1279,13 @@
       menu.hidden = !open;
       if (toggle) toggle.setAttribute('aria-expanded', String(open));
     };
-    refs.messages.querySelectorAll('[data-chat-reaction-toggle]').forEach((button) => {
+    unboundMessageElements('[data-chat-reaction-toggle]').forEach((button) => {
       button.addEventListener('click', () => {
         const actions = button.closest('.chat-message-actions');
         setReactionMenuOpen(actions, !actions?.classList.contains('is-open'));
       });
     });
-    refs.messages.querySelectorAll('[data-chat-reaction-more]').forEach((button) => {
+    unboundMessageElements('[data-chat-reaction-more]').forEach((button) => {
       button.addEventListener('click', (event) => {
         event.stopPropagation();
         const actions = button.closest('.chat-message-actions');
@@ -1269,7 +1298,7 @@
     });
     const mobileReactionGesture = window.matchMedia('(max-width: 640px), (pointer: coarse)').matches;
     if (mobileReactionGesture) {
-      refs.messages.querySelectorAll('.chat-message').forEach((article) => {
+      unboundMessageElements('.chat-message').forEach((article) => {
         const actions = article.querySelector('.chat-message-actions');
         if (!actions) return;
         let timer = null;
@@ -1320,13 +1349,13 @@
         }
       });
     }
-    refs.messages.querySelectorAll('[data-chat-message-reaction]').forEach((button) => {
+    unboundMessageElements('[data-chat-message-reaction]').forEach((button) => {
       button.addEventListener('click', () => sendReaction(button.dataset.messageId, button.dataset.emoji));
     });
-    refs.messages.querySelectorAll('[data-chat-message-reply]').forEach((button) => {
+    unboundMessageElements('[data-chat-message-reply]').forEach((button) => {
       button.addEventListener('click', () => startReply(button.dataset.messageId));
     });
-    refs.messages.querySelectorAll('[data-chat-reply-target]').forEach((button) => {
+    unboundMessageElements('[data-chat-reply-target]').forEach((button) => {
       button.addEventListener('click', () => navigateToReplyTarget(button.dataset.chatReplyTarget));
     });
     window.lucide?.createIcons();
@@ -1573,17 +1602,16 @@
     if (state.messages.length || state.calls.length) renderMessages();
     else refs.messages.innerHTML = '<div class="chat-messages-loading"><span></span><span></span><span></span></div>';
     try {
-      const [conversation, payload, callsPayload] = await Promise.all([
+      const [conversation, payload] = await Promise.all([
         api(`/conversations/${encodeURIComponent(requestedId)}`),
-        api(`/conversations/${encodeURIComponent(requestedId)}/messages?page=1&limit=${MESSAGE_PAGE_SIZE}`),
-        api(`/conversations/${encodeURIComponent(requestedId)}/calls?page=1&limit=100`).catch(() => null)
+        api(`/conversations/${encodeURIComponent(requestedId)}/messages?page=1&limit=${MESSAGE_PAGE_SIZE}`)
       ]);
       if (token !== state.activeLoadToken || requestedId !== String(state.conversationId)) return;
       state.conversation = Core.mergeConversationSnapshot(state.conversation || {}, conversation);
       state.messages = Core.mergeById(Array.isArray(payload?.data) ? payload.data : [], state.messages);
-      if (callsPayload !== null) state.calls = Core.normalizeCalls(callsPayload);
       state.messageTotalPages = Number(payload?.pagination?.totalPages || 1);
-      renderConversationDetails(); renderMessages();
+      renderConversationDetails(); renderMessages({ preserveScroll: Boolean(cached) });
+      void refreshActiveCalls(requestedId);
       cacheActiveConversation();
       const listItem = state.conversations.find((item) => String(item.id) === requestedId);
       if (ownsConversation(conversation) && Number(listItem?.unreadCount || conversation?.unreadCount || 0) > 0) {
@@ -3248,6 +3276,7 @@
     state.conversationId = null;
     state.messages = [];
     state.conversationCache.clear();
+    conversationListCache.clear();
     state.unreadLoadToken += 1;
     state.unreadConversations.clear();
     state.notifiedMessageIds.clear();
