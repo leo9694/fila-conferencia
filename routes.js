@@ -1101,15 +1101,19 @@ async function gerarPrevisualizacaoBoleto(nunota) {
 }
 
 async function gerarDocumentoFiscalSankhya(nunota, tipo) {
+  let usarImpressaoNativaBoleto = false;
   if (tipo === 'boleto') {
-    await garantirContaItauEmpresa8({
+    const conta = await garantirContaItauEmpresa8({
       nunota,
       executeQuery,
       atualizarRegistro: atualizarRegistroApi
     });
+    // Usa a impressão da nota e o modelo da conta, sem forçar o relatório
+    // da pré-visualização para o Itaú da empresa 8.
+    usarImpressaoNativaBoleto = conta.aplicavel;
   }
 
-  if (tipo === 'boleto' && process.env.SANKHYA_OM_BASE_URL) {
+  if (tipo === 'boleto' && process.env.SANKHYA_OM_BASE_URL && !usarImpressaoNativaBoleto) {
     const pdfBoleto = await gerarPrevisualizacaoBoleto(nunota);
     if (!pdfBoleto.subarray(0, 4).equals(Buffer.from('%PDF'))) {
       throw new Error('O Sankhya retornou um arquivo invalido para BOLETO.');
