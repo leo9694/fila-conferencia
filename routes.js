@@ -1023,7 +1023,7 @@ async function obterBoletoArmazenado(nunota, direto = false) {
   return arquivo.buffer;
 }
 
-async function gerarPrevisualizacaoBoleto(nunota) {
+async function gerarPrevisualizacaoBoleto(nunota, relatorioBoleto = null) {
   const titulos = await executeQuery(`
     SELECT
       FIN.NUFIN,
@@ -1055,7 +1055,8 @@ async function gerarPrevisualizacaoBoleto(nunota) {
     748: 12,
     756: 191
   };
-  const codigoRelatorio = normalizarNumero(primeiro.NURFEMODBOLETO)
+  const codigoRelatorio = normalizarNumero(relatorioBoleto)
+    || normalizarNumero(primeiro.NURFEMODBOLETO)
     || relatorioPadraoPorBanco[codigoBanco]
     || 0;
 
@@ -1102,19 +1103,24 @@ async function gerarPrevisualizacaoBoleto(nunota) {
 
 async function gerarDocumentoFiscalSankhya(nunota, tipo) {
   let usarImpressaoNativaBoleto = false;
+  let relatorioBoleto = null;
   if (tipo === 'boleto') {
     const conta = await garantirContaFaturamento({
       nunota,
       executeQuery,
       atualizarRegistro: atualizarRegistroApi
     });
-    // Usa a impressão da nota e o modelo da conta, sem forçar o relatório
-    // da pré-visualização para as contas corrigidas (Itaú e Sicredi).
-    usarImpressaoNativaBoleto = conta.aplicavel;
+    relatorioBoleto = conta.relatorioBoleto || null;
+    // Itaú mantém a impressão nativa; Sicredi usa o relatório 12 escolhido.
+    usarImpressaoNativaBoleto = conta.aplicavel && !relatorioBoleto;
+  }
+
+  if (relatorioBoleto && !process.env.SANKHYA_OM_BASE_URL) {
+    throw new Error('Configure o acesso direto ao Sankhya para abrir o boleto Sicredi pelo relatório 12.');
   }
 
   if (tipo === 'boleto' && process.env.SANKHYA_OM_BASE_URL && !usarImpressaoNativaBoleto) {
-    const pdfBoleto = await gerarPrevisualizacaoBoleto(nunota);
+    const pdfBoleto = await gerarPrevisualizacaoBoleto(nunota, relatorioBoleto);
     if (!pdfBoleto.subarray(0, 4).equals(Buffer.from('%PDF'))) {
       throw new Error('O Sankhya retornou um arquivo invalido para BOLETO.');
     }

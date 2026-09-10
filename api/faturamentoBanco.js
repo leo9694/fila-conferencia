@@ -87,7 +87,7 @@ async function garantirContaFaturamento({ nunota, executeQuery, atualizarRegistr
     throw erro;
   }
 
-  return { aplicavel: true, corrigidos: divergentes.length };
+  return { aplicavel: true, corrigidos: divergentes.length, ...(sicredi ? { relatorioBoleto: 12 } : {}) };
 }
 
 module.exports = {

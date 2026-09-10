@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const api = require('../api/sankhyaApi');
 const banco = require('../api/faturamentoBanco');
 
-function preparar(t, { itau = true, direto = true, semChave = false, erroConta = false } = {}) {
+function preparar(t, { itau = true, sicredi = false, direto = true, semChave = false, erroConta = false } = {}) {
   const ambienteOriginal = process.env.SANKHYA_OM_BASE_URL;
   if (direto) process.env.SANKHYA_OM_BASE_URL = 'http://sankhya.test/mge';
   else delete process.env.SANKHYA_OM_BASE_URL;
@@ -17,16 +17,23 @@ function preparar(t, { itau = true, direto = true, semChave = false, erroConta =
   t.mock.method(banco, 'garantirContaFaturamento', async () => {
     chamadas.push('conta');
     if (erroConta) throw new Error('Conta divergente');
-    return { aplicavel: itau, corrigidos: 0 };
+    return { aplicavel: itau || sicredi, corrigidos: 0, ...(sicredi ? { relatorioBoleto: 12 } : {}) };
   });
   t.mock.method(api, 'executeQuery', async () => [{
-    NUFIN: 200, CODEMP: 1, CODCTABCOINT: 50, CODBCO: 1, NURFEMODBOLETO: 11
+    NUFIN: 200, CODEMP: 1, CODCTABCOINT: sicredi ? 82 : 50, CODBCO: sicredi ? 748 : 1, NURFEMODBOLETO: sicredi ? 314 : 11
   }]);
   t.mock.method(api, 'executeService', async (servico, payload, opcoes) => {
     chamadas.push({ servico, payload, opcoes });
     return semChave ? {} : { responseBody: { documento: { valor: 'arquivo-teste' } } };
   });
-  t.mock.method(api, 'executeDirectService', async (servico) => {
+  t.mock.method(api, 'executeDirectService', async (servico, payload) => {
+    if (sicredi) {
+      assert.equal(payload.configBoleto.codigoRelatorio, 12);
+      assert.equal(payload.configBoleto.codBco, '82');
+      assert.equal(payload.configBoleto.codigoConta, '748');
+      assert.equal(payload.configBoleto.gerarNumeroBoleto, false);
+      assert.equal(payload.configBoleto.registraConta, false);
+    }
     chamadas.push(servico);
     return { responseBody: { documento: { valor: 'arquivo-teste' } } };
   });
@@ -63,11 +70,10 @@ test('preserva pré-visualização direta dos demais bancos e empresas', async (
   assert.deepEqual(chamadas, ['conta', 'BoletoSP.buildPreVisualizacao', 'downloadDirectFile:visualizadorArquivos.mge']);
 });
 
-test('usa impressão nativa para conta Sicredi corrigida sem impor modelo antigo', async (t) => {
-  const { gerar, chamadas } = preparar(t);
+test('imprime Sicredi conta 82 pelo relatório 12 sem gerar novo nosso número', async (t) => {
+  const { gerar, chamadas } = preparar(t, { sicredi: true });
   await gerar(100, 'boleto');
-  assert.equal(chamadas[1].servico, 'ImpressaoNotasSP.imprimeDocumentos');
-  assert.equal(chamadas.includes('BoletoSP.buildPreVisualizacao'), false);
+  assert.deepEqual(chamadas, ['conta', 'BoletoSP.buildPreVisualizacao', 'downloadDirectFile:visualizadorArquivos.mge']);
 });
 
 test('preserva impressão nativa sem OM direto para outros bancos', async (t) => {

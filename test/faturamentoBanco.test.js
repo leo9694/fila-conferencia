@@ -21,11 +21,11 @@ test('migra Sicredi selecionado para conta 82 e preserva títulos baixados e out
       Object.assign(titulos.find((titulo) => titulo.NUFIN === key.NUFIN), fields);
     }
   };
-  assert.deepEqual(await garantirContaFaturamento(deps), { aplicavel: true, corrigidos: 1 });
+  assert.deepEqual(await garantirContaFaturamento(deps), { aplicavel: true, corrigidos: 1, relatorioBoleto: 12 });
   assert.equal(titulos[0].CODCTABCOINT, 82);
   assert.equal(titulos[0].CODBCO, 748);
   assert.deepEqual(alterados, [1]);
-  assert.deepEqual(await garantirContaFaturamento(deps), { aplicavel: true, corrigidos: 0 });
+  assert.deepEqual(await garantirContaFaturamento(deps), { aplicavel: true, corrigidos: 0, relatorioBoleto: 12 });
 });
 
 test('recusa conta 82 cadastrada com banco incompatível sem alterar títulos', async () => {
