@@ -14,7 +14,7 @@ function preparar(t, { itau = true, direto = true, semChave = false, erroConta =
     else process.env.SANKHYA_OM_BASE_URL = ambienteOriginal;
     delete require.cache[require.resolve('../routes')];
   });
-  t.mock.method(banco, 'garantirContaItauEmpresa8', async () => {
+  t.mock.method(banco, 'garantirContaFaturamento', async () => {
     chamadas.push('conta');
     if (erroConta) throw new Error('Conta divergente');
     return { aplicavel: itau, corrigidos: 0 };
@@ -61,6 +61,13 @@ test('preserva pré-visualização direta dos demais bancos e empresas', async (
   const { gerar, chamadas } = preparar(t, { itau: false });
   await gerar(100, 'boleto');
   assert.deepEqual(chamadas, ['conta', 'BoletoSP.buildPreVisualizacao', 'downloadDirectFile:visualizadorArquivos.mge']);
+});
+
+test('usa impressão nativa para conta Sicredi corrigida sem impor modelo antigo', async (t) => {
+  const { gerar, chamadas } = preparar(t);
+  await gerar(100, 'boleto');
+  assert.equal(chamadas[1].servico, 'ImpressaoNotasSP.imprimeDocumentos');
+  assert.equal(chamadas.includes('BoletoSP.buildPreVisualizacao'), false);
 });
 
 test('preserva impressão nativa sem OM direto para outros bancos', async (t) => {

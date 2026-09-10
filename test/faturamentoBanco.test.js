@@ -1,6 +1,48 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { garantirContaItauEmpresa8 } = require('../api/faturamentoBanco');
+const { garantirContaFaturamento } = require('../api/faturamentoBanco');
+
+test('migra Sicredi selecionado para conta 82 e preserva títulos baixados e outras modalidades', async () => {
+  const titulos = [
+    { NUFIN: 1, CODCTABCOINT: 3, CODBCO: 748, CODTIPTIT: 19, RECDESP: 1 },
+    { NUFIN: 2, CODCTABCOINT: 3, CODBCO: 748, CODTIPTIT: 4, RECDESP: 1, DHBAIXA: '10/09/2026' },
+    { NUFIN: 3, CODCTABCOINT: 3, CODBCO: 748, CODTIPTIT: 1, RECDESP: 1 }
+  ];
+  const alterados = [];
+  const deps = {
+    nunota: 100,
+    executeQuery: async (sql) => sql.includes('FROM TGFCAB')
+      ? [{ CODEMP: 1, AD_BANCO: 3, BANCO_SELECIONADO: 748, BANCO_CONTA_SICREDI: 748 }]
+      : titulos.map((titulo) => ({ ...titulo })),
+    atualizarRegistro: async (entity, key, fields) => {
+      assert.equal(entity, 'Financeiro');
+      alterados.push(key.NUFIN);
+      Object.assign(titulos.find((titulo) => titulo.NUFIN === key.NUFIN), fields);
+    }
+  };
+  assert.deepEqual(await garantirContaFaturamento(deps), { aplicavel: true, corrigidos: 1 });
+  assert.equal(titulos[0].CODCTABCOINT, 82);
+  assert.equal(titulos[0].CODBCO, 748);
+  assert.deepEqual(alterados, [1]);
+  assert.deepEqual(await garantirContaFaturamento(deps), { aplicavel: true, corrigidos: 0 });
+});
+
+test('recusa conta 82 cadastrada com banco incompatível sem alterar títulos', async () => {
+  await assert.rejects(garantirContaFaturamento({
+    nunota: 100,
+    executeQuery: async () => [{ AD_BANCO: 82, BANCO_CONTA_SICREDI: 756 }],
+    atualizarRegistro: async () => assert.fail('Não deve gravar conta incompatível')
+  }), /não está cadastrada como Sicredi/);
+});
+
+test('não confunde Sicoob com Sicredi', async () => {
+  assert.deepEqual(await garantirContaFaturamento({
+    nunota: 100,
+    executeQuery: async () => [{ CODEMP: 8, AD_BANCO: 51, BANCO_SELECIONADO: 756 }],
+    atualizarRegistro: async () => assert.fail('Não deve alterar Sicoob')
+  }), { aplicavel: false, corrigidos: 0 });
+});
 
 test('prepara financeiro do pedido Itaú que veio com a conta Sicoob sem duplicar correção', async () => {
   const titulo = { NUFIN: 516287, CODCTABCOINT: 51, CODBCO: 756, CODTIPTIT: 19, RECDESP: 1, DHBAIXA: null };

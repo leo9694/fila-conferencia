@@ -1,6 +1,8 @@
 const EMPRESA_MS = 8;
 const CONTA_ITAU_MS = 71;
 const BANCO_ITAU = 341;
+const CONTA_SICREDI = 82;
+const BANCO_SICREDI = 748;
 const TIPOS_TITULO_BOLETO = new Set([4, 19]);
 
 function numeroInteiro(valor) {
@@ -14,24 +16,33 @@ function tituloElegivelParaCorrecao(titulo) {
     && !titulo.DHBAIXA;
 }
 
-async function garantirContaItauEmpresa8({ nunota, executeQuery, atualizarRegistro }) {
+async function garantirContaFaturamento({ nunota, executeQuery, atualizarRegistro }) {
   const numeroNota = numeroInteiro(nunota);
   if (!numeroNota) {
     throw new TypeError('NUNOTA inválido para validar a conta bancária do faturamento.');
   }
 
   const [cabecalho] = await executeQuery(`
-    SELECT NUNOTA, CODEMP, AD_BANCO
-    FROM TGFCAB
-    WHERE NUNOTA = ${numeroNota}
+    SELECT CAB.NUNOTA, CAB.CODEMP, CAB.AD_BANCO, CTA.CODBCO AS BANCO_SELECIONADO,
+           DEST.CODBCO AS BANCO_CONTA_SICREDI
+    FROM TGFCAB CAB
+    LEFT JOIN TSICTA CTA ON CTA.CODCTABCOINT = CAB.AD_BANCO
+    LEFT JOIN TSICTA DEST ON DEST.CODCTABCOINT = ${CONTA_SICREDI}
+    WHERE CAB.NUNOTA = ${numeroNota}
   `);
 
-  if (
-    numeroInteiro(cabecalho?.CODEMP) !== EMPRESA_MS
-    || numeroInteiro(cabecalho?.AD_BANCO) !== CONTA_ITAU_MS
-  ) {
+  const sicredi = numeroInteiro(cabecalho?.BANCO_SELECIONADO) === BANCO_SICREDI
+    || numeroInteiro(cabecalho?.AD_BANCO) === CONTA_SICREDI;
+  const itau = numeroInteiro(cabecalho?.CODEMP) === EMPRESA_MS
+    && numeroInteiro(cabecalho?.AD_BANCO) === CONTA_ITAU_MS;
+  if (!sicredi && !itau) {
     return { aplicavel: false, corrigidos: 0 };
   }
+  if (sicredi && numeroInteiro(cabecalho?.BANCO_CONTA_SICREDI) !== BANCO_SICREDI) {
+    throw new Error('A conta 82 não está cadastrada como Sicredi no Sankhya. Revise a conta antes de faturar.');
+  }
+  const contaDestino = sicredi ? CONTA_SICREDI : CONTA_ITAU_MS;
+  const bancoDestino = sicredi ? BANCO_SICREDI : BANCO_ITAU;
 
   const titulos = await executeQuery(`
     SELECT NUFIN, CODCTABCOINT, CODBCO, CODTIPTIT, RECDESP, DHBAIXA
@@ -42,8 +53,8 @@ async function garantirContaItauEmpresa8({ nunota, executeQuery, atualizarRegist
   const divergentes = titulos.filter((titulo) => (
     tituloElegivelParaCorrecao(titulo)
     && (
-      numeroInteiro(titulo.CODCTABCOINT) !== CONTA_ITAU_MS
-      || numeroInteiro(titulo.CODBCO) !== BANCO_ITAU
+      numeroInteiro(titulo.CODCTABCOINT) !== contaDestino
+      || numeroInteiro(titulo.CODBCO) !== bancoDestino
     )
   ));
 
@@ -51,7 +62,7 @@ async function garantirContaItauEmpresa8({ nunota, executeQuery, atualizarRegist
     await atualizarRegistro(
       'Financeiro',
       { NUFIN: numeroInteiro(titulo.NUFIN) },
-      { CODCTABCOINT: CONTA_ITAU_MS, CODBCO: BANCO_ITAU }
+      { CODCTABCOINT: contaDestino, CODBCO: bancoDestino }
     );
   }
 
@@ -64,13 +75,13 @@ async function garantirContaItauEmpresa8({ nunota, executeQuery, atualizarRegist
   const aindaDivergentes = confirmacao.filter((titulo) => (
     tituloElegivelParaCorrecao(titulo)
     && (
-      numeroInteiro(titulo.CODCTABCOINT) !== CONTA_ITAU_MS
-      || numeroInteiro(titulo.CODBCO) !== BANCO_ITAU
+      numeroInteiro(titulo.CODCTABCOINT) !== contaDestino
+      || numeroInteiro(titulo.CODBCO) !== bancoDestino
     )
   ));
 
   if (aindaDivergentes.length > 0) {
-    const erro = new Error('O faturamento da empresa 8 não confirmou a conta Itaú nos títulos financeiros.');
+    const erro = new Error(`O faturamento não confirmou a conta ${contaDestino} (${sicredi ? 'Sicredi' : 'Itaú'}) nos títulos financeiros.`);
     erro.codigo = 'CONTA_BANCARIA_FATURAMENTO_DIVERGENTE';
     erro.nufins = aindaDivergentes.map((titulo) => numeroInteiro(titulo.NUFIN));
     throw erro;
@@ -80,6 +91,7 @@ async function garantirContaItauEmpresa8({ nunota, executeQuery, atualizarRegist
 }
 
 module.exports = {
-  garantirContaItauEmpresa8,
+  garantirContaFaturamento,
+  garantirContaItauEmpresa8: garantirContaFaturamento,
   tituloElegivelParaCorrecao
 };

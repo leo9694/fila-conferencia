@@ -13,7 +13,7 @@ const {
 } = require('./api/sankhyaApi');
 const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
 const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
-const { garantirContaItauEmpresa8 } = require('./api/faturamentoBanco');
+const { garantirContaFaturamento } = require('./api/faturamentoBanco');
 const {
   consolidarLeiturasEntrada,
   planejarDatasEstoqueEntrada,
@@ -1103,13 +1103,13 @@ async function gerarPrevisualizacaoBoleto(nunota) {
 async function gerarDocumentoFiscalSankhya(nunota, tipo) {
   let usarImpressaoNativaBoleto = false;
   if (tipo === 'boleto') {
-    const conta = await garantirContaItauEmpresa8({
+    const conta = await garantirContaFaturamento({
       nunota,
       executeQuery,
       atualizarRegistro: atualizarRegistroApi
     });
     // Usa a impressão da nota e o modelo da conta, sem forçar o relatório
-    // da pré-visualização para o Itaú da empresa 8.
+    // da pré-visualização para as contas corrigidas (Itaú e Sicredi).
     usarImpressaoNativaBoleto = conta.aplicavel;
   }
 
@@ -6881,7 +6881,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     // A finalização nativa pode faturar imediatamente e copiar o financeiro do
     // pedido. Corrigir antes dela; falhas não podem cair no fechamento alternativo.
     if (modo === 'saida') {
-      await garantirContaItauEmpresa8({
+      await garantirContaFaturamento({
         nunota,
         executeQuery,
         atualizarRegistro: atualizarRegistroApi
@@ -6979,7 +6979,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     let erroContaBancariaFaturamento = null;
     if (notaFaturada) {
       try {
-        contaBancariaFaturamento = await garantirContaItauEmpresa8({
+        contaBancariaFaturamento = await garantirContaFaturamento({
           nunota: notaFaturada.NUNOTA,
           executeQuery,
           atualizarRegistro: atualizarRegistroApi
