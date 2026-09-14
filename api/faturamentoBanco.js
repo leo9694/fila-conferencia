@@ -88,7 +88,18 @@ async function garantirContaFaturamento({ nunota, executeQuery, atualizarRegistr
     throw erro;
   }
 
-  const relatorioConta = numeroInteiro(cabecalho.RELATORIO_CONTA_SICREDI);
+  let relatorioConta = numeroInteiro(cabecalho.RELATORIO_CONTA_SICREDI);
+  if (sicredi && !(relatorioConta > 0)) {
+    // O modelo de impressão da conta também pode apontar para um relatório
+    // pela TGFMON, mesmo com NURFEMODBOLETO vazio na TSICTA.
+    const [modelo] = await executeQuery(`
+      SELECT MON.NURFE AS RELATORIO_MODELO
+      FROM TSICTA CTA
+      INNER JOIN TGFMON MON ON MON.CODMODNF = CTA.MODBOLETA
+      WHERE CTA.CODCTABCOINT = ${CONTA_SICREDI}
+    `);
+    relatorioConta = numeroInteiro(modelo?.RELATORIO_MODELO);
+  }
   return {
     aplicavel: true,
     corrigidos: divergentes.length,

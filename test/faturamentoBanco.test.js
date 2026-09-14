@@ -41,6 +41,40 @@ test('consulta o modelo atual da conta 82 a cada solicitação sem fixar relató
   }
 });
 
+test('resolve o relatório do modelo de impressão da conta 82 quando o relatório direto está vazio', async () => {
+  const consultas = [];
+  const resultado = await garantirContaFaturamento({
+    nunota: 3882929,
+    executeQuery: async (sql) => {
+      consultas.push(sql);
+      if (sql.includes('FROM TGFCAB')) {
+        return [{ AD_BANCO: 82, BANCO_CONTA_SICREDI: 748, RELATORIO_CONTA_SICREDI: null }];
+      }
+      if (sql.includes('INNER JOIN TGFMON')) {
+        assert.match(sql, /MON.CODMODNF = CTA.MODBOLETA/);
+        assert.match(sql, /CTA.CODCTABCOINT = 82/);
+        return [{ RELATORIO_MODELO: 305 }];
+      }
+      return [];
+    },
+    atualizarRegistro: async () => assert.fail('Não deve alterar financeiro')
+  });
+  assert.equal(resultado.relatorioBoleto, 305);
+  assert.equal(consultas.filter((sql) => sql.includes('INNER JOIN TGFMON')).length, 1);
+});
+
+test('não consulta modelo Sicredi para faturamento Itaú', async () => {
+  const resultado = await garantirContaFaturamento({
+    nunota: 100,
+    executeQuery: async (sql) => {
+      assert.doesNotMatch(sql, /INNER JOIN TGFMON/);
+      return sql.includes('FROM TGFCAB') ? [{ CODEMP: 8, AD_BANCO: 71 }] : [];
+    },
+    atualizarRegistro: async () => assert.fail('Não deve alterar financeiro')
+  });
+  assert.deepEqual(resultado, { aplicavel: true, corrigidos: 0 });
+});
+
 test('recusa conta 82 cadastrada com banco incompatível sem alterar títulos', async () => {
   await assert.rejects(garantirContaFaturamento({
     nunota: 100,
