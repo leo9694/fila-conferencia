@@ -24,7 +24,8 @@ async function garantirContaFaturamento({ nunota, executeQuery, atualizarRegistr
 
   const [cabecalho] = await executeQuery(`
     SELECT CAB.NUNOTA, CAB.CODEMP, CAB.AD_BANCO, CTA.CODBCO AS BANCO_SELECIONADO,
-           DEST.CODBCO AS BANCO_CONTA_SICREDI
+           DEST.CODBCO AS BANCO_CONTA_SICREDI,
+           DEST.NURFEMODBOLETO AS RELATORIO_CONTA_SICREDI
     FROM TGFCAB CAB
     LEFT JOIN TSICTA CTA ON CTA.CODCTABCOINT = CAB.AD_BANCO
     LEFT JOIN TSICTA DEST ON DEST.CODCTABCOINT = ${CONTA_SICREDI}
@@ -87,7 +88,12 @@ async function garantirContaFaturamento({ nunota, executeQuery, atualizarRegistr
     throw erro;
   }
 
-  return { aplicavel: true, corrigidos: divergentes.length, ...(sicredi ? { relatorioBoleto: 12 } : {}) };
+  const relatorioConta = numeroInteiro(cabecalho.RELATORIO_CONTA_SICREDI);
+  return {
+    aplicavel: true,
+    corrigidos: divergentes.length,
+    ...(sicredi ? { relatorioBoleto: relatorioConta > 0 ? relatorioConta : null } : {})
+  };
 }
 
 module.exports = {

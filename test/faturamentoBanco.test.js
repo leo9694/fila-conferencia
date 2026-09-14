@@ -13,7 +13,7 @@ test('migra Sicredi selecionado para conta 82 e preserva títulos baixados e out
   const deps = {
     nunota: 100,
     executeQuery: async (sql) => sql.includes('FROM TGFCAB')
-      ? [{ CODEMP: 1, AD_BANCO: 3, BANCO_SELECIONADO: 748, BANCO_CONTA_SICREDI: 748 }]
+      ? [{ CODEMP: 1, AD_BANCO: 3, BANCO_SELECIONADO: 748, BANCO_CONTA_SICREDI: 748, RELATORIO_CONTA_SICREDI: 314 }]
       : titulos.map((titulo) => ({ ...titulo })),
     atualizarRegistro: async (entity, key, fields) => {
       assert.equal(entity, 'Financeiro');
@@ -21,11 +21,24 @@ test('migra Sicredi selecionado para conta 82 e preserva títulos baixados e out
       Object.assign(titulos.find((titulo) => titulo.NUFIN === key.NUFIN), fields);
     }
   };
-  assert.deepEqual(await garantirContaFaturamento(deps), { aplicavel: true, corrigidos: 1, relatorioBoleto: 12 });
+  assert.deepEqual(await garantirContaFaturamento(deps), { aplicavel: true, corrigidos: 1, relatorioBoleto: 314 });
   assert.equal(titulos[0].CODCTABCOINT, 82);
   assert.equal(titulos[0].CODBCO, 748);
   assert.deepEqual(alterados, [1]);
-  assert.deepEqual(await garantirContaFaturamento(deps), { aplicavel: true, corrigidos: 0, relatorioBoleto: 12 });
+  assert.deepEqual(await garantirContaFaturamento(deps), { aplicavel: true, corrigidos: 0, relatorioBoleto: 314 });
+});
+
+test('consulta o modelo atual da conta 82 a cada solicitação sem fixar relatório', async () => {
+  for (const modelo of [305, 314, null]) {
+    const resultado = await garantirContaFaturamento({
+      nunota: 100,
+      executeQuery: async (sql) => sql.includes('FROM TGFCAB')
+        ? [{ AD_BANCO: 82, BANCO_CONTA_SICREDI: 748, RELATORIO_CONTA_SICREDI: modelo }]
+        : [],
+      atualizarRegistro: async () => assert.fail('Não deve alterar financeiro')
+    });
+    assert.equal(resultado.relatorioBoleto, modelo);
+  }
 });
 
 test('recusa conta 82 cadastrada com banco incompatível sem alterar títulos', async () => {

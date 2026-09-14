@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const api = require('../api/sankhyaApi');
 const banco = require('../api/faturamentoBanco');
 
-function preparar(t, { itau = true, sicredi = false, direto = true, semChave = false, erroConta = false } = {}) {
+function preparar(t, { itau = true, sicredi = false, relatorio = 314, direto = true, semChave = false, erroConta = false } = {}) {
   const ambienteOriginal = process.env.SANKHYA_OM_BASE_URL;
   if (direto) process.env.SANKHYA_OM_BASE_URL = 'http://sankhya.test/mge';
   else delete process.env.SANKHYA_OM_BASE_URL;
@@ -17,7 +17,7 @@ function preparar(t, { itau = true, sicredi = false, direto = true, semChave = f
   t.mock.method(banco, 'garantirContaFaturamento', async () => {
     chamadas.push('conta');
     if (erroConta) throw new Error('Conta divergente');
-    return { aplicavel: itau || sicredi, corrigidos: 0, ...(sicredi ? { relatorioBoleto: 12 } : {}) };
+    return { aplicavel: itau || sicredi, corrigidos: 0, ...(sicredi ? { relatorioBoleto: relatorio } : {}) };
   });
   t.mock.method(api, 'executeQuery', async () => [{
     NUFIN: 200, CODEMP: 1, CODCTABCOINT: sicredi ? 82 : 50, CODBCO: sicredi ? 748 : 1, NURFEMODBOLETO: sicredi ? 314 : 11
@@ -28,7 +28,7 @@ function preparar(t, { itau = true, sicredi = false, direto = true, semChave = f
   });
   t.mock.method(api, 'executeDirectService', async (servico, payload) => {
     if (sicredi) {
-      assert.equal(payload.configBoleto.codigoRelatorio, 12);
+      assert.equal(payload.configBoleto.codigoRelatorio, relatorio);
       assert.equal(payload.configBoleto.codBco, '82');
       assert.equal(payload.configBoleto.codigoConta, '748');
       assert.equal(payload.configBoleto.gerarNumeroBoleto, false);
@@ -70,10 +70,22 @@ test('preserva pré-visualização direta dos demais bancos e empresas', async (
   assert.deepEqual(chamadas, ['conta', 'BoletoSP.buildPreVisualizacao', 'downloadDirectFile:visualizadorArquivos.mge']);
 });
 
-test('imprime Sicredi conta 82 pelo relatório 12 sem gerar novo nosso número', async (t) => {
+test('imprime Sicredi conta 82 pelo relatório configurado sem gerar novo nosso número', async (t) => {
   const { gerar, chamadas } = preparar(t, { sicredi: true });
   await gerar(100, 'boleto');
   assert.deepEqual(chamadas, ['conta', 'BoletoSP.buildPreVisualizacao', 'downloadDirectFile:visualizadorArquivos.mge']);
+});
+
+test('acompanha mudança de relatório da conta Sicredi', async (t) => {
+  const { gerar } = preparar(t, { sicredi: true, relatorio: 305 });
+  await gerar(100, 'boleto');
+});
+
+test('usa impressão nativa Sicredi quando a conta não define relatório formatado', async (t) => {
+  const { gerar, chamadas } = preparar(t, { sicredi: true, relatorio: null });
+  await gerar(100, 'boleto');
+  assert.equal(chamadas[1].servico, 'ImpressaoNotasSP.imprimeDocumentos');
+  assert.equal(chamadas.includes('BoletoSP.buildPreVisualizacao'), false);
 });
 
 test('preserva impressão nativa sem OM direto para outros bancos', async (t) => {

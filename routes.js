@@ -1111,12 +1111,12 @@ async function gerarDocumentoFiscalSankhya(nunota, tipo) {
       atualizarRegistro: atualizarRegistroApi
     });
     relatorioBoleto = conta.relatorioBoleto || null;
-    // Itaú mantém a impressão nativa; Sicredi usa o relatório 12 escolhido.
+    // Sicredi usa o relatório da conta; sem relatório, mantém a impressão nativa.
     usarImpressaoNativaBoleto = conta.aplicavel && !relatorioBoleto;
   }
 
   if (relatorioBoleto && !process.env.SANKHYA_OM_BASE_URL) {
-    throw new Error('Configure o acesso direto ao Sankhya para abrir o boleto Sicredi pelo relatório 12.');
+    throw new Error('Configure o acesso direto ao Sankhya para abrir o boleto Sicredi pelo relatório configurado na conta 82.');
   }
 
   if (tipo === 'boleto' && process.env.SANKHYA_OM_BASE_URL && !usarImpressaoNativaBoleto) {
