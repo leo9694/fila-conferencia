@@ -10,7 +10,7 @@
   const HIDDEN_CONVERSATIONS_KEY = 'fila-conferencia.chat.hidden-conversations';
   const UI_CACHE_KEY = 'fila-conferencia.chat.ui-cache.v1';
   const CHANNEL_FILTER_KEY = 'fila-conferencia.chat.channel-filter';
-  const NOTIFICATION_SOUND_URLS = ['/chat-message-notification.mp3'];
+  const NOTIFICATION_SOUND_URLS = ['/chat-message-notification-07.mp3'];
   const SENT_MESSAGE_SOUND_URL = '/chat-message-sent.mp3';
   const UI_CACHE_TTL = 10 * 60 * 1000;
   const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
