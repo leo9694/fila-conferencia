@@ -14,6 +14,7 @@ const {
 const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
 const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
 const { garantirContaFaturamento } = require('./api/faturamentoBanco');
+const { planejarDetalhesConferenciaSaida } = require('./api/conferenciaSaida');
 const {
   consolidarLeiturasEntrada,
   planejarDatasEstoqueEntrada,
@@ -2104,33 +2105,21 @@ async function salvarDetalhesConferenciaSankhya({ nuconf, nunota }) {
 
   const dhAlter = formatarDataHoraSankhya();
   const detalhesExistentes = await executeQuery(`
-    SELECT SEQCONF
+    SELECT SEQCONF, CODPROD, CODBARRA, CODVOL, CONTROLE
     FROM TGFCOI2
     WHERE NUCONF = ${nuconf}
     ORDER BY SEQCONF
   `);
-  const sequenciasExistentes = new Set(detalhesExistentes.map((item) => Number(item.SEQCONF)));
-
-  let seqConf = 1;
-  for (const item of itens) {
-    const qtdConferida = Math.max(0, normalizarNumero(item.QTDNEG) - normalizarNumero(item.QTDCORTE));
-
-    if (qtdConferida <= 0) {
-      continue;
-    }
-
-    const qtdConferidaApi = numeroApi(qtdConferida);
+  const plano = planejarDetalhesConferenciaSaida(itens, detalhesExistentes);
+  for (const { detalhe, seqConf, existente } of plano.atribuicoes) {
     const campos = {
-      CODBARRA: item.CODBARRACONF || item.CODBARRA || item.CODPROD,
-      CODPROD: item.CODPROD,
-      CODVOL: item.CODVOLCONF || item.CODVOL || 'UN',
-      CONTROLE: normalizarControleConferencia(item.CONTROLE),
-      QTDCONFVOLPAD: qtdConferidaApi,
-      QTDCONF: qtdConferidaApi,
+      ...detalhe,
+      QTDCONFVOLPAD: numeroApi(detalhe.QTDCONFVOLPAD),
+      QTDCONF: numeroApi(detalhe.QTDCONF),
       DHALTER: dhAlter
     };
 
-    if (sequenciasExistentes.has(seqConf)) {
+    if (existente) {
       await atualizarRegistroApi(
         'DetalhesConferencia',
         { NUCONF: nuconf, SEQCONF: seqConf },
@@ -2142,10 +2131,14 @@ async function salvarDetalhesConferenciaSankhya({ nuconf, nunota }) {
         SEQCONF: seqConf,
         ...campos
       });
-      sequenciasExistentes.add(seqConf);
     }
-
-    seqConf += 1;
+  }
+  for (const seqConf of plano.sequenciasObsoletas) {
+    await atualizarRegistroApi('DetalhesConferencia', { NUCONF: nuconf, SEQCONF: seqConf }, {
+      QTDCONF: 0,
+      QTDCONFVOLPAD: 0,
+      DHALTER: dhAlter
+    });
   }
 }
 
