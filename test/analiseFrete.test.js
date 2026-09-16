@@ -1,0 +1,78 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { calcularFormulaFrete } = require('../api/formulaFrete');
+const { filtrosAnalise, sqlPedidos, sqlSimulacoes, sqlFretesReais, simularTabelas, compararFrete, carregarAnaliseFrete } = require('../api/analiseFrete');
+
+const formula = `IF((VLRNOTA*PERCENTUAL/100)>(PESO/1000*VALOR),
+  IF((VLRNOTA*PERCENTUAL/100)>VLRMIN,(VLRNOTA*PERCENTUAL/100),VLRMIN),
+  IF((PESO/1000*VALOR)>VLRMIN,(PESO/1000*VALOR),VLRMIN))
+  +(VLRNOTA*1/100)+(IF((PESO/100)>TRUNC(PESO/100,0),TRUNC(PESO/100,0)+1,TRUNC(PESO/100,0))*2.05)`;
+const rota = { NUNOTA: 10, NUCFR: 5, DESCRCALCFRET: 'CARVALIMA', REGIAO: 'R6', CODEVENTO: 2,
+  FORMULA: formula, VALOR: 807.53, PERCENTUAL: 2, VLRMIN: 60.57, PESO: 10, VLRNOTA: 400 };
+
+test('calcula fórmula cadastrada com mínimo, percentual e pedágio por fração', () => {
+  assert.equal(simularTabelas([rota])[0].valor, 66.62);
+  assert.equal(simularTabelas([{ ...rota, PESO: 1000 }])[0].valor, 832.03);
+  assert.equal(simularTabelas([{ ...rota, PESO: 100, VLRNOTA: 10000 }])[0].valor, 302.05);
+});
+
+test('não executa código e não substitui fórmulas desconhecidas por estimativas', () => {
+  for (const texto of ['process.exit()', '1;2', 'UNSUPPORTED(1)', '1/0', 'PESO+NAOEXISTE']) {
+    assert.throws(() => calcularFormulaFrete(texto, { PESO: 10 }));
+  }
+  assert.equal(simularTabelas([{ ...rota, FORMULA: 'EVENTO(1)' }])[0].valor, null);
+  assert.equal(simularTabelas([rota, rota])[0].valor, null);
+});
+
+test('mantém tabelas alternativas separadas e soma eventos de cada tabela', () => {
+  const resultado = simularTabelas([rota, { ...rota, CODEVENTO: 3, FORMULA: '10' }, { ...rota, NUCFR: 6, FORMULA: '40' }]);
+  assert.equal(resultado[0].valor, 76.62);
+  assert.equal(resultado[1].valor, 40);
+});
+
+test('rejeita filtros e identificadores inválidos antes do SQL', () => {
+  assert.throws(() => filtrosAnalise({ dataInicial: '2026-02-30', dataFinal: '2026-03-01' }));
+  assert.throws(() => filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-02', transportadora: '1 OR 1=1' }));
+  assert.throws(() => sqlSimulacoes(['1 OR 1=1']));
+  assert.throws(() => sqlFretesReais([NaN]));
+});
+
+test('restringe sugestão pela transportadora, região da tabela e cidades da rota', () => {
+  const sql = sqlSimulacoes([10]);
+  assert.match(sql, /P.CODPARC=CAB.CODPARCTRANSP/);
+  assert.match(sql, /F.NUCFR=R.NUCFR AND F.CODREG=R.CODREGDEST/);
+  assert.match(sql, /CAB.PESOBRUTO PESO/);
+  assert.match(sqlFretesReais([10]), /STATUS_IMPORTACAO/);
+  assert.match(sqlPedidos(filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-31' })), /PAR.CODPARC, PAR.NOMEPARC CLIENTE/);
+  assert.match(sqlPedidos(filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-31' })), /EMP.NOMEFANTASIA NOMEEMP/);
+  assert.match(sqlPedidos(filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-31' })), /NOT EXISTS/);
+});
+
+test('deduplica CT-e, calcula diferença real menos sugerido e não confunde ausência com zero', () => {
+  const cte = { CHAVEACESSO: 'chave', FRETE_REAL: 70, COMPARTILHADO: 0 };
+  const resultado = compararFrete({}, [cte, cte], [{ valor: 66.62 }]);
+  assert.equal(resultado.real, 70);
+  assert.equal(resultado.simulacoes[0].diferenca, 3.38);
+  assert.equal(compararFrete({}, [], [{ valor: 66.62 }]).simulacoes[0].diferenca, null);
+  assert.equal(compararFrete({}, [{ ...cte, FRETE_REAL: null }], [{ valor: 10 }]).real, null);
+  assert.equal(compararFrete({}, [{ ...cte, FRETE_REAL: 0 }], [{ valor: 10 }]).simulacoes[0].diferenca, -10);
+});
+
+test('usa somente a parcela por peso do CT-e compartilhado em cada pedido', () => {
+  const resultado = compararFrete({}, [{ CHAVEACESSO: 'x', FRETE_CTE_TOTAL: 200, FRETE_REAL: 80, COMPARTILHADO: 1 }], [{ valor: 50 }]);
+  assert.equal(resultado.real, 80);
+  assert.equal(resultado.simulacoes[0].diferenca, 30);
+  assert.equal(resultado.ctes[0].FRETE_CTE_TOTAL, 200);
+});
+
+test('carrega página com consultas em lote e sem acessar estimativa histórica', async () => {
+  const respostas = [[{ NUNOTA: 10, TOTAL: 1 }], [], [rota], [{ CODPARC: 644, NOMEPARC: 'CARVALIMA' }]];
+  let chamadas = 0;
+  const resultado = await carregarAnaliseFrete({ dataInicial: '2026-01-01', dataFinal: '2026-01-31' }, async (sql) => {
+    assert.match(sql, /^SELECT|^WITH/);
+    return respostas[chamadas++];
+  });
+  assert.equal(chamadas, 4);
+  assert.equal(resultado.linhas[0].simulacoes[0].valor, 66.62);
+  assert.equal(resultado.transportadoras.length, 1);
+});

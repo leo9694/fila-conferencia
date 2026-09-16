@@ -866,7 +866,7 @@ function atualizarItemAtivoNavegacaoGlobal(tela) {
       || (tela === 'contagem' && alvo === 'abrir-contagem-estoque')
       || (tela === 'vendas' && alvo === 'abrir-vendas-gerais')
       || (tela === 'relatorios' && alvo === 'abrir-relatorios')
-      || (tela === 'transporte' && alvo === 'abrir-transporte')
+      || (tela === 'transporte' && alvo === (window.location.hash === '#transporte/analise' ? 'abrir-analise-frete' : 'abrir-transporte'))
       || (tela === 'chat' && alvo === 'abrir-chat');
     item.classList.toggle('is-active', ativo);
     if (ativo) {
@@ -909,6 +909,10 @@ function executarDestinoHome(id) {
   }
   if (id === 'abrir-transporte') {
     abrirTransporte();
+    return;
+  }
+  if (id === 'abrir-analise-frete') {
+    abrirTransporte(true);
     return;
   }
   if (id === 'abrir-chat') {
@@ -1895,7 +1899,7 @@ async function abrirChat(conversationId = null, { substituirHistorico = false } 
   }
 }
 
-async function abrirTransporte() {
+async function abrirTransporte(analise = false) {
   const controller = window.transporteDashboardController;
   if (!controller) return;
   if (!controller.permitido && !await controller.verificarAcesso()) {
@@ -1904,8 +1908,8 @@ async function abrirTransporte() {
   }
 
   mostrarHomeESuspenderRefresh();
+  history.pushState({ tela: 'transporte' }, '', analise ? '#transporte/analise' : '#transporte');
   mostrarTransporte();
-  history.pushState({ tela: 'transporte' }, '', '#transporte');
   try {
     await controller.preparar();
   } catch (error) {
@@ -10222,7 +10226,7 @@ async function prepararSessaoAutenticada(usuario) {
     return;
   }
 
-  if (window.location.hash === '#transporte') {
+  if (['#transporte', '#transporte/analise'].includes(window.location.hash)) {
     if (!window.transporteDashboardController?.permitido) {
       mostrarHome();
       history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);
@@ -10230,7 +10234,7 @@ async function prepararSessaoAutenticada(usuario) {
     }
     mostrarTransporte();
     await window.transporteDashboardController.preparar().catch((error) => console.error('Erro ao restaurar transporte:', error));
-    history.replaceState({ tela: 'transporte' }, '', '#transporte');
+    history.replaceState({ tela: 'transporte' }, '', window.location.hash);
     return;
   }
 
@@ -11216,7 +11220,7 @@ window.addEventListener('popstate', (event) => {
     return;
   }
 
-  if (state?.tela === 'transporte' || window.location.hash === '#transporte') {
+  if (state?.tela === 'transporte' || ['#transporte', '#transporte/analise'].includes(window.location.hash)) {
     if (!window.transporteDashboardController?.permitido) {
       mostrarHomeESuspenderRefresh();
       history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);

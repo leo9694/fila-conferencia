@@ -46,7 +46,11 @@
   function codigoUsuario(usuario) { return normalizarCodigoUsuario(usuario?.codUsu ?? usuario?.CODUSU ?? usuario); }
   function chaveUsuario(codigo) { return codigo === null ? null : `${CHAVE_SESSAO}:${codigo}`; }
   function permissaoConfirmada(usuario) { return Boolean(usuario?.gruposConfirmados && usuario?.permissoes?.transporte); }
-  function atualizarMenu() { const menu = $('home-nav-transporte'); if (menu) menu.hidden = !permitido; }
+  function atualizarMenu() {
+    ['home-nav-transporte', 'home-nav-analise-frete'].forEach((id) => {
+      const menu = $(id); if (menu) menu.hidden = !permitido;
+    });
+  }
 
   async function verificarAcesso(usuarioOuCodigo = codigoUsuarioAtual) {
     const usuario = usuarioOuCodigo && typeof usuarioOuCodigo === 'object' ? usuarioOuCodigo : null;
@@ -328,6 +332,10 @@
 
   async function preparar() {
     if (!permitido) return;
+    const analise = window.location.hash === '#transporte/analise';
+    $('transporte-painel').hidden = analise;
+    $('analise-frete-painel').hidden = !analise;
+    if (analise) return window.analiseFreteController?.preparar();
     if (!elementos.dataInicial.value) elementos.dataInicial.value = inicioPadrao();
     if (!elementos.dataFinal.value) elementos.dataFinal.value = hoje();
     await carregar();
@@ -340,6 +348,6 @@
 
   window.transporteDashboardController = {
     get permitido() { return permitido; }, verificarAcesso, preparar,
-    limparSessao() { permitido = false; dados = null; estadoDetalhado = ''; cidadeDetalhada = ''; codigoUsuarioAtual = null; atualizarMenu(); }
+    limparSessao() { window.analiseFreteController?.limparSessao(); permitido = false; dados = null; estadoDetalhado = ''; cidadeDetalhada = ''; codigoUsuarioAtual = null; atualizarMenu(); }
   };
 }());

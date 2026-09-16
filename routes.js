@@ -72,6 +72,7 @@ const {
   validarPeriodo
 } = require('./api/relatorioCtes');
 const { montarSqlEstimativaFrete, normalizarEstimativaFrete } = require('./api/estimativaFrete');
+const { carregarAnaliseFrete } = require('./api/analiseFrete');
 const {
   TOP_FATURAMENTO_VENDAS,
   consolidarDashboardVendas,
@@ -2645,6 +2646,17 @@ router.get('/transporte/malhas/estados/:uf/municipios', exigirGerenciaOuDiretori
     const status = err.statusCode || 502;
     if (status >= 500) console.error('Erro ao carregar malha municipal do IBGE:', err.message);
     res.status(status).json({ erro: status === 400 ? err.message : 'Não foi possível carregar a malha municipal do IBGE.' });
+  }
+});
+
+router.get('/transporte/analise-frete', exigirGerenciaOuDiretoria, async (req, res) => {
+  try {
+    const resultado = await carregarAnaliseFrete(req.query, executeQuery);
+    res.json(resultado);
+  } catch (err) {
+    console.error('Erro na análise de frete:', err.message);
+    res.status(/inválid|valid|data|período|Página/i.test(err.message) ? 400 : 502)
+      .json({ erro: 'Não foi possível carregar a análise de frete. Confira o período e tente novamente.' });
   }
 });
 

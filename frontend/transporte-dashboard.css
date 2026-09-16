@@ -10,6 +10,38 @@
   color: #102d46;
 }
 
+#transporte-painel[hidden], #analise-frete-painel[hidden] { display: none; }
+
+.analise-frete-page { display: grid; gap: 16px; }
+.analise-frete-heading { min-height: 104px; padding: 28px 30px; }
+.analise-frete-heading h1 { margin: 0; font-size: clamp(1.85rem, 2.7vw, 2.45rem); letter-spacing: -.035em; }
+.analise-frete-filters { grid-template-columns: 230px 230px minmax(260px, 1fr) auto; margin: 0; padding: 18px; gap: 16px; }
+.analise-frete-filters label { color: #46647b; font-size: .68rem; }
+.analise-frete-filters input, .analise-frete-filters select { height: 42px; border-radius: 11px; }
+.analise-frete-submit, .analise-frete-pagination button { height: 42px; border: 0; border-radius: 11px; padding: 0 19px; font: 800 .82rem/1 Inter, sans-serif; cursor: pointer; }
+.analise-frete-submit { display: inline-flex; align-items: center; justify-content: center; gap: 8px; color: #fff; background: #087f6d; box-shadow: 0 6px 14px rgba(8, 127, 109, .18); }
+.analise-frete-submit:hover { background: #076b5d; transform: translateY(-1px); }
+.analise-frete-submit svg { width: 16px; }
+.analise-frete-summary { min-height: 40px; display: flex; align-items: center; padding: 0 4px; }
+.analise-frete-summary p { margin: 0; color: #557086; font-size: .82rem; font-weight: 700; }
+.analise-frete-results { overflow: hidden; background: #fff; border: 1px solid #dce9e6; border-radius: 18px; box-shadow: 0 8px 25px rgba(15, 51, 70, .06); }
+.analise-frete-results .transporte-table-wrap { max-height: 820px; }
+.analise-frete-table { min-width: 1380px; table-layout: fixed; font-size: .76rem; }
+.analise-frete-table th:nth-child(1) { width: 12%; }.analise-frete-table th:nth-child(2) { width: 17%; }.analise-frete-table th:nth-child(3) { width: 15%; }.analise-frete-table th:nth-child(4) { width: 15%; }.analise-frete-table th:nth-child(5) { width: 19%; }.analise-frete-table th:nth-child(6) { width: 16%; }.analise-frete-table th:nth-child(7) { width: 6%; }
+.analise-frete-table th { padding: 14px 16px; background: #f7fbfa; color: #527086; font-size: .66rem; letter-spacing: .04em; }
+.analise-frete-table th, .analise-frete-table td { padding: 13px 16px; }
+.analise-frete-table td { min-width: 155px; color: #28475d; line-height: 1.45; vertical-align: top; white-space: normal; }
+.analise-frete-table td div { max-width: none; overflow-wrap: anywhere; }
+.analise-frete-table td div:first-child { color: #17384c; font-weight: 800; }
+.analise-frete-table td div + div { margin-top: 4px; color: #587084; }
+.analise-frete-table td:nth-child(5) div:first-child, .analise-frete-table td:nth-child(6) div:last-child, .analise-frete-table td:nth-child(7) div { color: #087f6d; }
+.analise-frete-table td:nth-child(7) div { font-weight: 800; }
+.analise-frete-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid #e1eeeb; }
+.analise-frete-pagination button { height: 35px; color: #087f6d; background: #eef8f5; border: 1px solid #b9e0d5; padding: 0 14px; }
+.analise-frete-pagination button:hover:not(:disabled) { background: #dff3ed; }
+.analise-frete-pagination button:disabled { cursor: not-allowed; opacity: .45; }
+.analise-frete-pagination span { min-width: 104px; color: #557086; font-size: .76rem; font-weight: 800; text-align: center; }
+
 .transporte-heading,
 .transporte-panel,
 .transporte-filters {
@@ -68,9 +100,15 @@
 .transporte-compare-label { padding: 14px 16px 8px; text-transform: none; font-size: .75rem; }.transporte-compare-label select { height: 122px; padding: 6px; }.transporte-comparison { padding: 0 16px 16px; }.transporte-comparison-empty, .transporte-empty { color: #64748b; font-size: .8rem; text-align: center; padding: 28px 12px; }.transporte-comparison-row { display: grid; grid-template-columns: 1.2fr repeat(5, .75fr); gap: 6px; padding: 9px 0; border-top: 1px solid #e1eeeb; font-size: .72rem; }.transporte-comparison-row b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.transporte-comparison-row span { color: #60758a; }.transporte-comparison-row strong { display: block; color: #183a4d; }
 .transporte-table-wrap { overflow: auto; max-height: 390px; }.transporte-table { width: 100%; min-width: 980px; border-collapse: collapse; font-size: .77rem; }.transporte-table th { position: sticky; top: 0; z-index: 1; background: #f6fbf9; color: #597084; font-size: .68rem; text-transform: uppercase; letter-spacing: .03em; }.transporte-table th, .transporte-table td { padding: 11px 12px; border-bottom: 1px solid #e1eeeb; text-align: left; }.transporte-table tr:hover td { background: #f1faf7; }.transporte-table td.is-money { color: #087f6d; font-weight: 800; }.transporte-table td.is-number { text-align: right; }
 
-@media (max-width: 1280px) { .transporte-filters { grid-template-columns: repeat(4, minmax(150px, 1fr)); }.transporte-kpis { grid-template-columns: repeat(4, minmax(140px, 1fr)); }.transporte-grid { grid-template-columns: minmax(0, 1fr); }.transporte-ranking-panel, .transporte-comparison-panel { grid-column: auto; }.transporte-details-panel { grid-column: auto; }.transporte-map-panel, .transporte-cities-panel { min-height: auto; } }
-@media (max-width: 760px) { .transporte-page { width: min(100% - 24px, 1540px); padding: 16px 0 28px; }.transporte-heading { padding: 18px; align-items: flex-start; flex-direction: column; }.transporte-heading-actions { width: 100%; justify-content: space-between; }.transporte-access { font-size: .67rem; }.transporte-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; }.transporte-refresh { justify-content: center; }.transporte-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.transporte-kpis article { padding: 10px; }.transporte-kpis strong { font-size: .9rem; }.transporte-panel > header { padding: 13px; }.transporte-metric, .transporte-sort { min-width: 135px; }.transporte-map { height: 420px; margin: 4px 10px 0; }.transporte-map-breadcrumb { padding: 0 13px; }.transporte-map-help { padding: 12px 13px 14px; }.transporte-ranking-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }.transporte-ranking-row > :first-child { grid-column: 1 / -1; }.transporte-ranking-row span { white-space: normal; }.transporte-comparison-row { grid-template-columns: 1fr 1fr 1fr; }.transporte-comparison-row > :first-child { grid-column: 1 / -1; } }
+@media (max-width: 1280px) { .transporte-filters { grid-template-columns: repeat(4, minmax(150px, 1fr)); }.analise-frete-filters { grid-template-columns: repeat(3, minmax(170px, 1fr)); }.transporte-kpis { grid-template-columns: repeat(4, minmax(140px, 1fr)); }.transporte-grid { grid-template-columns: minmax(0, 1fr); }.transporte-ranking-panel, .transporte-comparison-panel { grid-column: auto; }.transporte-details-panel { grid-column: auto; }.transporte-map-panel, .transporte-cities-panel { min-height: auto; } }
+@media (max-width: 760px) { .transporte-page { width: min(100% - 24px, 1540px); padding: 16px 0 28px; }.transporte-heading { padding: 18px; align-items: flex-start; flex-direction: column; }.analise-frete-heading { min-height: 82px; padding: 21px; }.analise-frete-filters { grid-template-columns: 1fr 1fr; }.analise-frete-filters label:nth-child(3), .analise-frete-submit { grid-column: 1 / -1; }.transporte-heading-actions { width: 100%; justify-content: space-between; }.transporte-access { font-size: .67rem; }.transporte-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 12px; }.transporte-refresh { justify-content: center; }.transporte-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }.transporte-kpis article { padding: 10px; }.transporte-kpis strong { font-size: .9rem; }.transporte-panel > header { padding: 13px; }.transporte-metric, .transporte-sort { min-width: 135px; }.transporte-map { height: 420px; margin: 4px 10px 0; }.transporte-map-breadcrumb { padding: 0 13px; }.transporte-map-help { padding: 12px 13px 14px; }.transporte-ranking-row { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }.transporte-ranking-row > :first-child { grid-column: 1 / -1; }.transporte-ranking-row span { white-space: normal; }.transporte-comparison-row { grid-template-columns: 1fr 1fr 1fr; }.transporte-comparison-row > :first-child { grid-column: 1 / -1; } }
 @media (max-width: 430px) { .transporte-filters { grid-template-columns: 1fr; }.transporte-filters label:nth-child(1), .transporte-filters label:nth-child(2) { grid-column: auto; }.transporte-heading-actions .btn-back { padding: 9px 12px; }.transporte-heading-actions .btn-back span { display: none; } }
+
+@media (max-width: 760px) {
+  .analise-frete-filters { grid-template-columns: 1fr 1fr; }
+  .analise-frete-filters label:nth-child(3), .analise-frete-filters .analise-frete-submit { grid-column: 1 / -1; }
+}
+@media (max-width: 430px) { .analise-frete-filters { grid-template-columns: 1fr; } }
 
 .transporte-map-label.is-zoom-hidden { display: none !important; }
 .transporte-city-distance { color: #087f6d; font-weight: 700; }
