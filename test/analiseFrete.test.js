@@ -44,6 +44,7 @@ test('restringe sugestão pela transportadora, região da tabela e cidades da ro
   assert.match(sql, /F.NUCFR=R.NUCFR AND F.CODREG=R.CODREGDEST/);
   assert.match(sql, /CAB.PESOBRUTO PESO/);
   assert.match(sqlFretesReais([10]), /STATUS_IMPORTACAO/);
+  assert.doesNotMatch(sqlFretesReais([10]), /CASE WHEN R\.STATUS_IMPORTACAO=2/);
   assert.match(sqlPedidos(filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-31' })), /PAR.CODPARC, PAR.NOMEPARC CLIENTE/);
   assert.match(sqlPedidos(filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-31' })), /NVL\(EMP.NOMEFANTASIA,EMP.RAZAOSOCIAL\) NOMEEMP/);
   assert.match(sqlPedidos(filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-31' })), /CAB.CODTIPOPER IN \(35,10\)/);
