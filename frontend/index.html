@@ -12606,12 +12606,14 @@
         <label>Data inicial<input type="date" id="analise-frete-inicio" required></label>
         <label>Data final<input type="date" id="analise-frete-fim" required></label>
         <label>Transportadora<select id="analise-frete-transportadora"><option value="0">Todas</option></select></label>
+        <label>CT-e emitido<select id="analise-frete-cte-emitido"><option value="todos">Todos</option><option value="com">Com CT-e</option><option value="sem">Sem CT-e</option></select></label>
+        <label>Situação do CT-e<select id="analise-frete-status-cte"><option value="todos">Todas</option><option value="importado">Importado</option><option value="pendente">Pendente</option></select></label>
         <button class="analise-frete-submit" type="submit"><i data-lucide="search" aria-hidden="true"></i>Consultar</button>
       </form>
       <div class="analise-frete-summary"><p id="analise-frete-status" role="status" aria-live="polite"></p></div>
       <section class="analise-frete-results" aria-label="Resultados da análise de frete">
       <div class="transporte-table-wrap"><table class="transporte-table analise-frete-table">
-        <thead><tr><th>Pedido / venda</th><th>Cliente / destino</th><th>Transportadora</th><th>Dados do frete</th><th>Tabela / região / sugestão</th><th>CT-e / frete real</th><th>Diferença</th></tr></thead>
+        <thead><tr><th>Nota de venda</th><th>Cliente / destino</th><th>Transportadora</th><th>Dados do frete</th><th>Tabela / região / sugestão</th><th>CT-e / frete real</th><th>Diferença</th></tr></thead>
         <tbody id="analise-frete-linhas"></tbody>
       </table></div>
       <div class="analise-frete-pagination"><button type="button" id="analise-frete-anterior">Anterior</button><span id="analise-frete-pagina"></span><button type="button" id="analise-frete-proxima">Próxima</button></div>
@@ -13203,7 +13205,7 @@
   <script src="vendas-dashboard.js?v=20260820-1"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="transporte-dashboard.js?v=20260916-1"></script>
-  <script src="analise-frete.js?v=20260916-6"></script>
+  <script src="analise-frete.js?v=20260916-10"></script>
   <script src="chat-core.js?v=20260904-2"></script>
   <script src="whatsapp-call-core.js?v=20260909-1"></script>
   <script src="whatsapp-call.js?v=20260909-1"></script>

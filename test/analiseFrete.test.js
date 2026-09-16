@@ -33,6 +33,7 @@ test('mantém tabelas alternativas separadas e soma eventos de cada tabela', () 
 test('rejeita filtros e identificadores inválidos antes do SQL', () => {
   assert.throws(() => filtrosAnalise({ dataInicial: '2026-02-30', dataFinal: '2026-03-01' }));
   assert.throws(() => filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-02', transportadora: '1 OR 1=1' }));
+  assert.throws(() => filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-02', cteEmitido: 'emitido' }));
   assert.throws(() => sqlSimulacoes(['1 OR 1=1']));
   assert.throws(() => sqlFretesReais([NaN]));
 });
@@ -44,8 +45,9 @@ test('restringe sugestão pela transportadora, região da tabela e cidades da ro
   assert.match(sql, /CAB.PESOBRUTO PESO/);
   assert.match(sqlFretesReais([10]), /STATUS_IMPORTACAO/);
   assert.match(sqlPedidos(filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-31' })), /PAR.CODPARC, PAR.NOMEPARC CLIENTE/);
-  assert.match(sqlPedidos(filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-31' })), /EMP.NOMEFANTASIA NOMEEMP/);
-  assert.match(sqlPedidos(filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-31' })), /NOT EXISTS/);
+  assert.match(sqlPedidos(filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-31' })), /NVL\(EMP.NOMEFANTASIA,EMP.RAZAOSOCIAL\) NOMEEMP/);
+  assert.match(sqlPedidos(filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-31' })), /CAB.CODTIPOPER IN \(35,10\)/);
+  assert.match(sqlPedidos(filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-31', cteEmitido: 'com', statusCte: 'importado' })), /CASE WHEN IX.STATUS=2/);
 });
 
 test('deduplica CT-e, calcula diferença real menos sugerido e não confunde ausência com zero', () => {

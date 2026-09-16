@@ -1,18 +1,37 @@
 const { validarPeriodoTransporte } = require('./transporteDashboard');
 const { calcularFormulaFrete } = require('./formulaFrete');
+const TOPS_FATURAMENTO = Object.freeze([35, 10]);
 
 function filtrosAnalise(query) {
   const periodo = validarPeriodoTransporte(query.dataInicial, query.dataFinal);
   const pagina = Number(query.pagina || 1);
   const transportadora = Number(query.transportadora || 0);
+  const cteEmitido = String(query.cteEmitido || 'todos').toLowerCase();
+  const statusCte = String(query.statusCte || 'todos').toLowerCase();
   if (!Number.isSafeInteger(pagina) || pagina < 1 || pagina > 100000 || !Number.isSafeInteger(transportadora) || transportadora < 0) {
     throw new Error('Página ou transportadora inválida.');
   }
-  return { ...periodo, pagina, transportadora };
+  if (!['todos', 'com', 'sem'].includes(cteEmitido) || !['todos', 'importado', 'pendente'].includes(statusCte)) {
+    throw new Error('Filtro de CT-e inválido.');
+  }
+  return { ...periodo, pagina, transportadora, cteEmitido, statusCte: cteEmitido === 'sem' ? 'todos' : statusCte };
 }
 
 function sqlPedidos(f) {
-  return `SELECT CAB.NUNOTA, CAB.NUMNOTA, CAB.CODEMP, EMP.NOMEFANTASIA NOMEEMP, CAB.TIPMOV,
+  const filtrosCte = [
+    f.cteEmitido === 'com' ? `AND CTE.CHAVE_NFE IS NOT NULL` : '',
+    f.cteEmitido === 'sem' ? `AND CTE.CHAVE_NFE IS NULL` : '',
+    f.statusCte === 'importado' ? `AND CTE.IMPORTADO=1` : '',
+    f.statusCte === 'pendente' ? `AND CTE.CHAVE_NFE IS NOT NULL AND CTE.IMPORTADO=0` : ''
+  ].filter(Boolean).join('\n      ');
+  return `WITH CTES_REFERENCIADOS AS (
+    SELECT /*+ MATERIALIZE */ X.CHAVE_NFE, MAX(CASE WHEN IX.STATUS=2 THEN 1 ELSE 0 END) IMPORTADO
+    FROM TGFIXN IX, XMLTABLE('/docsRef/chaveAcesso' PASSING XMLTYPE(IX.DOCSREF)
+      COLUMNS CHAVE_NFE VARCHAR2(44) PATH '.') X
+    WHERE IX.TIPO='C' AND IX.CHAVEACESSO IS NOT NULL AND IX.DOCSREF IS NOT NULL
+    GROUP BY X.CHAVE_NFE
+  )
+  SELECT CAB.NUNOTA, CAB.NUMNOTA, CAB.CODEMP, NVL(EMP.NOMEFANTASIA,EMP.RAZAOSOCIAL) NOMEEMP, CAB.TIPMOV,
     TO_CHAR(CAB.DTNEG, 'YYYY-MM-DD') DATA_PEDIDO,
     PAR.CODPARC, PAR.NOMEPARC CLIENTE, NVL(CAB.CODPARCTRANSP,0) CODPARCTRANSP,
     NVL(TRA.NOMEPARC,'Sem transportadora') TRANSPORTADORA,
@@ -24,13 +43,14 @@ function sqlPedidos(f) {
     LEFT JOIN TGFPAR TRA ON TRA.CODPARC=CAB.CODPARCTRANSP
     LEFT JOIN TSICID CID ON CID.CODCID=PAR.CODCID
     LEFT JOIN TSIEMP EMP ON EMP.CODEMP=CAB.CODEMP
+    LEFT JOIN TGFNFE NFE ON NFE.NUNOTA=CAB.NUNOTA
+    LEFT JOIN CTES_REFERENCIADOS CTE ON CTE.CHAVE_NFE=NFE.CHAVENFE
     WHERE CAB.STATUSNOTA='L'
-      AND (CAB.TIPMOV='P' OR (CAB.TIPMOV='V' AND NOT EXISTS (
-        SELECT 1 FROM TGFVAR V JOIN TGFCAB O ON O.NUNOTA=V.NUNOTAORIG
-        WHERE V.NUNOTA=CAB.NUNOTA AND O.TIPMOV='P')))
+      AND CAB.TIPMOV='V' AND CAB.CODTIPOPER IN (${TOPS_FATURAMENTO.join(',')})
       AND CAB.DTNEG >= TO_DATE('${f.inicio}','YYYY-MM-DD')
       AND CAB.DTNEG < TO_DATE('${f.fim}','YYYY-MM-DD')+1
       ${f.transportadora ? `AND CAB.CODPARCTRANSP=${f.transportadora}` : ''}
+      ${filtrosCte}
     ORDER BY NVL(TRA.NOMEPARC,'Sem transportadora'), CAB.DTNEG DESC, CAB.NUNOTA DESC
     OFFSET ${(f.pagina - 1) * 10} ROWS FETCH NEXT 10 ROWS ONLY`;
 }
@@ -38,18 +58,13 @@ function sqlPedidos(f) {
 function sqlFretesReais(ids) {
   if (!ids.length || ids.some((id) => !Number.isSafeInteger(id) || id <= 0)) throw new Error('Pedidos inválidos.');
   return `WITH NOTAS AS (
-    SELECT DISTINCT V.NUNOTAORIG PEDIDO, N.NUNOTA, N.CHAVENFE
-    FROM TGFVAR V JOIN TGFCAB C ON C.NUNOTA=V.NUNOTA AND C.TIPMOV='V' AND C.STATUSNOTA='L'
-    JOIN TGFNFE N ON N.NUNOTA=C.NUNOTA
-    WHERE V.NUNOTAORIG IN (${ids.join(',')})
-    UNION
-    SELECT C.NUNOTA PEDIDO, C.NUNOTA, N.CHAVENFE FROM TGFCAB C
-    JOIN TGFNFE N ON N.NUNOTA=C.NUNOTA
-    WHERE C.NUNOTA IN (${ids.join(',')}) AND C.TIPMOV='V'
+    SELECT C.NUNOTA PEDIDO, C.NUNOTA, N.CHAVENFE
+    FROM TGFCAB C JOIN TGFNFE N ON N.NUNOTA=C.NUNOTA
+    WHERE C.NUNOTA IN (${ids.join(',')}) AND C.TIPMOV='V' AND C.CODTIPOPER IN (${TOPS_FATURAMENTO.join(',')})
   ), ARQUIVOS AS (
     SELECT IX.CHAVEACESSO, IX.NUMNOTA, IX.CODPARC, IX.XNOMEEMIT, IX.VLRNOTA, IX.STATUS STATUS_IMPORTACAO, IX.DOCSREF,
       ROW_NUMBER() OVER(PARTITION BY IX.CHAVEACESSO ORDER BY IX.NUARQUIVO DESC) RN
-    FROM TGFIXN IX WHERE IX.TIPO='C' AND IX.STATUS=2 AND IX.CHAVEACESSO IS NOT NULL
+    FROM TGFIXN IX WHERE IX.TIPO='C' AND IX.CHAVEACESSO IS NOT NULL
       AND EXISTS (SELECT 1 FROM NOTAS N WHERE INSTR(IX.DOCSREF,N.CHAVENFE)>0)
   ), REFERENCIAS AS (
     SELECT DISTINCT A.CHAVEACESSO, A.NUMNOTA, A.CODPARC, A.XNOMEEMIT, A.VLRNOTA, A.STATUS_IMPORTACAO, X.CHAVE
@@ -65,10 +80,8 @@ function sqlFretesReais(ids) {
       COUNT(*) OVER(PARTITION BY N.CHAVEACESSO) QTD_NOTAS_CTE
     FROM NOTAS_CTE N
   ), VINCULOS AS (
-    SELECT DISTINCT P.*, NVL(V.NUNOTAORIG,P.NUNOTA) PEDIDO,
-      NVL(NULLIF(O.PESOBRUTO,0),NVL(NULLIF(O.PESO,0),1)) PESO_PEDIDO
-    FROM PESOS_CTE P LEFT JOIN TGFVAR V ON V.NUNOTA=P.NUNOTA
-    LEFT JOIN TGFCAB O ON O.NUNOTA=V.NUNOTAORIG
+    SELECT P.*, P.NUNOTA PEDIDO, P.PESO_NOTA PESO_PEDIDO
+    FROM PESOS_CTE P
   ), RATEIOS AS (
     SELECT V.*, SUM(V.PESO_PEDIDO) OVER(PARTITION BY V.CHAVEACESSO,V.NUNOTA) PESO_TOTAL_PEDIDOS_NOTA,
       COUNT(*) OVER(PARTITION BY V.CHAVEACESSO,V.NUNOTA) QTD_PEDIDOS_NOTA
@@ -76,8 +89,8 @@ function sqlFretesReais(ids) {
   )
   SELECT DISTINCT N.PEDIDO, R.CHAVEACESSO, R.NUMNOTA NUM_CTE, R.XNOMEEMIT TRANSPORTADORA_CTE, R.STATUS_IMPORTACAO,
     R.VLRNOTA FRETE_CTE_TOTAL,
-    ROUND(R.VLRNOTA * (R.PESO_NOTA / R.PESO_TOTAL_CTE) *
-      (R.PESO_PEDIDO / R.PESO_TOTAL_PEDIDOS_NOTA), 2) FRETE_REAL,
+    CASE WHEN R.STATUS_IMPORTACAO=2 THEN ROUND(R.VLRNOTA * (R.PESO_NOTA / R.PESO_TOTAL_CTE) *
+      (R.PESO_PEDIDO / R.PESO_TOTAL_PEDIDOS_NOTA), 2) END FRETE_REAL,
     CASE WHEN R.QTD_NOTAS_CTE>1 OR R.QTD_PEDIDOS_NOTA>1 THEN 1 ELSE 0 END COMPARTILHADO
   FROM NOTAS N JOIN RATEIOS R ON R.NUNOTA=N.NUNOTA AND R.PEDIDO=N.PEDIDO`;
 }
@@ -107,7 +120,7 @@ function sqlSimulacoes(ids) {
     JOIN TGFCFR T ON T.NUCFR=P.NUCFR
     JOIN TGFRCF R ON R.NUCFR=T.NUCFR AND R.OBRIGATORIO='S'
     LEFT JOIN TGFCFRC RD ON RD.NUCFR=R.NUCFR AND RD.CODREG=R.CODREGDEST
-    WHERE CAB.NUNOTA IN (${ids.join(',')})
+    WHERE CAB.NUNOTA IN (${ids.join(',')}) AND CAB.CODTIPOPER IN (${TOPS_FATURAMENTO.join(',')})
       AND NVL(T.SERVICOECT,0)=0
       AND (NVL(R.CODCIDORIG,0)=0 OR R.CODCIDORIG=EMP.CODCID)
       AND (NVL(R.CODCIDDEST,0)=0 OR R.CODCIDDEST=PAR.CODCID)
@@ -148,7 +161,7 @@ async function carregarAnaliseFrete(query, executeQuery) {
   const simulacoes = pedidos.length ? await executeQuery(sqlSimulacoes(pedidos.map((p) => Number(p.NUNOTA)))) : [];
   const transportadoras = await executeQuery(`SELECT DISTINCT P.CODPARC, P.NOMEPARC FROM TGFPAR P
     JOIN TGFCAB C ON C.CODPARCTRANSP=P.CODPARC
-    WHERE C.TIPMOV IN ('P','V') AND C.STATUSNOTA='L'
+    WHERE C.CODTIPOPER IN (${TOPS_FATURAMENTO.join(',')}) AND C.TIPMOV='V' AND C.STATUSNOTA='L'
       AND C.DTNEG>=TO_DATE('${filtros.inicio}','YYYY-MM-DD')
       AND C.DTNEG<TO_DATE('${filtros.fim}','YYYY-MM-DD')+1 ORDER BY P.NOMEPARC`);
   const linhas = pedidos.map((p) => compararFrete(p,
@@ -157,4 +170,4 @@ async function carregarAnaliseFrete(query, executeQuery) {
   return { linhas, transportadoras, pagina: filtros.pagina, total: Number(pedidos[0]?.TOTAL || 0), tamanhoPagina: 10 };
 }
 
-module.exports = { carregarAnaliseFrete, compararFrete, filtrosAnalise, sqlPedidos, sqlFretesReais, sqlSimulacoes, simularTabelas };
+module.exports = { TOPS_FATURAMENTO, carregarAnaliseFrete, compararFrete, filtrosAnalise, sqlPedidos, sqlFretesReais, sqlSimulacoes, simularTabelas };
