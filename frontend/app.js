@@ -9731,6 +9731,39 @@ function solicitarVolumesConferencia() {
   }, 0);
 }
 
+async function obterRespostaConfirmacaoConferencia(requisicao, pedido, modo) {
+  try {
+    const res = await requisicao;
+    const payload = await res.json();
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      return { res, payload };
+    }
+  } catch {
+    // A conexão pode terminar antes do faturamento. Consulte sem repetir o POST.
+  }
+
+  if (modo === 'saida') {
+    try {
+      const consulta = await fetch(`/api/fila-conferencia/pedidos/${pedido}/documentos`, { cache: 'no-store' });
+      if (consulta.ok) {
+        const documentos = await consulta.json();
+        if (documentos.faturado && documentos.nota?.NUNOTA) {
+          return {
+            res: { ok: true },
+            payload: {
+              recuperado: true,
+              faturamento: { status: 'FATURADO', nota: documentos.nota, detalhes: [] }
+            }
+          };
+        }
+      }
+    } catch {
+      // A consulta também pode estar indisponível; não presuma falha do faturamento.
+    }
+  }
+  throw new Error('A conexão terminou antes da resposta. A operação pode continuar no Sankhya. Atualize a fila e verifique o resultado antes de confirmar novamente.');
+}
+
 async function confirmarConferencia(volumes) {
   const volumesInvalidos = filaModoConferencia === 'saida' ? volumes <= 0 : volumes < 0;
   if (!pedidoSelecionado || !Number.isInteger(volumes) || volumesInvalidos) {
@@ -9745,7 +9778,7 @@ async function confirmarConferencia(volumes) {
   abrirModalProcessandoConferencia(pedidoSelecionado);
 
   try {
-    const res = await fetch('/api/fila-conferencia/confirmar', {
+    const { res, payload } = await obterRespostaConfirmacaoConferencia(fetch('/api/fila-conferencia/confirmar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -9771,8 +9804,7 @@ async function confirmarConferencia(volumes) {
           leituras: Array.isArray(item.leituras) ? item.leituras : []
         }))
       })
-    });
-    const payload = await res.json();
+    }), pedidoSelecionado.NUNOTA, filaModoConferencia);
 
     if (!res.ok) {
       confirmarStatus.innerHTML = montarErroConfirmacao(payload);
@@ -9782,7 +9814,7 @@ async function confirmarConferencia(volumes) {
     }
 
     const pedidoFinalizado = { ...pedidoSelecionado, QTDVOL: volumes };
-    confirmarStatus.innerHTML = '<span class="success-text">Conferência confirmada.</span>';
+    confirmarStatus.textContent = payload.recuperado ? 'Faturamento localizado no Sankhya.' : 'Conferência confirmada.';
     filaPedidos = filaPedidos.filter((pedido) => pedido.NUNOTA !== pedidoSelecionado.NUNOTA);
     limparNavegacaoFilaSalva();
     limparPedidoConferencia('Pedido conferido. Selecione o próximo pedido.');
