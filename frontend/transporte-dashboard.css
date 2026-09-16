@@ -13,6 +13,8 @@
 #transporte-painel[hidden], #analise-frete-painel[hidden] { display: none; }
 
 .analise-frete-page { display: grid; gap: 16px; }
+.analise-frete-filters .analise-frete-busca { grid-column: 1 / -1; }
+#analise-frete-linhas[aria-busy="true"] { opacity: .55; }
 .analise-frete-heading { min-height: 104px; padding: 28px 30px; }
 .analise-frete-heading h1 { margin: 0; font-size: clamp(1.85rem, 2.7vw, 2.45rem); letter-spacing: -.035em; }
 .analise-frete-filters { grid-template-columns: 180px 180px minmax(230px, 1fr) 165px 165px auto; margin: 0; padding: 18px; gap: 16px; }

@@ -69,13 +69,56 @@ test('usa somente a parcela por peso do CT-e compartilhado em cada pedido', () =
 });
 
 test('carrega página com consultas em lote e sem acessar estimativa histórica', async () => {
-  const respostas = [[{ NUNOTA: 10, TOTAL: 1 }], [], [rota], [{ CODPARC: 644, NOMEPARC: 'CARVALIMA' }]];
+  const respostas = [[{ NUNOTA: 10, CODPARCTRANSP: 644, TRANSPORTADORA: 'CARVALIMA' }], [rota]];
   let chamadas = 0;
   const resultado = await carregarAnaliseFrete({ dataInicial: '2026-01-01', dataFinal: '2026-01-31' }, async (sql) => {
     assert.match(sql, /^SELECT|^WITH/);
     return respostas[chamadas++];
   });
-  assert.equal(chamadas, 4);
+  assert.equal(chamadas, 2);
   assert.equal(resultado.linhas[0].simulacoes[0].valor, 66.62);
   assert.equal(resultado.transportadoras.length, 1);
+});
+
+test('agrupa antes de paginar, pesquisa todo o conjunto e reutiliza páginas', async () => {
+  const q = { dataInicial: '2026-01-01', dataFinal: '2026-01-31' };
+  const notas = Array.from({ length: 25 }, (_, i) => ({ NUNOTA: i + 1, NUMNOTA: i + 100,
+    CODPARC: 654, CLIENTE: 'João', CIDADE: 'Cuiabá', VLRNOTA: 10, PESO: .123,
+    ...(i === 0 || i === 24 ? { CHAVEACESSO: 'cte', NUM_CTE: 999, STATUS_IMPORTACAO: 0,
+      REFERENCIAS_TOTAL: 2, CHAVENFE: String(i), FRETE_CTE_TOTAL: 50 } : {}) }));
+  let bases = 0;
+  let consultas = 0;
+  const executar = async (sql) => {
+    consultas++;
+    if (sql.startsWith('WITH NOTAS')) { bases++; return notas; }
+    return [];
+  };
+  const primeira = await carregarAnaliseFrete(q, executar);
+  assert.equal(primeira.total, 24);
+  assert.equal(primeira.linhas[0].NUNOTA, '1 · 25');
+  assert.equal(primeira.linhas[0].VLRNOTA, 20);
+  assert.equal(primeira.linhas[0].PESO, .246);
+  const segunda = await carregarAnaliseFrete({ ...q, pagina: 2, consultaId: primeira.consultaId }, executar);
+  assert.equal(segunda.linhas.length, 10);
+  const antes = consultas;
+  await carregarAnaliseFrete({ ...q, consultaId: primeira.consultaId }, executar);
+  assert.equal(consultas, antes);
+  for (const busca of ['999', '124', 'joao', 'cuiaba', '654']) {
+    const r = await carregarAnaliseFrete({ ...q, busca, consultaId: primeira.consultaId }, executar);
+    assert.ok(r.total > 0);
+    if (busca === '124') assert.equal(r.linhas[0].NUNOTA, '1 · 25');
+  }
+  assert.equal(bases, 1);
+  await assert.rejects(carregarAnaliseFrete({ ...q, consultaId: 'expirada' }, executar), /expirada/);
+});
+
+test('não soma tabelas alternativas nem compara um CT-e parcialmente selecionado', () => {
+  const { consolidar } = require('../api/analiseFreteConsulta');
+  const g = { cte: { FRETE_CTE_TOTAL: 100, REFERENCIAS_TOTAL: 3 },
+    notas: [{ NUNOTA: 1, CHAVENFE: 'a' }, { NUNOTA: 2, CHAVENFE: 'b' }] };
+  const dados = new Map([[1, [rota, { ...rota, NUCFR: 6 }]], [2, [rota, { ...rota, NUCFR: 6 }]]]);
+  const r = consolidar(g, dados, simularTabelas);
+  assert.equal(r.simulacoes.length, 2);
+  assert.equal(r.simulacoes[0].valor, 133.24);
+  assert.equal(r.simulacoes[0].diferenca, null);
 });

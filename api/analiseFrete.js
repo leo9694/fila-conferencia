@@ -14,7 +14,9 @@ function filtrosAnalise(query) {
   if (!['todos', 'com', 'sem'].includes(cteEmitido) || !['todos', 'importado', 'pendente'].includes(statusCte)) {
     throw new Error('Filtro de CT-e inválido.');
   }
-  return { ...periodo, pagina, transportadora, cteEmitido, statusCte: cteEmitido === 'sem' ? 'todos' : statusCte };
+  const busca = String(query.busca || '').trim();
+  if (busca.length > 120) throw new Error('Busca inválida: máximo de 120 caracteres.');
+  return { ...periodo, pagina, transportadora, busca, cteEmitido, statusCte: cteEmitido === 'sem' ? 'todos' : statusCte };
 }
 
 function sqlPedidos(f) {
@@ -156,18 +158,7 @@ function simularTabelas(registros) {
 
 async function carregarAnaliseFrete(query, executeQuery) {
   const filtros = filtrosAnalise(query);
-  const pedidos = await executeQuery(sqlPedidos(filtros));
-  const reais = pedidos.length ? await executeQuery(sqlFretesReais(pedidos.map((p) => Number(p.NUNOTA)))) : [];
-  const simulacoes = pedidos.length ? await executeQuery(sqlSimulacoes(pedidos.map((p) => Number(p.NUNOTA)))) : [];
-  const transportadoras = await executeQuery(`SELECT DISTINCT P.CODPARC, P.NOMEPARC FROM TGFPAR P
-    JOIN TGFCAB C ON C.CODPARCTRANSP=P.CODPARC
-    WHERE C.CODTIPOPER IN (${TOPS_FATURAMENTO.join(',')}) AND C.TIPMOV='V' AND C.STATUSNOTA='L'
-      AND C.DTNEG>=TO_DATE('${filtros.inicio}','YYYY-MM-DD')
-      AND C.DTNEG<TO_DATE('${filtros.fim}','YYYY-MM-DD')+1 ORDER BY P.NOMEPARC`);
-  const linhas = pedidos.map((p) => compararFrete(p,
-    reais.filter((r) => Number(r.PEDIDO) === Number(p.NUNOTA)),
-    simularTabelas(simulacoes.filter((r) => Number(r.NUNOTA) === Number(p.NUNOTA)))));
-  return { linhas, transportadoras, pagina: filtros.pagina, total: Number(pedidos[0]?.TOTAL || 0), tamanhoPagina: 10 };
+  return require('./analiseFreteConsulta').consultar(filtros, query, executeQuery, sqlSimulacoes, simularTabelas);
 }
 
 module.exports = { TOPS_FATURAMENTO, carregarAnaliseFrete, compararFrete, filtrosAnalise, sqlPedidos, sqlFretesReais, sqlSimulacoes, simularTabelas };
