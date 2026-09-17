@@ -98,6 +98,7 @@ test('agrupa antes de paginar, pesquisa todo o conjunto e reutiliza páginas', a
   assert.equal(primeira.linhas[0].NUNOTA, '1 · 25');
   assert.equal(primeira.linhas[0].VLRNOTA, 20);
   assert.equal(primeira.linhas[0].PESO, .246);
+  assert.deepEqual(primeira.linhas[0].notasDetalhes.map((n) => n.NUNOTA), [25, 1]);
   const segunda = await carregarAnaliseFrete({ ...q, pagina: 2, consultaId: primeira.consultaId }, executar);
   assert.equal(segunda.linhas.length, 10);
   const antes = consultas;
@@ -112,13 +113,14 @@ test('agrupa antes de paginar, pesquisa todo o conjunto e reutiliza páginas', a
   await assert.rejects(carregarAnaliseFrete({ ...q, consultaId: 'expirada' }, executar), /expirada/);
 });
 
-test('não soma tabelas alternativas nem compara um CT-e parcialmente selecionado', () => {
+test('simula uma única carga com os dados somados das notas e não soma sugestões individuais', () => {
   const { consolidar } = require('../api/analiseFreteConsulta');
   const g = { cte: { FRETE_CTE_TOTAL: 100, REFERENCIAS_TOTAL: 3 },
-    notas: [{ NUNOTA: 1, CHAVENFE: 'a' }, { NUNOTA: 2, CHAVENFE: 'b' }] };
+    notas: [{ NUNOTA: 1, CHAVENFE: 'a', VLRNOTA: 400, PESO: 10 },
+      { NUNOTA: 2, CHAVENFE: 'b', VLRNOTA: 400, PESO: 10 }] };
   const dados = new Map([[1, [rota, { ...rota, NUCFR: 6 }]], [2, [rota, { ...rota, NUCFR: 6 }]]]);
   const r = consolidar(g, dados, simularTabelas);
   assert.equal(r.simulacoes.length, 2);
-  assert.equal(r.simulacoes[0].valor, 133.24);
+  assert.equal(r.simulacoes[0].valor, 70.62);
   assert.equal(r.simulacoes[0].diferenca, null);
 });

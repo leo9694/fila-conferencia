@@ -6,10 +6,16 @@
   let filtros = null;
   const moeda = (v) => v == null ? '—' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   const numero = (v) => Number(v || 0).toLocaleString('pt-BR');
+  const dataBr = (v) => {
+    const partes = String(v || '').split('-');
+    return partes.length === 3 ? `${partes[2]}/${partes[1]}/${partes[0]}` : (v || '—');
+  };
   let consultaId = null;
 
-  function celula(tr, linhas) {
+  function celula(tr, linhas, opcoes = {}) {
     const td = document.createElement('td');
+    if (opcoes.classe) td.className = opcoes.classe;
+    if (opcoes.linhas > 1) td.rowSpan = opcoes.linhas;
     for (const texto of linhas) {
       const div = document.createElement('div');
       div.textContent = texto;
@@ -21,20 +27,24 @@
   function render(linhas) {
     $('linhas').replaceChildren();
     for (const p of linhas) {
-      const tr = document.createElement('tr');
-      const tipoNota = Number(p.CODTIPOPER) === 10 ? 'Nota de bonificação' : 'Nota de venda';
-      celula(tr, [p.agrupadoCte ? `Notas: ${p.NUMNOTA}` : `${tipoNota} ${p.NUMNOTA || '—'}`, `Nº único: ${p.NUNOTA} · ${p.CODEMP} - ${p.NOMEEMP || 'Empresa sem nome'}`, p.DATA_PEDIDO]);
-      celula(tr, [`${p.CODPARC || '—'} - ${p.CLIENTE || 'Cliente sem nome'}`, p.CIDADE || '—']);
-      celula(tr, [p.TRANSPORTADORA]);
-      celula(tr, [p.agrupadoCte ? `Vendas somadas: ${moeda(p.VLRNOTA)}` : `Venda: ${moeda(p.VLRNOTA)}`, p.agrupadoCte ? `Frete nos pedidos: ${moeda(p.VLRFRETE)}` : `Frete no pedido: ${moeda(p.VLRFRETE)}`, `${numero(p.PESO)} kg · ${numero(p.QTDVOL)} volumes`, `CIF/FOB: ${p.CIF_FOB || '—'}`]);
-      celula(tr, p.simulacoes.length ? p.simulacoes.map((s) => `${s.codigo ? `${s.codigo} · ` : ''}${s.tabela} · ${s.regiao || 'Rota direta'}: ${s.erro ? 'Cálculo indisponível — revisar fórmula/rotas' : moeda(s.valor)}`) : ['Sem tabela/região aplicável à transportadora']);
-      celula(tr, p.ctes.length ? [
-        ...p.ctes.map((c) => `CT-e ${c.NUM_CTE} · ${c.TRANSPORTADORA_CTE}: ${moeda(c.FRETE_CTE_TOTAL ?? c.FRETE_REAL)}`),
-        p.agrupadoCte ? `Total do CT-e: ${moeda(p.real)}` : p.compartilhado ? `Frete rateado por peso: ${moeda(p.real)}` : `Total real: ${moeda(p.real)}`,
-        ...p.ctes.map((c) => Number(c.STATUS_IMPORTACAO) === 2 ? 'CT-e importado no Sankhya' : 'CT-e pendente de importação')
-      ] : ['Sem CT-e emitido vinculado']);
-      celula(tr, p.grupoIncompleto ? ['CT-e com notas fora do período'] : p.simulacoes.length ? p.simulacoes.map((s) => s.diferenca == null ? '—' : moeda(s.diferenca)) : ['—']);
-      $('linhas').appendChild(tr);
+      const notas = p.notasDetalhes?.length ? p.notasDetalhes : [p];
+      notas.forEach((nota, indice) => {
+        const tr = document.createElement('tr');
+        if (indice > 0) tr.classList.add('analise-frete-cte-continuacao');
+        const tipoNota = Number(nota.CODTIPOPER) === 10 ? 'Nota de bonificação' : 'Nota de venda';
+        celula(tr, [`${tipoNota} ${nota.NUMNOTA || '—'}`, `Nº único: ${nota.NUNOTA} · ${nota.CODEMP} - ${nota.NOMEEMP || 'Empresa sem nome'}`, dataBr(nota.DATA_PEDIDO)]);
+        celula(tr, [`${nota.CODPARC || '—'} - ${nota.CLIENTE || 'Cliente sem nome'}`, nota.CIDADE || '—']);
+        celula(tr, [nota.TRANSPORTADORA]);
+        celula(tr, [`Venda: ${moeda(nota.VLRNOTA)}`, `Frete no pedido: ${moeda(nota.VLRFRETE)}`, `${numero(nota.PESO)} kg · ${numero(nota.QTDVOL)} volumes`, `CIF/FOB: ${nota.CIF_FOB || '—'}`]);
+        if (indice === 0) celula(tr, p.simulacoes.length ? p.simulacoes.map((s) => `${s.codigo ? `${s.codigo} · ` : ''}${s.tabela} · ${s.regiao || 'Rota direta'}: ${s.erro ? 'Cálculo indisponível — revisar fórmula/rotas' : moeda(s.valor)}`) : ['Sem tabela/região aplicável à transportadora'], { classe: 'analise-frete-sugestao', linhas: notas.length });
+        if (indice === 0) celula(tr, p.ctes.length ? [
+          ...p.ctes.map((c) => `CT-e ${c.NUM_CTE} · ${c.TRANSPORTADORA_CTE}: ${moeda(c.FRETE_CTE_TOTAL ?? c.FRETE_REAL)}`),
+          p.agrupadoCte ? `Total do CT-e: ${moeda(p.real)}` : p.compartilhado ? `Frete rateado por peso: ${moeda(p.real)}` : `Total real: ${moeda(p.real)}`,
+          ...p.ctes.map((c) => Number(c.STATUS_IMPORTACAO) === 2 ? 'CT-e importado no Sankhya' : 'CT-e pendente de importação')
+        ] : ['Sem CT-e emitido vinculado'], { classe: 'analise-frete-cte', linhas: notas.length });
+        if (indice === 0) celula(tr, p.grupoIncompleto ? ['CT-e com notas fora do período'] : p.simulacoes.length ? p.simulacoes.map((s) => s.diferenca == null ? '—' : moeda(s.diferenca)) : ['—'], { classe: 'analise-frete-diferenca', linhas: notas.length });
+        $('linhas').appendChild(tr);
+      });
     }
   }
 

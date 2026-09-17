@@ -36,8 +36,10 @@
 .analise-frete-table td div { max-width: none; overflow-wrap: anywhere; }
 .analise-frete-table td div:first-child { color: #17384c; font-weight: 800; }
 .analise-frete-table td div + div { margin-top: 4px; color: #587084; }
-.analise-frete-table td:nth-child(5) div:first-child, .analise-frete-table td:nth-child(6) div:last-child, .analise-frete-table td:nth-child(7) div { color: #087f6d; }
-.analise-frete-table td:nth-child(7) div { font-weight: 800; }
+.analise-frete-table .analise-frete-sugestao div:first-child, .analise-frete-table .analise-frete-cte div:last-child, .analise-frete-table .analise-frete-diferenca div { color: #087f6d; }
+.analise-frete-table .analise-frete-diferenca div { font-weight: 800; }
+.analise-frete-table td[rowspan] { vertical-align: middle; background: #f5fbf9; }
+.analise-frete-table .analise-frete-cte-continuacao td:not([rowspan]) { border-top-style: dashed; }
 .analise-frete-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid #e1eeeb; }
 .analise-frete-pagination button { height: 35px; color: #087f6d; background: #eef8f5; border: 1px solid #b9e0d5; padding: 0 14px; }
 .analise-frete-pagination button:hover:not(:disabled) { background: #dff3ed; }

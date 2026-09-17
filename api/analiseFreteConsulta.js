@@ -9,7 +9,7 @@ function sqlBase(f, offset) {
       TO_CHAR(CAB.DTNEG,'YYYY-MM-DD') DATA_PEDIDO,
       CAB.CODPARC,PAR.NOMEPARC CLIENTE,CID.NOMECID CIDADE,
       CAB.CODPARCTRANSP,TRA.NOMEPARC TRANSPORTADORA,CAB.CIF_FOB,
-      CAB.VLRNOTA,CAB.VLRFRETE,CAB.PESOBRUTO PESO,CAB.QTDVOL,NFE.CHAVENFE
+      CAB.VLRNOTA,CAB.VLRFRETE,CAB.PESOBRUTO PESO,CAB.M3,CAB.QTDVOL,NFE.CHAVENFE
     FROM TGFCAB CAB
     LEFT JOIN TGFPAR PAR ON PAR.CODPARC=CAB.CODPARC
     LEFT JOIN TSICID CID ON CID.CODCID=PAR.CODCID
@@ -60,28 +60,48 @@ function filtrar(grupos, f) {
   });
 }
 
+function simularCargaConsolidada(notas, simulacoes, simularTabelas) {
+  if (notas.length === 1) return simularTabelas(simulacoes.get(Number(notas[0].NUNOTA)) || []);
+  const registrosPorNota = notas.map((nota) => simulacoes.get(Number(nota.NUNOTA)) || []);
+  const tabelasComuns = [...new Set(registrosPorNota[0].map((r) => String(r.NUCFR)))]
+    .filter((codigo) => registrosPorNota.every((registros) => registros.some((r) => String(r.NUCFR) === codigo)));
+  const campoSomado = (campo) => notas.reduce((total, nota, indice) => {
+    const valor = nota[campo] ?? registrosPorNota[indice][0]?.[campo];
+    return total + Number(valor || 0);
+  }, 0);
+  const totais = { VLRNOTA: campoSomado('VLRNOTA'), PESO: campoSomado('PESO'), M3: campoSomado('M3') };
+  const resultado = [];
+  const camposConfiguracao = ['CODEVENTO','FORMULA','VALOR','PERCENTUAL','VLRMIN','DISTANCIA','TEMPO','REGIAO'];
+  for (const codigo of tabelasComuns) {
+    const rotas = registrosPorNota.map((registros) => registros.filter((r) => String(r.NUCFR) === codigo)
+      .sort((a, b) => Number(a.CODEVENTO) - Number(b.CODEVENTO)));
+    const assinatura = (lista) => JSON.stringify(lista.map((r) => camposConfiguracao.map((campo) => r[campo] ?? null)));
+    if (rotas.some((lista) => assinatura(lista) !== assinatura(rotas[0]))) {
+      const base = rotas[0][0];
+      resultado.push({ codigo: base.NUCFR, tabela: base.DESCRCALCFRET, regiao: base.REGIAO, valor: null, eventos: [], erro: true });
+      continue;
+    }
+    resultado.push(...simularTabelas(rotas[0].map((r) => ({ ...r, ...totais }))));
+  }
+  return resultado;
+}
+
 function consolidar(g, simulacoes, simularTabelas) {
   const notas = g.notas;
+  const notasDetalhes = [...notas].sort((a, b) => Number(b.NUNOTA) - Number(a.NUNOTA));
   const lista = (campo) => [...new Set(notas.map((n) => n[campo]).filter((v) => v != null))].join(' · ');
   const soma = (campo) => notas.reduce((s,n) => s + Number(n[campo] || 0),0);
   const c = g.cte;
   // Não comparar o custo integral de um CT-e com apenas parte das notas selecionadas pelo período.
   const incompleto = c && new Set(notas.map((n) => n.CHAVENFE)).size < Number(c.REFERENCIAS_TOTAL);
   const real = c?.FRETE_CTE_TOTAL == null ? null : Number(c.FRETE_CTE_TOTAL);
-  const porNota = notas.map((n) => simularTabelas(simulacoes.get(Number(n.NUNOTA)) || []));
-  const codigos = [...new Set(porNota.flat().map((s) => s.codigo))];
-  const sugestoes = codigos.map((codigo) => {
-    const partes = porNota.map((listaNota) => listaNota.find((s) => s.codigo === codigo));
-    const base = partes.find(Boolean);
-    const valor = partes.every((s) => s && s.valor != null && !s.erro)
-      ? Math.round(partes.reduce((s,p) => s + p.valor,0) * 100) / 100 : null;
-    return { ...base, valor, erro: valor == null,
-      diferenca: !incompleto && real != null && valor != null ? Math.round((real-valor)*100)/100 : null };
-  });
+  const sugestoes = simularCargaConsolidada(notas, simulacoes, simularTabelas).map((s) => ({ ...s,
+    diferenca: !incompleto && real != null && s.valor != null ? Math.round((real-s.valor)*100)/100 : null }));
   return { ...notas[0], agrupadoCte: notas.length > 1,
     NUNOTA: lista('NUNOTA'), NUMNOTA: lista('NUMNOTA'), CODEMP: lista('CODEMP'), NOMEEMP: lista('NOMEEMP'),
     CODPARC: lista('CODPARC'), CLIENTE: lista('CLIENTE'), CIDADE: lista('CIDADE'), CIF_FOB: lista('CIF_FOB'),
     VLRNOTA: soma('VLRNOTA'), VLRFRETE: soma('VLRFRETE'), PESO: soma('PESO'), QTDVOL: soma('QTDVOL'),
+    notasDetalhes,
     real, compartilhado: false, grupoIncompleto: Boolean(incompleto),
     ctes: c ? [{ ...c, FRETE_REAL: real }] : [], simulacoes: sugestoes };
 }
