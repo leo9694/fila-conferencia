@@ -871,6 +871,7 @@ async function consultarFaturamentoExistente(nunotaOrigem) {
 function extrairChaveDocumento(resultado = {}) {
   const documento = resultado?.responseBody?.documento;
   const boleto = resultado?.responseBody?.boleto;
+  const chave = resultado?.responseBody?.chave;
   return String(
     documento?.valor?.$
     ?? documento?.valor
@@ -880,8 +881,79 @@ function extrairChaveDocumento(resultado = {}) {
     ?? boleto?.valor
     ?? boleto?.$
     ?? boleto
+    ?? chave?.valor?.$
+    ?? chave?.valor
+    ?? chave?.$
+    ?? chave
     ?? ''
   ).trim();
+}
+
+function extrairModeloDacte(configuracao) {
+  const encontrado = String(configuracao || '').match(/modeloDacte=["'](\d+)["']/i);
+  const modelo = Number(encontrado?.[1]);
+  return Number.isSafeInteger(modelo) && modelo > 0 ? modelo : 163;
+}
+
+async function gerarDacteSankhya(chaveAcesso) {
+  const chave = String(chaveAcesso || '').trim();
+  if (!/^\d{44}$/.test(chave)) {
+    throw new Error('Chave de acesso do CT-e inválida.');
+  }
+
+  const [cte] = await executeQuery(`
+    SELECT NUARQUIVO, NUMNOTA
+    FROM (
+      SELECT NUARQUIVO, NUMNOTA
+      FROM TGFIXN
+      WHERE CHAVEACESSO = '${chave}'
+        AND XML IS NOT NULL
+      ORDER BY CASE WHEN STATUS = 2 THEN 0 ELSE 1 END, NUARQUIVO DESC
+    )
+    WHERE ROWNUM = 1
+  `);
+  if (!cte?.NUARQUIVO) {
+    const erro = new Error('XML do CT-e não encontrado no Sankhya.');
+    erro.statusCode = 404;
+    throw erro;
+  }
+
+  const [parametro] = await executeQuery(`
+    SELECT TEXTO
+    FROM TSIPAR
+    WHERE CHAVE = 'CONFIGURACAOMDE'
+  `);
+  const modeloDacte = extrairModeloDacte(parametro?.TEXTO);
+  const resultado = await executeService(
+    'VisualizadorRelatorios.visualizarRelatorio',
+    {
+      relatorio: {
+        nuRfe: String(modeloDacte),
+        parametros: {
+          parametro: [{
+            classe: 'java.math.BigDecimal',
+            nome: 'NUARQUIVO',
+            valor: String(cte.NUARQUIVO)
+          }]
+        }
+      }
+    },
+    { modulePath: 'mge', forceAccessSession: true }
+  );
+  const chaveArquivo = extrairChaveDocumento(resultado);
+  if (!chaveArquivo) {
+    throw new Error('O Sankhya não retornou a chave de visualização do DACTE.');
+  }
+
+  const arquivo = await downloadGatewayFile('mge', 'visualizadorArquivos.mge', {
+    hidemail: 'S',
+    download: 'S',
+    chaveArquivo
+  });
+  if (!arquivo.buffer.subarray(0, 4).equals(Buffer.from('%PDF'))) {
+    throw new Error('O Sankhya retornou um arquivo inválido para o DACTE.');
+  }
+  return { pdf: arquivo.buffer, numero: cte.NUMNOTA };
 }
 
 function extrairAvisosDocumento(resultado = {}) {
@@ -2658,6 +2730,46 @@ router.get('/transporte/analise-frete', exigirGerenciaOuDiretoria, async (req, r
     res.status(/inválid|valid|data|período|Página/i.test(err.message) ? 400 : 502)
       .json({ erro: 'Não foi possível carregar a análise de frete. Confira o período e tente novamente.' });
   }
+});
+
+router.get('/transporte/analise-frete/ctes/:chaveAcesso/pdf', exigirGerenciaOuDiretoria, async (req, res) => {
+  try {
+    const documento = await gerarDacteSankhya(req.params.chaveAcesso);
+    const numero = String(documento.numero || req.params.chaveAcesso).replace(/[^0-9]/g, '');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="dacte-${numero}.pdf"`);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(documento.pdf);
+  } catch (err) {
+    console.error('Erro ao abrir DACTE:', err.message);
+    const status = err.statusCode || (/inválida/i.test(err.message) ? 400 : 502);
+    res.status(status).json({
+      erro: 'Não foi possível abrir o DACTE.',
+      detalhes: err.message
+    });
+  }
+});
+
+router.get('/transporte/analise-frete/ctes/:chaveAcesso/visualizar', exigirGerenciaOuDiretoria, (req, res) => {
+  const chave = String(req.params.chaveAcesso || '').trim();
+  if (!/^\d{44}$/.test(chave)) {
+    res.status(400).json({ erro: 'Chave de acesso do CT-e inválida.' });
+    return;
+  }
+
+  const pdfUrl = `/api/transporte/analise-frete/ctes/${chave}/pdf#zoom=page-width`;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.send(`<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visualizador de CT-e</title>
+  <style>html,body,iframe{width:100%;height:100%;margin:0;border:0;overflow:hidden}body{background:#f2f4f5}iframe{display:block}</style>
+</head>
+<body><iframe src="${pdfUrl}" title="Documento auxiliar do CT-e"></iframe></body>
+</html>`);
 });
 
 router.get('/transporte/dashboard', exigirGerenciaOuDiretoria, async (req, res) => {
@@ -7431,6 +7543,8 @@ router._internals = {
   obterIntervaloDatas,
   extrairAvisosDocumento,
   extrairChaveDocumento,
+  extrairModeloDacte,
+  gerarDacteSankhya,
   gerarDocumentoFiscalSankhya,
   obterDanfeArmazenado,
   obterSituacaoDocumentosPedido,

@@ -5,10 +5,11 @@ const TOPS_FATURAMENTO = Object.freeze([35, 10]);
 function filtrosAnalise(query) {
   const periodo = validarPeriodoTransporte(query.dataInicial, query.dataFinal);
   const pagina = Number(query.pagina || 1);
-  const transportadora = Number(query.transportadora || 0);
+  const transportadoras = String(query.transportadora || '').split(',').filter((id) => id && id !== '0').map(Number);
   const cteEmitido = String(query.cteEmitido || 'todos').toLowerCase();
   const statusCte = String(query.statusCte || 'todos').toLowerCase();
-  if (!Number.isSafeInteger(pagina) || pagina < 1 || pagina > 100000 || !Number.isSafeInteger(transportadora) || transportadora < 0) {
+  if (!Number.isSafeInteger(pagina) || pagina < 1 || pagina > 100000 || transportadoras.length > 50
+    || transportadoras.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
     throw new Error('Página ou transportadora inválida.');
   }
   if (!['todos', 'com', 'sem'].includes(cteEmitido) || !['todos', 'importado', 'pendente'].includes(statusCte)) {
@@ -16,7 +17,8 @@ function filtrosAnalise(query) {
   }
   const busca = String(query.busca || '').trim();
   if (busca.length > 120) throw new Error('Busca inválida: máximo de 120 caracteres.');
-  return { ...periodo, pagina, transportadora, busca, cteEmitido, statusCte: cteEmitido === 'sem' ? 'todos' : statusCte };
+  return { ...periodo, pagina, transportadoras: [...new Set(transportadoras)], busca, cteEmitido,
+    statusCte: cteEmitido === 'sem' ? 'todos' : statusCte };
 }
 
 function sqlPedidos(f) {
@@ -51,7 +53,7 @@ function sqlPedidos(f) {
       AND CAB.TIPMOV='V' AND CAB.CODTIPOPER IN (${TOPS_FATURAMENTO.join(',')})
       AND CAB.DTNEG >= TO_DATE('${f.inicio}','YYYY-MM-DD')
       AND CAB.DTNEG < TO_DATE('${f.fim}','YYYY-MM-DD')+1
-      ${f.transportadora ? `AND CAB.CODPARCTRANSP=${f.transportadora}` : ''}
+      ${f.transportadoras.length ? `AND CAB.CODPARCTRANSP IN (${f.transportadoras.join(',')})` : ''}
       ${filtrosCte}
     ORDER BY NVL(TRA.NOMEPARC,'Sem transportadora'), CAB.DTNEG DESC, CAB.NUNOTA DESC
     OFFSET ${(f.pagina - 1) * 10} ROWS FETCH NEXT 10 ROWS ONLY`;

@@ -33,6 +33,7 @@ test('mantém tabelas alternativas separadas e soma eventos de cada tabela', () 
 test('rejeita filtros e identificadores inválidos antes do SQL', () => {
   assert.throws(() => filtrosAnalise({ dataInicial: '2026-02-30', dataFinal: '2026-03-01' }));
   assert.throws(() => filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-02', transportadora: '1 OR 1=1' }));
+  assert.deepEqual(filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-02', transportadora: '644,770,644' }).transportadoras, [644, 770]);
   assert.throws(() => filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-02', cteEmitido: 'emitido' }));
   assert.throws(() => sqlSimulacoes(['1 OR 1=1']));
   assert.throws(() => sqlFretesReais([NaN]));

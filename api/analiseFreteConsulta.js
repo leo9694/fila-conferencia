@@ -51,7 +51,7 @@ function agrupar(registros) {
 function filtrar(grupos, f) {
   const termo = normalizar(f.busca).trim();
   return grupos.filter((g) => {
-    if (f.transportadora && !g.notas.some((n) => Number(n.CODPARCTRANSP) === f.transportadora)) return false;
+    if (f.transportadoras.length && !g.notas.some((n) => f.transportadoras.includes(Number(n.CODPARCTRANSP)))) return false;
     if (f.cteEmitido === 'com' && !g.cte || f.cteEmitido === 'sem' && g.cte) return false;
     if (f.statusCte === 'importado' && (!g.cte || Number(g.cte.STATUS_IMPORTACAO) !== 2)) return false;
     if (f.statusCte === 'pendente' && (!g.cte || Number(g.cte.STATUS_IMPORTACAO) === 2)) return false;

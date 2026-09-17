@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/home-dashboard.css?v=20260813-1">
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/transporte-dashboard.css?v=20260917-6">
+  <link rel="stylesheet" href="/transporte-dashboard.css?v=20260917-9">
   <link rel="stylesheet" href="/chat.css?v=20260904-1">
 
   <style>
@@ -12606,7 +12606,10 @@
         <label class="analise-frete-busca">Buscar cliente, destino, CT-e ou nota<input type="search" id="analise-frete-busca" maxlength="120" placeholder="Código ou nome do cliente, cidade, número do CT-e ou nota"></label>
         <label>Data inicial<input type="date" id="analise-frete-inicio" required></label>
         <label>Data final<input type="date" id="analise-frete-fim" required></label>
-        <label>Transportadora<select id="analise-frete-transportadora"><option value="0">Todas</option></select></label>
+        <div class="analise-frete-filter-field"><span>Transportadora</span><div class="analise-frete-multiselect" id="analise-frete-transportadora">
+          <button type="button" id="analise-frete-transportadora-trigger" aria-haspopup="listbox" aria-expanded="false"><span id="analise-frete-transportadora-texto">Todas</span><span aria-hidden="true">⌄</span></button>
+          <div class="analise-frete-multiselect-menu" id="analise-frete-transportadora-opcoes" role="listbox" aria-multiselectable="true" hidden></div>
+        </div></div>
         <label>CT-e emitido<select id="analise-frete-cte-emitido"><option value="todos">Todos</option><option value="com">Com CT-e</option><option value="sem">Sem CT-e</option></select></label>
         <label>Situação do CT-e<select id="analise-frete-status-cte"><option value="todos">Todas</option><option value="importado">Importado</option><option value="pendente">Pendente</option></select></label>
         <button class="analise-frete-submit" type="submit"><i data-lucide="search" aria-hidden="true"></i>Consultar</button>
@@ -13206,7 +13209,7 @@
   <script src="vendas-dashboard.js?v=20260820-1"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="transporte-dashboard.js?v=20260916-1"></script>
-  <script src="analise-frete.js?v=20260917-15"></script>
+  <script src="analise-frete.js?v=20260917-20"></script>
   <script src="chat-core.js?v=20260904-2"></script>
   <script src="whatsapp-call-core.js?v=20260909-1"></script>
   <script src="whatsapp-call.js?v=20260909-1"></script>

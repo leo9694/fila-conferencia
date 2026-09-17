@@ -19,13 +19,26 @@
 .analise-frete-heading h1 { margin: 0; font-size: clamp(1.85rem, 2.7vw, 2.45rem); letter-spacing: -.035em; }
 .analise-frete-filters { grid-template-columns: 180px 180px minmax(230px, 1fr) 165px 165px auto; margin: 0; padding: 18px; gap: 16px; }
 .analise-frete-filters label { color: #46647b; font-size: .68rem; }
+.analise-frete-filter-field { display: grid; gap: 5px; color: #46647b; font-size: .68rem; font-weight: 800; text-transform: uppercase; }
 .analise-frete-filters input, .analise-frete-filters select { height: 42px; border-radius: 11px; }
+.analise-frete-multiselect { position: relative; }
+.analise-frete-multiselect > button { width: 100%; height: 42px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border: 1px solid #c7dcd7; border-radius: 11px; padding: 0 13px; color: #17384c; background: #fff; font: 700 .78rem/1 Inter, sans-serif; cursor: pointer; }
+.analise-frete-multiselect > button:focus { outline: 2px solid rgba(8,127,109,.2); border-color: #087f6d; }
+.analise-frete-multiselect > button span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.analise-frete-multiselect-menu { position: absolute; z-index: 12; top: calc(100% + 6px); left: 0; width: max(100%, 280px); max-height: 260px; overflow-y: auto; border: 1px solid #cfe1dd; border-radius: 12px; padding: 6px; background: #fff; box-shadow: 0 14px 30px rgba(15,51,70,.16); }
+.analise-frete-multiselect-menu[hidden] { display: none; }
+.analise-frete-filters .analise-frete-multiselect-opcao { display: flex; align-items: center; gap: 9px; border-radius: 8px; padding: 9px; color: #28475d; font-size: .75rem; font-weight: 700; text-transform: none; cursor: pointer; }
+.analise-frete-multiselect-opcao:hover { background: #eef8f5; }
+.analise-frete-multiselect-opcao input { width: 16px; height: 16px; margin: 0; accent-color: #087f6d; }
 .analise-frete-submit, .analise-frete-pagination button { height: 42px; border: 0; border-radius: 11px; padding: 0 19px; font: 800 .82rem/1 Inter, sans-serif; cursor: pointer; }
 .analise-frete-submit { display: inline-flex; align-items: center; justify-content: center; gap: 8px; color: #fff; background: #087f6d; box-shadow: 0 6px 14px rgba(8, 127, 109, .18); }
 .analise-frete-submit:hover { background: #076b5d; transform: translateY(-1px); }
 .analise-frete-submit svg { width: 16px; }
 .analise-frete-summary { min-height: 40px; display: flex; align-items: center; padding: 0 4px; }
 .analise-frete-summary p { margin: 0; color: #557086; font-size: .82rem; font-weight: 700; }
+.analise-frete-summary p.is-loading { display: inline-flex; align-items: center; gap: 9px; }
+.analise-frete-summary p.is-loading::before { content: ''; width: 14px; height: 14px; flex: 0 0 14px; border: 2px solid #b8d9d2; border-top-color: #087f6d; border-radius: 50%; animation: analise-frete-spin .7s linear infinite; }
+@keyframes analise-frete-spin { to { transform: rotate(360deg); } }
 .analise-frete-results { overflow: hidden; background: #fff; border: 1px solid #dce9e6; border-radius: 18px; box-shadow: 0 8px 25px rgba(15, 51, 70, .06); }
 .analise-frete-results .transporte-table-wrap { max-height: 820px; }
 .analise-frete-table { min-width: 1380px; table-layout: fixed; font-size: .76rem; }
@@ -37,6 +50,8 @@
 .analise-frete-table td div:first-child { color: #17384c; font-weight: 800; }
 .analise-frete-table td div + div { margin-top: 4px; color: #587084; }
 .analise-frete-table .analise-frete-sugestao div:first-child, .analise-frete-table .analise-frete-cte div:last-child, .analise-frete-table .analise-frete-diferenca div { color: #087f6d; }
+.analise-frete-table .analise-frete-cte a { color: #087f6d; font-weight: 800; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
+.analise-frete-table .analise-frete-cte a:hover { color: #055f52; }
 .analise-frete-table .analise-frete-diferenca div { font-weight: 800; }
 .analise-frete-table td[rowspan] { vertical-align: middle; background: #f5fbf9; }
 .analise-frete-table .analise-frete-cte-continuacao td:not([rowspan]) { border-top-style: dashed; }

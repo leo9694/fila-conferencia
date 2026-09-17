@@ -12,6 +12,21 @@ test('extrai chave do PDF retornada pelo servico de impressao', () => {
   assert.equal(routes._internals.extrairChaveDocumento(resultado), 'preVisualizacao_ABC123');
 });
 
+test('extrai chave do PDF retornada pelo visualizador de relatorios', () => {
+  const resultado = {
+    responseBody: {
+      chave: { valor: 'vRfe_ABC123' }
+    }
+  };
+
+  assert.equal(routes._internals.extrairChaveDocumento(resultado), 'vRfe_ABC123');
+});
+
+test('usa o modelo DACTE configurado no Sankhya e possui fallback seguro', () => {
+  assert.equal(routes._internals.extrairModeloDacte('<value modeloDacte="987" />'), 987);
+  assert.equal(routes._internals.extrairModeloDacte(null), 163);
+});
+
 test('normaliza avisos de impressao do Sankhya', () => {
   const resultado = {
     responseBody: {
