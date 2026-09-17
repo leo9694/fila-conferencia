@@ -14,7 +14,7 @@ const {
 const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
 const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
 const { garantirContaFaturamento } = require('./api/faturamentoBanco');
-const { planejarDetalhesConferenciaSaida } = require('./api/conferenciaSaida');
+const { gravarDetalhesConferenciaSaida } = require('./api/conferenciaSaida');
 const {
   consolidarLeiturasEntrada,
   planejarDatasEstoqueEntrada,
@@ -2177,42 +2177,14 @@ async function salvarDetalhesConferenciaSankhya({ nuconf, nunota }) {
   `);
 
   const dhAlter = formatarDataHoraSankhya();
-  const detalhesExistentes = await executeQuery(`
-    SELECT SEQCONF, CODPROD, CODBARRA, CODVOL, CONTROLE
+  const consultarGravados = () => executeQuery(`
+    SELECT SEQCONF, CODPROD, CODBARRA, CODVOL, CONTROLE, QTDCONF, QTDCONFVOLPAD
     FROM TGFCOI2
     WHERE NUCONF = ${nuconf}
     ORDER BY SEQCONF
   `);
-  const plano = planejarDetalhesConferenciaSaida(itens, detalhesExistentes);
-  for (const { detalhe, seqConf, existente } of plano.atribuicoes) {
-    const campos = {
-      ...detalhe,
-      QTDCONFVOLPAD: numeroApi(detalhe.QTDCONFVOLPAD),
-      QTDCONF: numeroApi(detalhe.QTDCONF),
-      DHALTER: dhAlter
-    };
-
-    if (existente) {
-      await atualizarRegistroApi(
-        'DetalhesConferencia',
-        { NUCONF: nuconf, SEQCONF: seqConf },
-        campos
-      );
-    } else {
-      await salvarRegistroApi('DetalhesConferencia', {
-        NUCONF: nuconf,
-        SEQCONF: seqConf,
-        ...campos
-      });
-    }
-  }
-  for (const seqConf of plano.sequenciasObsoletas) {
-    await atualizarRegistroApi('DetalhesConferencia', { NUCONF: nuconf, SEQCONF: seqConf }, {
-      QTDCONF: 0,
-      QTDCONFVOLPAD: 0,
-      DHALTER: dhAlter
-    });
-  }
+  const existentes = await consultarGravados();
+  await gravarDetalhesConferenciaSaida({ nuconf, itens, existentes, dhAlter, executeService, consultarGravados });
 }
 
 const filasSincronizacaoEntrada = new Map();
