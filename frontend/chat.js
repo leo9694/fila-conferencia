@@ -2969,26 +2969,42 @@
       setFeedback('O contato compartilhado não possui um telefone válido.', true);
       return;
     }
-    const existing = await findConversationByPhone(phone);
-    if (existing) {
-      restoreConversationLocally(existing, phone);
-      await openConversation(existing.id, { historyMode: 'push' });
-      if (!assignedUser(state.conversation)) await claimConversation(existing.id);
-      if (ownsConversation()) openTemplates();
-      return;
+    if (button.disabled) return;
+    button.disabled = true;
+    const channelId = conversationChannelId(state.conversation || {}) || state.selectedChannelId;
+    try {
+      const existing = await findConversationByPhone(phone, channelId);
+      if (existing) {
+        restoreConversationLocally(existing, phone);
+        await openConversation(existing.id, { historyMode: 'push' });
+        if (!assignedUser(state.conversation)) await claimConversation(existing.id);
+        if (ownsConversation()) openTemplates();
+        return;
+      }
+      openNewContact();
+      setManualContact(true);
+      refs.manualContactName.value = String(button.dataset.contactName || '').trim() || phone;
+      refs.manualContactPhone.value = phone;
+      if (channelId) refs.newChannel.value = String(channelId);
+      updateNewContactSubmit();
+    } catch (error) {
+      setFeedback(error.message || 'Não foi possível abrir o contato compartilhado.', true);
+    } finally {
+      button.disabled = false;
     }
-    setFeedback('Para iniciar uma nova conversa, busque o parceiro cadastrado no Sankhya pelo botão Adicionar contato.', true);
   }
 
-  async function findConversationByPhone(phone) {
+  async function findConversationByPhone(phone, channelId) {
     const normalized = Core.normalizePhone(phone);
     const matchesPhone = (conversation) => {
+      if (channelId && conversationChannelId(conversation) !== String(channelId)) return false;
       const contact = Core.contact(conversation);
       return [contact.phone, contact.waId].some((value) => Core.normalizePhone(value) === normalized);
     };
     const local = state.conversations.find(matchesPhone);
     if (local) return local;
     const query = new URLSearchParams({ page: '1', limit: '30', search: normalized, assignment: 'ALL' });
+    if (channelId) query.set('channelId', String(channelId));
     const payload = await api(`/conversations?${query}`);
     const conversations = Array.isArray(payload?.data) ? payload.data : [];
     return conversations.find(matchesPhone) || null;

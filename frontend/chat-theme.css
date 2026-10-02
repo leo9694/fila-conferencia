@@ -54,3 +54,9 @@
 .chat-theme-dark .chat-screen .chat-bitrix-pipeline-list a { background:#203b34; border-color:#3a5b52; color:#e9edef; }
 .chat-theme-dark .chat-screen .chat-bitrix-pipeline-list b { color:#6adfc5; }
 .chat-theme-dark .chat-screen .chat-sankhya-links p { border-color:#3a4244; }
+.chat-theme-dark .chat-screen .chat-shared-contact strong { color:#e9edef; }
+.chat-theme-dark .chat-screen .chat-shared-contact small { color:#aebac1; }
+.chat-theme-dark .chat-screen .chat-shared-contact-avatar { background:#24433d; color:#6adfc5; }
+.chat-theme-dark .chat-screen .chat-shared-contact-action { background:#203b34; border-color:#3a5b52; color:#6adfc5; }
+.chat-theme-dark .chat-screen .chat-shared-contact-action:hover:not(:disabled) { background:#2b4b42; }
+.chat-theme-dark .chat-screen .chat-composer-feedback.is-error { color:#ff9b94; }
