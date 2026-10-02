@@ -1,0 +1,56 @@
+/* Tema restrito ao chat e seus diálogos; o modo claro usa os estilos existentes. */
+.chat-theme-dark .chat-screen { color-scheme:dark; background:#161717; color:#e9edef; }
+.chat-theme-dark .chat-screen :is(.chat-workspace,.chat-conversations-panel,.chat-details-panel,.chat-main-panel,.chat-active-header,.chat-workspace-actions,.chat-composer,.chat-empty-state,.chat-active-view) { background-color:#161717; border-color:#303535; color:#e9edef; }
+.chat-theme-dark .chat-screen :is(.chat-list-line strong,.chat-panel-title strong,.chat-contact-heading strong,.chat-details-panel strong,.chat-details-panel h3) { color:#e9edef; }
+.chat-theme-dark .chat-screen :is(.chat-list-line small,.chat-list-line time,.chat-contact-heading span,.chat-list-agent,.chat-empty-state,.chat-details-panel small,.chat-details-panel p,.chat-details-panel label,.chat-composer-feedback) { color:#aebac1; }
+.chat-theme-dark .chat-screen .chat-conversation { border-color:#252b2c; color:#e9edef; }
+.chat-theme-dark .chat-screen .chat-conversation:hover { background:#232727; }
+.chat-theme-dark .chat-screen .chat-conversation.is-active { background:#2b3030; box-shadow:inset 3px 0 #00a884; }
+.chat-theme-dark .chat-screen .chat-conversation.is-cross-channel-transfer { background:#44351c; }
+.chat-theme-dark .chat-screen :is(.chat-search,.chat-agent-filter,.chat-active-filters,.chat-filters button,.chat-channel-tabs button,.chat-realtime-status,.chat-unread-alert,.chat-back-button,.chat-icon-button,.chat-template-button) { background:#242828; border-color:#3a4244; color:#aebac1; }
+.chat-theme-dark .chat-screen :is(input,textarea,select) { color-scheme:dark; background-color:#242828; border-color:#3a4244; color:#e9edef; }
+.chat-theme-dark .chat-screen :is(input,textarea)::placeholder { color:#aebac1; }
+.chat-theme-dark .chat-screen .chat-search input { background:transparent; }
+.chat-theme-dark .chat-screen :is(.chat-filters button.is-active,.chat-channel-tabs button.is-active,.chat-unread-alert.is-active,.chat-send-button,.chat-assignment-button) { background:#005c4b; border-color:#008e72; color:#e9edef; }
+.chat-theme-dark .chat-screen :is(.chat-list-avatar,.chat-contact-avatar,.chat-details-avatar) { background:#24433d; color:#6adfc5; }
+.chat-theme-dark .chat-screen :is(.chat-channel-badge,.chat-sankhya-badge,.chat-panel-title span) { background:#203b34; color:#6adfc5; }
+.chat-theme-dark .chat-screen .chat-active-view { position:relative; isolation:isolate; background:#111414; }
+.chat-theme-dark .chat-screen .chat-active-view::before { content:""; position:absolute; inset:0; z-index:-1; pointer-events:none; background:url('/chat-wallpaper.png') center top / 760px auto repeat; filter:invert(1) grayscale(1); opacity:.45; }
+.chat-theme-dark .chat-screen .chat-message-list { background:transparent; }
+.chat-theme-dark .chat-screen .chat-bubble { background:#262b2d; border-color:#262b2d; color:#e9edef; }
+.chat-theme-dark .chat-screen .chat-message.is-outbound .chat-bubble { background:#005c4b; border-color:#005c4b; }
+.chat-theme-dark .chat-screen .chat-bubble footer { color:#aebac1; }
+.chat-theme-dark .chat-screen :is(.chat-message-reply-quote,.chat-composer-reply,.chat-message.is-inbound .chat-message-reply-quote) { background:#1a2325; color:#aebac1; border-left-color:#00a884; }
+.chat-theme-dark .chat-screen :is(.chat-message-reply-quote strong,.chat-composer-reply strong) { color:#6adfc5; }
+.chat-theme-dark .chat-screen :is(.chat-message-reply-quote span,.chat-composer-reply small) { color:#aebac1; }
+.chat-theme-dark .chat-screen :is(.chat-message-reaction-menu,.chat-message-action-toggle,.chat-reaction-badge,.chat-emoji-menu,.chat-attachment-menu,.chat-recording,.chat-shared-contact,.chat-document,.chat-call-event-card) { background:#242b2d; border-color:#3a4244; color:#e9edef; }
+.chat-theme-dark .chat-screen :is(.chat-message-reaction-menu button,.chat-emoji-menu button,.chat-attachment-menu button,.chat-message-reaction-menu .chat-message-reply-action) { color:#e9edef; border-color:#3a4244; }
+.chat-theme-dark .chat-screen :is(.chat-message-reaction-menu button:hover,.chat-emoji-menu button:hover,.chat-attachment-menu button:hover) { background:#364044; }
+.chat-theme-dark .chat-screen :is(.chat-window-notice,.chat-active-filters) { background:#24312b; color:#c4d8cd; border-color:#3a4244; }
+.chat-theme-dark .chat-screen :is(.chat-panel-title button,.chat-details-head button,.chat-details-toggle,.chat-mobile-back) { color:#aebac1; }
+.chat-theme-dark :is(.chat-agent-dialog,.chat-template-dialog,.chat-contact-dialog,.chat-delete-dialog,.chat-conversation-context-menu,.chat-media-dialog) { color-scheme:dark; background:#202628; color:#e9edef; border-color:#3a4244; }
+.chat-theme-dark :is(.chat-agent-dialog,.chat-template-dialog,.chat-contact-dialog) :is(input,select,textarea) { background:#2b3335; color:#e9edef; border-color:#465154; }
+.chat-theme-dark :is(.chat-agent-dialog,.chat-template-dialog,.chat-contact-dialog) :is(label,small,p) { color:#aebac1; }
+.chat-theme-dark :is(.chat-agent-dialog,.chat-template-dialog,.chat-contact-dialog) :is(header span,header button) { color:#6adfc5; }
+.chat-theme-dark :is(.chat-agent-dialog,.chat-template-dialog,.chat-contact-dialog) footer button { background:#2b3335; color:#6adfc5; border-color:#465154; }
+.chat-theme-dark :is(.chat-agent-dialog,.chat-template-dialog,.chat-contact-dialog) footer button:last-child { background:#008069; color:#fff; }
+.chat-theme-dark .chat-conversation-context-menu button { color:#e9edef; }
+.chat-theme-dark .chat-conversation-context-menu button:hover { background:#364044; }
+.chat-theme-dark .chat-screen :is(.chat-composer-feedback,.chat-call-start,.chat-load-more,.chat-link-partner-button,.chat-empty-state>span,.chat-image-placeholder,.chat-media-shell,.chat-future-data:not(.is-verified),.chat-internal-event>span,.chat-system-notice,.chat-system-notice.is-closed) { background:#242b2d; border-color:#3a4244; color:#aebac1; }
+.chat-theme-dark .chat-screen :is(.chat-empty-state strong,.chat-list-empty strong,.chat-list-error strong,.chat-internal-event strong,.chat-system-notice strong,.chat-future-data p b) { color:#e9edef; }
+.chat-theme-dark .chat-screen :is(.chat-panel-title button:hover,.chat-panel-title button.is-active,.chat-details-head button:hover,.chat-details-toggle:hover,.chat-mobile-back:hover) { background:#2b3835; color:#6adfc5; }
+.chat-theme-dark .chat-screen :is(.chat-conversation-skeleton i,.chat-conversation-skeleton span,.chat-conversation-skeleton b) { background-image:linear-gradient(90deg,#252b2c,#343b3c,#252b2c); }
+.chat-theme-dark :is(.chat-template-dialog,.chat-contact-dialog,.chat-agent-dialog) :is(.chat-search,.chat-template-list button,.chat-template-preview,.chat-contact-body>p,.chat-partner-results,.chat-partner-results button,.chat-selected-partner,.chat-settings-search,.chat-agent-users form) { background:#2b3335; color:#e9edef; border-color:#465154; }
+.chat-theme-dark .chat-agent-dialog.is-wide,.chat-theme-dark .chat-agent-dialog.is-wide>header { background:#202628; color:#e9edef; border-color:#465154; }
+.chat-theme-dark .chat-screen :is(.chat-details-head,.chat-details-list div) { border-color:#303a3c; }
+.chat-theme-dark .chat-screen .chat-details-list dt { color:#aebac1; }
+.chat-theme-dark .chat-screen :is(.chat-details-list dd,.chat-details-content h2,.chat-call-history-button b,.chat-call-history-list b) { color:#e9edef; }
+.chat-theme-dark .chat-screen :is(.chat-future-data.is-verified,.chat-call-history-button,.chat-call-history-list article) { background:#242b2d; border-color:#3a4244; color:#e9edef; }
+.chat-theme-dark .chat-screen .chat-call-history { background:transparent; }
+.chat-theme-dark .chat-screen .chat-call-history-button:hover { background:#2b3835; border-color:#528476; }
+.chat-theme-dark .chat-screen :is(.chat-call-history-button>span>svg,.chat-bitrix-history-button,.chat-bitrix-heading>small) { color:#6adfc5; }
+.chat-theme-dark .chat-screen :is(.chat-bitrix-history-button,.chat-bitrix-heading>small) { background:#203b34; border-color:#3a5b52; }
+.chat-theme-dark .chat-screen .chat-bitrix-data.is-pending>em { color:#e9bb68; }
+.chat-theme-dark .chat-screen .chat-bitrix-pipeline-list a { background:#203b34; border-color:#3a5b52; color:#e9edef; }
+.chat-theme-dark .chat-screen .chat-bitrix-pipeline-list b { color:#6adfc5; }
+.chat-theme-dark .chat-screen .chat-sankhya-links p { border-color:#3a4244; }

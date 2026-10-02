@@ -105,6 +105,7 @@ function perfilAtendente(usuario = {}) {
     codUsu: Number(usuario.codUsu),
     name: salvo.nomeExibicao || usuario.nome || `Usuario ${usuario.codUsu}`,
     signature: salvo.assinatura || salvo.nomeExibicao || usuario.nome || '',
+    aparencia: salvo.aparencia === 'escuro' ? 'escuro' : 'claro',
     director: pertenceDiretoria(usuario),
     channelIds: Array.isArray(salvo.canaisPermitidos) ? salvo.canaisPermitidos : null
   };
@@ -1386,7 +1387,8 @@ router.put('/profile', (req, res) => {
     habilitado: true,
     nome: req.usuario.nome,
     nomeExibicao: req.body?.nomeExibicao || req.usuario.nome,
-    assinatura: req.body?.assinatura || ''
+    assinatura: req.body?.assinatura || '',
+    aparencia: req.body?.aparencia
   }, req.usuario.codUsu);
   res.json({ perfil: perfilAtendente({ ...req.usuario, nome: perfil.nomeExibicao }) });
 });

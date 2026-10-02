@@ -76,6 +76,7 @@ function criarChatAtendenteStore(options = {}) {
       nome: normalizarTexto(dados.nome ?? anterior.nome),
       nomeExibicao: normalizarTexto(dados.nomeExibicao ?? anterior.nomeExibicao ?? dados.nome ?? anterior.nome),
       assinatura: normalizarTexto(dados.assinatura ?? anterior.assinatura, 80),
+      aparencia: (dados.aparencia ?? anterior.aparencia) === 'escuro' ? 'escuro' : 'claro',
       canaisPermitidos: dados.canaisPermitidos === undefined
         ? (Array.isArray(anterior.canaisPermitidos) ? anterior.canaisPermitidos : undefined)
         : normalizarCanais(dados.canaisPermitidos),

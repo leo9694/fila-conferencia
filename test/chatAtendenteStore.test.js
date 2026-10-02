@@ -24,6 +24,21 @@ test('persiste acesso e perfil do atendente sem guardar credenciais', () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
+test('persiste aparência por atendente e preserva preferência ao editar outros campos', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-aparencia-'));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const filePath = path.join(dir, 'atendentes.json');
+  const store = criarChatAtendenteStore({ filePath });
+  store.salvar(72, { aparencia: 'escuro' });
+  store.salvar(72, { assinatura: 'Leonardo' });
+  store.salvar(73, { nome: 'Outro atendente' });
+  const recarregado = criarChatAtendenteStore({ filePath });
+  assert.equal(recarregado.obter(72).aparencia, 'escuro');
+  assert.equal(recarregado.obter(73).aparencia, 'claro');
+  assert.equal(recarregado.salvar(72, { aparencia: 'claro' }).aparencia, 'claro');
+  assert.equal(recarregado.salvar(72, { aparencia: 'inválido' }).aparencia, 'claro');
+});
+
 test('mantém a atribuição do atendimento localmente, sem depender da API externa', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'chat-atendimentos-'));
   const filePath = path.join(dir, 'atendimentos.json');

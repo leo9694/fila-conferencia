@@ -418,6 +418,7 @@
       const payload = await api('/access');
       state.access = payload;
       state.profile = payload?.perfil || null;
+      aplicarAparenciaChat();
       state.hiddenConversationIds = new Set(readHiddenConversationIds());
       if (menu) menu.hidden = payload?.permitido !== true;
       if (refs.settingsOpen) refs.settingsOpen.hidden = payload?.diretor !== true;
@@ -427,6 +428,7 @@
       return payload?.permitido === true;
     } catch {
       state.access = null; state.profile = null;
+      aplicarAparenciaChat();
       if (menu) menu.hidden = true;
       window.whatsappCallController?.stop();
       return false;
@@ -2401,10 +2403,22 @@
     document.body.append(modal);
   }
 
+  function aplicarAparenciaChat() {
+    document.body.classList.toggle('chat-theme-dark', state.profile?.aparencia === 'escuro');
+  }
+
   function openProfileDialog() {
     const modal = document.createElement('div');
     modal.className = 'chat-agent-modal';
     modal.innerHTML = `<form class="chat-agent-dialog"><header><div><span>MEU PERFIL</span><h2>Perfil do atendente</h2></div><button type="button" data-close aria-label="Fechar">×</button></header><label>Nome exibido<input name="nomeExibicao" maxlength="160" required value="${escapeHtml(state.profile?.name || '')}"></label><label>Assinatura das mensagens<input name="assinatura" maxlength="80" value="${escapeHtml(state.profile?.signature || '')}" placeholder="Ex.: Leonardo"></label><small>A assinatura será incluída automaticamente nas mensagens de texto.</small><p class="chat-agent-feedback"></p><footer><button type="button" data-close>Cancelar</button><button type="submit">Salvar perfil</button></footer></form>`;
+    const aparencia = document.createElement('label');
+    aparencia.textContent = 'Aparência do chat';
+    const seletor = document.createElement('select');
+    seletor.name = 'aparencia';
+    seletor.append(new Option('Claro', 'claro'), new Option('Escuro', 'escuro'));
+    seletor.value = state.profile?.aparencia === 'escuro' ? 'escuro' : 'claro';
+    aparencia.append(seletor);
+    modal.querySelector('.chat-agent-feedback').before(aparencia);
     const close = () => modal.remove();
     modal.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', close));
     modal.querySelector('form').addEventListener('submit', async (event) => {
@@ -2412,7 +2426,7 @@
       const form = new FormData(event.currentTarget);
       try {
         const payload = await api('/profile', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(Object.fromEntries(form)) });
-        state.profile = payload.perfil; close();
+        state.profile = payload.perfil; aplicarAparenciaChat(); close();
       } catch (error) { modal.querySelector('.chat-agent-feedback').textContent = error.message; }
     });
     document.body.append(modal);
@@ -3302,6 +3316,7 @@
     state.unreadOnly = false;
     state.access = null;
     state.profile = null;
+    aplicarAparenciaChat();
     state.agents = [];
     const menu = byId('home-nav-chat');
     if (menu) menu.hidden = true;
