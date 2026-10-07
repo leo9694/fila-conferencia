@@ -2,6 +2,21 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const whatsappApi = require('../api/whatsappApi');
 
+test('consulta a URA extraindo sua configuração do envelope da API', async () => {
+  const originalFetch = global.fetch;
+  const originalSecret = process.env.CALL_AGENT_AUTH_SECRET;
+  process.env.CALL_AGENT_AUTH_SECRET = 'segredo-de-teste-da-ura-com-32-caracteres';
+  global.fetch = async () => ({ ok: true, headers: { get: () => 'application/json' },
+    json: async () => ({ success: true, data: { enabled: true } }) });
+  try {
+    assert.deepEqual(await whatsappApi.getCallIvrConfig(1, { id: '72', name: 'Leo', director: true }), { enabled: true });
+  } finally {
+    global.fetch = originalFetch;
+    if (originalSecret === undefined) delete process.env.CALL_AGENT_AUTH_SECRET;
+    else process.env.CALL_AGENT_AUTH_SECRET = originalSecret;
+  }
+});
+
 test('monta query da API omitindo valores vazios', () => {
   assert.equal(
     whatsappApi._internals.queryString({ page: 2, search: 'João Silva', status: '' }),

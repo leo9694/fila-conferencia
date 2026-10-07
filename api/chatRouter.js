@@ -5,10 +5,14 @@ const whatsappApi = require('./whatsappApi');
 const bitrixService = require('./bitrixService');
 const { executeQuery, executeService } = require('./sankhyaApi');
 const { criarChatAtendenteStore } = require('./chatAtendenteStore');
+const { criarChatSetoresStore } = require('./chatSetoresStore');
 
 const router = express.Router();
 const realtime = whatsappApi.createRealtimeBridge();
 const atendentes = criarChatAtendenteStore();
+const setoresChamadas = criarChatSetoresStore();
+const { configurarUra } = require('./chatUra');
+const configurandoUra = new Set();
 const eventosAtendimento = new EventEmitter();
 const CONTROLE_CHAMADA_TTL_MS = 4 * 60 * 60 * 1000;
 const ATRIBUICAO_SEM_INTERACAO_MS = 24 * 60 * 60 * 1000;
@@ -1322,20 +1326,20 @@ router.get('/access', (req, res) => {
   });
 });
 
-router.get('/settings/users', exigirDiretoria, asyncRoute(async (_req, res) => {
+async function carregarConfiguracaoAtendentes({ incluirTodos = false } = {}) {
   const [rows, respostaCanais] = await Promise.all([
     executeQuery(`
     SELECT USU.CODUSU, TRIM(USU.NOMEUSU) AS NOMEUSU,
            TRIM(GRU.NOMEGRUPO) AS NOMEGRUPO
     FROM TSIUSU USU
     LEFT JOIN TSIGRU GRU ON GRU.CODGRUPO = USU.CODGRUPO
-    WHERE ${filtroAcessoAtivo('USU')}
+    WHERE ${incluirTodos ? '1 = 1' : filtroAcessoAtivo('USU')}
     ORDER BY USU.NOMEUSU
   `),
     whatsappApi.getChannels()
   ]);
   const canais = Array.isArray(respostaCanais?.data) ? respostaCanais.data : [];
-  res.json({
+  return {
     canais,
     usuarios: rows.map((row) => {
       const salvo = atendentes.obter(row.CODUSU);
@@ -1351,7 +1355,45 @@ router.get('/settings/users', exigirDiretoria, asyncRoute(async (_req, res) => {
         canaisPermitidos: diretor ? canais.map((canal) => String(canal.id)) : (salvo?.canaisPermitidos ?? null)
       };
     })
+  };
+}
+
+router.get('/settings/users', exigirDiretoria, asyncRoute(async (_req, res) => {
+  res.json(await carregarConfiguracaoAtendentes());
+}));
+
+router.get('/settings/calls', exigirDiretoria, asyncRoute(async (req, res) => {
+  const configuracao = await carregarConfiguracaoAtendentes({ incluirTodos: true });
+  const channelId = String(req.query.channelId || configuracao.canais[0]?.id || '');
+  if (!configuracao.canais.some((canal) => String(canal.id) === channelId)) {
+    return res.status(400).json({ erro: 'Selecione um número de atendimento disponível.' });
+  }
+  const ura = await whatsappApi.getCallIvrConfig(channelId, req.atendente).catch((error) => {
+    if (error.status === 404) return { enabled: false, unavailable: true };
+    throw error;
   });
+  res.json({ canais: configuracao.canais, channelId, ura,
+    uraEditable: whatsappApi.callClientEnvironment() === 'production',
+    usuarios: configuracao.usuarios, ...setoresChamadas.listar(channelId) });
+}));
+
+router.put('/settings/calls/:channelId', exigirDiretoria, asyncRoute(async (req, res) => {
+  const configuracao = await carregarConfiguracaoAtendentes({ incluirTodos: true });
+  const channelId = String(req.params.channelId);
+  if (!configuracao.canais.some((canal) => String(canal.id) === channelId)) {
+    return res.status(400).json({ erro: 'Número de atendimento indisponível.' });
+  }
+  if (configurandoUra.has(channelId)) return res.status(409).json({ erro: 'Uma configuração está sendo salva. Tente novamente.' });
+  configurandoUra.add(channelId);
+  try {
+    const dados = req.body || {};
+    const preview = setoresChamadas.salvar(channelId, dados, configuracao.usuarios, req.usuario.codUsu, { persistir: false });
+    const ura = configurarUra(preview.setores, dados.uraEnabled === true);
+    if (dados.uraEnabled !== undefined) {
+      await whatsappApi.configureCallIvr(channelId, ura, req.atendente);
+    }
+    res.json({ ...setoresChamadas.salvar(channelId, dados, configuracao.usuarios, req.usuario.codUsu), ura });
+  } finally { configurandoUra.delete(channelId); }
 }));
 
 router.put('/settings/users/:codUsu', exigirDiretoria, asyncRoute(async (req, res) => {
@@ -2137,7 +2179,12 @@ for (const action of ['pre-accept', 'accept', 'reject', 'terminate']) {
     } else {
       const atendimento = controleChamadas.exigir(callId, atendente);
       const atribuicao = liberarAtribuicaoExpirada(conversation);
-      if (!atendimento && atribuicao?.userId && String(atribuicao.userId) !== String(req.atendente.id)) {
+      const historico = action === 'reject' && !atendimento
+        ? await whatsappApi.getConversationCalls(conversation.id, { page: 1, limit: 100 }, req.atendente) : null;
+      const dadosChamadas = historico?.data ?? historico;
+      const chamadas = Array.isArray(dadosChamadas) ? dadosChamadas : dadosChamadas?.calls || dadosChamadas?.items || [];
+      const filaUra = chamadas.some((item) => item.callId === callId && item.ivr?.phase === 'QUEUE');
+      if (!filaUra && !atendimento && atribuicao?.userId && String(atribuicao.userId) !== String(req.atendente.id)) {
         throw erroPosseChamada(atribuicao);
       }
     }

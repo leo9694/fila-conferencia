@@ -62,6 +62,7 @@ function createAgentToken(agent, now = Math.floor(Date.now() / 1000)) {
     sub: String(agent.id),
     name: String(agent.name),
     director: agent.director === true,
+    ...(Array.isArray(agent.channelIds) ? { channelIds: agent.channelIds.map(String) } : {}),
     environment: callClientEnvironment(),
     ...(agent.clientId ? { clientId: String(agent.clientId).slice(0, 128) } : {}),
     iat: now,
@@ -370,6 +371,12 @@ function createRealtimeBridge({ ioFactory, agent } = {}) {
 }
 
 module.exports = {
+  callClientEnvironment,
+  getCallIvrConfig: async (channelId, agent) => {
+    const payload = await request(`/api/channels/${encodeURIComponent(channelId)}/call-ivr`, { agent });
+    return payload?.data ?? payload;
+  },
+  configureCallIvr: (channelId, input, agent) => request(`/api/channels/${encodeURIComponent(channelId)}/call-ivr`, { ...json('PUT', input), agent }),
   claimCall,
   createRealtimeBridge,
   callMediaReady,

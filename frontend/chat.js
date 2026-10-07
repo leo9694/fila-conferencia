@@ -42,6 +42,7 @@
     detailsLast: byId('chat-details-last'), detailsUnread: byId('chat-details-unread'),
     realtime: byId('chat-realtime-status'),
     profileOpen: byId('chat-profile-open'), settingsOpen: byId('chat-settings-open'),
+    callsSettingsOpen: byId('chat-calls-settings-open'),
     assignmentLabel: byId('chat-assignment-label'), detailsAgent: byId('chat-details-agent'),
     claim: byId('chat-claim'), transfer: byId('chat-transfer'), release: byId('chat-release'),
     newMessage: byId('chat-new-message-button'), mobileBack: byId('chat-mobile-back'),
@@ -422,6 +423,7 @@
       state.hiddenConversationIds = new Set(readHiddenConversationIds());
       if (menu) menu.hidden = payload?.permitido !== true;
       if (refs.settingsOpen) refs.settingsOpen.hidden = payload?.diretor !== true;
+      if (refs.callsSettingsOpen) refs.callsSettingsOpen.hidden = payload?.diretor !== true;
       if (refs.agentFilterToggle) refs.agentFilterToggle.hidden = payload?.permitido !== true;
       if (payload?.permitido === true) window.whatsappCallController?.start(payload.perfil);
       else window.whatsappCallController?.stop();
@@ -2478,6 +2480,188 @@
     } catch (error) { modal.querySelector('.chat-agent-dialog>p').textContent = error.message; }
   }
 
+  function filtrarAtendentesSetor(usuarios, adicionados, busca) {
+    const normalizar = (valor) => String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('pt-BR');
+    const termo = normalizar(busca).trim();
+    const existentes = new Set(adicionados.map(String));
+    return usuarios.filter((usuario) => !existentes.has(String(usuario.codUsu))
+      && normalizar(`${usuario.codUsu} ${usuario.nome} ${usuario.nomeExibicao || ''}`).includes(termo));
+  }
+
+  async function openCallsSettingsDialog() {
+    if (!state.access?.diretor) return;
+    const modal = document.createElement('dialog');
+    modal.className = 'chat-agent-dialog chat-calls-dialog';
+    modal.setAttribute('aria-labelledby', 'chat-calls-settings-title');
+    modal.innerHTML = `<header><div><span>CONFIGURAR CHAMADAS</span><h2 id="chat-calls-settings-title">Setores de atendimento</h2></div><button type="button" data-close aria-label="Fechar">×</button></header><p>Organize os atendentes por número. Uma pessoa pode participar de vários setores. As permissões de acesso ao chat não são alteradas.</p><label>Número de atendimento<select data-channel disabled></select></label><label class="chat-ura-toggle"><input type="checkbox" data-ura disabled> Ativar URA com a gravação da Norte Sul Sementes</label><p>1 · Financeiro &nbsp; 2 · Vendas &nbsp; 3 · Compras &nbsp; 9 · Ouvir novamente. Sem atendimento no setor em 25 segundos, chama os demais disponíveis. Configure os setores com esses nomes.</p><div data-sectors></div><button type="button" data-add disabled>+ Criar setor</button><p class="chat-agent-feedback" role="status"></p><footer><button type="button" data-close>Cancelar</button><button type="button" data-save disabled>Salvar configuração</button></footer>`;
+    document.body.append(modal);
+    modal.showModal();
+    const channelSelect = modal.querySelector('[data-channel]');
+    const sectorsList = modal.querySelector('[data-sectors]');
+    const feedback = modal.querySelector('.chat-agent-feedback');
+    const saveButton = modal.querySelector('[data-save]');
+    const addButton = modal.querySelector('[data-add]');
+    const uraInput = modal.querySelector('[data-ura]');
+    uraInput.addEventListener('change', () => { dirty = true; });
+    let payload = null;
+    let setores = [];
+    let dirty = false;
+    let busy = false;
+    const close = () => {
+      if (busy || (dirty && !window.confirm('Descartar as alterações não salvas?'))) return;
+      modal.close();
+    };
+    modal.addEventListener('close', () => modal.remove());
+    modal.addEventListener('cancel', (event) => { event.preventDefault(); close(); });
+    modal.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', close));
+    const collect = () => {
+      setores = [...sectorsList.querySelectorAll('[data-sector]')].map((element, index) => ({
+        ...(setores[index]?.id ? { id: setores[index].id } : {}),
+        nome: element.querySelector('[data-name]').value,
+        atendentes: setores[index].atendentes
+      }));
+    };
+    const render = () => {
+      const usuarios = new Map(payload.usuarios.map((user) => [String(user.codUsu), user]));
+      sectorsList.innerHTML = setores.map((setor, index) => {
+        const membros = setor.atendentes.map((codigo) => {
+          const usuario = usuarios.get(String(codigo));
+          const nome = usuario?.nome || 'Usuário não encontrado no Sankhya — remova para salvar';
+          return `<div class="chat-call-sector-member"><span>${escapeHtml(codigo)} - ${escapeHtml(nome)}</span><button type="button" data-unlink="${index}" data-user="${escapeHtml(codigo)}" aria-label="Remover ${escapeHtml(nome)} do setor">×</button></div>`;
+        }).join('');
+        return `<fieldset data-sector><legend>Setor ${index + 1}</legend><div class="chat-call-sector-head"><input data-name maxlength="80" aria-label="Nome do setor ${index + 1}" placeholder="Ex.: Comercial" value="${escapeHtml(setor.nome)}"><button type="button" data-remove="${index}" aria-label="Remover setor ${index + 1}">Remover</button></div><div class="chat-call-sector-members">${membros || '<small>Nenhum atendente adicionado.</small>'}</div><button type="button" data-add-attendant="${index}">+ Adicionar atendente</button></fieldset>`;
+      }).join('') || '<p>Nenhum setor cadastrado para este número. Clique em Criar setor.</p>';
+    };
+    const openAttendantPicker = (index) => {
+      collect();
+      const setor = setores[index];
+      const picker = document.createElement('dialog');
+      picker.className = 'chat-agent-dialog chat-calls-dialog chat-call-picker';
+      picker.setAttribute('aria-labelledby', 'chat-call-picker-title');
+      picker.innerHTML = `<header><div><span>USUÁRIOS DO SANKHYA</span><h2 id="chat-call-picker-title">Adicionar atendentes</h2></div><button type="button" data-close aria-label="Fechar">×</button></header><p>Setor: ${escapeHtml(setor.nome || `Setor ${index + 1}`)}. Todos os usuários do Sankhya estão disponíveis. Adicionar ao setor não libera acesso ao chat; as permissões continuam em Configurar atendentes.</p><label>Pesquisar usuário<input type="search" placeholder="Código ou nome no Sankhya" data-search></label><div class="chat-call-picker-results" data-results></div><p data-count role="status"></p><footer><button type="button" data-close>Cancelar</button><button type="button" data-confirm disabled>Adicionar selecionados</button></footer>`;
+      const selecionados = new Set();
+      const results = picker.querySelector('[data-results]');
+      const search = picker.querySelector('[data-search]');
+      const confirm = picker.querySelector('[data-confirm]');
+      const updateCount = () => {
+        picker.querySelector('[data-count]').textContent = `${selecionados.size} atendente(s) selecionado(s)`;
+        confirm.disabled = selecionados.size === 0;
+      };
+      const renderResults = () => {
+        const usuarios = filtrarAtendentesSetor(payload.usuarios, setor.atendentes, search.value);
+        results.innerHTML = usuarios.map((usuario) => `<label><input type="checkbox" value="${escapeHtml(usuario.codUsu)}" ${selecionados.has(String(usuario.codUsu)) ? 'checked' : ''}><span><strong>${escapeHtml(usuario.codUsu)} - ${escapeHtml(usuario.nome)}</strong>${usuario.nomeExibicao && usuario.nomeExibicao !== usuario.nome ? `<small>No chat: ${escapeHtml(usuario.nomeExibicao)}</small>` : ''}</span></label>`).join('') || '<p>Nenhum atendente disponível para esta busca. Os já adicionados não aparecem nesta lista.</p>';
+      };
+      results.addEventListener('change', (event) => {
+        const input = event.target;
+        if (input.type !== 'checkbox') return;
+        if (input.checked) selecionados.add(input.value);
+        else selecionados.delete(input.value);
+        updateCount();
+      });
+      search.addEventListener('input', renderResults);
+      picker.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', () => picker.close()));
+      picker.addEventListener('close', () => {
+        picker.remove();
+        sectorsList.querySelector(`[data-add-attendant="${index}"]`)?.focus();
+      });
+      confirm.addEventListener('click', () => {
+        setor.atendentes = [...new Set([...setor.atendentes.map(String), ...selecionados])];
+        dirty = true;
+        render();
+        picker.close();
+      });
+      document.body.append(picker);
+      renderResults();
+      updateCount();
+      picker.showModal();
+      search.focus();
+    };
+    const setBusy = (value) => {
+      busy = value;
+      channelSelect.disabled = value;
+      saveButton.disabled = value;
+      addButton.disabled = value;
+      uraInput.disabled = value || payload?.uraEditable === false || payload?.ura?.unavailable === true;
+      sectorsList.querySelectorAll('input,button').forEach((input) => { input.disabled = value; });
+    };
+    async function load(channelId = '') {
+      setBusy(true);
+      feedback.textContent = 'Carregando configuração...';
+      try {
+        payload = await api(`/settings/calls${channelId ? `?channelId=${encodeURIComponent(channelId)}` : ''}`);
+        if (!modal.isConnected) return;
+        channelSelect.innerHTML = payload.canais.map((channel) => `<option value="${escapeHtml(channel.id)}">${escapeHtml(channelText(channel))}</option>`).join('');
+        channelSelect.value = payload.channelId;
+        setores = payload.setores;
+        uraInput.checked = payload.ura?.enabled === true;
+        dirty = false;
+        render();
+        feedback.textContent = '';
+      } catch (error) {
+        feedback.textContent = error.message;
+        if (payload) channelSelect.value = payload.channelId;
+      } finally {
+        setBusy(false);
+        if (!payload) { saveButton.disabled = true; addButton.disabled = true; }
+      }
+    }
+    channelSelect.addEventListener('change', () => {
+      if (dirty && !window.confirm('Trocar o número e descartar as alterações não salvas?')) {
+        channelSelect.value = payload.channelId;
+        return;
+      }
+      void load(channelSelect.value);
+    });
+    sectorsList.addEventListener('input', () => { dirty = true; });
+    addButton.addEventListener('click', () => {
+      collect();
+      if (setores.length >= 100) { feedback.textContent = 'Limite de 100 setores por número.'; return; }
+      setores.push({ nome: '', atendentes: [] });
+      dirty = true;
+      render();
+      sectorsList.querySelector('fieldset:last-child [data-name]')?.focus();
+    });
+    sectorsList.addEventListener('click', (event) => {
+      if (busy) return;
+      const add = event.target.closest('[data-add-attendant]');
+      if (add) { openAttendantPicker(Number(add.dataset.addAttendant)); return; }
+      const unlink = event.target.closest('[data-unlink]');
+      if (unlink) {
+        collect();
+        const setor = setores[Number(unlink.dataset.unlink)];
+        setor.atendentes = setor.atendentes.filter((codigo) => String(codigo) !== unlink.dataset.user);
+        dirty = true;
+        render();
+        return;
+      }
+      const button = event.target.closest('[data-remove]');
+      if (!button || busy || !window.confirm('Remover este setor? A alteração será aplicada ao salvar.')) return;
+      collect();
+      setores.splice(Number(button.dataset.remove), 1);
+      dirty = true;
+      render();
+    });
+    saveButton.addEventListener('click', async () => {
+      collect();
+      setBusy(true);
+      feedback.textContent = 'Salvando...';
+      try {
+        const saved = await api(`/settings/calls/${encodeURIComponent(payload.channelId)}`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ setores, revisao: payload.revisao,
+            ...(payload.uraEditable !== false && !payload.ura?.unavailable ? { uraEnabled: uraInput.checked } : {}) })
+        });
+        payload = { ...payload, ...saved };
+        setores = saved.setores;
+        dirty = false;
+        render();
+        feedback.textContent = 'Configuração salva.';
+      } catch (error) { feedback.textContent = error.message; }
+      finally { setBusy(false); }
+    });
+    await load(state.selectedChannelId);
+  }
+
   async function beginRecording() {
     if (state.conversation?.requiresTemplate) return setFeedback('Envie um template aprovado antes de gravar uma mensagem.', true);
     if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) return setFeedback('Este navegador não oferece gravação de áudio.', true);
@@ -3169,6 +3353,7 @@
     refs.transfer.addEventListener('click', openTransferDialog);
     refs.profileOpen.addEventListener('click', openProfileDialog);
     refs.settingsOpen.addEventListener('click', openSettingsDialog);
+    refs.callsSettingsOpen?.addEventListener('click', openCallsSettingsDialog);
     refs.messages.addEventListener('scroll', () => {
       if (state.loadingOlder || state.messagePage >= state.messageTotalPages) return;
       if (Core.shouldLoadOlderMessages(refs.messages, { threshold: MESSAGE_SCROLL_THRESHOLD })) loadOlderMessages();

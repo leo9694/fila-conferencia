@@ -4,6 +4,43 @@ const assert = require('node:assert/strict');
 const chatRouter = require('../api/chatRouter');
 const whatsappApi = require('../api/whatsappApi');
 
+test('consulta todos os usuários para setores sem remover o filtro de acesso das configurações existentes', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const vm = require('node:vm');
+  const fonte = fs.readFileSync(path.join(__dirname, '../api/chatRouter.js'), 'utf8');
+  const inicio = fonte.indexOf('async function carregarConfiguracaoAtendentes(');
+  const fim = fonte.indexOf("router.get('/settings/users'", inicio);
+  let consulta;
+  const carregar = vm.runInNewContext(`${fonte.slice(inicio, fim)}; carregarConfiguracaoAtendentes;`, {
+    executeQuery: async (sql) => { consulta = sql; return [{ CODUSU: 99, NOMEUSU: 'MICHELE' }]; },
+    whatsappApi: { getChannels: async () => ({ data: [{ id: 'mt' }] }) },
+    atendentes: { obter: () => null },
+    filtroAcessoAtivo: chatRouter._internals.filtroAcessoAtivo
+  });
+  const todos = await carregar({ incluirTodos: true });
+  assert.match(consulta, /WHERE 1 = 1/);
+  assert.doesNotMatch(consulta, /DTLIMACESSO/);
+  assert.equal(todos.usuarios[0].nome, 'MICHELE');
+  assert.equal(todos.usuarios[0].habilitado, false);
+  await carregar();
+  assert.match(consulta, /DTLIMACESSO/);
+});
+
+test('configuração de setores de chamadas exige diretoria na consulta e na gravação', () => {
+  for (const caminho of ['/settings/calls', '/settings/calls/:channelId']) {
+    const route = chatRouter.stack.find((layer) => layer.route?.path === caminho).route;
+    let status;
+    let proximo = false;
+    const res = { status(value) { status = value; return this; }, json() {} };
+    route.stack[0].handle({ usuario: { grupos: ['VENDAS'] } }, res, () => { proximo = true; });
+    assert.equal(status, 403);
+    assert.equal(proximo, false);
+    route.stack[0].handle({ usuario: { grupos: ['DIRETORIA'] } }, res, () => { proximo = true; });
+    assert.equal(proximo, true);
+  }
+});
+
 test('não transforma falha de autenticação do WhatsApp em sessão local expirada', () => {
   assert.equal(chatRouter._internals.responseStatus({ status: 401 }), 502);
   assert.equal(chatRouter._internals.responseStatus({ status: 403 }), 502);
