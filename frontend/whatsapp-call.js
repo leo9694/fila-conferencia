@@ -128,17 +128,19 @@
   }
 
   function makeClient() {
-    return new Core.WhatsAppCallClient({
+    const client = new Core.WhatsAppCallClient({
       api: clientApi(),
       mediaDevices: navigator.mediaDevices,
       PeerConnection: window.RTCPeerConnection || window.webkitRTCPeerConnection,
       AudioContext: window.AudioContext || window.webkitAudioContext,
       remoteAudio: refs.remoteAudio,
       onMediaError: () => {
+        if (state.client !== client || client.closed || !state.call) return;
         refs.status.textContent = 'Áudio conectado, mas a saída de som foi bloqueada pelo navegador.';
         toast('Clique novamente no painel da chamada para liberar o som.');
       },
       onRemoteMedia: () => {
+        if (state.client !== client || client.closed || !state.call) return;
         if (String(state.call?.direction || '').toUpperCase() !== 'OUTBOUND'
           || !['INITIATING', 'RINGING', 'CONNECTING'].includes(state.status)) return;
         stopRingtone();
@@ -146,6 +148,7 @@
         startTimer(state.call?.answeredAt || Date.now());
       }
     });
+    return client;
   }
 
   function channel(payload = {}) {
@@ -662,7 +665,7 @@
     }
     const apiStatus = String(payload.call?.status || payload.status || '').toUpperCase();
     if (Core.TERMINAL_STATES.has(apiStatus) || ['call:ended', 'call:rejected', 'call:failed'].includes(event)) dismissCall(incomingId);
-    if (incomingId && state.call && incomingId !== callId(state.call)) return;
+    if (!incomingId || (state.call && incomingId !== callId(state.call))) return;
     if (!state.call) return;
     if (state.status === 'ENDING' && (['call:ringing', 'call:connecting', 'call:active'].includes(event)
       || (event === 'call:updated' && !Core.TERMINAL_STATES.has(apiStatus)))) return;
@@ -673,10 +676,8 @@
       return;
     }
     if (event === 'call:signal') {
-      state.signal = signal(payload) || state.signal;
-      if (state.client?.peer && state.signal?.sdp && (state.signal.sdpType || state.signal.type) !== 'offer') {
-        state.client.applySignal(state.signal).catch(() => setStatus('FAILED', 'Falha ao estabelecer áudio.'));
-      }
+      // O SDP da Meta pertence à conexão Meta/gateway. O peer do navegador
+      // recebe seu próprio SDP pelas rotas de mídia, sem renegociação por SSE.
       return;
     }
     if (event === 'call:updated') {

@@ -5,7 +5,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const Core = require('../frontend/whatsapp-call-core');
 
-function fixture(fetch = async () => ({ ok: true, json: async () => ({}) })) {
+function fixture(fetch = async () => ({ ok: true, json: async () => ({}) }), callCore = Core) {
   const elements = new Map();
   const intervals = [];
   const element = () => ({
@@ -23,7 +23,7 @@ function fixture(fetch = async () => ({ ok: true, json: async () => ({}) })) {
     addEventListener(event, listener) { this.handlers[event] = listener; }
     close() {}
   }
-  const window = { WhatsAppCallCore: Core, crypto: { randomUUID: () => 'device-test-123' } };
+  const window = { WhatsAppCallCore: callCore, crypto: { randomUUID: () => 'device-test-123' } };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../frontend/whatsapp-call.js'), 'utf8'), {
     window, navigator: {}, Audio: AudioMock, EventSource: SourceMock, fetch,
     document: {
@@ -124,4 +124,84 @@ test('outra sessão para de tocar quando uma transferência é aceita no ambient
   controller.handleEvent('call:transfer:accepted', { transferId: 'transfer-1', clientId: 'browser-production' });
   assert.equal(audio.playing, false);
   assert.equal(controller.state.call, null);
+});
+
+test('sinalização da Meta não renegocia o áudio do navegador já conectado ao gateway', () => {
+  const { controller } = fixture();
+  controller.handleEvent('call:incoming', incoming);
+  let applied = false;
+  controller.state.client = {
+    peer: {}, cleanup() {},
+    applySignal() { applied = true; return Promise.reject(new Error('SDP de outra conexão')); }
+  };
+  controller.handleEvent('call:active', incoming);
+  controller.handleEvent('call:signal', { callId: incoming.callId, session: { sdpType: 'answer', sdp: 'meta-answer' } });
+  assert.equal(applied, false);
+  assert.equal(controller.state.status, 'ACTIVE');
+  controller.stop();
+});
+
+test('falha antiga e eventos sem identidade não afetam uma nova ligação bem-sucedida', () => {
+  const { controller } = fixture();
+  controller.handleEvent('call:incoming', incoming);
+  controller.handleEvent('call:ended', incoming);
+  controller.stop();
+  controller.start({ id: '72' });
+  const next = { ...incoming, callId: 'call-2' };
+  controller.handleEvent('call:incoming', next);
+  controller.state.client = { cleanup() {} };
+  controller.handleEvent('call:active', next);
+  controller.handleEvent('call:failed', incoming);
+  controller.handleEvent('call:failed', {});
+  assert.equal(controller.state.status, 'ACTIVE');
+  assert.equal(controller.state.call.callId, 'call-2');
+  controller.stop();
+});
+
+test('erro tardio de reprodução da primeira ligação não altera o painel da segunda', async () => {
+  const clients = [];
+  class ClientMock {
+    constructor(options) { this.options = options; clients.push(this); }
+    unlockRemoteAudio() {}
+    async acceptIncoming() {}
+    cleanup() { this.closed = true; }
+  }
+  const { controller, elements } = fixture(undefined, { ...Core, WhatsAppCallClient: ClientMock });
+  controller.handleEvent('call:incoming', incoming);
+  await elements.get('whatsapp-call-accept').click();
+  assert.equal(controller.state.status, 'ACTIVE');
+  controller.handleEvent('call:ended', incoming);
+  controller.stop();
+  controller.start({ id: '72' });
+  controller.handleEvent('call:incoming', { ...incoming, callId: 'call-2' });
+  await elements.get('whatsapp-call-accept').click();
+  const status = elements.get('whatsapp-call-status');
+  const message = status.textContent;
+  clients[0].options.onMediaError(new Error('Reprodução atrasada'));
+  clients[0].options.onRemoteMedia();
+  assert.equal(status.textContent, message);
+  assert.equal(controller.state.status, 'ACTIVE');
+  assert.equal(controller.state.call.callId, 'call-2');
+  controller.stop();
+});
+
+test('erro de sinalização tardio não transforma uma ligação encerrada com sucesso em falha', async () => {
+  const { controller, elements } = fixture();
+  controller.handleEvent('call:incoming', incoming);
+  controller.state.client = {
+    peer: {}, cleanup() {},
+    applySignal: async () => { throw new Error('Peer já encerrado'); }
+  };
+  controller.handleEvent('call:active', incoming);
+  controller.handleEvent('call:signal', {
+    callId: incoming.callId, session: { sdpType: 'answer', sdp: 'meta-answer-atrasado' }
+  });
+  controller.handleEvent('call:ended', incoming);
+  const message = elements.get('whatsapp-call-status').textContent;
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(controller.state.status, 'ENDED');
+  assert.equal(controller.state.call, null);
+  assert.equal(elements.get('whatsapp-call-status').textContent, message);
+  controller.stop();
 });
