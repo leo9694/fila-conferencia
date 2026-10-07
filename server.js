@@ -180,6 +180,7 @@ app.get('/api/auth/me', async (req, res) => {
 });
 
 app.use('/api/chat', exigirAutenticacao, chatRouter);
+app.use('/api/empresa', exigirAutenticacao, exigirAcessoSankhya, require('./api/diarioBordoRouter'));
 app.use('/api', exigirAutenticacao, exigirAcessoSankhya, routes);
 
 app.get('/', (req, res) => {

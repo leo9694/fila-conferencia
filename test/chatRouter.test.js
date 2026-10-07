@@ -100,6 +100,20 @@ test('garante posse exclusiva da chamada ao primeiro atendente', () => {
   assert.equal(controle.liberar('call-1', primeiroDispositivo), true);
 });
 
+test('avisa quem atendeu e os demais atendentes do canal para interromper o toque', () => {
+  const delivered = [];
+  const payload = { callId: 'call-1', channel: { id: '101' }, attendant: { id: '72' } };
+  for (const profile of [
+    { id: '72', channelIds: ['101'] },
+    { id: '81', channelIds: ['101'] },
+    { id: '90', channelIds: ['202'] }
+  ]) {
+    const listener = chatRouter._internals.criarRepassadorChamada(profile, (event) => delivered.push([profile.id, event]));
+    listener({ event: 'call:claimed', payload });
+  }
+  assert.deepEqual(delivered, [['72', 'call:claimed'], ['81', 'call:claimed']]);
+});
+
 test('trata números móveis da Meta com e sem o nono dígito como o mesmo WhatsApp', () => {
   assert.equal(chatRouter._internals.identidadeTelefoneWhatsapp('5566999633482'), '556699633482');
   assert.equal(chatRouter._internals.identidadeTelefoneWhatsapp('556699633482'), '556699633482');

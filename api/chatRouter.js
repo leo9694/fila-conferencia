@@ -164,6 +164,12 @@ function atendentePodeReceberEventoChamada(atendente = {}, event, payload = {}) 
   return atendentePodeAcessarCanal(atendente, channelId);
 }
 
+function criarRepassadorChamada(atendente, write) {
+  return ({ event, payload }) => {
+    if (atendentePodeReceberEventoChamada(atendente, event, payload) === true) write(event, payload);
+  };
+}
+
 function erroCanalNaoPermitido() {
   const error = new Error('Você não possui acesso a este número de atendimento.');
   error.status = 403;
@@ -1963,14 +1969,14 @@ router.get('/calls', asyncRoute(async (req, res) => {
     page: req.query.page,
     limit: req.query.limit,
     conversationId: req.query.conversationId
-  }));
+  }, req.atendente));
 }));
 
 router.get('/conversations/:id/calls', asyncRoute(async (req, res) => {
   res.json(await whatsappApi.getConversationCalls(id(req.params.id), {
     page: req.query.page,
     limit: req.query.limit
-  }));
+  }, req.atendente));
 }));
 
 async function consultarPermissaoLigacao(req, res) {
@@ -1999,7 +2005,7 @@ router.post('/conversations/:id/calls/media', asyncRoute(async (req, res) => {
   podeAtender(conversation, req.atendente);
   res.status(201).json(await whatsappApi.createOutboundMedia(conversationId, {
     session: req.body?.session
-  }, req.atendente));
+  }, atendenteChamada(req.atendente, req.body?.clientId)));
 }));
 
 router.post('/conversations/:id/calls', asyncRoute(async (req, res) => {
@@ -2009,7 +2015,7 @@ router.post('/conversations/:id/calls', asyncRoute(async (req, res) => {
   res.status(201).json(await whatsappApi.createCall(conversationId, {
     ...(req.body?.mediaSessionId ? { mediaSessionId: req.body.mediaSessionId } : { session: req.body?.session }),
     agent: agenteChamada(req.atendente)
-  }, req.atendente));
+  }, atendenteChamada(req.atendente, req.body?.clientId)));
 }));
 
 router.get('/call-agents', asyncRoute(async (req, res) => {
@@ -2019,25 +2025,27 @@ router.get('/call-agents', asyncRoute(async (req, res) => {
 router.post('/calls/:callId/media', asyncRoute(async (req, res) => {
   const callId = idChamadaWhatsapp(req.params.callId);
   if (!callId) return res.status(400).json({ erro: 'Chamada inválida.' });
+  if (!req.body?.transferId) controleChamadas.exigir(callId, atendenteChamada(req.atendente, req.body?.clientId));
   res.status(201).json(await whatsappApi.joinCallMedia(callId, {
     session: req.body?.session,
     ...(req.body?.transferId ? { transferId: req.body.transferId } : {})
-  }, req.atendente));
+  }, atendenteChamada(req.atendente, req.body?.clientId)));
 }));
 
 router.post('/calls/:callId/media-ready', asyncRoute(async (req, res) => {
   const callId = idChamadaWhatsapp(req.params.callId);
   if (!callId) return res.status(400).json({ erro: 'Chamada inválida.' });
+  if (!req.body?.transferId) controleChamadas.exigir(callId, atendenteChamada(req.atendente, req.body?.clientId));
   res.json(await whatsappApi.callMediaReady(callId, {
     ...(req.body?.transferId ? { transferId: req.body.transferId } : {})
-  }, req.atendente));
+  }, atendenteChamada(req.atendente, req.body?.clientId)));
 }));
 
 router.post('/calls/:callId/transfer', asyncRoute(async (req, res) => {
   const callId = idChamadaWhatsapp(req.params.callId);
   if (!callId) return res.status(400).json({ erro: 'Chamada inválida.' });
   res.status(201).json(await whatsappApi.requestCallTransfer(
-    callId, String(req.body?.targetAgentId || ''), req.atendente
+    callId, String(req.body?.targetAgentId || ''), atendenteChamada(req.atendente, req.body?.clientId)
   ));
 }));
 
@@ -2048,13 +2056,14 @@ for (const action of ['accept', 'reject', 'cancel']) {
       return res.status(400).json({ erro: 'Transferência inválida.' });
     }
     res.json(await whatsappApi.updateCallTransfer(
-      callId, req.params.transferId, action, req.atendente
+      callId, req.params.transferId, action, atendenteChamada(req.atendente, req.body?.clientId)
     ));
   }));
 }
 
-function reivindicarChamada(callId, conversation, atendente) {
+async function reivindicarChamada(callId, conversation, atendente) {
   if (!atendentePodeAcessarConversa(atendente, conversation)) throw erroCanalNaoPermitido();
+  await whatsappApi.claimCall(callId, atendente);
   const resultado = controleChamadas.reivindicar(callId, conversation.id, atendente);
   if (!resultado.criado) return resultado.atendimento;
 
@@ -2082,6 +2091,7 @@ function reivindicarChamada(callId, conversation, atendente) {
     payload: {
       callId,
       conversationId: Number(conversation.id),
+      channel: conversation.channel || { id: idCanalConversa(conversation) },
       attendant: { id: String(atendente.id), name: atendente.name || 'Atendente' },
       clientId: atendente.clientId,
       claimedAt: resultado.atendimento.claimedAt
@@ -2096,7 +2106,21 @@ router.post('/calls/:callId/claim', asyncRoute(async (req, res) => {
   const conversationId = id(req.body?.conversationId);
   const conversation = await obterConversaConsolidada(conversationId);
   const atendente = atendenteChamada(req.atendente, req.body?.clientId);
-  res.json({ atendimento: reivindicarChamada(callId, conversation, atendente) });
+  res.json({ atendimento: await reivindicarChamada(callId, conversation, atendente) });
+}));
+
+router.get('/calls/:callId/state', asyncRoute(async (req, res) => {
+  const callId = idChamadaWhatsapp(req.params.callId);
+  if (!callId) return res.status(400).json({ erro: 'Chamada inválida.' });
+  const conversationId = id(req.query.conversationId);
+  const conversation = await obterConversaConsolidada(conversationId);
+  if (!atendentePodeAcessarConversa(req.atendente, conversation)) throw erroCanalNaoPermitido();
+  const atendimento = controleChamadas.obter(callId);
+  const resposta = await whatsappApi.getConversationCalls(conversationId, { page: 1, limit: 100 }, req.atendente);
+  const dados = resposta?.data ?? resposta;
+  const calls = Array.isArray(dados) ? dados : dados?.calls || dados?.items || [];
+  const call = calls.find((call) => String(call.callId || call.id) === callId) || null;
+  res.json({ atendimento: call ? atendimento : null, call });
 }));
 
 for (const action of ['pre-accept', 'accept', 'reject', 'terminate']) {
@@ -2106,7 +2130,7 @@ for (const action of ['pre-accept', 'accept', 'reject', 'terminate']) {
     const conversationId = id(req.body?.conversationId);
     const conversation = await obterConversaConsolidada(conversationId);
     const atendente = atendenteChamada(req.atendente, req.body?.clientId);
-    if (['pre-accept', 'accept'].includes(action)) reivindicarChamada(callId, conversation, atendente);
+    if (['pre-accept', 'accept'].includes(action)) await reivindicarChamada(callId, conversation, atendente);
     else if (action === 'terminate') {
       const atendimento = controleChamadas.exigir(callId, atendente);
       if (!atendimento) podeAtender(conversation, req.atendente);
@@ -2120,7 +2144,7 @@ for (const action of ['pre-accept', 'accept', 'reject', 'terminate']) {
     const resposta = await whatsappApi.updateCall(callId, action, {
       ...(req.body?.session ? { session: req.body.session } : {}),
       agent: agenteChamada(req.atendente)
-    }, req.atendente);
+    }, atendente);
     if (['reject', 'terminate'].includes(action)) controleChamadas.liberar(callId, atendente);
     res.json(resposta);
   }));
@@ -2176,10 +2200,7 @@ router.get('/events', (req, res) => {
       });
     }
   };
-  const onCall = ({ event, payload }) => {
-    const attendantId = payload?.attendant?.id;
-    if (!attendantId || String(attendantId) === String(req.atendente.id)) write(event, payload);
-  };
+  const onCall = criarRepassadorChamada(req.atendente, write);
   const onDeleted = (payload) => write('conversation:deleted', payload);
   const onUpdated = (payload) => {
     const conversation = payload?.conversation || payload || {};
@@ -2224,7 +2245,7 @@ router.get('/events', (req, res) => {
     },
     (payload) => write('connection', payload)
   );
-  const agentRealtime = whatsappApi.createRealtimeBridge({ agent: req.atendente });
+  const agentRealtime = whatsappApi.createRealtimeBridge({ agent: atendenteChamada(req.atendente, req.query?.clientId) });
   const unsubscribeAgent = agentRealtime.subscribe(({ event, payload }) => {
     if (!String(event).startsWith('call:')) return;
     if (event === 'call:transfer:completed' && payload?.conversationId
@@ -2263,7 +2284,7 @@ router.get('/events', (req, res) => {
       })
       // Sem identificar o número, a chamada direta não deve tocar para o atendente.
       .catch(() => {});
-  });
+  }, (payload) => write('call:connection', payload));
   const keepAlive = setInterval(() => res.write(': keep-alive\n\n'), 25000);
   req.on('close', () => {
     clearInterval(keepAlive);
@@ -2320,6 +2341,7 @@ router._internals = {
   atendentePodeReceberEventoChamada,
   eventoTransferenciaChamada,
   criarControleChamadas,
+  criarRepassadorChamada,
   idsRelacionadosConversa,
   mensagemInternaAtribuicao,
   mensagensInternasDeEventos,

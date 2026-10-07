@@ -3,6 +3,7 @@ const multer = require('multer');
 const path = require('path');
 const { PDFDocument } = require('pdf-lib');
 const router = express.Router();
+const { semControleAdicional, validarRastreabilidadeNovoItem } = require('./api/estoqueContagemControle');
 const {
   downloadDirectFile,
   downloadGatewayFile,
@@ -73,6 +74,7 @@ const {
 } = require('./api/relatorioCtes');
 const { montarSqlEstimativaFrete, normalizarEstimativaFrete } = require('./api/estimativaFrete');
 const { carregarAnaliseFrete } = require('./api/analiseFrete');
+const { consultarRastreioProduto, consultarFiltrosRastreio, consultarValoresColuna } = require('./api/rastreioProduto');
 const {
   TOP_FATURAMENTO_VENDAS,
   consolidarDashboardVendas,
@@ -3768,6 +3770,34 @@ router.get('/fila-conferencia/produtos/:codprod/foto', async (req, res) => {
   }
 });
 
+router.route('/produtos/rastreio').get(consultarRastreio).post(consultarRastreio);
+async function consultarRastreio(req, res) {
+  try {
+    res.json(await consultarRastreioProduto(req.method === 'POST' ? req.body : req.query, executeQuery));
+  } catch (error) {
+    if (!error.statusCode) console.error('Erro no rastreio de produto:', error);
+    res.status(error.statusCode || 500).json({ erro: error.statusCode ? error.message : 'Não foi possível consultar as movimentações do produto.' });
+  }
+}
+
+router.post('/produtos/rastreio/valores', async (req, res) => {
+  try {
+    res.json(await consultarValoresColuna(req.body, executeQuery));
+  } catch (error) {
+    if (!error.statusCode) console.error('Erro nos valores de coluna:', error);
+    res.status(error.statusCode || 500).json({ erro: error.statusCode ? error.message : 'Não foi possível carregar os valores da coluna.' });
+  }
+});
+
+router.get('/produtos/rastreio/filtros', async (req, res) => {
+  try {
+    res.json(await consultarFiltrosRastreio(executeQuery));
+  } catch (error) {
+    console.error('Erro nos filtros de rastreio:', error);
+    res.status(500).json({ erro: 'Não foi possível carregar as empresas e TOPs.' });
+  }
+});
+
 router.get('/produtos/consulta', async (req, res) => {
   try {
     const codigo = String(req.query.codigo || '').trim();
@@ -3926,6 +3956,7 @@ function serializarSessaoContagemEstoque(sessao) {
       return {
         chave: item.chave,
         codProd: item.codProd,
+        tipContEst: item.tipContEst || null,
         descrProd: item.descrProd,
         referencia: item.referencia,
         codVol: item.codVol,
@@ -4200,6 +4231,10 @@ async function migrarPosicaoControle({
 }
 
 async function atualizarRastreabilidadeItemEstoque({ sessao, item, dados }) {
+  const [produtoControle] = await executeQuery(`SELECT NVL(TIPCONTEST, 'N') AS TIPCONTEST FROM TGFPRO WHERE CODPROD = ${Number(item.codProd)}`);
+  if (!produtoControle) throw new Error('Produto não encontrado no cadastro do Sankhya.');
+  const semControle = semControleAdicional(produtoControle.TIPCONTEST);
+  if (semControle) dados = { ...dados, controle: item.controle || '', dtFabricacao: null, dtValidade: null };
   const controleAtual = String(item.controle || '').trim();
   const controleNovo = String(dados?.controle ?? controleAtual).trim();
   if (controleNovo.length > 100) throw new Error('O lote/controle deve ter no máximo 100 caracteres.');
@@ -4243,7 +4278,7 @@ async function atualizarRastreabilidadeItemEstoque({ sessao, item, dados }) {
     const posicoesSemControle = registrosPorControle('');
     if (posicoesSemControle.length === 1) registroOrigem = posicoesSemControle[0];
   }
-  const permiteNovaPosicao = item.adicionadoManualmente === true && Boolean(controleNovo);
+  const permiteNovaPosicao = item.adicionadoManualmente === true && (Boolean(controleNovo) || semControle);
   if (!registroOrigem && !registroDestino && !permiteNovaPosicao) {
     const lotesDisponiveis = registros
       .map((itemEstoque) => String(itemEstoque.CONTROLE || '').trim() || 'Sem controle')
@@ -4317,8 +4352,8 @@ async function atualizarRastreabilidadeItemEstoque({ sessao, item, dados }) {
     };
   }
 
-  if (alterouControle && !registroDestino) {
-    if (!controleNovo) {
+  if ((alterouControle || (!registroOrigem && permiteNovaPosicao)) && !registroDestino) {
+    if (!controleNovo && !semControle) {
       throw new Error('Não é possível criar uma posição de estoque sem informar o lote/controle.');
     }
     await salvarRegistroApi('Estoque', {
@@ -4750,6 +4785,7 @@ async function localizarProdutoParaContagem(codigo) {
         PRO.DESCRPROD,
         PRO.REFERENCIA,
         PRO.CODVOL,
+        NVL(PRO.TIPCONTEST, 'N') AS TIPCONTEST,
         PRO.CODGRUPOPROD,
         NVL(GRU.DESCRGRUPOPROD, 'Sem grupo') AS DESCRGRUPOPROD
       FROM TGFPRO PRO
@@ -4794,14 +4830,12 @@ async function prepararNovoItemContagem(sessao, dados) {
     : Number(sessao.local);
   if (!codLocal) throw new Error('Informe o local onde o novo lote foi encontrado.');
 
-  const controle = String(dados?.controle || '').trim();
-  if (!controle) throw new Error('Informe o lote/controle do novo item.');
+  const semControle = semControleAdicional(produto.TIPCONTEST);
+  const controle = semControle ? '' : String(dados?.controle || '').trim();
   if (controle.length > 100) throw new Error('O lote/controle deve ter no maximo 100 caracteres.');
-  const dtFabricacao = normalizarDataIsoRastreabilidade(dados?.dtFabricacao, 'A data de fabricacao');
-  const dtValidade = normalizarDataIsoRastreabilidade(dados?.dtValidade, 'A data de validade');
-  if (!dtFabricacao || !dtValidade) {
-    throw new Error('Informe a data de fabricacao e a data de validade do novo lote.');
-  }
+  const dtFabricacao = semControle ? null : normalizarDataIsoRastreabilidade(dados?.dtFabricacao, 'A data de fabricacao');
+  const dtValidade = semControle ? null : normalizarDataIsoRastreabilidade(dados?.dtValidade, 'A data de validade');
+  validarRastreabilidadeNovoItem({ tipoControle: produto.TIPCONTEST, controle, dtFabricacao, dtValidade });
   if (dtValidade < dtFabricacao) {
     throw new Error('A validade nao pode ser anterior a data de fabricacao.');
   }
@@ -4839,6 +4873,7 @@ async function prepararNovoItemContagem(sessao, dados) {
     quantidade,
     item: {
       codProd: Number(produto.CODPROD),
+      tipContEst: produto.TIPCONTEST,
       descrProd: produto.DESCRPROD,
       referencia: produto.REFERENCIA,
       codVol: produto.CODVOL || 'UN',
@@ -4862,6 +4897,7 @@ router.get('/estoque-contagem/produtos/localizar', async (req, res) => {
     res.json({
       produto: {
         codProd: Number(produto.CODPROD),
+        tipContEst: produto.TIPCONTEST,
         descricao: String(produto.DESCRPROD || 'Produto sem descrição').trim(),
         referencia: String(produto.REFERENCIA || '').trim(),
         codVol: String(produto.CODVOL || 'UN').trim(),
@@ -5084,6 +5120,7 @@ router.post('/estoque-contagem/sessoes', async (req, res) => {
         PRO.DESCRPROD,
         PRO.REFERENCIA,
         PRO.CODVOL,
+        NVL(PRO.TIPCONTEST, 'N') AS TIPCONTEST,
         PRO.CODGRUPOPROD,
         NVL(GRU.DESCRGRUPOPROD, 'Sem grupo') AS DESCRGRUPOPROD,
         NVL(TRIM(EST.CONTROLE), '') AS CONTROLE,

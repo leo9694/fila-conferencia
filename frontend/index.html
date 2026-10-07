@@ -17,6 +17,8 @@
   <link rel="stylesheet" href="/transporte-dashboard.css?v=20260917-9">
   <link rel="stylesheet" href="/chat.css?v=20260918-1">
   <link rel="stylesheet" href="/chat-theme.css?v=20261002-3">
+  <link rel="stylesheet" href="/rastreio-produto.css?v=20261005-5">
+  <link rel="stylesheet" href="/diario-bordo.css?v=20261007-6">
 
   <style>
     :root {
@@ -11075,6 +11077,9 @@
               <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-atualizacao-contato" title="Atualização de contato">
                 <i data-lucide="contact-round" aria-hidden="true"></i><span>Atualização de contato</span>
               </button>
+              <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-rastreio-produto" title="Rastreio de produto">
+                <i data-lucide="history" aria-hidden="true"></i><span>Rastreio de produto</span>
+              </button>
             </div>
           </details>
           <details class="home-dashboard-nav-group">
@@ -11083,6 +11088,12 @@
               <button class="home-dashboard-nav-item" id="home-nav-relatorios" type="button" data-home-target="abrir-relatorios" title="Relatórios" hidden>
                 <i data-lucide="file-spreadsheet" aria-hidden="true"></i><span>Relatórios</span>
               </button>
+            </div>
+          </details>
+          <details class="home-dashboard-nav-group">
+            <summary><i data-lucide="building-2" aria-hidden="true"></i><span>Empresa</span><i class="home-dashboard-nav-chevron" data-lucide="chevron-down" aria-hidden="true"></i></summary>
+            <div class="home-dashboard-nav-submenu">
+              <button class="home-dashboard-nav-item" type="button" data-home-target="abrir-diario-bordo" title="Diário de bordo"><i data-lucide="notebook-pen" aria-hidden="true"></i><span>Diário de bordo</span></button>
             </div>
           </details>
           <button class="home-dashboard-nav-item" id="home-nav-chat" type="button" data-home-target="abrir-chat" title="Chat" hidden>
@@ -13205,6 +13216,67 @@
     </div>
   </section>
 
+  <section class="screen" id="diario-bordo-screen">
+    <main class="diario-bordo-app">
+      <header><div><h1>Diário de bordo</h1><p>Controle de retirada e devolução dos veículos da empresa.</p></div><div class="diario-bordo-acoes"><button type="button" id="diario-cadastros">Cadastros</button><button type="button" id="diario-nova-saida" class="diario-primary">+ Registrar saída</button></div></header>
+      <div class="diario-bordo-resumo"><div>Em uso<strong id="diario-em-uso">—</strong></div><div>Viagens encerradas<strong id="diario-encerradas">—</strong></div><div>Total percorrido no diário<strong id="diario-total-km">—</strong></div><div>Km percorridos no filtro<strong id="diario-distancia">—</strong></div></div>
+      <form class="diario-bordo-filtros" id="diario-filtros">
+        <label>BUSCAR<input name="busca" type="search" placeholder="Placa, veículo, motorista, empresa ou rota"></label>
+        <label>SAÍDA A PARTIR DE<input name="inicio" type="date"></label><label>SAÍDA ATÉ<input name="fim" type="date"></label>
+        <label>SITUAÇÃO<select name="situacao"><option value="">Todas</option><option value="aberto">Em uso</option><option value="encerrado">Encerrado</option></select></label>
+        <button type="submit">Filtrar</button><button type="button" id="diario-atualizar">Atualizar</button>
+      </form>
+      <p id="diario-status" class="diario-bordo-status" role="status"></p>
+      <div class="diario-bordo-tabela"><table><thead><tr><th>Saída / retorno</th><th>Veículo</th><th>Motorista</th><th>Rota</th><th>Quilometragem</th><th>Situação / ações</th></tr></thead><tbody id="diario-linhas"></tbody></table></div>
+      <div class="diario-bordo-paginacao"><button id="diario-anterior" type="button">Anterior</button><span id="diario-pagina"></span><button id="diario-proxima" type="button">Próxima</button></div>
+      <dialog id="diario-tipo-modal" class="diario-bordo-modal" aria-labelledby="diario-tipo-titulo">
+        <header><h2 id="diario-tipo-titulo">O que deseja cadastrar?</h2><button type="button" id="diario-tipo-fechar" aria-label="Fechar seleção de cadastro">×</button></header>
+        <div class="diario-bordo-tipos"><button type="button" data-cadastro-tipo="rotas">Cadastrar destino / rota</button><button type="button" data-cadastro-tipo="carros">Cadastrar carro</button><button type="button" data-cadastro-tipo="motoristas">Cadastrar motorista</button></div>
+      </dialog>
+      <dialog id="diario-excluir-modal" class="diario-bordo-modal" aria-labelledby="diario-excluir-titulo">
+        <header><h2 id="diario-excluir-titulo">Confirmar exclusão</h2><button type="button" id="diario-excluir-fechar" aria-label="Fechar confirmação de exclusão">×</button></header>
+        <p id="diario-excluir-descricao"></p><p>O cadastro deixará de aparecer nas próximas saídas. O histórico das viagens será preservado.</p>
+        <p id="diario-excluir-status" role="status"></p><footer><button type="button" id="diario-excluir-cancelar">Cancelar</button><button type="button" id="diario-excluir-confirmar" class="diario-danger">Excluir cadastro</button></footer>
+      </dialog>
+      <dialog id="diario-cadastro-modal" class="diario-bordo-modal" aria-labelledby="diario-cadastro-titulo">
+        <header><h2 id="diario-cadastro-titulo">Cadastros do diário de bordo</h2><button type="button" id="diario-cadastro-fechar" aria-label="Fechar cadastros">×</button></header>
+        <form id="diario-cadastro-form"><div id="diario-cadastro-campos" class="diario-bordo-grid"></div><p id="diario-cadastro-status" role="status"></p><footer><button type="button" id="diario-cadastro-cancelar">Cancelar</button><button type="submit" id="diario-cadastro-salvar" class="diario-primary">Salvar cadastro</button></footer></form>
+        <h3>Cadastros existentes</h3><ul id="diario-cadastro-lista" class="diario-bordo-cadastro-lista"></ul>
+      </dialog>
+      <dialog id="diario-modal" class="diario-bordo-modal" aria-labelledby="diario-modal-titulo">
+        <header><h2 id="diario-modal-titulo"></h2><button type="button" id="diario-fechar" aria-label="Fechar">×</button></header>
+        <form id="diario-registro-form"><div id="diario-campos" class="diario-bordo-grid"></div><p id="diario-form-status" role="status"></p><footer><button type="button" id="diario-cancelar">Cancelar</button><button type="submit" class="diario-primary" id="diario-salvar">Registrar</button></footer></form>
+        <dl id="diario-detalhes" hidden></dl>
+      </dialog>
+    </main>
+  </section>
+  <section class="screen rastreio-produto-screen" id="rastreio-produto-screen">
+    <main class="rastreio-produto-app">
+      <header><h1>Rastreio de produto</h1></header>
+      <form id="rastreio-produto-form" class="rastreio-produto-form">
+        <label>CÓDIGO DO PRODUTO<input name="codProd" type="number" min="1" step="1" required placeholder="Código Sankhya"></label>
+        <label>DATA INICIAL<input id="rastreio-produto-inicial" name="dataInicial" type="date" required></label>
+        <label>DATA FINAL<input id="rastreio-produto-final" name="dataFinal" type="date" required></label>
+        <label>EMPRESA<select id="rastreio-produto-empresa" name="empresa"><option value="">Todas as empresas</option></select></label>
+        <label>TOP<select id="rastreio-produto-top" name="top"><option value="">Todas as TOPs</option></select></label>
+        <button type="submit">Consultar</button>
+      </form>
+      <p id="rastreio-produto-status" class="rastreio-produto-status" role="status">Selecione o produto e o período e clique em Consultar.</p>
+      <div id="rastreio-produto-resultados" aria-busy="false">
+        <div class="rastreio-produto-table-wrap"><table class="rastreio-produto-table">
+          <colgroup><col style="width:10%"><col style="width:14%"><col style="width:16%"><col style="width:20%"><col style="width:18%"><col style="width:22%"></colgroup>
+          <thead><tr><th>DATA</th><th>MOVIMENTAÇÃO</th><th>NOTA / PEDIDO</th><th>TOP</th><th>EMPRESA</th><th>PARCEIRO</th></tr></thead>
+          <tbody id="rastreio-produto-linhas"><tr><td colspan="6">Nenhuma consulta realizada.</td></tr></tbody>
+        </table></div>
+        <div class="rastreio-produto-pagination"><button id="rastreio-produto-anterior" type="button" disabled>Anterior</button><span id="rastreio-produto-pagina"></span><button id="rastreio-produto-proxima" type="button" disabled>Próxima</button></div>
+      </div>
+      <p class="rastreio-produto-note">Ordem cronológica pela data de entrada/saída ou, quando ausente, pela data de negociação. Inclui documentos pendentes e pedidos: a quantidade do documento não representa necessariamente uma alteração do saldo de estoque.</p>
+      <dialog id="rastreio-produto-painel" class="rastreio-produto-painel" aria-labelledby="rastreio-produto-painel-titulo">
+        <header><h2 id="rastreio-produto-painel-titulo">Detalhes da movimentação</h2><button type="button" id="rastreio-produto-painel-fechar" aria-label="Fechar detalhes">×</button></header>
+        <dl id="rastreio-produto-painel-dados" class="rastreio-produto-detalhe-grid"></dl>
+      </dialog>
+    </main>
+  </section>
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <script src="asyncRefresh.js?v=20260601-2"></script>
   <script src="vendas-dashboard.js?v=20260820-1"></script>
@@ -13216,6 +13288,9 @@
   <script src="whatsapp-call.js?v=20260909-1"></script>
   <script src="chat-dom.js?v=20260909-1"></script>
   <script src="chat.js?v=20261002-2"></script>
-  <script src="app.js?v=20260916-1"></script>
+  <script src="rastreio-produto.js?v=20261005-4"></script>
+  <script src="diario-bordo-quilometragem.js?v=20261007-2"></script>
+  <script src="diario-bordo.js?v=20261007-6"></script>
+  <script src="app.js?v=20261007-1"></script>
 </body>
 </html>

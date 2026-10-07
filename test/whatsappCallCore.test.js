@@ -66,6 +66,43 @@ test('libera microfone quando a criação da chamada de saída falha', async () 
   assert.equal(item.client.peer, null);
 });
 
+test('encerra a chamada reivindicada quando o gateway falha e libera o microfone', async () => {
+  const item = fixture();
+  const terminated = [];
+  item.api.joinMedia = async () => { throw new Error('Gateway indisponível'); };
+  item.api.terminate = async (...args) => terminated.push(args);
+  await assert.rejects(item.client.acceptIncoming({ callId: 'call-1', conversationId: 12 }), /Gateway indisponível/);
+  assert.deepEqual(terminated, [['call-1', { conversationId: 12 }]]);
+  assert.equal(item.track.stopped, true);
+});
+
+test('não encerra a chamada quando outro atendente vence a reivindicação', async () => {
+  const item = fixture();
+  let terminated = false;
+  item.api.claim = async () => { throw Object.assign(new Error('Outro atendente'), { status: 409 }); };
+  item.api.terminate = async () => { terminated = true; };
+  await assert.rejects(item.client.acceptIncoming({ callId: 'call-1', conversationId: 12 }), /Outro atendente/);
+  assert.equal(terminated, false);
+  assert.equal(item.track.stopped, true);
+});
+
+test('não inicia ligação se a preparação de mídia responder após o cancelamento', async () => {
+  const item = fixture();
+  let resolveMedia;
+  const reachedMedia = new Promise((resolve) => {
+    item.api.createOutboundMedia = () => {
+      resolve();
+      return new Promise((done) => { resolveMedia = done; });
+    };
+  });
+  const pending = item.client.startOutgoing({ conversationId: 12 });
+  await reachedMedia;
+  item.client.cleanup();
+  resolveMedia({ mediaSessionId: 'media-1', session: { sdp: 'answer' } });
+  await assert.rejects(pending, /encerrada/);
+  assert.equal(item.calls.some(([action]) => action === 'create'), false);
+});
+
 test('solicita microfone somente ao aceitar e conecta pelo gateway antes de ativar', async () => {
   const item = fixture();
   assert.equal(item.microphoneRequests(), 0);
@@ -100,6 +137,8 @@ test('mantém botões de atender e recusar durante eventos de chamada recebida',
   assert.equal(eventUiStatus('call:connecting', 'RINGING', false), 'RINGING');
   assert.equal(eventUiStatus('call:ringing', 'CONNECTING', true), 'CONNECTING');
   assert.equal(eventUiStatus('call:active', 'RINGING', false), null);
+  assert.equal(eventUiStatus('call:ringing', 'ACTIVE', true), null);
+  assert.equal(eventUiStatus('call:connecting', 'ENDING', true), null);
 });
 
 test('traduz atualizações genéricas da API para os estados visuais da chamada', () => {

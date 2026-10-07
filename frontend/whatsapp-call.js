@@ -32,6 +32,35 @@
     transfer: null, outgoingTransfer: null, permission: null, conversationLoadToken: 0,
     clientId: createCallClientId()
   };
+  const dismissedCalls = new Set();
+  let reconciliationTimer = null;
+  let reconciling = false;
+
+  async function reconcileCall() {
+    if (reconciling || !state.call || state.transfer || !['RINGING', 'CONNECTING', 'ACTIVE'].includes(state.status)) return;
+    const id = callId(state.call);
+    const conversation = conversationId(state.call);
+    if (!id || !conversation) return;
+    reconciling = true;
+    try {
+      const snapshot = await api(`/calls/${encodeURIComponent(id)}/state?conversationId=${encodeURIComponent(conversation)}`);
+      if (!state.call || id !== callId(state.call)) return;
+      if (snapshot.atendimento) {
+        const owner = snapshot.atendimento;
+        handleEvent('call:claimed', {
+          callId: id, attendant: { id: owner.userId, name: owner.userName },
+          clientId: owner.clientId, claimedAt: owner.claimedAt
+        });
+      }
+      if (snapshot.call) handleEvent('call:updated', snapshot.call);
+    } catch {} finally { reconciling = false; }
+  }
+
+  function dismissCall(id) {
+    if (!id) return;
+    dismissedCalls.add(id);
+    if (dismissedCalls.size > 256) dismissedCalls.delete(dismissedCalls.values().next().value);
+  }
 
   function escapeHtml(value) {
     return String(value ?? '').replace(/[&<>'"]/g, (char) => ({
@@ -57,7 +86,7 @@
   }
 
   function callId(payload = {}) {
-    return String(payload.callId || payload.call?.id || payload.id || '').trim();
+    return String(payload.callId || payload.call?.callId || payload.call?.id || payload.id || '').trim();
   }
 
   function conversationId(payload = {}) {
@@ -78,7 +107,7 @@
   }
 
   function jsonBody(payload) {
-    return { method: 'POST', body: JSON.stringify(payload) };
+    return { method: 'POST', body: JSON.stringify({ ...payload, clientId: state.clientId }) };
   }
 
   function callBody(payload = {}) {
@@ -90,10 +119,11 @@
       claim: (id, payload) => api(`/calls/${encodeURIComponent(id)}/claim`, callBody(payload)),
       preAccept: (id, payload) => api(`/calls/${encodeURIComponent(id)}/pre-accept`, callBody(payload)),
       accept: (id, payload) => api(`/calls/${encodeURIComponent(id)}/accept`, callBody(payload)),
+      terminate: (id, payload) => api(`/calls/${encodeURIComponent(id)}/terminate`, callBody(payload)),
       create: (id, payload) => api(`/conversations/${encodeURIComponent(id)}/calls`, jsonBody(payload)),
       createOutboundMedia: (id, payload) => api(`/conversations/${encodeURIComponent(id)}/calls/media`, jsonBody(payload)),
-      joinMedia: (id, payload) => api(`/calls/${encodeURIComponent(id)}/media`, jsonBody(payload)),
-      mediaReady: (id, payload) => api(`/calls/${encodeURIComponent(id)}/media-ready`, jsonBody(payload))
+      joinMedia: (id, payload) => api(`/calls/${encodeURIComponent(id)}/media`, callBody(payload)),
+      mediaReady: (id, payload) => api(`/calls/${encodeURIComponent(id)}/media-ready`, callBody(payload))
     };
   }
 
@@ -132,9 +162,11 @@
     refs.mute.hidden = !controls.mute;
     refs.transfer.hidden = !controls.transfer;
     refs.end.hidden = !controls.end;
+    if (status === 'FAILED' && !callId(state.call)) refs.end.hidden = true;
     refs.permission.hidden = status !== 'PERMISSION';
     refs.close.hidden = !['PERMISSION', 'FAILED', 'BUSY', 'REJECTED', 'ENDED'].includes(status);
     const direction = String(state.call?.direction || '').toUpperCase();
+    if (status !== 'RINGING' && state.ringtone?.kind === 'incoming') stopRingtone();
     if (Core.shouldPlayOutboundRingback(status, direction)) startRingback();
     else if (state.ringtone?.kind === 'outbound') stopRingtone();
   }
@@ -292,8 +324,10 @@
     if (!state.call || state.status !== 'RINGING') return;
     stopRingtone();
     setStatus('CONNECTING', 'Conectando áudio...');
+    const currentCall = state.call;
+    const client = state.client && !state.client.closed ? state.client : makeClient();
     try {
-      state.client = makeClient();
+      state.client = client;
       state.client.unlockRemoteAudio();
       if (state.transfer) {
         setStatus('TRANSFER_CONNECTING', 'Aceitando transferência...');
@@ -311,6 +345,7 @@
         }
       }
     } catch (error) {
+      if (state.call !== currentCall && state.client !== client) return;
       if (state.transfer) {
         const failedTransfer = state.transfer;
         try {
@@ -339,11 +374,15 @@
   }
 
   async function rejectIncoming() {
+    if (!state.call || state.status !== 'RINGING') return;
+    const rejectedId = callId(state.call);
+    setStatus('ENDING', 'Recusando chamada...');
     try {
       if (state.transfer) {
         await api(`/calls/${encodeURIComponent(callId(state.call))}/transfer/${encodeURIComponent(state.transfer.transferId)}/reject`, jsonBody({}));
       } else await updateCall('reject');
     } catch (error) { toast(error.message); }
+    if (state.call && callId(state.call) !== rejectedId) return;
     cleanup();
   }
 
@@ -396,8 +435,10 @@
 
   async function endCall() {
     if (state.status === 'ENDING') return;
+    const endedId = callId(state.call);
     setStatus('ENDING', 'Encerrando chamada...');
     try { await updateCall('terminate'); } catch (error) { toast(error.message); }
+    if (state.call && callId(state.call) !== endedId) return;
     cleanup();
     if (state.conversation) loadHistory(state.conversation).catch(() => {});
   }
@@ -483,17 +524,21 @@
   }
 
   async function beginOutbound(conversation) {
+    if (!['IDLE', 'PERMISSION'].includes(state.status)) return;
     state.call = { conversationId: conversation.id, direction: 'OUTBOUND', contact: conversation.contact, channel: conversation.channel };
     openOverlay(conversation, 'INITIATING');
     refs.title.textContent = 'Ligação pelo WhatsApp';
     refs.status.textContent = `Ligando para ${contact(conversation).name}...`;
+    const client = state.client && !state.client.closed ? state.client : makeClient();
     try {
-      state.client ||= makeClient();
+      state.client = client;
       state.client.unlockRemoteAudio();
       const created = await state.client.startOutgoing({ conversationId: conversation.id });
+      if (state.client !== client) return;
       state.call = { ...state.call, ...(created?.call || created || {}) };
-      setStatus('RINGING', 'Chamando...');
+      if (state.status === 'INITIATING') setStatus('RINGING', 'Chamando...');
     } catch (error) {
+      if (state.client !== client) return;
       const errorStatus = error.code === 'AGENT_BUSY' || error.code === 'CALL_ALREADY_ACTIVE' ? 'BUSY'
         : error.code === 'CALL_PERMISSION_REQUIRED' || error.code === 'CALL_PERMISSION_EXPIRED' ? 'REJECTED' : 'FAILED';
       setStatus(errorStatus, error?.name === 'NotAllowedError'
@@ -509,7 +554,11 @@
       return;
     }
     if (event === 'call:outgoing') {
-      if (conversationId(payload) !== Number(state.conversation?.id) || state.call) return;
+      if (conversationId(payload) !== Number(state.conversation?.id)) return;
+      if (state.call) {
+        if (!callId(state.call) && state.client) state.call = { ...state.call, ...(payload.call || payload) };
+        return;
+      }
       state.call = payload.call || payload;
       openOverlay(state.call, 'INITIATING');
       refs.title.textContent = 'Ligação pelo WhatsApp';
@@ -536,6 +585,16 @@
       return;
     }
     if (event === 'call:transfer:accepted') {
+      if (state.transfer?.transferId === payload.transferId && payload.clientId) {
+        if (payload.clientId !== state.clientId) {
+          cleanup();
+          toast('Transferência atendida em outra sessão.');
+        } else {
+          stopRingtone();
+          setStatus('TRANSFER_CONNECTING', 'Conectando áudio da transferência...');
+        }
+        return;
+      }
       if (state.outgoingTransfer?.transferId === payload.transferId) {
         setStatus('TRANSFER_PENDING', `${payload.toAgent?.name || 'Atendente'} aceitou; conectando o áudio...`);
       }
@@ -566,6 +625,12 @@
       return;
     }
     if (event === 'call:incoming') {
+      if (!incomingId || dismissedCalls.has(incomingId)) return;
+      if (state.call && incomingId === callId(state.call)) {
+        state.call = { ...state.call, ...payload };
+        state.signal = signal(payload) || state.signal;
+        return;
+      }
       if (state.status !== 'IDLE' && incomingId !== callId(state.call)) {
         toast('Outra chamada está chegando.');
         return;
@@ -578,11 +643,13 @@
       return;
     }
     if (event === 'call:claimed') {
-      if (!state.call || incomingId !== callId(state.call)) return;
       const ownerId = String(payload.attendant?.id || '');
       const currentId = String(state.profile?.id || state.profile?.codUsu || '');
       const ownerClientId = String(payload.clientId || '');
-      if (ownerId && ownerId === currentId && ownerClientId === state.clientId) {
+      const ownClient = ownerId && ownerId === currentId && ownerClientId === state.clientId;
+      if (!ownClient) dismissCall(incomingId);
+      if (!state.call || incomingId !== callId(state.call)) return;
+      if (ownClient) {
         stopRingtone();
         state.call = { ...state.call, attendant: payload.attendant, claimedAt: payload.claimedAt };
         if (state.status === 'RINGING') setStatus('CONNECTING', 'Conectando áudio...');
@@ -593,7 +660,18 @@
       toast(`Chamada atendida por ${ownerName}.`);
       return;
     }
+    const apiStatus = String(payload.call?.status || payload.status || '').toUpperCase();
+    if (Core.TERMINAL_STATES.has(apiStatus) || ['call:ended', 'call:rejected', 'call:failed'].includes(event)) dismissCall(incomingId);
     if (incomingId && state.call && incomingId !== callId(state.call)) return;
+    if (!state.call) return;
+    if (state.status === 'ENDING' && (['call:ringing', 'call:connecting', 'call:active'].includes(event)
+      || (event === 'call:updated' && !Core.TERMINAL_STATES.has(apiStatus)))) return;
+    if (!state.client && !state.transfer && (event === 'call:active' || Core.callUpdateUiStatus(apiStatus) === 'ACTIVE')) {
+      dismissCall(incomingId);
+      cleanup();
+      toast('Chamada atendida por outro atendente.');
+      return;
+    }
     if (event === 'call:signal') {
       state.signal = signal(payload) || state.signal;
       if (state.client?.peer && state.signal?.sdp && (state.signal.sdpType || state.signal.type) !== 'offer') {
@@ -635,10 +713,12 @@
     if (!state.call) return;
     const direction = String(state.call.direction || '').toUpperCase();
     if (direction === 'OUTBOUND' && event === 'call:ringing') {
+      if (['ACTIVE', 'ENDING'].includes(state.status)) return;
       setStatus('RINGING', 'Chamando...');
       return;
     }
     if (direction === 'OUTBOUND' && event === 'call:connecting') {
+      if (['ACTIVE', 'ENDING'].includes(state.status)) return;
       setStatus('CONNECTING', 'Conectando áudio...');
       return;
     }
@@ -660,7 +740,7 @@
 
   function connectRealtime() {
     state.source?.close();
-    const source = new EventSource('/api/chat/events');
+    const source = new EventSource(`/api/chat/events?clientId=${encodeURIComponent(state.clientId)}`);
     state.source = source;
     ['call:permission:updated', 'call:outgoing', 'call:incoming', 'call:claimed', 'call:ringing', 'call:connecting', 'call:active', 'call:ended', 'call:failed', 'call:rejected', 'call:updated', 'call:signal',
       'call:transfer:incoming', 'call:transfer:accepted', 'call:transfer:rejected', 'call:transfer:cancelled',
@@ -668,8 +748,15 @@
       .forEach((event) => source.addEventListener(event, (message) => {
         try { handleEvent(event, JSON.parse(message.data)); } catch {}
       }));
-    source.addEventListener('connection', () => {
-      state.reconnecting = false;
+    source.addEventListener('call:connection', (message) => {
+      let connection;
+      try { connection = JSON.parse(message.data); } catch { return; }
+      state.reconnecting = connection.state !== 'connected';
+      if (!state.reconnecting) void reconcileCall();
+      if (connection.state === 'disabled') {
+        refs.status.textContent = connection.detail || 'Telefonia indisponível.';
+        return;
+      }
       if (state.status !== 'IDLE') {
         const text = state.status === 'ACTIVE' ? 'Chamada em andamento'
           : state.status === 'TRANSFER_PENDING' ? 'Transferência pendente'
@@ -686,9 +773,13 @@
   function start(profile) {
     state.profile = profile || null;
     if (!state.source) connectRealtime();
+    reconciliationTimer ||= setInterval(() => {
+      if (state.status === 'RINGING' || state.reconnecting) void reconcileCall();
+    }, 5000);
   }
 
   function stop() {
+    clearInterval(reconciliationTimer); reconciliationTimer = null;
     state.source?.close(); state.source = null;
     state.profile = null;
     cleanup();

@@ -862,6 +862,8 @@ function atualizarItemAtivoNavegacaoGlobal(tela) {
       || (tela === 'fila' && alvo === 'abrir-conferencia')
       || (tela === 'acompanhamento' && alvo === 'abrir-acompanhamento')
       || (tela === 'consulta' && alvo === 'abrir-consulta-home')
+      || (tela === 'rastreio-produto' && alvo === 'abrir-rastreio-produto')
+      || (tela === 'diario-bordo' && alvo === 'abrir-diario-bordo')
       || (tela === 'contato' && alvo === 'abrir-atualizacao-contato')
       || (tela === 'contagem' && alvo === 'abrir-contagem-estoque')
       || (tela === 'vendas' && alvo === 'abrir-vendas-gerais')
@@ -877,6 +879,8 @@ function atualizarItemAtivoNavegacaoGlobal(tela) {
 }
 
 function mostrarNavegacaoGlobal(tela) {
+  if (tela !== 'diario-bordo') document.getElementById('diario-bordo-screen')?.classList.remove('active');
+  if (tela !== 'rastreio-produto') document.getElementById('rastreio-produto-screen')?.classList.remove('active');
   if (tela !== 'transporte') transporteScreen?.classList.remove('active');
   if (tela !== 'chat') chatScreen?.classList.remove('active');
   document.body.classList.add('has-global-sidebar');
@@ -885,6 +889,8 @@ function mostrarNavegacaoGlobal(tela) {
 }
 
 function ocultarNavegacaoGlobal() {
+  document.getElementById('diario-bordo-screen')?.classList.remove('active');
+  document.getElementById('rastreio-produto-screen')?.classList.remove('active');
   transporteScreen?.classList.remove('active');
   chatScreen?.classList.remove('active');
   fecharSidebarHome();
@@ -899,6 +905,16 @@ function abrirVisaoGeralPeloMenu() {
 
 function executarDestinoHome(id) {
   fecharSidebarHome();
+  if (id === 'abrir-diario-bordo') {
+    mostrarDiarioBordo();
+    history.pushState({ tela: 'diario-bordo' }, '', '#diario-bordo');
+    return;
+  }
+  if (id === 'abrir-rastreio-produto') {
+    mostrarRastreioProduto();
+    history.pushState({ tela: 'rastreio-produto' }, '', '#rastreio-produto');
+    return;
+  }
   if (id === 'abrir-vendas-gerais') {
     abrirVendasGerais();
     return;
@@ -1743,6 +1759,32 @@ function mostrarFila() {
   vendasGeraisScreen.classList.remove('active');
   filaScreen.classList.add('active');
   mostrarNavegacaoGlobal('fila');
+}
+
+function mostrarRastreioProduto() {
+  if (!usuarioLogado) {
+    mostrarLogin('Entre para acessar o rastreio de produto.');
+    return;
+  }
+  fecharConsultaProdutosModal();
+  mostrarHomeESuspenderRefresh();
+  document.querySelectorAll('.screen.active').forEach((screen) => screen.classList.remove('active'));
+  document.getElementById('rastreio-produto-screen').classList.add('active');
+  mostrarNavegacaoGlobal('rastreio-produto');
+  window.rastreioProdutoController?.preparar();
+}
+
+function mostrarDiarioBordo() {
+  if (!usuarioLogado) {
+    mostrarLogin('Entre para acessar o diário de bordo.');
+    return;
+  }
+  fecharConsultaProdutosModal();
+  mostrarHomeESuspenderRefresh();
+  document.querySelectorAll('.screen.active').forEach((screen) => screen.classList.remove('active'));
+  document.getElementById('diario-bordo-screen').classList.add('active');
+  mostrarNavegacaoGlobal('diario-bordo');
+  window.diarioBordoController?.preparar();
 }
 
 function mostrarConsultaProdutos() {
@@ -2901,6 +2943,18 @@ function exibirResumoNovoProdutoContagem(titulo, detalhe = '', status = '') {
   else estoqueContagemNovoProdutoResumo.removeAttribute('data-status');
 }
 
+function configurarCamposControleContagem(tipoControle, novo = false) {
+  const semControle = String(tipoControle || '').trim().toUpperCase() === 'N';
+  const campos = novo
+    ? [estoqueContagemNovoLote, estoqueContagemNovoFabricacao, estoqueContagemNovoValidade]
+    : [estoqueContagemLote, estoqueContagemFabricacao, estoqueContagemValidade];
+  campos.forEach((campo) => {
+    campo.closest('.separacao-confirm-field').hidden = semControle;
+    campo.disabled = semControle;
+    if (semControle) campo.value = '';
+  });
+}
+
 async function consultarNovoProdutoContagem({ exibirErro = true } = {}) {
   if (estoqueContagemNovoProdutoTimer) clearTimeout(estoqueContagemNovoProdutoTimer);
   estoqueContagemNovoProdutoTimer = null;
@@ -2928,6 +2982,7 @@ async function consultarNovoProdutoContagem({ exibirErro = true } = {}) {
     if (!resposta.ok) throw new Error(payload.erro || 'Produto não encontrado no Sankhya.');
 
     estoqueContagemNovoProduto = { ...payload.produto, codigoConsultado: codigo };
+    configurarCamposControleContagem(estoqueContagemNovoProduto.tipContEst, true);
     const unidade = estoqueContagemNovoProduto.codVol || 'UN';
     const grupo = estoqueContagemNovoProduto.grupo || 'Sem grupo';
     exibirResumoNovoProdutoContagem(
@@ -2968,6 +3023,7 @@ function abrirNovoItemContagemEstoque() {
     return;
   }
   fecharNovoItemContagemEstoque();
+  configurarCamposControleContagem(null, true);
   const localFixo = estoqueContagemAtual.local !== null && estoqueContagemAtual.local !== undefined;
   estoqueContagemNovoLocalField.hidden = localFixo;
   estoqueContagemNovoLocal.value = localFixo ? String(estoqueContagemAtual.local) : '';
@@ -2981,19 +3037,20 @@ async function adicionarNovoItemContagemEstoque() {
   const quantidade = Number(quantidadeTexto);
   if (
     !estoqueContagemNovoCodigo.value.trim()
-    || !estoqueContagemNovoLote.value.trim()
-    || !estoqueContagemNovoFabricacao.value
-    || !estoqueContagemNovoValidade.value
     || quantidadeTexto === ''
     || !Number.isFinite(quantidade)
     || quantidade < 0
   ) {
-    estoqueContagemNovoItemMensagem.textContent = 'Preencha produto, lote, fabricação, validade e quantidade.';
+    estoqueContagemNovoItemMensagem.textContent = 'Preencha produto e quantidade.';
     return;
   }
 
   const produtoConsultado = await consultarNovoProdutoContagem();
   if (!produtoConsultado) return;
+  if (String(produtoConsultado.tipContEst || '').trim().toUpperCase() !== 'N' && (!estoqueContagemNovoLote.value.trim() || !estoqueContagemNovoFabricacao.value || !estoqueContagemNovoValidade.value)) {
+    estoqueContagemNovoItemMensagem.textContent = 'Preencha lote, fabricação e validade para este produto controlado.';
+    return;
+  }
 
   botaoConfirmarNovoItemEstoque.disabled = true;
   botaoConfirmarNovoItemEstoque.textContent = 'Adicionando...';
@@ -3048,6 +3105,7 @@ function abrirConfirmacaoContagemEstoque(item) {
   estoqueContagemLote.value = item.controle || '';
   estoqueContagemFabricacao.value = formatarDataInput(item.dtFabricacao);
   estoqueContagemValidade.value = formatarDataInput(item.dtVal);
+  configurarCamposControleContagem(item.tipContEst);
   estoqueContagemQuantidade.value = recontagem || item.contagemAtual === null
     ? ''
     : String(item.contagemAtual);
@@ -10196,6 +10254,17 @@ async function prepararSessaoAutenticada(usuario) {
     return;
   }
 
+  if (window.location.hash === '#diario-bordo') {
+    mostrarDiarioBordo();
+    history.replaceState({ tela: 'diario-bordo' }, '', '#diario-bordo');
+    return;
+  }
+  if (window.location.hash === '#rastreio-produto') {
+    mostrarRastreioProduto();
+    history.replaceState({ tela: 'rastreio-produto' }, '', '#rastreio-produto');
+    return;
+  }
+
   if (window.location.hash === '#atualizacao-contato') {
     mostrarAtualizacaoContato();
     carregarPerfisContato();
@@ -11159,6 +11228,14 @@ window.addEventListener('resize', () => {
 
 window.addEventListener('popstate', (event) => {
   const state = event.state;
+  if (state?.tela === 'diario-bordo' || window.location.hash === '#diario-bordo') {
+    mostrarDiarioBordo();
+    return;
+  }
+  if (state?.tela === 'rastreio-produto' || window.location.hash === '#rastreio-produto') {
+    mostrarRastreioProduto();
+    return;
+  }
 
   if (
     (state?.tela === 'painel-acompanhamento' || state?.tela === 'conferencia') &&

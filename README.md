@@ -33,3 +33,13 @@ Arquitetura:
 - `frontend/chat.css`: layout responsivo em três, duas ou uma coluna.
 
 O histórico usa paginação REST. Atualizações em tempo real chegam pelo Socket.IO no backend e são distribuídas à sessão web por SSE. Os testes não enviam mensagens reais.
+
+### Teste local e produção compartilhando a API
+
+Use `npm run start:local` neste computador. Esse comando identifica a telefonia como `local` antes de carregar o `.env`, sem modificar o arquivo ou as credenciais. Em produção, `npm start` mantém o ambiente `production` por padrão; também é possível defini-lo explicitamente com `CALL_CLIENT_ENV=production`.
+
+Na API WhatsApp, `CALL_DELIVERY_ENVS=local,production` permite receber chamadas nos dois ambientes (novo padrão quando essa variável não está definida). Se a implantação já define apenas `production`, essa configuração continua restringindo o recebimento ao ambiente de produção e deve ser ajustada para habilitar teste local.
+
+A mesma chamada tem um único dono, escolhido pela API entre atendente, ambiente e aba autenticada. O primeiro aceite interrompe o toque nos demais; outra sessão não pode substituir o áudio, confirmar mídia, transferir ou encerrar a chamada do vencedor. Ligações de saída enviam eventos de progresso ao ambiente que as iniciou. A disponibilidade do mesmo atendente continua compartilhada para impedir que ele entre em duas chamadas ao mesmo tempo.
+
+Publique a API atualizada antes de atualizar o sistema de atendimento: o sistema passa a usar `/api/calls/:callId/claim` para reivindicar a chamada centralmente. A posse central usa memória da API; várias instâncias da API ainda exigem coordenação compartilhada. Não é necessário separar o número nem duplicar os webhooks para executar dois ambientes de frontend.

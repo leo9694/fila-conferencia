@@ -28,7 +28,7 @@
       accept: incomingRinging,
       reject: incomingRinging,
       mute: hasMedia,
-      end: ['RINGING', 'CONNECTING', 'ACTIVE', 'TRANSFER_PENDING'].includes(status)
+      end: ['RINGING', 'CONNECTING', 'ACTIVE', 'TRANSFER_PENDING', 'FAILED'].includes(status)
         && (status !== 'RINGING' || direction === 'OUTBOUND'),
       transfer: ['ACTIVE', 'TRANSFER_PENDING'].includes(status)
     };
@@ -169,7 +169,7 @@
   }
 
   function waitForPeerConnected(peer, timeoutMs = 12000) {
-    if (['connected', 'completed'].includes(peer?.connectionState) || peer?.iceConnectionState === 'connected') {
+    if (['connected', 'completed'].includes(peer?.connectionState) || ['connected', 'completed'].includes(peer?.iceConnectionState)) {
       return Promise.resolve();
     }
     return new Promise((resolve, reject) => {
@@ -191,6 +191,7 @@
       const timer = setTimeout(() => finish(new Error('Tempo esgotado ao conectar o áudio.')), timeoutMs);
       peer.addEventListener?.('connectionstatechange', change);
       peer.addEventListener?.('iceconnectionstatechange', change);
+      change();
     });
   }
 
@@ -227,6 +228,7 @@
 
   function eventUiStatus(event, currentStatus, hasClient) {
     if (!['call:ringing', 'call:connecting'].includes(event)) return null;
+    if (['ACTIVE', 'ENDING', 'TRANSFER_PENDING', 'TRANSFER_CONNECTING'].includes(currentStatus)) return null;
     if (currentStatus === 'RINGING' && !hasClient) return 'RINGING';
     return 'CONNECTING';
   }
@@ -285,7 +287,7 @@
     }
 
     notifyRemoteMedia() {
-      if (this.remoteMediaNotified) return;
+      if (this.closed || this.remoteMediaNotified) return;
       this.remoteMediaNotified = true;
       this.onRemoteMedia?.();
     }
@@ -352,35 +354,54 @@
     }
 
     async prepareLocalMedia() {
+      this.assertOpen();
       if (!this.peer) await this.preparePeer();
       if (!this.localStream) await this.captureMicrophone();
       return this.localStream;
     }
 
+    assertOpen() {
+      if (this.closed) throw new Error('A chamada foi encerrada.');
+    }
+
     async connectGateway({ callId, transferId }) {
       await this.prepareLocalMedia();
       const offer = await this.peer.createOffer();
+      this.assertOpen();
       await this.peer.setLocalDescription(offer);
       await waitForIceGathering(this.peer);
+      this.assertOpen();
       const response = await this.api.joinMedia(callId, {
         session: sessionFrom(this.peer.localDescription),
         ...(transferId ? { transferId } : {})
       });
+      this.assertOpen();
       const answer = response?.session || response;
       await this.peer.setRemoteDescription({ type: answer.sdpType || answer.type || 'answer', sdp: answer.sdp });
+      this.assertOpen();
       await waitForPeerConnected(this.peer);
+      this.assertOpen();
       await waitForOutboundAudio(this.peer, this.mediaReadyWaitOptions);
-      await retryMediaAction(() => this.api.mediaReady(callId, transferId ? { transferId } : {}));
+      this.assertOpen();
+      await retryMediaAction(() => {
+        this.assertOpen();
+        return this.api.mediaReady(callId, transferId ? { transferId } : {});
+      });
+      this.assertOpen();
       return answer;
     }
 
     async acceptIncoming({ callId, conversationId }) {
+      let claimed = false;
       try {
         await this.prepareLocalMedia();
         await this.api.claim(callId, { conversationId });
+        claimed = true;
+        this.assertOpen();
         return await this.connectGateway({ callId });
       } catch (error) {
         this.cleanup();
+        if (claimed) await this.api.terminate?.(callId, { conversationId }).catch(() => {});
         throw error;
       }
     }
@@ -390,16 +411,25 @@
         await this.preparePeer();
         await this.captureMicrophone();
         const offer = await this.peer.createOffer();
+        this.assertOpen();
         await this.peer.setLocalDescription(offer);
         await waitForIceGathering(this.peer);
+        this.assertOpen();
         const media = await this.api.createOutboundMedia(conversationId, {
           session: sessionFrom(this.peer.localDescription)
         });
+        this.assertOpen();
         const answer = media?.session || media;
         await this.peer.setRemoteDescription({ type: answer.sdpType || answer.type || 'answer', sdp: answer.sdp });
+        this.assertOpen();
         await waitForPeerConnected(this.peer);
+        this.assertOpen();
         await waitForOutboundAudio(this.peer, this.mediaReadyWaitOptions);
-        return await retryMediaAction(() => this.api.create(conversationId, { mediaSessionId: media.mediaSessionId }));
+        this.assertOpen();
+        return await retryMediaAction(() => {
+          this.assertOpen();
+          return this.api.create(conversationId, { mediaSessionId: media.mediaSessionId });
+        });
       } catch (error) {
         this.cleanup();
         throw error;
@@ -410,6 +440,7 @@
       const session = signal.session || signal;
       if (!this.peer || !session.sdp) return false;
       const type = session.sdpType || session.type || 'answer';
+      if (this.peer.remoteDescription?.sdp === session.sdp && this.peer.remoteDescription?.type === type) return true;
       await this.peer.setRemoteDescription({ type, sdp: session.sdp });
       return true;
     }

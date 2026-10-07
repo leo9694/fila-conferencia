@@ -227,3 +227,57 @@ test('token individual é curto, assinado e não expõe o segredo', () => {
     else process.env.CALL_CLIENT_ENV = originalEnvironment;
   }
 });
+
+test('renova o token individual a cada autenticação do socket após 90 segundos', () => {
+  const original = process.env.CALL_AGENT_AUTH_SECRET;
+  const originalNow = Date.now;
+  process.env.CALL_AGENT_AUTH_SECRET = 'segredo-exclusivo-do-teste-com-32-caracteres';
+  let now = 1000000;
+  Date.now = () => now;
+  let auth;
+  try {
+    const bridge = whatsappApi.createRealtimeBridge({
+      agent: { id: '72', name: 'Ana' },
+      ioFactory(_url, options) { auth = options.auth; return { on() {}, disconnect() {} }; }
+    });
+    const unsubscribe = bridge.subscribe(() => {});
+    const claims = [];
+    const authenticate = () => auth((value) => claims.push(JSON.parse(Buffer.from(value.agentToken.split('.')[0], 'base64url').toString())));
+    authenticate();
+    now += 120000;
+    authenticate();
+    assert.equal(claims[1].iat - claims[0].iat, 120);
+    assert.equal(claims[1].exp, Math.floor(now / 1000) + 90);
+    unsubscribe();
+  } finally {
+    Date.now = originalNow;
+    if (original === undefined) delete process.env.CALL_AGENT_AUTH_SECRET;
+    else process.env.CALL_AGENT_AUTH_SECRET = original;
+  }
+});
+
+test('assina ambiente e dispositivo no token usado para reivindicar a chamada na API', async () => {
+  const originalSecret = process.env.CALL_AGENT_AUTH_SECRET;
+  const originalEnvironment = process.env.CALL_CLIENT_ENV;
+  const originalFetch = global.fetch;
+  process.env.CALL_AGENT_AUTH_SECRET = 'segredo-de-teste-com-mais-de-32-caracteres';
+  process.env.CALL_CLIENT_ENV = 'local';
+  let received;
+  global.fetch = async (url, options) => {
+    const token = options.headers['X-Agent-Token'];
+    received = { url, claims: JSON.parse(Buffer.from(token.split('.')[0], 'base64url').toString()) };
+    return new Response(JSON.stringify({ success: true }), { headers: { 'content-type': 'application/json' } });
+  };
+  try {
+    await whatsappApi.claimCall('wacid.test-local', { id: '72', name: 'Ana', clientId: 'device-local' });
+    assert.match(received.url, /\/api\/calls\/wacid.test-local\/claim$/);
+    assert.equal(received.claims.environment, 'local');
+    assert.equal(received.claims.clientId, 'device-local');
+  } finally {
+    global.fetch = originalFetch;
+    if (originalSecret === undefined) delete process.env.CALL_AGENT_AUTH_SECRET;
+    else process.env.CALL_AGENT_AUTH_SECRET = originalSecret;
+    if (originalEnvironment === undefined) delete process.env.CALL_CLIENT_ENV;
+    else process.env.CALL_CLIENT_ENV = originalEnvironment;
+  }
+});

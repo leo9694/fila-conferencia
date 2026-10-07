@@ -1,4 +1,5 @@
 const fs = require('node:fs');
+const { semControleAdicional } = require('./estoqueContagemControle');
 const path = require('node:path');
 const crypto = require('node:crypto');
 
@@ -55,6 +56,7 @@ function normalizarItem(item = {}) {
   return {
     chave: texto(item.chave) || criarChaveItem({ codProd, codLocal, controle }),
     codProd,
+    tipContEst: texto(item.tipContEst ?? item.TIPCONTEST).toUpperCase() || null,
     descrProd: texto(item.descrProd || item.DESCRPROD) || `Produto ${codProd}`,
     referencia: texto(item.referencia || item.REFERENCIA),
     codVol: texto(item.codVol || item.CODVOL) || 'UN',
@@ -296,7 +298,7 @@ function criarEstoqueContagemStore(options = {}) {
     if (!novoItem.codProd || !novoItem.codLocal) {
       throw new Error('Informe um produto e um local validos.');
     }
-    if (!novoItem.controle) {
+    if (!novoItem.controle && !semControleAdicional(novoItem.tipContEst)) {
       throw new Error('Informe o lote/controle do novo item.');
     }
     if (sessao.itens.some((registro) => registro.chave === novoItem.chave)) {

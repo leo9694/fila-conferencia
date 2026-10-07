@@ -40,6 +40,21 @@ const itens = [
   }
 ];
 
+test('adiciona e confirma cutelaria sem lote e validade apenas com cadastro sem controle adicional', () => {
+  const store = criarStore();
+  const sessao = store.criar({ empresa: 1, itens });
+  store.adicionarItem({ id: sessao.id, item: { codProd: 30, codLocal: 1, descrProd: 'Cutelaria', tipContEst: 'N' }, quantidade: 12 });
+  const item = store.obter(sessao.id).itens.find((registro) => registro.codProd === 30);
+  assert.equal(item.controle, '');
+  assert.equal(item.dtVal, null);
+  assert.equal(item.tipContEst, 'N');
+  assert.equal(item.chave, '30|1|SEM_CONTROLE');
+  store.registrar({ id: sessao.id, chave: item.chave, quantidade: 15 });
+  assert.equal(obterContagemAtual(store.obter(sessao.id), store.obter(sessao.id).itens.find((registro) => registro.codProd === 30)), 15);
+  assert.throws(() => store.adicionarItem({ id: sessao.id, item: { codProd: 30, codLocal: 1, tipContEst: 'N' }, quantidade: 1 }), /ja fazem/);
+  assert.throws(() => store.adicionarItem({ id: sessao.id, item: { codProd: 40, codLocal: 1, tipContEst: 'L' }, quantidade: 1 }), /lote/);
+});
+
 test('cria copia cega e conclui contagem sem divergencia', () => {
   const store = criarStore();
   const sessao = store.criar({

@@ -63,6 +63,7 @@ function createAgentToken(agent, now = Math.floor(Date.now() / 1000)) {
     name: String(agent.name),
     director: agent.director === true,
     environment: callClientEnvironment(),
+    ...(agent.clientId ? { clientId: String(agent.clientId).slice(0, 128) } : {}),
     iat: now,
     exp: now + 90
   })).toString('base64url');
@@ -89,7 +90,7 @@ async function parseResponse(response) {
       || 'Não foi possível comunicar com o atendimento.';
     const error = new Error(message);
     error.status = response.status;
-    error.integrationCode = payload?.error?.code || '';
+    error.integrationCode = payload?.error?.code || payload?.publicCode || payload?.code || payload?.codigo || '';
     throw error;
   }
   return payload;
@@ -178,12 +179,12 @@ async function updateAssignment(id, payload) {
   return request(`/api/conversations/${encodeURIComponent(id)}/assignment`, json('POST', payload));
 }
 
-async function getCalls(params) {
-  return request(`/api/calls${queryString(params)}`);
+async function getCalls(params, agent) {
+  return request(`/api/calls${queryString(params)}`, { agent });
 }
 
-async function getConversationCalls(id, params) {
-  return request(`/api/conversations/${encodeURIComponent(id)}/calls${queryString(params)}`);
+async function getConversationCalls(id, params, agent) {
+  return request(`/api/conversations/${encodeURIComponent(id)}/calls${queryString(params)}`, { agent });
 }
 
 async function getCallPermission(id, params, agent) {
@@ -204,6 +205,10 @@ async function updateCall(callId, action, payload, agent) {
   });
 }
 
+async function claimCall(callId, agent) {
+  return request(`/api/calls/${encodeURIComponent(callId)}/claim`, { ...json('POST', {}), agent });
+}
+
 async function getCallAgents(agent) {
   return request('/api/call-agents', { agent });
 }
@@ -213,7 +218,9 @@ async function joinCallMedia(callId, payload, agent) {
 }
 
 async function callMediaReady(callId, payload, agent) {
-  return request(`/api/calls/${encodeURIComponent(callId)}/media-ready`, { ...json('POST', payload), agent });
+  return request(`/api/calls/${encodeURIComponent(callId)}/media-ready`, {
+    ...json('POST', payload), agent, signal: AbortSignal.timeout(90000)
+  });
 }
 
 async function createOutboundMedia(id, payload, agent) {
@@ -307,10 +314,9 @@ function createRealtimeBridge({ ioFactory, agent } = {}) {
 
   function connect() {
     if (socket || emitter.listenerCount('event') === 0) return;
-    const socketAuth = { apiKey: apiKey() };
     if (agent) {
       try {
-        socketAuth.agentToken = createAgentToken(agent);
+        createAgentToken(agent);
       } catch (error) {
         // A ausência do segredo deve indisponibilizar somente a telefonia.
         // Nunca deixe a callback interna do Socket.IO derrubar o processo.
@@ -323,7 +329,14 @@ function createRealtimeBridge({ ioFactory, agent } = {}) {
     socket = io(baseUrl(), {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      auth: (callback) => callback(socketAuth),
+      auth: (callback) => {
+        try {
+          callback({ apiKey: apiKey(), ...(agent ? { agentToken: createAgentToken(agent) } : {}) });
+        } catch (error) {
+          emitState('disabled', error?.message || 'Telefonia não configurada.');
+          callback({});
+        }
+      },
       timeout: 15000
     });
     emitState('connecting');
@@ -357,6 +370,7 @@ function createRealtimeBridge({ ioFactory, agent } = {}) {
 }
 
 module.exports = {
+  claimCall,
   createRealtimeBridge,
   callMediaReady,
   createCall,
