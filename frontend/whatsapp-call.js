@@ -165,7 +165,6 @@
     refs.mute.hidden = !controls.mute;
     refs.transfer.hidden = !controls.transfer;
     refs.end.hidden = !controls.end;
-    if (status === 'FAILED' && !callId(state.call)) refs.end.hidden = true;
     refs.permission.hidden = status !== 'PERMISSION';
     refs.close.hidden = !['PERMISSION', 'FAILED', 'BUSY', 'REJECTED', 'ENDED'].includes(status);
     const direction = String(state.call?.direction || '').toUpperCase();
@@ -438,6 +437,10 @@
 
   async function endCall() {
     if (state.status === 'ENDING') return;
+    if (!state.call || Core.TERMINAL_STATES.has(state.status)) {
+      cleanup();
+      return;
+    }
     const endedId = callId(state.call);
     setStatus('ENDING', 'Encerrando chamada...');
     try { await updateCall('terminate'); } catch (error) { toast(error.message); }

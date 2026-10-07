@@ -40,6 +40,19 @@ function fixture(fetch = async () => ({ ok: true, json: async () => ({}) }), cal
 
 const incoming = { callId: 'call-1', conversationId: 12, direction: 'INBOUND', status: 'RINGING' };
 
+test('fecha a tela de falha imediatamente sem tentar encerrar uma chamada já finalizada na API', async () => {
+  let requests = 0;
+  const { controller, elements } = fixture(async () => { requests += 1; return new Promise(() => {}); });
+  controller.handleEvent('call:incoming', incoming);
+  controller.handleEvent('call:failed', { ...incoming, status: 'FAILED' });
+  const before = requests;
+  assert.equal(elements.get('whatsapp-call-end').hidden, false);
+  await elements.get('whatsapp-call-end').click();
+  assert.equal(controller.state.status, 'IDLE');
+  assert.equal(elements.get('whatsapp-call-overlay').hidden, true);
+  assert.equal(requests, before);
+});
+
 test('para o toque ao receber a posse de outro atendente e ignora incoming atrasado', () => {
   const { controller } = fixture();
   controller.handleEvent('call:incoming', incoming);
