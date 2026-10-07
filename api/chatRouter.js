@@ -1368,10 +1368,10 @@ router.get('/settings/calls', exigirDiretoria, asyncRoute(async (req, res) => {
   if (!configuracao.canais.some((canal) => String(canal.id) === channelId)) {
     return res.status(400).json({ erro: 'Selecione um número de atendimento disponível.' });
   }
-  const ura = await whatsappApi.getCallIvrConfig(channelId, req.atendente).catch((error) => {
-    if (error.status === 404) return { enabled: false, unavailable: true };
-    throw error;
-  });
+  const ura = await whatsappApi.getCallIvrConfig(channelId, req.atendente).catch(() => ({
+    unavailable: true,
+    aviso: 'Não foi possível consultar a URA na API. Você pode configurar os setores; a URA não será alterada. Verifique a atualização e a conexão da API.'
+  }));
   res.json({ canais: configuracao.canais, channelId, ura,
     uraEditable: whatsappApi.callClientEnvironment() === 'production',
     usuarios: configuracao.usuarios, ...setoresChamadas.listar(channelId) });
@@ -1392,7 +1392,8 @@ router.put('/settings/calls/:channelId', exigirDiretoria, asyncRoute(async (req,
     if (dados.uraEnabled !== undefined) {
       await whatsappApi.configureCallIvr(channelId, ura, req.atendente);
     }
-    res.json({ ...setoresChamadas.salvar(channelId, dados, configuracao.usuarios, req.usuario.codUsu), ura });
+    res.json({ ...setoresChamadas.salvar(channelId, dados, configuracao.usuarios, req.usuario.codUsu),
+      ...(dados.uraEnabled !== undefined ? { ura } : {}) });
   } finally { configurandoUra.delete(channelId); }
 }));
 

@@ -2596,7 +2596,7 @@
         uraInput.checked = payload.ura?.enabled === true;
         dirty = false;
         render();
-        feedback.textContent = '';
+        feedback.textContent = payload.ura?.aviso || '';
       } catch (error) {
         feedback.textContent = error.message;
         if (payload) channelSelect.value = payload.channelId;
