@@ -16,6 +16,7 @@ function criarRotas(getCallIvrConfig) {
       put: (route, _auth, handler) => { handlers.put = handler; }
     },
     exigirDiretoria: () => {},
+    perfilAtendente: (usuario) => ({ id: String(usuario?.codUsu), name: usuario?.nome, director: usuario?.grupos?.includes('DIRETORIA') === true }),
     asyncRoute: (handler) => handler,
     carregarConfiguracaoAtendentes: async () => ({ canais: [{ id: 'numero-1' }, { id: 'numero-2' }], usuarios: [] }),
     whatsappApi: {
@@ -58,6 +59,25 @@ test('preserva configuração de URA consultada com sucesso', async () => {
   await handlers.get({ query: {}, atendente: {} }, res);
   assert.equal(res.body.ura.enabled, true);
   assert.equal(res.body.ura.unavailable, undefined);
+});
+
+test('consulta e salva URA com identidade da diretoria antes do middleware do chat', async () => {
+  const usuario = { codUsu: 72, nome: 'LEONARDO', grupos: ['DIRETORIA'] };
+  const { handlers, configuracoes, res } = criarRotas(async (_channelId, agent) => {
+    assert.equal(agent.id, '72');
+    assert.equal(agent.name, 'LEONARDO');
+    assert.equal(agent.director, true);
+    return { enabled: false };
+  });
+  // As rotas de configuração vêm antes de router.use(exigirAcessoChat).
+  await handlers.get({ query: {}, usuario }, res);
+  assert.equal(res.body.ura.unavailable, undefined);
+  await handlers.put({ params: { channelId: 'numero-1' }, usuario,
+    body: { setores: [], uraEnabled: true } }, res);
+  assert.equal(configuracoes.length, 1);
+  assert.equal(configuracoes[0][2].id, '72');
+  assert.equal(configuracoes[0][2].director, true);
+  assert.equal(res.body.ura.enabled, true);
 });
 
 test('salvar setores sem consultar URA não sobrescreve seu estado nem configura a API', async () => {
