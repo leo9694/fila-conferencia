@@ -6,6 +6,10 @@ function erro(mensagem, status = 400) {
   return Object.assign(new Error(mensagem), { status });
 }
 
+function usuarioDiretoria(usuario = {}) {
+  return Array.isArray(usuario.grupos) && usuario.grupos.some((grupo) => String(grupo || '').trim().toLocaleUpperCase('pt-BR') === 'DIRETORIA');
+}
+
 function texto(valor, campo, obrigatorio = true) {
   const resultado = String(valor ?? '').trim();
   if ((obrigatorio && !resultado) || resultado.length > 1000) throw erro(`Informe ${campo} válido (até 1000 caracteres).`);
@@ -39,9 +43,19 @@ function criarDiarioBordo({ filePath = path.join(process.cwd(), 'data', 'diario-
   }
   const autor = (usuario) => ({ codUsu: usuario?.codUsu ?? null, nome: usuario?.nome ?? usuario?.nomeUsu ?? '' });
   return {
-    listar() { return carregar().sort((a, b) => b.saida.localeCompare(a.saida)); },
-    sair(dados, usuario) {
+    listar() { return carregar().filter((item) => !item.excluidoEm).sort((a, b) => b.saida.localeCompare(a.saida)); },
+    remover(id, usuario) {
+      if (!usuarioDiretoria(usuario)) throw erro('Somente a Diretoria pode excluir registros do diário.', 403);
       const registros = carregar();
+      const registro = registros.find((item) => item.id === id && !item.excluidoEm);
+      if (!registro) throw erro('Registro não encontrado.', 404);
+      Object.assign(registro, { excluidoEm: new Date().toISOString(), excluidoPor: autor(usuario) });
+      salvar(registros);
+      return { id: registro.id, excluido: true };
+    },
+    sair(dados, usuario) {
+      const historico = carregar();
+      const registros = historico.filter((item) => !item.excluidoEm);
       const placa = texto(dados.placa, 'a placa').toUpperCase().replace(/[\s-]/g, '');
       if (!/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(placa)) throw erro('Placa inválida. Use ABC1234 ou ABC1D23.');
       if (registros.some((item) => item.placa === placa && !item.retorno)) throw erro('Este veículo já tem uma saída em andamento.', 409);
@@ -59,13 +73,13 @@ function criarDiarioBordo({ filePath = path.join(process.cwd(), 'data', 'diario-
       registro.kmPrevisto = Math.round(registro.distanciaIda * 2 * 1000000) / 1000000;
       const anteriores = registros.filter((item) => item.placa === placa);
       if (anteriores.some((item) => item.retorno > registro.saida)) throw erro('Saída anterior à última devolução deste veículo.');
-      registros.push(registro);
-      salvar(registros);
+      historico.push(registro);
+      salvar(historico);
       return registro;
     },
     devolver(id, dados, usuario) {
       const registros = carregar();
-      const registro = registros.find((item) => item.id === id);
+      const registro = registros.find((item) => item.id === id && !item.excluidoEm);
       if (!registro) throw erro('Registro não encontrado.', 404);
       if (registro.retorno) throw erro('Esta saída já foi encerrada.', 409);
       const retorno = data(dados.retorno);
@@ -77,4 +91,4 @@ function criarDiarioBordo({ filePath = path.join(process.cwd(), 'data', 'diario-
   };
 }
 
-module.exports = { criarDiarioBordo };
+module.exports = { criarDiarioBordo, usuarioDiretoria };

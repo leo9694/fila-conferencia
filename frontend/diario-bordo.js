@@ -25,6 +25,7 @@
   const excluirModal = $('diario-excluir-modal');
   let exclusao = null;
   let excluindo = false;
+  let podeExcluirRegistro = false;
 
   async function api(caminho = '', body, metodo = body ? 'POST' : 'GET') {
     const response = await fetch(`/api/empresa/diario-bordo${caminho}`, { method: metodo, headers: body ? { 'Content-Type': 'application/json' } : {}, ...(body ? { body: JSON.stringify(body) } : {}) });
@@ -53,7 +54,7 @@
       <td><strong>${escape(item.placa)}</strong><small>${escape(item.veiculo)}${item.empresa ? ` · ${escape(item.empresa)}` : ''}</small></td>
       <td>${escape(item.motorista)}</td><td>${escape(item.origem)} → ${escape(item.destino)}</td>
       <td>${window.diarioBordoQuilometragem.distanciaViagem(item) === null ? 'Sem distância cadastrada' : `${numero(window.diarioBordoQuilometragem.distanciaViagem(item))} km (ida e volta)`}<small>${item.distanciaIda ? `${numero(item.distanciaIda)} km até o destino · ${item.retorno ? 'Concluída' : 'Prevista'}` : 'Registro antigo: não contabilizado'}</small></td>
-      <td><span class="diario-bordo-tag ${item.retorno ? '' : 'aberto'}">${item.retorno ? 'Encerrado' : 'Em uso'}</span><div><button type="button" data-detalhes="${escape(item.id)}">Detalhes</button>${!item.retorno ? `<button type="button" data-devolver="${escape(item.id)}">Devolver</button>` : ''}</div></td>
+      <td><span class="diario-bordo-tag ${item.retorno ? '' : 'aberto'}">${item.retorno ? 'Encerrado' : 'Em uso'}</span><div><button type="button" data-detalhes="${escape(item.id)}">Detalhes</button>${!item.retorno ? `<button type="button" data-devolver="${escape(item.id)}">Devolver</button>` : ''}${podeExcluirRegistro ? `<button type="button" class="diario-danger" data-excluir-registro="${escape(item.id)}" title="Excluir registro" aria-label="Excluir registro do veículo ${escape(item.placa)}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>` : ''}</div></td>
       </tr>`).join('') || '<tr><td colspan="6">Nenhum registro encontrado.</td></tr>';
     $('diario-pagina').textContent = `Página ${pagina} de ${paginas} · ${lista.length} registros`;
     $('diario-anterior').disabled = pagina === 1;
@@ -66,7 +67,10 @@
     $('diario-atualizar').disabled = true;
     $('diario-status').textContent = 'Carregando diário de bordo…';
     try {
-      [registros, cadastros] = await Promise.all([api(), api('/cadastros')]);
+      const [lista, novosCadastros, permissoes] = await Promise.all([api(), api('/cadastros'), api('/permissoes')]);
+      registros = lista;
+      cadastros = novosCadastros;
+      podeExcluirRegistro = permissoes.podeExcluir === true;
       renderizar();
       $('diario-status').textContent = 'Distância calculada pelo destino × 2 (ida e volta). Somente viagens devolvidas entram nos totais percorridos. Registros antigos sem distância cadastrada não são contabilizados.';
     } catch (error) { $('diario-status').textContent = error.message; }
@@ -149,6 +153,19 @@
   $('diario-linhas').addEventListener('click', (event) => {
     const button = event.target.closest('button');
     if (!button) return;
+    if (button.dataset.excluirRegistro) {
+      if (!podeExcluirRegistro || excluindo) return;
+      const item = registros.find((registro) => registro.id === button.dataset.excluirRegistro);
+      if (!item) return;
+      exclusao = { registro: true, id: item.id };
+      $('diario-excluir-descricao').textContent = `Excluir a viagem de ${item.placa}, motorista ${item.motorista}, com saída em ${data(item.saida)}?`;
+      $('diario-excluir-aviso').textContent = 'A viagem será retirada do histórico exibido e dos totais de quilometragem. Os cadastros de veículo, motorista e rota não serão excluídos.';
+      $('diario-excluir-confirmar').textContent = 'Excluir registro';
+      $('diario-excluir-status').textContent = '';
+      excluirModal.showModal();
+      $('diario-excluir-cancelar').focus();
+      return;
+    }
     const item = registros.find((registro) => registro.id === (button.dataset.detalhes || button.dataset.devolver));
     if (!item) return;
     if (button.dataset.devolver) { abrirRegistro(item); return; }
@@ -251,6 +268,8 @@
     const item = cadastros[tipoCadastro].find((registro) => registro.id === button.dataset.excluirCadastro);
     if (!item) return;
     exclusao = { tipo: tipoCadastro, id: item.id };
+    $('diario-excluir-aviso').textContent = 'O cadastro deixará de aparecer nas próximas saídas. O histórico das viagens será preservado.';
+    $('diario-excluir-confirmar').textContent = 'Excluir cadastro';
     $('diario-excluir-descricao').textContent = `Deseja excluir o cadastro de ${item.placa || item.nome}?`;
     $('diario-excluir-status').textContent = '';
     excluirModal.showModal();
@@ -264,18 +283,26 @@
     if (excluindo || !exclusao) return;
     excluindo = true;
     $('diario-excluir-confirmar').disabled = true;
-    $('diario-excluir-status').textContent = 'Excluindo cadastro…';
+    $('diario-excluir-status').textContent = 'Excluindo…';
     try {
-      await api(`/cadastros/${exclusao.tipo}/${encodeURIComponent(exclusao.id)}`, undefined, 'DELETE');
-      cadastros[exclusao.tipo] = cadastros[exclusao.tipo].filter((item) => item.id !== exclusao.id);
-      listarCadastros();
+      if (exclusao.registro) {
+        await api(`/${encodeURIComponent(exclusao.id)}`, undefined, 'DELETE');
+        registros = registros.filter((item) => item.id !== exclusao.id);
+        renderizar();
+        $('diario-status').textContent = 'Registro excluído do diário. Totais atualizados.';
+      } else {
+        await api(`/cadastros/${exclusao.tipo}/${encodeURIComponent(exclusao.id)}`, undefined, 'DELETE');
+        cadastros[exclusao.tipo] = cadastros[exclusao.tipo].filter((item) => item.id !== exclusao.id);
+        listarCadastros();
+        $('diario-cadastro-status').textContent = 'Cadastro excluído. O histórico das viagens foi preservado.';
+      }
       excluirModal.close();
-      $('diario-cadastro-status').textContent = 'Cadastro excluído. O histórico das viagens foi preservado.';
     } catch (error) { $('diario-excluir-status').textContent = error.message; }
     finally { excluindo = false; $('diario-excluir-confirmar').disabled = false; }
   });
   window.diarioBordoController = { preparar() {
     registros = [];
+    podeExcluirRegistro = false;
     cadastros = { rotas: [], carros: [], motoristas: [] };
     renderizar();
     carregar();

@@ -1,5 +1,5 @@
 const express = require('express');
-const { criarDiarioBordo } = require('./diarioBordo');
+const { criarDiarioBordo, usuarioDiretoria } = require('./diarioBordo');
 const { criarDiarioBordoCadastros } = require('./diarioBordoCadastros');
 const router = express.Router();
 const diario = criarDiarioBordo();
@@ -12,6 +12,8 @@ async function executar(res, operacao) {
   }
 }
 router.get('/diario-bordo', (req, res) => executar(res, () => diario.listar()));
+router.get('/diario-bordo/permissoes', (req, res) => res.json({ podeExcluir: usuarioDiretoria(req.usuario) }));
+router.delete('/diario-bordo/:id', (req, res) => executar(res, () => diario.remover(req.params.id, req.usuario)));
 router.get('/diario-bordo/cadastros', (req, res) => executar(res, () => cadastros.listar()));
 router.get('/diario-bordo/usuarios', (req, res) => executar(res, () => cadastros.consultarUsuarios(req.query.busca)));
 router.post('/diario-bordo/cadastros/:tipo', (req, res) => executar(res, () => cadastros.adicionar(req.params.tipo, req.body || {}, req.usuario)));
