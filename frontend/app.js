@@ -8871,6 +8871,7 @@ async function processarLoteFeltrinSeparacao(codigoEnfileirado) {
   }
   pendente.lendoLote = true;
   botaoConfirmarSeparacao.disabled = true;
+  let confirmarAutomaticamente = false;
   try {
     if (pendente.leituraFeltrin) throw new Error('Confirme novamente o total anterior antes de adicionar outras caixas.');
     const codigoProduto = pendente.entradaCodigo?.codigo;
@@ -8898,6 +8899,7 @@ async function processarLoteFeltrinSeparacao(codigoEnfileirado) {
     const totalContado = normalizarQuantidade(itemDestino.qtdSeparada) + quantidade;
     const totalPedido = quantidadeEsperadaSeparacao(itemDestino);
     const restanteLote = Math.max(0, Math.round((totalPedido - totalContado) * 1000000) / 1000000);
+    confirmarAutomaticamente = !pendente.numeroLeituras && restanteLote === 0;
     pendente.numeroLeituras = numeroLeituras;
     pendente.quantidade = quantidade;
     separacaoConfirmQtd.textContent = `${formatarQuantidade(quantidade)} ${obterUnidadeExibicaoItem(pendente.item)}`;
@@ -8920,6 +8922,9 @@ async function processarLoteFeltrinSeparacao(codigoEnfileirado) {
   } finally {
     pendente.lendoLote = false;
     if (itemSeparacaoPendente === pendente) botaoConfirmarSeparacao.disabled = !pendente.loteBipado || Boolean(pendente.leiturasNaFila);
+  }
+  if (confirmarAutomaticamente && itemSeparacaoPendente === pendente) {
+    await salvarLeituraFeltrinConfirmada();
   }
 }
 

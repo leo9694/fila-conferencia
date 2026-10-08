@@ -100,6 +100,50 @@ test('caixa de outro produto não registra quantidade na separação', async () 
   assert.match(contexto.separacaoConfirmStatus.textContent, /outro produto/);
 });
 
+test('primeira leitura que completa o lote confirma automaticamente sem duplicar com Enter consecutivo', async () => {
+  const { contexto, gravacoes } = ambiente(1113, 20);
+  await Promise.all([vm.runInContext('processarLoteFeltrinSeparacao()', contexto), vm.runInContext('processarLoteFeltrinSeparacao()', contexto)]);
+  assert.equal(gravacoes.length, 1);
+  assert.equal(gravacoes[0].body.numeroLeituras, 1);
+  assert.equal(gravacoes[0].body.codigo, codigo);
+  assert.equal(contexto.itemSeparacaoPendente, null);
+});
+
+test('confirma automaticamente quando a primeira caixa completa apenas o restante do lote', async () => {
+  const { contexto, gravacoes } = ambiente(1113, 10);
+  contexto.itemSeparacaoPendente.item.qtdSeparada = 10;
+  vm.runInContext('enfileirarLoteFeltrinSeparacao(); enfileirarLoteFeltrinSeparacao();', contexto);
+  const pendente = contexto.itemSeparacaoPendente;
+  await pendente.filaLeiturasFeltrin;
+  assert.equal(gravacoes.length, 1);
+  assert.equal(contexto.itemSeparacaoPendente, null);
+});
+
+test('falha da confirmação automática mantém painel aberto para tentar novamente sem duplicar a leitura', async () => {
+  const { contexto } = ambiente(1113, 20);
+  const tentativas = [];
+  contexto.requisitarSeparacao = async (_route, options) => {
+    tentativas.push(JSON.parse(options.body));
+    if (tentativas.length === 1) throw new Error('Falha temporária');
+    return {};
+  };
+  await vm.runInContext('processarLoteFeltrinSeparacao()', contexto);
+  assert.ok(contexto.itemSeparacaoPendente);
+  assert.equal(contexto.botaoConfirmarSeparacao.disabled, false);
+  assert.match(contexto.separacaoConfirmStatus.textContent, /Falha temporária/);
+  await vm.runInContext('confirmarItemSeparacao()', contexto);
+  assert.deepEqual(tentativas[1], tentativas[0]);
+  assert.equal(contexto.itemSeparacaoPendente, null);
+});
+
+test('caixa que excede o restante nunca confirma automaticamente', async () => {
+  const { contexto, gravacoes } = ambiente(1113, 30);
+  await vm.runInContext('processarLoteFeltrinSeparacao()', contexto);
+  assert.equal(gravacoes.length, 0);
+  assert.ok(contexto.itemSeparacaoPendente);
+  assert.match(contexto.separacaoConfirmStatus.textContent, /excede/);
+});
+
 test('limpa o campo quando falta lote e mantém o código completo para confirmar e repetir após falha', async () => {
   const { contexto } = ambiente();
   const tentativas = [];
