@@ -22,6 +22,7 @@
   };
 
   function createCallClientId() {
+    if (window.chatRealtime) return window.chatRealtime.clientId;
     if (window.crypto?.randomUUID) return window.crypto.randomUUID();
     return `call-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   }
@@ -744,7 +745,8 @@
 
   function connectRealtime() {
     state.source?.close();
-    const source = new EventSource(`/api/chat/events?clientId=${encodeURIComponent(state.clientId)}`);
+    const source = window.chatRealtime ? window.chatRealtime.subscribe()
+      : new EventSource(`/api/chat/events?clientId=${encodeURIComponent(state.clientId)}`);
     state.source = source;
     ['call:permission:updated', 'call:outgoing', 'call:incoming', 'call:claimed', 'call:ringing', 'call:connecting', 'call:active', 'call:ended', 'call:failed', 'call:rejected', 'call:updated', 'call:signal',
       'call:transfer:incoming', 'call:transfer:accepted', 'call:transfer:rejected', 'call:transfer:cancelled',
