@@ -198,23 +198,6 @@ test('normaliza números para localizar uma conversa já existente', () => {
   assert.equal(ChatCore.normalizePhone('+55 (66) 9233-9094'), '556692339094');
 });
 
-test('preserva entrega e leitura quando uma resposta atrasada tenta regredir o status', () => {
-  const current = [{ id: 1, wamid: 'wamid.1', status: 'READ', text: 'Oi' }];
-  const merged = ChatCore.mergeById(current, [{ id: 1, status: 'SENT', text: 'Oi atualizado' }]);
-  assert.equal(merged[0].status, 'READ');
-  assert.equal(merged[0].text, 'Oi atualizado');
-  assert.equal(ChatCore.mergeById(current, [{ id: 1, status: 'PENDING' }])[0].status, 'READ');
-  assert.equal(ChatCore.updateMessageStatus(current, { wamid: 'wamid.1', status: 'READ' })[0], current[0]);
-});
-
-test('atualização atrasada não troca a última mensagem nem a posição cronológica da conversa', () => {
-  const current = { id: 1, lastMessageAt: '2026-10-08T12:00:00Z', lastMessage: { id: 2, text: 'Nova' } };
-  const result = ChatCore.mergeConversationSnapshot(current, { id: 1, lastMessageAt: '2026-10-07T12:00:00Z', lastMessage: { id: 1, text: 'Antiga' }, unreadCount: 0 });
-  assert.equal(result.lastMessage.id, 2);
-  assert.equal(result.lastMessageAt, current.lastMessageAt);
-  assert.equal(result.unreadCount, 0);
-});
-
 test('atualiza status por id ou wamid', () => {
   const messages = [{ id: 1, wamid: 'wamid.1', status: 'SENT' }];
   assert.equal(ChatCore.updateMessageStatus(messages, { messageId: 1, status: 'DELIVERED' })[0].status, 'DELIVERED');

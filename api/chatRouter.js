@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const { criarEventosCompartilhados, criarProcessadorCompartilhado } = require('./eventosCompartilhados');
+const { EventEmitter } = require('node:events');
 const whatsappApi = require('./whatsappApi');
 const bitrixService = require('./bitrixService');
 const { executeQuery, executeService } = require('./sankhyaApi');
@@ -13,7 +13,7 @@ const atendentes = criarChatAtendenteStore();
 const setoresChamadas = criarChatSetoresStore();
 const { configurarUra } = require('./chatUra');
 const configurandoUra = new Set();
-const eventosAtendimento = criarEventosCompartilhados();
+const eventosAtendimento = new EventEmitter();
 const CONTROLE_CHAMADA_TTL_MS = 4 * 60 * 60 * 1000;
 const ATRIBUICAO_SEM_INTERACAO_MS = 24 * 60 * 60 * 1000;
 const upload = multer({
@@ -815,7 +815,6 @@ async function mensagensConsolidadas(conversationId, params = {}) {
     ...respostas.flatMap((resposta) => Array.isArray(resposta?.data) ? resposta.data : []),
     ...mensagensInternasAtendimento(conversationId)
   ];
-  registrarConversaDasMensagens(messages, group.canonicalId);
   const unique = new Map();
   messages.forEach((message) => unique.set(String(message.id ?? message.wamid), message));
   const data = [...unique.values()].sort((a, b) => {
@@ -916,18 +915,6 @@ async function buscarConversasPorCodigoParceiro(codParc) {
   return consolidarConversas([...encontradas.values()]);
 }
 
-const conversaPorMensagem = new Map();
-
-function registrarConversaDasMensagens(messages, conversationId) {
-  for (const message of messages) {
-    for (const key of [message.id, message.wamid, message.messageId, message.message_id]) {
-      if (key === undefined || key === null || key === '') continue;
-      conversaPorMensagem.set(String(key), conversationId);
-    }
-  }
-  while (conversaPorMensagem.size > 10000) conversaPorMensagem.delete(conversaPorMensagem.keys().next().value);
-}
-
 async function normalizarEventoAtendimento(event, payload = {}) {
   if (event === 'conversation:new' || event === 'conversation:updated') {
     const incoming = payload.conversation || payload;
@@ -937,10 +924,10 @@ async function normalizarEventoAtendimento(event, payload = {}) {
     const conversation = consolidarConversas(cached ? [cached, incoming] : [incoming])[0];
     return { ...payload, conversationId: conversation.id, conversation: comAtribuicao(conversation) };
   }
-  const rawId = Number(payload.conversationId || payload.message?.conversationId || payload.statusUpdate?.conversationId || payload.conversation?.id);
+  const rawId = Number(payload.conversationId || payload.message?.conversationId || payload.conversation?.id);
   if (!Number.isInteger(rawId)) return payload;
   let group = grupoConversa(rawId);
-  if (group.ids.length === 1 && !cacheConversaCanonica.has(rawId) && ['message:new', 'message:status'].includes(event)) {
+  if (group.ids.length === 1 && !cacheConversaCanonica.has(rawId) && event === 'message:new') {
     try {
       const incoming = await whatsappApi.getConversation(rawId);
       const channelPhone = chaveCanalTelefoneConversa(incoming);
@@ -951,7 +938,6 @@ async function normalizarEventoAtendimento(event, payload = {}) {
     } catch {}
   }
   const canonicalId = group.canonicalId;
-  if (event === 'message:new' && payload.message) registrarConversaDasMensagens([payload.message], canonicalId);
   return {
     ...payload,
     conversationId: canonicalId,
@@ -2243,40 +2229,13 @@ router.get('/media/:mediaId', asyncRoute(async (req, res) => {
   media.body.pipe(res);
 }));
 
-const processarEventoTempoReal = criarProcessadorCompartilhado(async (event, payload) => {
-  if (event === 'message:status') {
-    const updates = Array.isArray(payload.statuses) ? payload.statuses : [payload.message || payload.statusUpdate || payload];
-    return Promise.all(updates.map(async (update) => {
-      if (!update || typeof update !== 'object') return null;
-      const knownId = [update.wamid, update.messageId, update.message_id, update.id]
-        .map((key) => conversaPorMensagem.get(String(key))).find(Boolean);
-      const conversationId = update.conversationId || payload.conversationId || payload.conversation?.id || knownId;
-      if (!conversationId) return null;
-      const normalizado = await normalizarEventoAtendimento(event, { conversationId, statusUpdate: update });
-      return { ...normalizado, conversation: cacheConversaCanonica.get(Number(normalizado.conversationId)) };
-    }));
-  }
-  let normalizado = await normalizarEventoAtendimento(event, payload);
-  // Cadastro Sankhya é complementar: não deve atrasar o recebimento da mensagem.
-  const conversationId = Number(normalizado.conversationId || normalizado.conversation?.id);
-  const conversation = normalizado.conversation || cacheConversaCanonica.get(conversationId);
-  if (conversation) {
-    const [vinculada] = vincularCadastrosSankhyaDoCache([conversation]);
-    normalizado = { ...normalizado, conversation: vinculada };
-  }
-  return normalizado;
-});
-
 router.get('/events', (req, res) => {
-  let fechado = false;
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders?.();
 
   const write = (event, payload) => {
-    if (fechado || res.destroyed || res.writableEnded) return;
-    if (res.writableLength > 1024 * 1024) { res.destroy(); return; }
     res.write(`event: ${event}\n`);
     res.write(`data: ${JSON.stringify(payload)}\n\n`);
   };
@@ -2310,22 +2269,22 @@ router.get('/events', (req, res) => {
       if (String(event).startsWith('call:')) {
         return;
       }
-      processarEventoTempoReal(event, payload)
-        .then((resultado) => {
-          if (fechado) return;
-          for (const normalizado of Array.isArray(resultado) ? resultado : [resultado]) {
-            if (!normalizado) continue;
-            const conversation = normalizado.conversation || {
-              id: normalizado.conversationId,
-              ...(normalizado.message ? { lastMessage: normalizado.message, lastMessageAt: normalizado.message.messageTimestamp } : {})
-            };
-            if (atendentePodeAcessarConversa(req.atendente, conversation)
-              && !conversaOcultaParaUsuario(req.usuario.codUsu, conversation)) {
-              write(event, normalizado.conversation ? {
-                ...normalizado,
-                conversation: comAcessoAtendente(normalizado.conversation, req.atendente)
-              } : normalizado);
-            }
+      normalizarEventoAtendimento(event, payload)
+        .then(async (normalizado) => {
+          if (normalizado.conversation) {
+            const [vinculada] = await vincularCadastrosSankhya([normalizado.conversation]);
+            normalizado = { ...normalizado, conversation: vinculada };
+          }
+          const conversation = normalizado.conversation || {
+            id: normalizado.conversationId,
+            ...(normalizado.message ? { lastMessage: normalizado.message, lastMessageAt: normalizado.message.messageTimestamp } : {})
+          };
+          if (atendentePodeAcessarConversa(req.atendente, conversation)
+            && !conversaOcultaParaUsuario(req.usuario.codUsu, conversation)) {
+            write(event, normalizado.conversation ? {
+              ...normalizado,
+              conversation: comAcessoAtendente(normalizado.conversation, req.atendente)
+            } : normalizado);
           }
         })
         // Sem a conversa normalizada não é possível confirmar o número de origem.
@@ -2374,10 +2333,8 @@ router.get('/events', (req, res) => {
       // Sem identificar o número, a chamada direta não deve tocar para o atendente.
       .catch(() => {});
   }, (payload) => write('call:connection', payload));
-  const keepAlive = setInterval(() => { if (!fechado && !res.destroyed) res.write(': keep-alive\n\n'); }, 25000);
-  const fechar = () => {
-    if (fechado) return;
-    fechado = true;
+  const keepAlive = setInterval(() => res.write(': keep-alive\n\n'), 25000);
+  req.on('close', () => {
     clearInterval(keepAlive);
     eventosAtendimento.off('assignment', onAssignment);
     eventosAtendimento.off('call', onCall);
@@ -2385,10 +2342,7 @@ router.get('/events', (req, res) => {
     eventosAtendimento.off('updated', onUpdated);
     unsubscribe();
     unsubscribeAgent();
-  };
-  res.once('close', fechar);
-  res.once('error', fechar);
-  req.once('aborted', fechar);
+  });
 });
 
 router.use((error, _req, res, next) => {

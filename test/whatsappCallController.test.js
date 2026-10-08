@@ -5,10 +5,9 @@ const path = require('node:path');
 const vm = require('node:vm');
 const Core = require('../frontend/whatsapp-call-core');
 
-function fixture(fetch = async () => ({ ok: true, json: async () => ({}) }), callCore = Core, compartilhar = false) {
+function fixture(fetch = async () => ({ ok: true, json: async () => ({}) }), callCore = Core) {
   const elements = new Map();
   const intervals = [];
-  const sources = [];
   const element = () => ({
     hidden: true, dataset: {}, classList: { remove() {}, toggle() {} },
     addEventListener(event, listener) { this[event] = listener; },
@@ -20,12 +19,11 @@ function fixture(fetch = async () => ({ ok: true, json: async () => ({}) }), cal
     pause() { this.playing = false; }
   }
   class SourceMock {
-    constructor() { this.handlers = {}; sources.push(this); }
+    constructor() { this.handlers = {}; }
     addEventListener(event, listener) { this.handlers[event] = listener; }
     close() {}
   }
   const window = { WhatsAppCallCore: callCore, crypto: { randomUUID: () => 'device-test-123' } };
-  if (compartilhar) window.chatRealtime = require('../frontend/chat-realtime').criarChatRealtime({ EventSource: SourceMock, clientId: 'device-shared-123' });
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../frontend/whatsapp-call.js'), 'utf8'), {
     window, navigator: {}, Audio: AudioMock, EventSource: SourceMock, fetch,
     document: {
@@ -37,26 +35,8 @@ function fixture(fetch = async () => ({ ok: true, json: async () => ({}) }), cal
   });
   const controller = window.whatsappCallController;
   controller.start({ id: '72' });
-  return { controller, elements, intervals, sources, hub: window.chatRealtime };
+  return { controller, elements, intervals };
 }
-
-test('telefonia compartilhada mantém a identidade da aba e recebe chamada sem abrir outra conexão para o chat', () => {
-  const { controller, sources, hub } = fixture(undefined, Core, true);
-  const chat = hub.subscribe();
-  let mensagens = 0;
-  chat.addEventListener('message:new', () => mensagens++);
-  assert.equal(sources.length, 1);
-  assert.equal(controller.state.clientId, 'device-shared-123');
-  sources[0].handlers['call:incoming']({ data: JSON.stringify(incoming) });
-  assert.equal(controller.state.status, 'RINGING');
-  sources[0].handlers['call:claimed']({ data: JSON.stringify({ callId: incoming.callId,
-    attendant: { id: '72' }, clientId: 'outra-aba' }) });
-  assert.equal(controller.state.call, null);
-  sources[0].handlers['message:new']({ data: '{}' });
-  assert.equal(mensagens, 1);
-  controller.stop();
-  chat.close();
-});
 
 const incoming = { callId: 'call-1', conversationId: 12, direction: 'INBOUND', status: 'RINGING' };
 

@@ -79,14 +79,6 @@
   function mergeConversationSnapshot(current = {}, incoming = {}) {
     const next = incoming?.conversation || incoming || {};
     const merged = { ...current, ...definedFields(next) };
-    const currentMessageAt = new Date(current.lastMessageAt || current.lastMessage?.messageTimestamp || 0).getTime();
-    const incomingMessageAt = new Date(next.lastMessageAt || next.lastMessage?.messageTimestamp || 0).getTime();
-    if (currentMessageAt > incomingMessageAt && (next.lastMessage || next.lastMessageAt)) {
-      merged.lastMessage = current.lastMessage;
-      merged.lastMessageAt = current.lastMessageAt;
-    } else if (current.lastMessage && next.lastMessage && messageMatchesUpdate(current.lastMessage, next.lastMessage)) {
-      merged.lastMessage = mergeById([current.lastMessage], [next.lastMessage])[0];
-    }
     ['contact', 'assignment', 'serviceWindow', 'cadastroSankhya', 'bitrix'].forEach((field) => {
       if (next[field] === null) merged[field] = null;
       else if (next[field] && typeof next[field] === 'object' && !Array.isArray(next[field])) {
@@ -207,11 +199,7 @@
       const index = merged.findIndex((current) =>
         (id && String(current.id ?? '') === id) || (wamid && String(current.wamid ?? '') === wamid)
       );
-      if (index >= 0) {
-        const current = merged[index];
-        const updated = updateMessageStatus([current], item)[0];
-        merged[index] = { ...current, ...item, ...(updated.status ? { status: updated.status } : {}) };
-      }
+      if (index >= 0) merged[index] = { ...merged[index], ...item };
       else merged.push(item);
     });
     return merged.sort((a, b) => {
@@ -363,13 +351,12 @@
 
   function updateMessageStatus(items = [], update = {}) {
     const status = update.status || update.messageStatus || update.deliveryStatus || '';
-    const statusRank = { PENDING: 0, SENT: 1, DELIVERED: 2, READ: 3 };
+    const statusRank = { SENT: 1, DELIVERED: 2, READ: 3 };
     return items.map((message) => {
       if (messageMatchesUpdate(message, update)) {
         const atual = String(message.status || '').toUpperCase();
         const proximo = String(status || '').toUpperCase();
-        if (statusRank[atual] !== undefined && statusRank[proximo] !== undefined && statusRank[proximo] < statusRank[atual]) return message;
-        if ((!status || status === message.status) && (update.failureDetails === undefined || update.failureDetails === message.failureDetails)) return message;
+        if (statusRank[atual] && statusRank[proximo] && statusRank[proximo] < statusRank[atual]) return message;
         return {
           ...message,
           status: status || message.status,

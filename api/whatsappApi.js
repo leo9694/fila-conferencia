@@ -1,4 +1,4 @@
-const { criarEventosCompartilhados } = require('./eventosCompartilhados');
+const { EventEmitter } = require('events');
 const { Readable } = require('stream');
 const crypto = require('crypto');
 
@@ -304,7 +304,7 @@ async function getMedia(mediaId) {
 }
 
 function createRealtimeBridge({ ioFactory, agent } = {}) {
-  const emitter = criarEventosCompartilhados();
+  const emitter = new EventEmitter();
   let socket = null;
   let state = 'idle';
 

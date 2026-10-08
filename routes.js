@@ -38,6 +38,7 @@ const { gerarRomaneioCargaPdf } = require('./api/romaneioPdf');
 const { criarPedidoPrintStore } = require('./api/pedidoPrintStore');
 const { criarGuiaFaseStore } = require('./api/guiaFaseStore');
 const { criarSeparacaoStore } = require('./api/separacaoStore');
+const { consultarCodigoFeltrin, consultarMultiplicadorFeltrin } = require('./api/separacaoFeltrin');
 const {
   criarEstoqueContagemStore,
   obterContagemAtual
@@ -2893,6 +2894,33 @@ router.get('/fila-conferencia/separacao/:nunota', (req, res) => {
   res.json({ separacao: separacaoStore.obter(nunota) });
 });
 
+router.post('/fila-conferencia/separacao/:nunota/codigo-feltrin', async (req, res) => {
+  try {
+    const lote = await consultarCodigoFeltrin({
+      nunota: obterNumeroInteiro(req.params.nunota), codigo: req.body?.codigo, executeQuery
+    });
+    res.json({ lote });
+  } catch (error) {
+    res.status(400).json({ erro: error.message || 'Não foi possível identificar a caixa Feltrin.' });
+  }
+});
+
+router.post('/fila-conferencia/separacao/:nunota/leitura-feltrin', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+  try {
+    const leituraId = String(req.body?.leituraId || '');
+    if (!/^[a-zA-Z0-9-]{10,80}$/.test(leituraId)) throw new Error('Identificação da leitura inválida. Bipe novamente.');
+    await garantirPedidoNaoConferidoParaSeparacao(nunota);
+    const lote = await consultarCodigoFeltrin({ nunota, codigo: req.body?.codigo, executeQuery });
+    const quantidade = await consultarMultiplicadorFeltrin({ nunota, codProd: lote.codProd, codigoProduto: req.body?.codigoProduto, executeQuery });
+    res.json({ separacao: separacaoStore.registrarLeituraFeltrin({
+      nunota, codUsu: req.usuario?.codUsu, chave: req.body?.chave, lote, leituraId, quantidade
+    }) });
+  } catch (error) {
+    res.status(error.statusCode || 400).json({ erro: error.message || 'Não foi possível registrar a caixa Feltrin.' });
+  }
+});
+
 router.get('/fila-conferencia/separacao/:nunota/produtos/:codprod/lotes', async (req, res) => {
   const nunota = obterNumeroInteiro(req.params.nunota);
   const codProd = obterNumeroInteiro(req.params.codprod);
@@ -3474,6 +3502,7 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
         PRO.DESCRPROD,
         PRO.CODGRUPOPROD,
         GRU.DESCRGRUPOPROD,
+        PRO.MARCA,
         ITE.CONTROLE,
         ITE.CODVOL,
         PRO.CODVOL AS CODVOLPADRAO,
@@ -3657,6 +3686,7 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
           descrProd: row.DESCRPROD || `Produto ${row.CODPROD}`,
           codGrupoProd: row.CODGRUPOPROD || '',
           descrGrupoProd: row.DESCRGRUPOPROD || 'Sem grupo',
+          marca: row.MARCA || '',
           controle: row.CONTROLE || '',
           codVol: row.CODVOL || 'UN',
           codVolPadrao: row.CODVOLPADRAO || row.CODVOL || 'UN',

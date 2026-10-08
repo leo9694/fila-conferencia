@@ -2036,12 +2036,10 @@
     upsertConversation(payload);
     const scope = Core.conversationUpdateScope(state.conversationId, payload, state.conversation);
     if (scope === 'DIRECT') {
-      const conversation = Core.mergeConversationSnapshot(state.conversation || {}, {
+      state.conversation = Core.mergeConversationSnapshot(state.conversation || {}, {
         ...incoming,
         ...(payload.serviceWindow !== undefined ? { serviceWindow: payload.serviceWindow } : {})
       });
-      if (JSON.stringify(conversation) === JSON.stringify(state.conversation)) return;
-      state.conversation = conversation;
       renderConversationDetails();
       scheduleMessagesRender({ preserveScroll: true });
     } else if (scope === 'RELATED' && state.conversationId) {
@@ -2143,18 +2141,12 @@
         ? id === String(state.conversationId)
         : updates.some((update) => state.messages.some((message) => Core.messageMatchesUpdate(message, update)));
       if (belongsToActive) {
-        const previous = state.messages;
         updates.forEach((update) => {
           state.messages = Core.updateMessageStatus(state.messages, update);
         });
-        if (state.messages.some((message, index) => message !== previous[index])) {
-          scheduleMessagesRender({ preserveScroll: true });
-        }
+        scheduleMessagesRender({ preserveScroll: true });
+        if (id) refreshActiveConversation(id);
       }
-      state.conversationCache.forEach((_cached, cachedId) => {
-        if (!id || id === String(cachedId)) updateCachedConversationMessages(cachedId, (messages) =>
-          updates.reduce((current, update) => Core.updateMessageStatus(current, update), messages));
-      });
     } else if (event === 'conversation:new' || event === 'conversation:updated') {
       const incoming = payload.conversation || payload;
       const id = String(incoming.id ?? payload.conversationId ?? '');
@@ -2186,75 +2178,13 @@
 
   function connectRealtime() {
     state.eventSource?.close();
-    const source = window.chatRealtime ? window.chatRealtime.subscribe() : new EventSource('/api/chat/events');
-    state.eventSource = source;
-    let recuperar = false;
-    let recuperando = false;
-    let novaRecuperacao = false;
-    let antesDaQueda = null;
-    const marcarInterrupcao = () => {
-      recuperar = true;
-      if (!antesDaQueda) antesDaQueda = { id: state.conversationId, token: state.activeLoadToken,
-        conhecidos: new Set(state.messages.map(Core.realtimeMessageIdentity).filter(Boolean)) };
-    };
-    const reconciliar = async () => {
-      if (!recuperar || recuperando || state.eventSource !== source) return;
-      recuperar = false;
-      recuperando = true;
-      const id = state.conversationId;
-      const token = state.activeLoadToken;
-      const conhecidos = antesDaQueda?.id === id && antesDaQueda?.token === token
-        ? antesDaQueda.conhecidos : new Set(state.messages.map(Core.realtimeMessageIdentity).filter(Boolean));
-      try {
-        await Promise.all([loadConversations(), loadUnreadSummary()]);
-        if (!id || id !== state.conversationId || token !== state.activeLoadToken || state.eventSource !== source) {
-          if (!recuperar) antesDaQueda = null;
-          return;
-        }
-        let mensagens = [];
-        let page = 1;
-        let totalPages = 1;
-        do {
-          const payload = await api(`/conversations/${encodeURIComponent(id)}/messages?page=${page}&limit=${MESSAGE_PAGE_SIZE}`);
-          if (id !== state.conversationId || token !== state.activeLoadToken || state.eventSource !== source) return;
-          const recebidas = Array.isArray(payload?.data) ? payload.data : [];
-          mensagens = Core.mergeById(mensagens, recebidas);
-          totalPages = Number(payload?.pagination?.totalPages || 1);
-          if (!conhecidos.size || recebidas.some((message) => conhecidos.has(Core.realtimeMessageIdentity(message)))) break;
-          page++;
-        } while (page <= totalPages);
-        state.messages = Core.mergeById(mensagens, state.messages);
-        state.messageTotalPages = totalPages;
-        cacheActiveConversation();
-        scheduleMessagesRender({ preserveScroll: true });
-        void refreshActiveConversation(id);
-        if (!recuperar) antesDaQueda = null;
-      } catch (error) {
-        recuperar = true;
-        console.warn('Falha ao recuperar mensagens após reconexão:', error.message);
-      } finally {
-        recuperando = false;
-        if (novaRecuperacao) { novaRecuperacao = false; void reconciliar(); }
-      }
-    };
-    const solicitarRecuperacao = () => {
-      if (recuperando && recuperar) novaRecuperacao = true;
-      else void reconciliar();
-    };
+    const source = new EventSource('/api/chat/events'); state.eventSource = source;
     ['conversation:new', 'conversation:updated', 'message:new', 'message:status', 'conversation:read', 'conversation:status', 'conversation:assignment', 'conversation:deleted',
       'call:incoming', 'call:claimed', 'call:ringing', 'call:connecting', 'call:active', 'call:ended', 'call:failed', 'call:rejected', 'call:updated'].forEach((event) => {
       source.addEventListener(event, (message) => { try { handleRealtime(event, JSON.parse(message.data)); } catch {} });
     });
-    source.addEventListener('connection', (message) => {
-      try {
-        const status = JSON.parse(message.data);
-        updateRealtime(status);
-        if (status.state === 'connected') solicitarRecuperacao();
-        else if (status.state === 'disconnected' || status.state === 'reconnecting') marcarInterrupcao();
-      } catch {}
-    });
-    source.addEventListener('open', solicitarRecuperacao);
-    source.onerror = () => { marcarInterrupcao(); updateRealtime({ state: 'reconnecting' }); };
+    source.addEventListener('connection', (message) => { try { updateRealtime(JSON.parse(message.data)); } catch {} });
+    source.onerror = () => updateRealtime({ state: 'reconnecting' });
   }
 
   async function loadAgents() {

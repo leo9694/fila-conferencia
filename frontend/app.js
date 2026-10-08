@@ -272,6 +272,10 @@ const separacaoConfirmProduto = document.getElementById('separacao-confirm-produ
 const separacaoLoteField = document.getElementById('separacao-lote-field');
 const separacaoLoteSelect = document.getElementById('separacao-lote-select');
 const separacaoLoteInfo = document.getElementById('separacao-lote-info');
+const separacaoFeltrinField = document.getElementById('separacao-feltrin-field');
+const separacaoFeltrinCodigo = document.getElementById('separacao-feltrin-codigo');
+const separacaoFeltrinProdutoField = document.getElementById('separacao-feltrin-produto-field');
+const separacaoFeltrinProdutoCodigo = document.getElementById('separacao-feltrin-produto-codigo');
 const separacaoConfirmField = document.getElementById('separacao-confirm-field');
 const separacaoConfirmQtd = document.getElementById('separacao-confirm-qtd');
 const separacaoConfirmStatus = document.getElementById('separacao-confirm-status');
@@ -8213,7 +8217,8 @@ function aplicarEstadoSeparacao(separacao) {
       separacaoProcessada: Boolean(registro.processado),
       separacaoAjustada: Boolean(registro.ajustado),
       controleSeparado: String(registro.controleSeparado || '').trim() || null,
-      dtValidadeSeparada: String(registro.dtValidadeSeparada || '').trim() || null
+      dtValidadeSeparada: String(registro.dtValidadeSeparada || '').trim() || null,
+      lotesSeparados: Array.isArray(registro.lotesSeparados) ? registro.lotesSeparados : []
     };
   });
   separacaoConcluida = separacao.status === 'SEPARADO';
@@ -8284,6 +8289,7 @@ function itemSeparacaoDivergente(item) {
 }
 
 function obterLoteSeparacao(item) {
+  if (item.lotesSeparados?.length > 1) return `${item.lotesSeparados.length} lotes`;
   const controle = String(
     item.controleSeparado || item.controle || item.CONTROLE || ''
   ).trim();
@@ -8291,6 +8297,7 @@ function obterLoteSeparacao(item) {
 }
 
 function obterValidadeSeparacao(item) {
+  if (item.lotesSeparados?.length > 1) return 'Validade por lote';
   const possuiLoteSeparado = Boolean(String(item.controleSeparado || '').trim());
   const validade = possuiLoteSeparado
     ? (item.dtValidadeSeparada || '')
@@ -8340,6 +8347,7 @@ async function prepararItensSeparacao() {
         sequencia: item.sequencia,
         codProd: item.codProd,
         qtdEsperada: quantidadeEsperadaSeparacao(item),
+        controlePedido: String(item.controle || '').trim() || null,
         qtdSeparada: normalizarQuantidade(item.qtdSeparada),
         processado: Boolean(item.separacaoProcessada),
         ajustado: Boolean(item.separacaoAjustada),
@@ -8355,9 +8363,11 @@ async function prepararItensSeparacao() {
 
 async function sincronizarSeparacaoAberta() {
   if (separacaoSyncEmAndamento || separacaoScreen.hidden || !pedidoPreviewSelecionado?.NUNOTA) return;
+  if (itemSeparacaoPendente?.lendoLote || itemSeparacaoPendente?.salvando) return;
   separacaoSyncEmAndamento = true;
   try {
     const separacao = await requisitarSeparacao();
+    if (itemSeparacaoPendente?.lendoLote || itemSeparacaoPendente?.salvando) return;
     if (separacao && Number(separacao.versao || 0) !== separacaoVersao) {
       aplicarEstadoSeparacao(separacao);
       refletirSeparacaoConcluidaNaInterface();
@@ -8476,7 +8486,7 @@ function renderizarItensSeparacao() {
             ? 'Divergente'
             : parcial ? 'Parcial' : 'Pendente';
       const badgeClasse = zerado ? ' zero' : completo ? '' : ' pending';
-      return `
+      const linha = `
         <tr class="separacao-row${classe}" data-separacao-item="${escaparHtml(item.chaveSeparacao)}" tabindex="0">
           <td><strong class="separacao-product-code">${escaparHtml(item.codProd)}</strong></td>
           <td class="separacao-description" title="${escaparHtml(item.descrProd)}">${escaparHtml(item.descrProd || '-')}</td>
@@ -8486,6 +8496,17 @@ function renderizarItensSeparacao() {
           <td><span class="separacao-badge${badgeClasse}">${status}</span></td>
         </tr>
       `;
+      if (!item.lotesSeparados?.length) return linha;
+      return item.lotesSeparados.map((lote, indice) => `
+        <tr class="separacao-row${classe}" data-separacao-item="${escaparHtml(item.chaveSeparacao)}" tabindex="0">
+          <td><strong class="separacao-product-code">${escaparHtml(item.codProd)}</strong></td>
+          <td class="separacao-description">${escaparHtml(item.descrProd || '-')}</td>
+          <td>${formatarQuantidade(lote.qtdSeparada)} ${escaparHtml(obterUnidadeExibicaoItem(item))} <small>(total ${formatarQuantidade(separado)}/${formatarQuantidade(esperado)})</small></td>
+          <td>${escaparHtml(lote.controle)}</td>
+          <td>${escaparHtml(formatarData(lote.dtValidade) || 'Sem validade')}</td>
+          <td><span class="separacao-badge${badgeClasse}">${indice === 0 ? status : 'Lote separado'}</span></td>
+        </tr>
+      `).join('');
     }).join('');
     return cabecalho + linhas;
   }).join('');
@@ -8499,6 +8520,8 @@ function fecharConfirmacaoSeparacao() {
   separacaoLoteField.hidden = true;
   separacaoLoteSelect.innerHTML = '';
   separacaoLoteInfo.textContent = '';
+  separacaoFeltrinField.hidden = true;
+  separacaoFeltrinCodigo.value = '';
   separacaoAjustePainel.hidden = true;
   separacaoConfirmStatus.textContent = '';
 }
@@ -8523,6 +8546,7 @@ function atualizarProdutoConfirmacaoSeparacao() {
 
 function obterLoteSelecionadoConfirmacao() {
   if (!itemSeparacaoPendente) return null;
+  if (produtoSeparacaoFeltrin(itemSeparacaoPendente.item)) return itemSeparacaoPendente.loteBipado || null;
   const lotes = itemSeparacaoPendente.lotesDisponiveis || [];
   if (lotes.length <= 1) return itemSeparacaoPendente.loteSelecionado || lotes[0] || null;
   return lotes.find((lote) => lote.controle === separacaoLoteSelect.value) || null;
@@ -8570,12 +8594,17 @@ async function carregarLotesConfirmacaoSeparacao(item) {
     }
 
     atualizarProdutoConfirmacaoSeparacao();
+    itemSeparacaoPendente.lotesCarregados = true;
     separacaoConfirmStatus.textContent = itemSeparacaoProcessado(item)
       ? 'O item já foi processado. Você pode ajustar a quantidade ou devolvê-lo para pendente.'
       : itemSeparacaoPendente.entradaCodigo?.tipo === 'UNIDADE_ALTERNATIVA'
         ? `${obterDescricaoEntradaCodigo(itemSeparacaoPendente.entradaCodigo)} identificado. Confirme a quantidade total do item.`
         : 'Confirme a quantidade separada.';
-    botaoConfirmarSeparacao.disabled = false;
+    botaoConfirmarSeparacao.disabled = produtoSeparacaoFeltrin(item) && !itemSeparacaoProcessado(item);
+    if (produtoSeparacaoFeltrin(item)) {
+      separacaoLoteField.hidden = true;
+      if (!itemSeparacaoProcessado(item)) separacaoConfirmStatus.textContent = 'Bipe o lote. A quantidade segue o código da caixa ou unidade selecionado.';
+    }
   } catch (error) {
     if (!itemSeparacaoPendente || itemSeparacaoPendente.item !== item) return;
     separacaoConfirmStatus.textContent = error.message;
@@ -8596,7 +8625,7 @@ function abrirConfirmacaoSeparacao(item, entradaCodigo = null) {
   const processado = itemSeparacaoProcessado(item);
   const quantidade = processado
     ? 0
-    : restante;
+    : produtoSeparacaoFeltrin(item) ? Math.max(0, Number(entradaCodigo?.multiplicador) || 1) : restante;
 
   itemSeparacaoPendente = {
     item,
@@ -8624,13 +8653,26 @@ function abrirConfirmacaoSeparacao(item, entradaCodigo = null) {
       ? `${obterDescricaoEntradaCodigo(entradaCodigo)} identificado. Confirme a quantidade total do item.`
       : 'Confirme a quantidade separada.';
   separacaoConfirmModal.hidden = false;
+  separacaoFeltrinField.hidden = !produtoSeparacaoFeltrin(item) || processado;
+  separacaoFeltrinCodigo.value = '';
+  separacaoFeltrinProdutoField.hidden = Boolean(entradaCodigo?.codigo);
+  separacaoFeltrinProdutoCodigo.value = '';
   carregarLotesConfirmacaoSeparacao(item).then(() => {
-    if (!botaoConfirmarSeparacao.disabled) botaoConfirmarSeparacao.focus();
+    if (!itemSeparacaoPendente || itemSeparacaoPendente.item !== item) return;
+    if (produtoSeparacaoFeltrin(item) && !processado) {
+      if (entradaCodigo?.codigoFeltrin) {
+        separacaoFeltrinCodigo.value = entradaCodigo.codigoFeltrin;
+        if (entradaCodigo.codigo) void processarLoteFeltrinSeparacao();
+        else separacaoFeltrinProdutoCodigo.focus();
+      } else if (!entradaCodigo?.codigo) separacaoFeltrinProdutoCodigo.focus();
+      else focarLoteFeltrinSeparacao();
+    } else if (!botaoConfirmarSeparacao.disabled) botaoConfirmarSeparacao.focus();
   });
 }
 
 async function confirmarItemSeparacao() {
   if (!itemSeparacaoPendente) return;
+  if (itemSeparacaoPendente.salvando) return;
   const { item, quantidade } = itemSeparacaoPendente;
   const estadoAnterior = {
     qtdSeparada: item.qtdSeparada,
@@ -8673,6 +8715,10 @@ async function confirmarItemSeparacao() {
   }
 
   const loteSelecionado = obterLoteSelecionadoConfirmacao();
+  if (produtoSeparacaoFeltrin(item) && (!itemSeparacaoPendente.lotesCarregados || !loteSelecionado)) {
+    separacaoConfirmStatus.textContent = 'Bipe e valide o lote da caixa Feltrin antes de confirmar.';
+    return;
+  }
   if ((itemSeparacaoPendente.lotesDisponiveis || []).length > 1 && !loteSelecionado) {
     separacaoConfirmStatus.textContent = 'Selecione o lote que foi separado.';
     separacaoLoteSelect.focus();
@@ -8688,6 +8734,9 @@ async function confirmarItemSeparacao() {
     item.dtValidadeSeparada = loteSelecionado.dtValidade || null;
   }
   const completo = itemSeparacaoCompleto(item);
+  const pendente = itemSeparacaoPendente;
+  pendente.salvando = true;
+  botaoConfirmarSeparacao.disabled = true;
   try {
     await salvarProgressoSeparacao(item);
     fecharConfirmacaoSeparacao();
@@ -8703,6 +8752,9 @@ async function confirmarItemSeparacao() {
     Object.assign(item, estadoAnterior);
     renderizarItensSeparacao();
     separacaoConfirmStatus.textContent = error.message;
+  } finally {
+    pendente.salvando = false;
+    if (itemSeparacaoPendente === pendente) botaoConfirmarSeparacao.disabled = false;
   }
 }
 
@@ -8736,6 +8788,10 @@ async function aplicarAjusteQuantidadeSeparacao() {
   const esperado = quantidadeEsperadaSeparacao(item);
   const descricao = item.descrProd || `Produto ${item.codProd}`;
   const loteSelecionado = obterLoteSelecionadoConfirmacao();
+  if (valor > 0 && produtoSeparacaoFeltrin(item) && !loteSelecionado) {
+    separacaoConfirmStatus.textContent = 'Bipe o lote da caixa Feltrin antes de ajustar uma quantidade positiva.';
+    return;
+  }
   if (valor > 0 && (itemSeparacaoPendente.lotesDisponiveis || []).length > 1 && !loteSelecionado) {
     separacaoConfirmStatus.textContent = 'Selecione o lote que foi separado.';
     separacaoLoteSelect.focus();
@@ -8780,13 +8836,101 @@ function localizarItemSeparacaoPorCodigo(codigo) {
   return compativeis.find(({ item }) => !itemSeparacaoProcessado(item)) || compativeis[0] || null;
 }
 
-function processarCodigoSeparacao() {
+function produtoSeparacaoFeltrin(item) {
+  return /feltrin/i.test(String(item?.marca || ''));
+}
+
+function focarLoteFeltrinSeparacao() {
+  separacaoFeltrinCodigo.inputMode = separacaoEmMobile() ? 'none' : 'numeric';
+  separacaoFeltrinCodigo.focus({ preventScroll: true });
+  navigator.virtualKeyboard?.hide?.();
+}
+
+async function consultarCaixaFeltrinSeparacao(codigo) {
+  const resposta = await fetch(`/api/fila-conferencia/separacao/${Number(pedidoPreviewSelecionado?.NUNOTA)}/codigo-feltrin`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codigo })
+  });
+  const payload = await resposta.json();
+  if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível identificar o lote Feltrin.');
+  return payload.lote;
+}
+
+async function processarLoteFeltrinSeparacao() {
+  const pendente = itemSeparacaoPendente;
+  const pedido = pedidoPreviewSelecionado;
+  if (!pendente || !produtoSeparacaoFeltrin(pendente.item) || pendente.lendoLote || pendente.salvando || itemSeparacaoProcessado(pendente.item)) return;
+  if (!pendente.lotesCarregados) {
+    separacaoConfirmStatus.textContent = 'Aguarde a consulta dos lotes antes de bipar.';
+    return;
+  }
+  pendente.lendoLote = true;
+  pendente.loteBipado = null;
+  botaoConfirmarSeparacao.disabled = true;
+  try {
+    const codigoProduto = pendente.entradaCodigo?.codigo;
+    if (!codigoProduto) throw new Error('Bipe o código de barras da caixa ou da unidade antes de ler o lote.');
+    const codigo = separacaoFeltrinCodigo.value.trim();
+    const caixa = await consultarCaixaFeltrinSeparacao(codigo);
+    if (itemSeparacaoPendente !== pendente) return;
+    if (Number(caixa.codProd) !== Number(pendente.item.codProd)) throw new Error('A caixa bipada pertence a outro produto do pedido.');
+    const lote = pendente.lotesDisponiveis.find((item) => item.controle === caixa.controle);
+    if (!lote) throw new Error('Lote bipado não encontrado entre os lotes disponíveis.');
+    pendente.loteBipado = lote;
+    pendente.loteSelecionado = lote;
+    atualizarProdutoConfirmacaoSeparacao();
+    pendente.salvando = true;
+    if (!pendente.leituraFeltrin || pendente.leituraFeltrin.codigo !== codigo || pendente.leituraFeltrin.codigoProduto !== codigoProduto) {
+      pendente.leituraFeltrin = { codigo, codigoProduto, id: window.crypto?.randomUUID?.() || `leitura-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+    }
+    const separacao = await requisitarSeparacao('/leitura-feltrin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chave: pendente.item.chaveSeparacao, codigo, codigoProduto, leituraId: pendente.leituraFeltrin.id })
+    });
+    if (pedidoPreviewSelecionado !== pedido || separacaoScreen.hidden) return;
+    aplicarEstadoSeparacao(separacao);
+    if (itemSeparacaoPendente === pendente) fecharConfirmacaoSeparacao();
+    renderizarItensSeparacao();
+    atualizarStatusSeparacao(`Produto ${caixa.codProd}: ${formatarQuantidade(pendente.quantidade)} separado(s) no lote ${caixa.controle}.`, 'success');
+    limparCodigoSeparacao({ focar: true });
+  } catch (error) {
+    if (itemSeparacaoPendente !== pendente) return;
+    separacaoConfirmStatus.textContent = error.message;
+    separacaoFeltrinCodigo.select();
+  } finally {
+    pendente.lendoLote = false;
+    pendente.salvando = false;
+    pendente.loteBipado = null;
+  }
+}
+
+let leituraCaixaFeltrinEmAndamento = false;
+
+async function processarCodigoSeparacao() {
   const codigo = normalizarCodigo(separacaoCodigo.value);
   if (!codigo) {
     atualizarStatusSeparacao('Bipe ou digite um código para localizar o produto.', 'warning');
     return;
   }
   const correspondencia = localizarItemSeparacaoPorCodigo(codigo);
+  if (/^01\d{32}$/.test(codigo) && (!correspondencia || produtoSeparacaoFeltrin(correspondencia.item))) {
+    if (leituraCaixaFeltrinEmAndamento) return;
+    leituraCaixaFeltrinEmAndamento = true;
+    const pedido = pedidoPreviewSelecionado;
+    try {
+      const caixa = await consultarCaixaFeltrinSeparacao(codigo);
+      if (pedidoPreviewSelecionado !== pedido || separacaoScreen.hidden || separacaoConcluida) return;
+      const candidatos = itensSeparacao.filter((item) => produtoSeparacaoFeltrin(item) && Number(item.codProd) === Number(caixa.codProd) && !itemSeparacaoProcessado(item));
+      const item = candidatos.find((entrada) => String(entrada.controleSeparado || entrada.controle || '').trim() === caixa.controle)
+        || candidatos[0];
+      if (!item) throw new Error('Não há linha pendente compatível com o produto e lote desta caixa.');
+      abrirConfirmacaoSeparacao(item, { ...(obterEntradaCodigoItem(item, codigo) || {}), codigoFeltrin: codigo });
+    } catch (error) {
+      if (pedidoPreviewSelecionado === pedido) atualizarStatusSeparacao(error.message, 'warning');
+    } finally {
+      leituraCaixaFeltrinEmAndamento = false;
+    }
+    return;
+  }
   if (!correspondencia) {
     atualizarStatusSeparacao(`Codigo ${codigo} nao encontrado neste pedido.`, 'warning');
     separacaoCodigo.select();
@@ -10893,6 +11037,28 @@ separacaoLoteSelect.addEventListener('change', () => {
   separacaoConfirmStatus.textContent = itemSeparacaoPendente.loteSelecionado
     ? `Lote ${itemSeparacaoPendente.loteSelecionado.controle} selecionado.`
     : 'Selecione o lote que foi separado.';
+});
+separacaoFeltrinCodigo.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === 'Tab') {
+    event.preventDefault();
+    void processarLoteFeltrinSeparacao();
+  }
+});
+separacaoFeltrinProdutoCodigo.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter' && event.key !== 'Tab') return;
+  event.preventDefault();
+  const pendente = itemSeparacaoPendente;
+  if (!pendente || pendente.salvando || pendente.lendoLote) return;
+  const entrada = obterEntradaCodigoItem(pendente.item, separacaoFeltrinProdutoCodigo.value);
+  if (!entrada) {
+    separacaoConfirmStatus.textContent = 'O código não pertence ao produto selecionado.';
+    return;
+  }
+  pendente.entradaCodigo = entrada;
+  pendente.quantidade = Math.max(0, Number(entrada.multiplicador) || 1);
+  separacaoConfirmQtd.textContent = `${formatarQuantidade(pendente.quantidade)} ${obterUnidadeExibicaoItem(pendente.item)}`;
+  if (separacaoFeltrinCodigo.value) void processarLoteFeltrinSeparacao();
+  else focarLoteFeltrinSeparacao();
 });
 botaoAjustarQuantidadeSeparacao.addEventListener('click', abrirAjusteQuantidadeSeparacao);
 botaoCancelarAjusteSeparacao.addEventListener('click', () => {

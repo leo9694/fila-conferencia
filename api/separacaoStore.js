@@ -30,12 +30,17 @@ function normalizarItem(item = {}) {
     chave: String(item.chave || '').trim(),
     sequencia: numero(item.sequencia) || null,
     codProd: numero(item.codProd) || null,
+    controlePedido: String(item.controlePedido || '').trim() || null,
     qtdEsperada: Math.max(0, numero(item.qtdEsperada)),
     qtdSeparada: Math.max(0, numero(item.qtdSeparada)),
     processado: item.processado === true,
     ajustado: item.ajustado === true,
     controleSeparado: String(item.controleSeparado || '').trim() || null,
     dtValidadeSeparada: String(item.dtValidadeSeparada || '').trim() || null,
+    lotesSeparados: Array.isArray(item.lotesSeparados) ? item.lotesSeparados.map((lote) => ({
+      controle: String(lote.controle || '').trim(), qtdSeparada: Math.max(0, numero(lote.qtdSeparada)),
+      dtValidade: String(lote.dtValidade || '').trim() || null
+    })) : [],
     atualizadoEm: item.atualizadoEm || null,
     atualizadoPor: item.atualizadoPor === null || item.atualizadoPor === undefined
       ? null
@@ -76,7 +81,8 @@ function criarSeparacaoStore(options = {}) {
         chave: item.chave,
         sequencia: item.sequencia,
         codProd: item.codProd,
-        qtdEsperada: item.qtdEsperada
+        qtdEsperada: item.qtdEsperada,
+        controlePedido: item.controlePedido
       }));
 
     state[chavePedido] = {
@@ -104,6 +110,13 @@ function criarSeparacaoStore(options = {}) {
     if (!atualizado.chave) throw new Error('Item de separacao invalido.');
     const indice = separacao.itens.findIndex((registro) => registro.chave === atualizado.chave);
     if (indice < 0) throw new Error('Item nao pertence a esta separacao.');
+    const anterior = separacao.itens[indice];
+    let lotesSeparados = anterior.lotesSeparados || [];
+    if (atualizado.qtdSeparada !== anterior.qtdSeparada && lotesSeparados.length) {
+      if (atualizado.qtdSeparada === 0) lotesSeparados = [];
+      else if (lotesSeparados.length === 1) lotesSeparados = [{ ...lotesSeparados[0], qtdSeparada: atualizado.qtdSeparada }];
+      else throw new Error('Não é possível ajustar o total de vários lotes sem informar a quantidade de cada lote.');
+    }
 
     const agora = new Date().toISOString();
     separacao.itens[indice] = {
@@ -113,6 +126,7 @@ function criarSeparacaoStore(options = {}) {
       ajustado: atualizado.ajustado,
       controleSeparado: atualizado.controleSeparado,
       dtValidadeSeparada: atualizado.dtValidadeSeparada,
+      lotesSeparados,
       atualizadoEm: agora,
       atualizadoPor: codUsu === null ? null : numero(codUsu)
     };
@@ -142,7 +156,55 @@ function criarSeparacaoStore(options = {}) {
     return separacao;
   }
 
-  return { filePath, namespace, state, obter, iniciar, atualizarItem, concluir };
+  function registrarLeituraFeltrin({ nunota, codUsu = null, chave, lote, leituraId, quantidade = 1 }) {
+    const separacao = obter(nunota);
+    if (!separacao || separacao.status === 'SEPARADO') throw new Error('A separação não está aberta.');
+    const origem = separacao.itens.find((entrada) => entrada.chave === chave);
+    if (!origem || Number(origem.codProd) !== Number(lote.codProd)) throw new Error('A caixa não pertence ao produto selecionado.');
+    const mesmoProduto = separacao.itens.filter((entrada) => entrada.codProd === origem.codProd);
+    if (leituraId && mesmoProduto.some((entrada) => (entrada.leiturasFeltrin || []).includes(leituraId))) return separacao;
+    if (!Number.isFinite(quantidade) || quantidade <= 0) throw new Error('Quantidade da leitura inválida.');
+    const correspondentes = mesmoProduto.filter((entrada) => entrada.controlePedido === lote.controle);
+    if (!correspondentes.length && new Set(mesmoProduto.map((entrada) => entrada.controlePedido).filter(Boolean)).size > 1) {
+      throw new Error('O lote bipado não corresponde às linhas deste produto no pedido.');
+    }
+    const item = correspondentes.length
+      ? correspondentes.find((entrada) => !entrada.processado && entrada.qtdSeparada + quantidade <= entrada.qtdEsperada)
+      : origem;
+    if (!item) throw new Error('A leitura excede a quantidade pendente das linhas deste lote.');
+    const total = Math.round((item.qtdSeparada + quantidade) * 1000000) / 1000000;
+    if (item.processado || total > item.qtdEsperada) throw new Error('A leitura excede a quantidade pendente do item.');
+    const lotes = (item.lotesSeparados || []).map((entrada) => ({ ...entrada }));
+    if (!lotes.length && item.qtdSeparada > 0) {
+      if (!item.controleSeparado) throw new Error('A separação anterior não informa o lote. Revise o item antes de bipar.');
+      lotes.push({ controle: item.controleSeparado, dtValidade: item.dtValidadeSeparada, qtdSeparada: item.qtdSeparada });
+    }
+    const encontrado = lotes.find((entrada) => entrada.controle === lote.controle);
+    if (encontrado) encontrado.qtdSeparada = Math.round((encontrado.qtdSeparada + quantidade) * 1000000) / 1000000;
+    else lotes.push({ controle: lote.controle, dtValidade: lote.dtValidade, qtdSeparada: quantidade });
+    const itemAnterior = { ...item };
+    const estadoAnterior = { atualizadoEm: separacao.atualizadoEm, atualizadoPor: separacao.atualizadoPor, versao: separacao.versao };
+    const agora = new Date().toISOString();
+    Object.assign(item, { lotesSeparados: lotes, qtdSeparada: total,
+      leiturasFeltrin: leituraId ? [...(item.leiturasFeltrin || []), leituraId].slice(-1000) : (item.leiturasFeltrin || []),
+      processado: total >= item.qtdEsperada, ajustado: false,
+      controleSeparado: lotes.length === 1 ? lotes[0].controle : null,
+      dtValidadeSeparada: lotes.length === 1 ? lotes[0].dtValidade : null,
+      atualizadoEm: agora, atualizadoPor: codUsu });
+    separacao.atualizadoEm = agora;
+    separacao.atualizadoPor = codUsu;
+    separacao.versao = numero(separacao.versao) + 1;
+    try {
+      persistir();
+    } catch (error) {
+      Object.assign(item, itemAnterior);
+      Object.assign(separacao, estadoAnterior);
+      throw error;
+    }
+    return separacao;
+  }
+
+  return { filePath, namespace, state, obter, iniciar, atualizarItem, concluir, registrarLeituraFeltrin };
 }
 
 module.exports = { criarSeparacaoStore };
