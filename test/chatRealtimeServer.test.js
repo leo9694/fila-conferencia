@@ -44,6 +44,16 @@ test('SSE remove assinaturas e heartbeat ao fechar e não entrega eventos atrasa
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(conexoes[0].escritas.length, 0);
   assert.ok(conexoes[1].escritas.length > 0);
+  const inicio = conexoes[1].escritas.length;
+  for (const callback of globais) callback({ event: 'message:status', payload: [
+    { conversationId: 13, statusUpdate: { status: 'READ' }, conversation: { id: 13, channel: { id: 'ms' } } },
+    { conversationId: 12, statusUpdate: { status: 'DELIVERED' }, conversation: { id: 12, channel: { id: 'mt' } } },
+    null
+  ] });
+  await new Promise((resolve) => setImmediate(resolve));
+  const status = conexoes[1].escritas.slice(inicio).join('');
+  assert.match(status, /DELIVERED/);
+  assert.doesNotMatch(status, /READ/);
   for (const { req, res } of conexoes) { res.emit('close'); req.emit('aborted'); }
   assert.equal(eventosAtendimento.listenerCount('assignment'), 0);
   assert.equal(eventosAtendimento.listenerCount('call'), 0);

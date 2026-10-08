@@ -815,6 +815,7 @@ async function mensagensConsolidadas(conversationId, params = {}) {
     ...respostas.flatMap((resposta) => Array.isArray(resposta?.data) ? resposta.data : []),
     ...mensagensInternasAtendimento(conversationId)
   ];
+  registrarConversaDasMensagens(messages, group.canonicalId);
   const unique = new Map();
   messages.forEach((message) => unique.set(String(message.id ?? message.wamid), message));
   const data = [...unique.values()].sort((a, b) => {
@@ -915,6 +916,18 @@ async function buscarConversasPorCodigoParceiro(codParc) {
   return consolidarConversas([...encontradas.values()]);
 }
 
+const conversaPorMensagem = new Map();
+
+function registrarConversaDasMensagens(messages, conversationId) {
+  for (const message of messages) {
+    for (const key of [message.id, message.wamid, message.messageId, message.message_id]) {
+      if (key === undefined || key === null || key === '') continue;
+      conversaPorMensagem.set(String(key), conversationId);
+    }
+  }
+  while (conversaPorMensagem.size > 10000) conversaPorMensagem.delete(conversaPorMensagem.keys().next().value);
+}
+
 async function normalizarEventoAtendimento(event, payload = {}) {
   if (event === 'conversation:new' || event === 'conversation:updated') {
     const incoming = payload.conversation || payload;
@@ -924,10 +937,10 @@ async function normalizarEventoAtendimento(event, payload = {}) {
     const conversation = consolidarConversas(cached ? [cached, incoming] : [incoming])[0];
     return { ...payload, conversationId: conversation.id, conversation: comAtribuicao(conversation) };
   }
-  const rawId = Number(payload.conversationId || payload.message?.conversationId || payload.conversation?.id);
+  const rawId = Number(payload.conversationId || payload.message?.conversationId || payload.statusUpdate?.conversationId || payload.conversation?.id);
   if (!Number.isInteger(rawId)) return payload;
   let group = grupoConversa(rawId);
-  if (group.ids.length === 1 && !cacheConversaCanonica.has(rawId) && event === 'message:new') {
+  if (group.ids.length === 1 && !cacheConversaCanonica.has(rawId) && ['message:new', 'message:status'].includes(event)) {
     try {
       const incoming = await whatsappApi.getConversation(rawId);
       const channelPhone = chaveCanalTelefoneConversa(incoming);
@@ -938,6 +951,7 @@ async function normalizarEventoAtendimento(event, payload = {}) {
     } catch {}
   }
   const canonicalId = group.canonicalId;
+  if (event === 'message:new' && payload.message) registrarConversaDasMensagens([payload.message], canonicalId);
   return {
     ...payload,
     conversationId: canonicalId,
@@ -2230,6 +2244,18 @@ router.get('/media/:mediaId', asyncRoute(async (req, res) => {
 }));
 
 const processarEventoTempoReal = criarProcessadorCompartilhado(async (event, payload) => {
+  if (event === 'message:status') {
+    const updates = Array.isArray(payload.statuses) ? payload.statuses : [payload.message || payload.statusUpdate || payload];
+    return Promise.all(updates.map(async (update) => {
+      if (!update || typeof update !== 'object') return null;
+      const knownId = [update.wamid, update.messageId, update.message_id, update.id]
+        .map((key) => conversaPorMensagem.get(String(key))).find(Boolean);
+      const conversationId = update.conversationId || payload.conversationId || payload.conversation?.id || knownId;
+      if (!conversationId) return null;
+      const normalizado = await normalizarEventoAtendimento(event, { conversationId, statusUpdate: update });
+      return { ...normalizado, conversation: cacheConversaCanonica.get(Number(normalizado.conversationId)) };
+    }));
+  }
   let normalizado = await normalizarEventoAtendimento(event, payload);
   // Cadastro Sankhya é complementar: não deve atrasar o recebimento da mensagem.
   const conversationId = Number(normalizado.conversationId || normalizado.conversation?.id);
@@ -2285,18 +2311,21 @@ router.get('/events', (req, res) => {
         return;
       }
       processarEventoTempoReal(event, payload)
-        .then((normalizado) => {
+        .then((resultado) => {
           if (fechado) return;
-          const conversation = normalizado.conversation || {
-            id: normalizado.conversationId,
-            ...(normalizado.message ? { lastMessage: normalizado.message, lastMessageAt: normalizado.message.messageTimestamp } : {})
-          };
-          if (atendentePodeAcessarConversa(req.atendente, conversation)
-            && !conversaOcultaParaUsuario(req.usuario.codUsu, conversation)) {
-            write(event, normalizado.conversation ? {
-              ...normalizado,
-              conversation: comAcessoAtendente(normalizado.conversation, req.atendente)
-            } : normalizado);
+          for (const normalizado of Array.isArray(resultado) ? resultado : [resultado]) {
+            if (!normalizado) continue;
+            const conversation = normalizado.conversation || {
+              id: normalizado.conversationId,
+              ...(normalizado.message ? { lastMessage: normalizado.message, lastMessageAt: normalizado.message.messageTimestamp } : {})
+            };
+            if (atendentePodeAcessarConversa(req.atendente, conversation)
+              && !conversaOcultaParaUsuario(req.usuario.codUsu, conversation)) {
+              write(event, normalizado.conversation ? {
+                ...normalizado,
+                conversation: comAcessoAtendente(normalizado.conversation, req.atendente)
+              } : normalizado);
+            }
           }
         })
         // Sem a conversa normalizada não é possível confirmar o número de origem.

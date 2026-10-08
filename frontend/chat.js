@@ -2036,10 +2036,12 @@
     upsertConversation(payload);
     const scope = Core.conversationUpdateScope(state.conversationId, payload, state.conversation);
     if (scope === 'DIRECT') {
-      state.conversation = Core.mergeConversationSnapshot(state.conversation || {}, {
+      const conversation = Core.mergeConversationSnapshot(state.conversation || {}, {
         ...incoming,
         ...(payload.serviceWindow !== undefined ? { serviceWindow: payload.serviceWindow } : {})
       });
+      if (JSON.stringify(conversation) === JSON.stringify(state.conversation)) return;
+      state.conversation = conversation;
       renderConversationDetails();
       scheduleMessagesRender({ preserveScroll: true });
     } else if (scope === 'RELATED' && state.conversationId) {
@@ -2141,12 +2143,18 @@
         ? id === String(state.conversationId)
         : updates.some((update) => state.messages.some((message) => Core.messageMatchesUpdate(message, update)));
       if (belongsToActive) {
+        const previous = state.messages;
         updates.forEach((update) => {
           state.messages = Core.updateMessageStatus(state.messages, update);
         });
-        scheduleMessagesRender({ preserveScroll: true });
-        if (id) refreshActiveConversation(id);
+        if (state.messages.some((message, index) => message !== previous[index])) {
+          scheduleMessagesRender({ preserveScroll: true });
+        }
       }
+      state.conversationCache.forEach((_cached, cachedId) => {
+        if (!id || id === String(cachedId)) updateCachedConversationMessages(cachedId, (messages) =>
+          updates.reduce((current, update) => Core.updateMessageStatus(current, update), messages));
+      });
     } else if (event === 'conversation:new' || event === 'conversation:updated') {
       const incoming = payload.conversation || payload;
       const id = String(incoming.id ?? payload.conversationId ?? '');
