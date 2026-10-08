@@ -61,4 +61,11 @@ async function consultarMultiplicadorFeltrin({ nunota, codProd, codigoProduto, e
   return 1;
 }
 
-module.exports = { extrairLoteFeltrin, consultarCodigoFeltrin, consultarMultiplicadorFeltrin };
+function calcularQuantidadeFeltrin(multiplicador, numeroLeituras = 1) {
+  if (!Number.isSafeInteger(numeroLeituras) || numeroLeituras <= 0) throw new Error('Número de leituras inválido.');
+  const quantidade = Math.round(multiplicador * numeroLeituras * 1000000) / 1000000;
+  if (!Number.isFinite(quantidade) || quantidade <= 0 || quantidade > Number.MAX_SAFE_INTEGER) throw new Error('Quantidade das leituras inválida.');
+  return quantidade;
+}
+
+module.exports = { extrairLoteFeltrin, consultarCodigoFeltrin, consultarMultiplicadorFeltrin, calcularQuantidadeFeltrin };

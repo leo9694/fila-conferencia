@@ -3,11 +3,32 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { extrairLoteFeltrin, consultarCodigoFeltrin, consultarMultiplicadorFeltrin } = require('../api/separacaoFeltrin');
+const { extrairLoteFeltrin, consultarCodigoFeltrin, consultarMultiplicadorFeltrin, calcularQuantidadeFeltrin } = require('../api/separacaoFeltrin');
 const { criarSeparacaoStore } = require('../api/separacaoStore');
 
 const codigos = ['0173202900230025300420100004510010', '0172952200230025300590100002200010'];
 const lotes = ['0023002530042010', '0023002530059010'];
+
+test('acumula leituras com multiplicador do servidor e rejeita contagens inválidas', () => {
+  assert.equal(calcularQuantidadeFeltrin(10, 2), 20);
+  assert.equal(calcularQuantidadeFeltrin(1, 2), 2);
+  assert.equal(calcularQuantidadeFeltrin(0.5, 2), 1);
+  assert.equal(calcularQuantidadeFeltrin(10), 10);
+  for (const valor of [0, -1, 1.5, '2', null, Infinity, Number.MAX_SAFE_INTEGER + 1]) assert.throws(() => calcularQuantidadeFeltrin(10, valor), /leituras inválido/);
+});
+
+test('registra total acumulado atomicamente no lote e não duplica após repetir confirmação', (t) => {
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'feltrin-acumulado-'));
+  t.after(() => fs.rmSync(baseDir, { recursive: true, force: true }));
+  const store = criarSeparacaoStore({ baseDir });
+  store.iniciar({ nunota: 123, itens: [{ chave: '1', codProd: 1113, controlePedido: lotes[0], qtdEsperada: 20 }] });
+  const leitura = { nunota: 123, chave: '1', lote: { codProd: 1113, controle: lotes[0] }, quantidade: calcularQuantidadeFeltrin(10, 2), leituraId: 'caixas-acumuladas-1' };
+  store.registrarLeituraFeltrin(leitura);
+  store.registrarLeituraFeltrin(leitura);
+  assert.equal(store.obter(123).itens[0].qtdSeparada, 20);
+  assert.equal(store.obter(123).itens[0].lotesSeparados[0].qtdSeparada, 20);
+  assert.throws(() => store.registrarLeituraFeltrin({ ...leitura, leituraId: 'caixas-acumuladas-2' }), /excede/);
+});
 
 test('código compartilhado direciona a quantidade para a linha do lote original e não a primeira linha do produto', (t) => {
   const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'feltrin-linha-lote-'));

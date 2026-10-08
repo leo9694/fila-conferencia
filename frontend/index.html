@@ -7977,6 +7977,14 @@
       font-weight: 700;
     }
 
+    #separacao-feltrin-info[data-estado="pendente"] {
+      color: #dc2626;
+    }
+
+    #separacao-feltrin-info[data-estado="completo"] {
+      color: #059669;
+    }
+
     .separacao-confirm-field label {
       display: block;
       margin-bottom: 5px;
@@ -11916,7 +11924,7 @@
               <div class="separacao-lote-field" id="separacao-feltrin-field" hidden>
                 <label for="separacao-feltrin-codigo">Bipar lote da caixa Feltrin</label>
                 <input id="separacao-feltrin-codigo" type="text" inputmode="numeric" autocomplete="off" placeholder="Bipe o código completo da caixa e pressione Enter">
-                <small class="separacao-lote-info">O lote identifica a caixa. A quantidade segue o multiplicador do código de barras do produto lido antes.</small>
+                <small class="separacao-lote-info" id="separacao-feltrin-info" role="status" aria-live="polite">Cada leitura do mesmo lote soma uma caixa ou unidade, conforme o código lido antes. Clique em Confirmar item para registrar o total.</small>
               </div>
               <div class="separacao-lote-field" id="separacao-lote-field" hidden>
                 <label for="separacao-lote-select">Lote do estoque</label>
@@ -13300,6 +13308,6 @@
   <script src="rastreio-produto.js?v=20261005-4"></script>
   <script src="diario-bordo-quilometragem.js?v=20261007-2"></script>
   <script src="diario-bordo.js?v=20261008-3"></script>
-  <script src="app.js?v=20261008-5"></script>
+  <script src="app.js?v=20261008-9"></script>
 </body>
 </html>

@@ -38,7 +38,7 @@ const { gerarRomaneioCargaPdf } = require('./api/romaneioPdf');
 const { criarPedidoPrintStore } = require('./api/pedidoPrintStore');
 const { criarGuiaFaseStore } = require('./api/guiaFaseStore');
 const { criarSeparacaoStore } = require('./api/separacaoStore');
-const { consultarCodigoFeltrin, consultarMultiplicadorFeltrin } = require('./api/separacaoFeltrin');
+const { consultarCodigoFeltrin, consultarMultiplicadorFeltrin, calcularQuantidadeFeltrin } = require('./api/separacaoFeltrin');
 const {
   criarEstoqueContagemStore,
   obterContagemAtual
@@ -2912,7 +2912,8 @@ router.post('/fila-conferencia/separacao/:nunota/leitura-feltrin', async (req, r
     if (!/^[a-zA-Z0-9-]{10,80}$/.test(leituraId)) throw new Error('Identificação da leitura inválida. Bipe novamente.');
     await garantirPedidoNaoConferidoParaSeparacao(nunota);
     const lote = await consultarCodigoFeltrin({ nunota, codigo: req.body?.codigo, executeQuery });
-    const quantidade = await consultarMultiplicadorFeltrin({ nunota, codProd: lote.codProd, codigoProduto: req.body?.codigoProduto, executeQuery });
+    const multiplicador = await consultarMultiplicadorFeltrin({ nunota, codProd: lote.codProd, codigoProduto: req.body?.codigoProduto, executeQuery });
+    const quantidade = calcularQuantidadeFeltrin(multiplicador, req.body?.numeroLeituras);
     res.json({ separacao: separacaoStore.registrarLeituraFeltrin({
       nunota, codUsu: req.usuario?.codUsu, chave: req.body?.chave, lote, leituraId, quantidade
     }) });
