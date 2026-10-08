@@ -31,15 +31,16 @@ function ambienteConfirmacao(entradaCodigo = null) {
   return contexto;
 }
 
-test('clicar sem bipar permite selecionar o lote e confirmar a quantidade restante sem campo de código', async () => {
+test('clicar sem bipar restringe a seleção ao lote original do pedido sem campo de código', async () => {
   const contexto = ambienteConfirmacao();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(contexto.separacaoFeltrinField.hidden, true);
-  assert.equal(contexto.separacaoLoteField.hidden, false);
+  assert.equal(contexto.separacaoLoteField.hidden, true);
   assert.equal(contexto.botaoConfirmarSeparacao.disabled, false);
   assert.equal(contexto.itemSeparacaoPendente.quantidade, 20);
   contexto.separacaoLoteSelect.value = '0023002530059010';
-  assert.equal(vm.runInContext('obterLoteSelecionadoConfirmacao().controle', contexto), '0023002530059010');
+  assert.equal(vm.runInContext('obterLoteSelecionadoConfirmacao().controle', contexto), controle);
+  assert.equal(contexto.itemSeparacaoPendente.lotesDisponiveis.length, 1);
   const html = fs.readFileSync(path.join(__dirname, '../frontend/index.html'), 'utf8');
   assert.doesNotMatch(html, /id="separacao-feltrin-produto-codigo"/);
 });
@@ -142,6 +143,30 @@ test('caixa que excede o restante nunca confirma automaticamente', async () => {
   assert.equal(gravacoes.length, 0);
   assert.ok(contexto.itemSeparacaoPendente);
   assert.match(contexto.separacaoConfirmStatus.textContent, /excede/);
+});
+
+test('código comum do produto redireciona o painel para a linha original do lote bipado', async () => {
+  const { contexto, gravacoes } = ambiente(1113, 10);
+  const segundo = { codProd: 1113, marca: 'FELTRIN', chaveSeparacao: 'seq:2', controle: '0023002530059010', qtdSeparada: 0, qtdEsperada: 20 };
+  contexto.itensSeparacao.push(segundo);
+  contexto.itemSeparacaoPendente.lotesDisponiveis.push({ controle: segundo.controle, estoque: 100 });
+  contexto.separacaoFeltrinCodigo.value = '0172952200230025300590100002200010';
+  contexto.fetch = async () => ({ ok: true, json: async () => ({ lote: { codProd: 1113, controle: segundo.controle } }) });
+  await vm.runInContext('processarLoteFeltrinSeparacao()', contexto);
+  assert.equal(contexto.itemSeparacaoPendente.item, segundo);
+  assert.equal(contexto.itensSeparacao[0].controle, controle);
+  await vm.runInContext('confirmarItemSeparacao()', contexto);
+  assert.equal(gravacoes[0].body.chave, 'seq:2');
+});
+
+test('não aceita lote diferente nem quando o produto tem somente uma linha no pedido', async () => {
+  const { contexto, gravacoes } = ambiente(1113, 10);
+  contexto.itemSeparacaoPendente.lotesDisponiveis.push({ controle: '0023002530059010', estoque: 100 });
+  contexto.fetch = async () => ({ ok: true, json: async () => ({ lote: { codProd: 1113, controle: '0023002530059010' } }) });
+  await vm.runInContext('processarLoteFeltrinSeparacao()', contexto);
+  assert.match(contexto.separacaoConfirmStatus.textContent, /não corresponde/);
+  assert.equal(gravacoes.length, 0);
+  assert.equal(contexto.itemSeparacaoPendente.item.controle, controle);
 });
 
 test('limpa o campo quando falta lote e mantém o código completo para confirmar e repetir após falha', async () => {

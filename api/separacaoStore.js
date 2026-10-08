@@ -48,6 +48,13 @@ function normalizarItem(item = {}) {
   };
 }
 
+function validarLotePedido(item, controle, lotes = []) {
+  const esperado = String(item.controlePedido || '').trim();
+  if (esperado && (String(controle || '').trim() !== esperado || lotes.some((lote) => lote.qtdSeparada > 0 && lote.controle !== esperado))) {
+    throw new Error(`O lote separado deve ser o lote ${esperado} previsto nesta linha do pedido. Revise a separação do item.`);
+  }
+}
+
 function criarSeparacaoStore(options = {}) {
   const namespace = criarNamespace(options.namespace);
   const baseDir = options.baseDir || path.join(process.cwd(), 'data');
@@ -117,6 +124,7 @@ function criarSeparacaoStore(options = {}) {
       else if (lotesSeparados.length === 1) lotesSeparados = [{ ...lotesSeparados[0], qtdSeparada: atualizado.qtdSeparada }];
       else throw new Error('Não é possível ajustar o total de vários lotes sem informar a quantidade de cada lote.');
     }
+    if (atualizado.qtdSeparada > 0) validarLotePedido(anterior, atualizado.controleSeparado, lotesSeparados);
 
     const agora = new Date().toISOString();
     separacao.itens[indice] = {
@@ -144,6 +152,9 @@ function criarSeparacaoStore(options = {}) {
     if (!separacao.itens.length || separacao.itens.some((item) => item.processado !== true)) {
       throw new Error('Todos os itens precisam ser separados ou ajustados antes da conclusao.');
     }
+    for (const item of separacao.itens) {
+      if (item.qtdSeparada > 0) validarLotePedido(item, item.controleSeparado, item.lotesSeparados || []);
+    }
 
     const agora = new Date().toISOString();
     separacao.status = 'SEPARADO';
@@ -165,7 +176,7 @@ function criarSeparacaoStore(options = {}) {
     if (leituraId && mesmoProduto.some((entrada) => (entrada.leiturasFeltrin || []).includes(leituraId))) return separacao;
     if (!Number.isFinite(quantidade) || quantidade <= 0) throw new Error('Quantidade da leitura inválida.');
     const correspondentes = mesmoProduto.filter((entrada) => entrada.controlePedido === lote.controle);
-    if (!correspondentes.length && new Set(mesmoProduto.map((entrada) => entrada.controlePedido).filter(Boolean)).size > 1) {
+    if (!correspondentes.length && mesmoProduto.some((entrada) => entrada.controlePedido)) {
       throw new Error('O lote bipado não corresponde às linhas deste produto no pedido.');
     }
     const item = correspondentes.length
@@ -179,6 +190,7 @@ function criarSeparacaoStore(options = {}) {
       if (!item.controleSeparado) throw new Error('A separação anterior não informa o lote. Revise o item antes de bipar.');
       lotes.push({ controle: item.controleSeparado, dtValidade: item.dtValidadeSeparada, qtdSeparada: item.qtdSeparada });
     }
+    validarLotePedido(item, lote.controle, lotes);
     const encontrado = lotes.find((entrada) => entrada.controle === lote.controle);
     if (encontrado) encontrado.qtdSeparada = Math.round((encontrado.qtdSeparada + quantidade) * 1000000) / 1000000;
     else lotes.push({ controle: lote.controle, dtValidade: lote.dtValidade, qtdSeparada: quantidade });

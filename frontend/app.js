@@ -11,6 +11,7 @@ let estoqueContagemChavesLocalizadas = null;
 let estoqueContagemFiltroAuditoria = 'TODOS';
 let estoqueContagemFiltroStatus = 'TODOS';
 let leituraContagemEstoqueMobile = '';
+let tecladoContagemEstoqueHabilitado = false;
 let toqueLongoContagemEstoque = null;
 let estoqueContagemPreviaTimer = null;
 let estoqueContagemPreviaVersao = 0;
@@ -112,6 +113,7 @@ const estoqueContagemTitulo = document.getElementById('estoque-contagem-titulo')
 const estoqueContagemMeta = document.getElementById('estoque-contagem-meta');
 const estoqueContagemScan = document.getElementById('estoque-contagem-scan');
 const estoqueContagemCodigo = document.getElementById('estoque-contagem-codigo');
+const botaoTecladoContagemEstoque = document.getElementById('estoque-contagem-teclado');
 const botaoLimparCodigoContagemEstoque = document.getElementById('estoque-contagem-limpar-codigo');
 const estoqueContagemQuantidade = document.getElementById('estoque-contagem-quantidade');
 const estoqueContagemProgresso = document.getElementById('estoque-contagem-progresso');
@@ -585,31 +587,50 @@ function limparCodigoSeparacao({ focar = false } = {}) {
 function configurarLeitorContagemEstoque() {
   if (!estoqueContagemCodigo) return;
   const mobile = separacaoEmMobile();
+  const somenteBipador = mobile && !tecladoContagemEstoqueHabilitado;
+  botaoTecladoContagemEstoque.hidden = !mobile;
+  botaoTecladoContagemEstoque.setAttribute('aria-pressed', String(tecladoContagemEstoqueHabilitado));
+  botaoTecladoContagemEstoque.title = tecladoContagemEstoqueHabilitado ? 'Desabilitar teclado' : 'Habilitar teclado';
+  botaoTecladoContagemEstoque.setAttribute('aria-label', botaoTecladoContagemEstoque.title);
   // O campo e focado como readonly e liberado depois, bloqueando o teclado
   // virtual sem impedir bipadores que injetam texto diretamente no input.
-  estoqueContagemCodigo.readOnly = mobile;
-  estoqueContagemCodigo.inputMode = mobile ? 'none' : 'numeric';
-  estoqueContagemCodigo.setAttribute('virtualkeyboardpolicy', mobile ? 'manual' : 'auto');
+  estoqueContagemCodigo.readOnly = somenteBipador;
+  estoqueContagemCodigo.inputMode = somenteBipador ? 'none' : 'numeric';
+  estoqueContagemCodigo.setAttribute('virtualkeyboardpolicy', somenteBipador ? 'manual' : 'auto');
   estoqueContagemCodigo.setAttribute('autocomplete', 'off');
   estoqueContagemCodigo.setAttribute(
     'aria-label',
-    mobile ? 'Leitor de código de barras. Use o bipador ou mantenha um produto pressionado.' : 'Código de barras ou produto'
+    somenteBipador ? 'Leitor de código de barras. Use o bipador ou habilite o teclado.' : 'Código de barras ou produto'
   );
 }
 
 function focarLeitorContagemEstoqueSemTeclado() {
   if (!estoqueContagemCodigo || estoqueContagemCodigo.disabled) return;
   const mobile = separacaoEmMobile();
+  if (mobile && tecladoContagemEstoqueHabilitado) {
+    estoqueContagemCodigo.readOnly = false;
+    estoqueContagemCodigo.focus({ preventScroll: true });
+    return;
+  }
   if (mobile) estoqueContagemCodigo.readOnly = true;
   estoqueContagemCodigo.focus({ preventScroll: true });
   if (!mobile) return;
 
   if (navigator.virtualKeyboard?.hide) navigator.virtualKeyboard.hide();
   setTimeout(() => {
-    if (estoqueContagemItensView.hidden || estoqueContagemCodigo.disabled) return;
+    if (estoqueContagemItensView.hidden || estoqueContagemCodigo.disabled || tecladoContagemEstoqueHabilitado) return;
     estoqueContagemCodigo.readOnly = false;
     if (navigator.virtualKeyboard?.hide) navigator.virtualKeyboard.hide();
   }, 80);
+}
+
+function alternarTecladoContagemEstoque() {
+  if (!separacaoEmMobile() || estoqueContagemCodigo.disabled) return;
+  tecladoContagemEstoqueHabilitado = !tecladoContagemEstoqueHabilitado;
+  leituraContagemEstoqueMobile = estoqueContagemCodigo.value;
+  configurarLeitorContagemEstoque();
+  focarLeitorContagemEstoqueSemTeclado();
+  if (tecladoContagemEstoqueHabilitado) navigator.virtualKeyboard?.show?.();
 }
 
 function limparCodigoContagemEstoque({ focar = false } = {}) {
@@ -2116,6 +2137,7 @@ function mostrarItensContagemEstoque() {
   estoqueContagemItensView.hidden = false;
   estoqueContagemActive.hidden = false;
   estoqueContagemScreen.classList.add('contagem-itens-ativa');
+  tecladoContagemEstoqueHabilitado = false;
   configurarLeitorContagemEstoque();
   iniciarSincronizacaoContagemEstoque();
   atualizarIcones();
@@ -3371,6 +3393,7 @@ async function processarCodigoContagemEstoque() {
 function capturarTeclaLeitorContagemEstoque(event) {
   if (
     !separacaoEmMobile()
+    || tecladoContagemEstoqueHabilitado
     || estoqueContagemItensView.hidden
     || estoqueContagemScan.hidden
     || !estoqueContagemConfirmModal.hidden
@@ -8565,11 +8588,14 @@ async function carregarLotesConfirmacaoSeparacao(item) {
     if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível consultar os lotes.');
     if (!itemSeparacaoPendente || itemSeparacaoPendente.item !== item) return;
 
-    const lotes = Array.isArray(payload.lotes)
+    const lotesEstoque = Array.isArray(payload.lotes)
       ? payload.lotes.filter((lote) => Number(lote.estoque || 0) > 0)
       : [];
+    const controlePedido = String(item.controle || '').trim();
+    const lotes = !itemSeparacaoPendente.leituraFeltrinPorCodigo && controlePedido
+      ? lotesEstoque.filter((lote) => lote.controle === controlePedido) : lotesEstoque;
     itemSeparacaoPendente.lotesDisponiveis = lotes;
-    const controleAtual = String(item.controleSeparado || item.controle || '').trim();
+    const controleAtual = controlePedido || String(item.controleSeparado || '').trim();
     const loteAtual = lotes.find((lote) => lote.controle === controleAtual) || null;
 
     if (lotes.length === 1) {
@@ -8599,7 +8625,8 @@ async function carregarLotesConfirmacaoSeparacao(item) {
       : itemSeparacaoPendente.entradaCodigo?.tipo === 'UNIDADE_ALTERNATIVA'
         ? `${obterDescricaoEntradaCodigo(itemSeparacaoPendente.entradaCodigo)} identificado. Confirme a quantidade total do item.`
         : 'Confirme a quantidade separada.';
-    botaoConfirmarSeparacao.disabled = itemSeparacaoPendente.leituraFeltrinPorCodigo && !itemSeparacaoProcessado(item);
+    botaoConfirmarSeparacao.disabled = !itemSeparacaoProcessado(item) && (itemSeparacaoPendente.leituraFeltrinPorCodigo || Boolean(controlePedido && !lotes.length));
+    if (controlePedido && !lotes.length && !itemSeparacaoProcessado(item)) separacaoConfirmStatus.textContent = `Lote ${controlePedido} do pedido não disponível no estoque. Não é permitido substituí-lo por outro lote.`;
     if (itemSeparacaoPendente.leituraFeltrinPorCodigo) {
       separacaoLoteField.hidden = true;
       if (!itemSeparacaoProcessado(item)) separacaoConfirmStatus.textContent = 'Bipe o lote. A quantidade segue o código da caixa ou unidade selecionado.';
@@ -8718,6 +8745,10 @@ async function confirmarItemSeparacao() {
   }
 
   const loteSelecionado = obterLoteSelecionadoConfirmacao();
+  if (String(item.controle || '').trim() && loteSelecionado?.controle !== String(item.controle).trim()) {
+    separacaoConfirmStatus.textContent = `Selecione o lote ${item.controle} previsto nesta linha do pedido.`;
+    return;
+  }
   if (produtoSeparacaoFeltrin(item) && (!itemSeparacaoPendente.lotesCarregados || !loteSelecionado)) {
     separacaoConfirmStatus.textContent = itemSeparacaoPendente.leituraFeltrinPorCodigo
       ? 'Bipe e valide o lote da caixa Feltrin antes de confirmar.'
@@ -8793,6 +8824,10 @@ async function aplicarAjusteQuantidadeSeparacao() {
   const esperado = quantidadeEsperadaSeparacao(item);
   const descricao = item.descrProd || `Produto ${item.codProd}`;
   const loteSelecionado = obterLoteSelecionadoConfirmacao();
+  if (valor > 0 && String(item.controle || '').trim() && loteSelecionado?.controle !== String(item.controle).trim()) {
+    separacaoConfirmStatus.textContent = `Selecione o lote ${item.controle} previsto nesta linha do pedido.`;
+    return;
+  }
   if (valor > 0 && produtoSeparacaoFeltrin(item) && !loteSelecionado) {
     separacaoConfirmStatus.textContent = itemSeparacaoPendente.leituraFeltrinPorCodigo
       ? 'Bipe o lote da caixa Feltrin antes de ajustar uma quantidade positiva.'
@@ -8892,7 +8927,7 @@ async function processarLoteFeltrinSeparacao(codigoEnfileirado) {
     const quantidade = Math.round(numeroLeituras * (Number(pendente.entradaCodigo.multiplicador) || 1) * 1000000) / 1000000;
     const mesmoProduto = itensSeparacao.filter((item) => Number(item.codProd) === Number(caixa.codProd));
     const correspondentes = mesmoProduto.filter((item) => String(item.controle || '').trim() === caixa.controle);
-    if (!correspondentes.length && new Set(mesmoProduto.map((item) => item.controle).filter(Boolean)).size > 1) throw new Error('O lote bipado não corresponde às linhas deste produto no pedido.');
+    if (!correspondentes.length && mesmoProduto.some((item) => String(item.controle || '').trim())) throw new Error('O lote bipado não corresponde às linhas deste produto no pedido.');
     const candidatos = correspondentes.length ? correspondentes : [pendente.item];
     const itemDestino = candidatos.find((item) => !itemSeparacaoProcessado(item) && quantidade <= Math.max(0, quantidadeEsperadaSeparacao(item) - normalizarQuantidade(item.qtdSeparada)));
     if (!itemDestino) throw new Error('A leitura excede a quantidade pendente deste lote.');
@@ -8900,6 +8935,7 @@ async function processarLoteFeltrinSeparacao(codigoEnfileirado) {
     const totalPedido = quantidadeEsperadaSeparacao(itemDestino);
     const restanteLote = Math.max(0, Math.round((totalPedido - totalContado) * 1000000) / 1000000);
     confirmarAutomaticamente = !pendente.numeroLeituras && restanteLote === 0;
+    pendente.item = itemDestino;
     pendente.numeroLeituras = numeroLeituras;
     pendente.quantidade = quantidade;
     separacaoConfirmQtd.textContent = `${formatarQuantidade(quantidade)} ${obterUnidadeExibicaoItem(pendente.item)}`;
@@ -9000,8 +9036,8 @@ async function processarCodigoSeparacao() {
       const caixa = await consultarCaixaFeltrinSeparacao(codigo);
       if (pedidoPreviewSelecionado !== pedido || separacaoScreen.hidden || separacaoConcluida) return;
       const candidatos = itensSeparacao.filter((item) => produtoSeparacaoFeltrin(item) && Number(item.codProd) === Number(caixa.codProd) && !itemSeparacaoProcessado(item));
-      const item = candidatos.find((entrada) => String(entrada.controleSeparado || entrada.controle || '').trim() === caixa.controle)
-        || candidatos[0];
+      const item = candidatos.find((entrada) => String(entrada.controle || '').trim() === caixa.controle)
+        || (candidatos.every((entrada) => !String(entrada.controle || '').trim()) ? candidatos[0] : null);
       if (!item) throw new Error('Não há linha pendente compatível com o produto e lote desta caixa.');
       abrirConfirmacaoSeparacao(item, { ...(obterEntradaCodigoItem(item, codigo) || {}), codigoFeltrin: codigo });
     } catch (error) {
@@ -10920,17 +10956,17 @@ estoqueContagemCodigo.addEventListener('input', () => {
   }
 });
 estoqueContagemCodigo.addEventListener('pointerdown', (event) => {
-  if (!separacaoEmMobile()) return;
+  if (!separacaoEmMobile() || tecladoContagemEstoqueHabilitado) return;
   event.preventDefault();
   focarLeitorContagemEstoqueSemTeclado();
 });
 estoqueContagemCodigo.addEventListener('focus', () => {
-  if (separacaoEmMobile() && navigator.virtualKeyboard?.hide) {
+  if (separacaoEmMobile() && !tecladoContagemEstoqueHabilitado && navigator.virtualKeyboard?.hide) {
     navigator.virtualKeyboard.hide();
   }
 });
 estoqueContagemCodigo.addEventListener('keydown', (event) => {
-  if (separacaoEmMobile()) {
+  if (separacaoEmMobile() && !tecladoContagemEstoqueHabilitado) {
     capturarTeclaLeitorContagemEstoque(event);
     return;
   }
@@ -10939,6 +10975,7 @@ estoqueContagemCodigo.addEventListener('keydown', (event) => {
     processarCodigoContagemEstoque();
   }
 });
+botaoTecladoContagemEstoque.addEventListener('click', alternarTecladoContagemEstoque);
 document.addEventListener('keydown', (event) => {
   if (event.target === estoqueContagemCodigo || event.defaultPrevented) return;
   capturarTeclaLeitorContagemEstoque(event);

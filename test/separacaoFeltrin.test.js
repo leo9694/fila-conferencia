@@ -92,6 +92,7 @@ test('consulta identifica o produto pelo lote no estoque da empresa e somente Fe
     assert.match(sql, /EST.CODEMP = CAB.CODEMP/);
     assert.match(sql, /UPPER\(TRIM\(PRO.MARCA\)\) LIKE '%FELTRIN%'/);
     assert.match(sql, /ITE.NUNOTA = CAB.NUNOTA AND ITE.CODPROD = EST.CODPROD/);
+    assert.match(sql, /TRIM\(ITE.CONTROLE\) = TRIM\(EST.CONTROLE\)/);
     assert.match(sql, /0023002530042010/);
     return [{ CODPROD: 1113, DTVALID: '2028-01-01' }];
   } });
@@ -99,6 +100,43 @@ test('consulta identifica o produto pelo lote no estoque da empresa e somente Fe
   await assert.rejects(consultarCodigoFeltrin({ nunota: 123, codigo: codigos[0], executeQuery: async () => [] }), /não encontrado/);
   await assert.rejects(consultarCodigoFeltrin({ nunota: 123, codigo: codigos[0], executeQuery: async () => [{ CODPROD: 1113 }, { CODPROD: 2222 }] }), /mais de um produto/);
   await assert.rejects(consultarCodigoFeltrin({ nunota: -1, codigo: codigos[0], executeQuery: () => assert.fail() }), /Pedido inválido/);
+});
+
+test('lote original é obrigatório na leitura e na confirmação manual mesmo com uma única linha', (t) => {
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'feltrin-lote-obrigatorio-'));
+  t.after(() => fs.rmSync(baseDir, { recursive: true, force: true }));
+  const store = criarSeparacaoStore({ baseDir });
+  store.iniciar({ nunota: 123, itens: [{ chave: '1', codProd: 1113, controlePedido: lotes[0], qtdEsperada: 20 }] });
+  const antes = JSON.stringify(store.obter(123));
+  assert.throws(() => store.registrarLeituraFeltrin({ nunota: 123, chave: '1', lote: { codProd: 1113, controle: lotes[1] }, quantidade: 10 }), /não corresponde/);
+  assert.throws(() => store.atualizarItem({ nunota: 123, item: { chave: '1', qtdSeparada: 10, controleSeparado: lotes[1] } }), /previsto nesta linha/);
+  assert.equal(JSON.stringify(store.obter(123)), antes);
+});
+
+test('não grava manualmente o mesmo lote nas duas linhas de lotes diferentes', (t) => {
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'feltrin-lote-manual-'));
+  t.after(() => fs.rmSync(baseDir, { recursive: true, force: true }));
+  const store = criarSeparacaoStore({ baseDir });
+  store.iniciar({ nunota: 123, itens: lotes.map((controlePedido, indice) => ({ chave: String(indice), codProd: 1113, controlePedido, qtdEsperada: 10 })) });
+  store.atualizarItem({ nunota: 123, item: { chave: '0', qtdSeparada: 10, processado: true, controleSeparado: lotes[0] } });
+  assert.throws(() => store.atualizarItem({ nunota: 123, item: { chave: '1', qtdSeparada: 10, processado: true, controleSeparado: lotes[0] } }), /previsto nesta linha/);
+  assert.equal(store.obter(123).itens[1].qtdSeparada, 0);
+  store.atualizarItem({ nunota: 123, item: { chave: '1', qtdSeparada: 10, processado: true, controleSeparado: lotes[1] } });
+  assert.deepEqual(store.obter(123).itens.map((item) => item.controleSeparado), lotes);
+});
+
+test('progresso antigo de lote incorreto não é misturado ou concluído e só é limpo explicitamente', (t) => {
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'feltrin-lote-legado-'));
+  t.after(() => fs.rmSync(baseDir, { recursive: true, force: true }));
+  const store = criarSeparacaoStore({ baseDir });
+  store.iniciar({ nunota: 123, itens: [{ chave: '1', codProd: 1113, controlePedido: lotes[0], qtdEsperada: 20, qtdSeparada: 10, processado: true, controleSeparado: lotes[1] }] });
+  assert.throws(() => store.concluir({ nunota: 123 }), /previsto nesta linha/);
+  store.obter(123).itens[0].processado = false;
+  assert.throws(() => store.registrarLeituraFeltrin({ nunota: 123, chave: '1', lote: { codProd: 1113, controle: lotes[0] }, quantidade: 10 }), /previsto nesta linha/);
+  assert.equal(store.obter(123).itens[0].controleSeparado, lotes[1]);
+  store.atualizarItem({ nunota: 123, item: { chave: '1', qtdSeparada: 0 } });
+  store.registrarLeituraFeltrin({ nunota: 123, chave: '1', lote: { codProd: 1113, controle: lotes[0] }, quantidade: 20 });
+  assert.equal(store.obter(123).itens[0].controleSeparado, lotes[0]);
 });
 
 test('cada leitura soma uma unidade e mantém dois lotes separados ao reabrir sem exceder o pedido', (t) => {

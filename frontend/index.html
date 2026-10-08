@@ -7774,6 +7774,20 @@
 
     .separacao-clear-code svg { width: 19px; height: 19px; }
 
+    #estoque-contagem-scan .separacao-code-row:has(#estoque-contagem-teclado:not([hidden])) {
+      grid-template-columns: minmax(0, 1fr) 44px 44px;
+    }
+
+    #estoque-contagem-teclado {
+      display: inline-flex;
+      color: #087f73;
+      border-color: #b7dfd8;
+      background: #f0faf7;
+    }
+
+    #estoque-contagem-teclado[hidden] { display: none; }
+    #estoque-contagem-teclado[aria-pressed="true"] { color: #fff; background: #008577; }
+
     .separacao-progress {
       min-width: 170px;
       padding: 8px 12px;
@@ -11490,6 +11504,9 @@
                 <label for="estoque-contagem-codigo">Código de barras ou produto</label>
                 <div class="separacao-code-row">
                   <input id="estoque-contagem-codigo" type="text" inputmode="numeric" autocomplete="off" placeholder="Bipe ou digite o código">
+                  <button class="separacao-clear-code" id="estoque-contagem-teclado" type="button" title="Habilitar teclado" aria-label="Habilitar teclado" aria-pressed="false" aria-controls="estoque-contagem-codigo" hidden>
+                    <i data-lucide="keyboard"></i>
+                  </button>
                   <button class="separacao-clear-code" id="estoque-contagem-limpar-codigo" type="button" title="Limpar código" aria-label="Limpar código">
                     <i data-lucide="delete"></i>
                   </button>
@@ -13308,6 +13325,6 @@
   <script src="rastreio-produto.js?v=20261005-4"></script>
   <script src="diario-bordo-quilometragem.js?v=20261007-2"></script>
   <script src="diario-bordo.js?v=20261008-3"></script>
-  <script src="app.js?v=20261008-10"></script>
+  <script src="app.js?v=20261008-12"></script>
 </body>
 </html>
