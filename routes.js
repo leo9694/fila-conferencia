@@ -5058,10 +5058,8 @@ router.get('/estoque-contagem/filtros', async (req, res) => {
       `),
       executeQuery(`
         SELECT DISTINCT TRIM(PRO.MARCA) AS MARCA
-        FROM TGFEST EST
-        INNER JOIN TGFPRO PRO ON PRO.CODPROD = EST.CODPROD
-        WHERE ${baseEstoque}
-          AND TRIM(PRO.MARCA) IS NOT NULL
+        FROM TGFPRO PRO
+        WHERE TRIM(PRO.MARCA) IS NOT NULL
         ORDER BY TRIM(PRO.MARCA)
       `)
     ]);
@@ -5165,11 +5163,6 @@ router.post('/estoque-contagem/sessoes', async (req, res) => {
       WHERE ${montarSqlFiltrosCopiaEstoque(filtros)}
       ORDER BY NVL(GRU.DESCRGRUPOPROD, 'Sem grupo'), PRO.DESCRPROD, EST.CODLOCAL, EST.CONTROLE
     `);
-
-    if (!itens.length) {
-      res.status(422).json({ erro: 'Nenhum saldo de estoque foi encontrado para gerar a copia.' });
-      return;
-    }
 
     const [empresaRegistro, grupoRegistro] = await Promise.all([
       executeQuery(`

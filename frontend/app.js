@@ -128,6 +128,8 @@ const estoqueContagemItens = document.getElementById('estoque-contagem-itens');
 const estoqueContagemConfirmModal = document.getElementById('estoque-contagem-confirm-modal');
 const estoqueContagemConfirmTitulo = document.getElementById('estoque-contagem-confirm-titulo');
 const estoqueContagemConfirmProduto = document.getElementById('estoque-contagem-confirm-produto');
+const estoqueContagemConfirmSaldos = document.getElementById('estoque-contagem-confirm-saldos');
+const estoqueContagemQuantidadeLabel = document.querySelector('label[for="estoque-contagem-quantidade"]');
 const estoqueContagemConfirmMensagem = document.getElementById('estoque-contagem-confirm-mensagem');
 const estoqueContagemLote = document.getElementById('estoque-contagem-lote');
 const estoqueContagemFabricacao = document.getElementById('estoque-contagem-fabricacao');
@@ -2503,7 +2505,7 @@ async function atualizarPreviaContagemEstoque() {
     estoquePreviaLinhas.textContent = payload.previa.linhas;
     estoquePreviaLocais.textContent = payload.previa.locais;
     estoquePreviaUnidades.textContent = formatarQuantidade(payload.previa.unidades);
-    botaoCriarContagemEstoque.disabled = payload.previa.linhas === 0;
+    botaoCriarContagemEstoque.disabled = false;
   } catch (error) {
     if (versao !== estoqueContagemPreviaVersao) return;
     limparPreviaContagemEstoque();
@@ -2811,14 +2813,14 @@ function agruparItensContagemEstoque() {
 function renderizarItensContagemEstoque() {
   const grupos = agruparItensContagemEstoque();
   if (!grupos.length) {
-    estoqueContagemItens.innerHTML = '<tr><td colspan="7" class="empty-state">Nenhuma linha encontrada para esta contagem.</td></tr>';
+    estoqueContagemItens.innerHTML = '<tr><td colspan="8" class="empty-state">Nenhuma linha encontrada para esta contagem.</td></tr>';
     return;
   }
 
   estoqueContagemItens.innerHTML = grupos.map((grupo) => {
     const cabecalho = `
       <tr class="separacao-group-row">
-        <td colspan="7">${grupo.codigo ? `Grupo ${escaparHtml(grupo.codigo)} - ` : ''}${escaparHtml(grupo.descricao)}</td>
+        <td colspan="8">${grupo.codigo ? `Grupo ${escaparHtml(grupo.codigo)} - ` : ''}${escaparHtml(grupo.descricao)}</td>
       </tr>
     `;
     const linhas = grupo.itens.map((item) => {
@@ -2860,6 +2862,7 @@ function renderizarItensContagemEstoque() {
           <td class="estoque-lista-lote" data-label="Lote" title="${escaparAtributo(item.controle || 'Sem controle')}">${escaparHtml(item.controle || 'Sem controle')}</td>
           <td class="estoque-lista-fabricacao" data-label="Fabricação">${escaparHtml(fabricacaoTexto)}</td>
           <td class="estoque-lista-validade" data-label="Validade">${escaparHtml(validadeTexto)}</td>
+          <td class="estoque-lista-saldo" data-label="Estoque">${formatarQuantidade(item.estoqueSistema)} ${escaparHtml(item.codVol || 'UN')}</td>
           <td class="estoque-lista-contagem" data-label="Contagem">${contagemTexto}</td>
           <td class="estoque-lista-status"><span class="separacao-badge${badgeClasse}">${status}</span></td>
         </tr>
@@ -3131,11 +3134,19 @@ function abrirConfirmacaoContagemEstoque(item) {
   estoqueContagemFabricacao.value = formatarDataInput(item.dtFabricacao);
   estoqueContagemValidade.value = formatarDataInput(item.dtVal);
   configurarCamposControleContagem(item.tipContEst);
+  const unidade = escaparHtml(item.codVol || 'UN');
+  const primeiraContagem = item.primeiraContagem === null || item.primeiraContagem === undefined
+    ? '—' : `${formatarQuantidade(item.primeiraContagem)} ${unidade}`;
+  estoqueContagemConfirmSaldos.innerHTML = `
+    <div><span>Estoque do lote</span><strong>${formatarQuantidade(item.estoqueSistema)} ${unidade}</strong></div>
+    ${recontagem ? `<div><span>Primeira contagem</span><strong>${primeiraContagem}</strong></div>` : ''}
+  `;
+  estoqueContagemQuantidadeLabel.textContent = recontagem ? 'Quantidade da recontagem' : 'Quantidade física encontrada';
   estoqueContagemQuantidade.value = recontagem || item.contagemAtual === null
     ? ''
     : String(item.contagemAtual);
   estoqueContagemUnidade.textContent = item.codVol || 'UN';
-  estoqueContagemConfirmMensagem.textContent = 'Digite a quantidade física encontrada.';
+  estoqueContagemConfirmMensagem.textContent = recontagem ? 'Digite a quantidade encontrada na recontagem.' : 'Digite a quantidade física encontrada.';
   estoqueContagemConfirmModal.hidden = false;
   setTimeout(() => {
     estoqueContagemQuantidade.focus();
@@ -3252,7 +3263,9 @@ async function criarSessaoContagemEstoque() {
     estoqueContagemFiltroStatus = 'TODOS';
     estoqueContagemStatusFiltro.value = 'TODOS';
     estoqueContagemChavesLocalizadas = null;
-    atualizarMensagemContagemEstoque('Cópia criada. A contagem física já pode começar.');
+    atualizarMensagemContagemEstoque(payload.sessao.itens.length
+      ? 'Cópia criada. A contagem física já pode começar.'
+      : 'Contagem vazia criada. Adicione os produtos manualmente para começar.');
     await carregarListaContagensEstoque();
     mostrarItensContagemEstoque();
     renderizarContagemEstoque();

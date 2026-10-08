@@ -8199,6 +8199,24 @@
       font-weight: 900;
     }
 
+    .estoque-contagem-saldos {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 10px;
+      margin: 12px 0;
+    }
+
+    .estoque-contagem-saldos > div {
+      min-width: 0;
+      padding: 10px 12px;
+      border: 1px solid #b9d6d0;
+      border-radius: 10px;
+      background: #effaf7;
+    }
+
+    .estoque-contagem-saldos span { display: block; color: #387064; font-size: .75rem; }
+    .estoque-contagem-saldos strong { display: block; color: #006b5a; margin-top: 4px; overflow-wrap: anywhere; }
+
     @media (max-width: 520px) {
       .estoque-contagem-datas {
         grid-template-columns: 1fr;
@@ -10076,17 +10094,22 @@
       }
       .estoque-contagem-table .separacao-row .estoque-lista-contagem {
         grid-column: 1 / 3;
+        grid-row: 5;
+      }
+      .estoque-contagem-table .separacao-row .estoque-lista-saldo {
+        grid-column: 1 / 3;
         grid-row: 4;
       }
       .estoque-contagem-table .separacao-row .estoque-lista-status {
         grid-column: 3;
-        grid-row: 4;
+        grid-row: 5;
         align-self: end;
         justify-self: end;
       }
       .estoque-contagem-table .estoque-lista-lote::before,
       .estoque-contagem-table .estoque-lista-fabricacao::before,
       .estoque-contagem-table .estoque-lista-validade::before,
+      .estoque-contagem-table .estoque-lista-saldo::before,
       .estoque-contagem-table .estoque-lista-contagem::before {
         content: attr(data-label);
         display: block;
@@ -11560,6 +11583,7 @@
                     <th style="width: 150px">Lote</th>
                     <th style="width: 115px">Fabricação</th>
                     <th style="width: 115px">Validade</th>
+                    <th style="width: 125px">Estoque</th>
                     <th style="width: 125px">Contagem</th>
                     <th style="width: 170px">Status</th>
                   </tr>
@@ -11592,6 +11616,7 @@
               <small>As alterações de lote e datas serão atualizadas no estoque do Sankhya ao confirmar.</small>
             </div>
             <div class="separacao-confirm-field">
+              <div class="estoque-contagem-saldos" id="estoque-contagem-confirm-saldos"></div>
               <label for="estoque-contagem-quantidade">Quantidade física encontrada</label>
               <div class="estoque-contagem-quantidade-direta">
                 <input id="estoque-contagem-quantidade" type="number" min="0" step="any" inputmode="decimal" autocomplete="off" placeholder="0">
@@ -13325,6 +13350,6 @@
   <script src="rastreio-produto.js?v=20261005-4"></script>
   <script src="diario-bordo-quilometragem.js?v=20261007-2"></script>
   <script src="diario-bordo.js?v=20261008-3"></script>
-  <script src="app.js?v=20261008-12"></script>
+  <script src="app.js?v=20261008-14"></script>
 </body>
 </html>
