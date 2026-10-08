@@ -4,11 +4,12 @@ function extrairLoteFeltrin(codigo) {
   return valor.slice(8, 24);
 }
 
-async function consultarCodigoFeltrin({ nunota, codigo, executeQuery }) {
+async function consultarCodigoFeltrin({ nunota, codigo, codProd, executeQuery }) {
   if (!Number.isSafeInteger(nunota) || nunota <= 0) throw new Error('Pedido inválido.');
+  if (codProd !== undefined && (!Number.isSafeInteger(codProd) || codProd <= 0)) throw new Error('Produto inválido.');
   const controle = extrairLoteFeltrin(codigo);
   // O prefixo varia entre caixas do mesmo produto. A identificação é feita
-  // pelo lote exato no estoque, restrita aos produtos Feltrin do pedido.
+  // pelo produto previamente bipado e lote exato. Sem produto, exige lote único.
   const rows = await executeQuery(`
     SELECT EST.CODPROD, TRIM(EST.CONTROLE) AS CONTROLE,
       TO_CHAR(MAX(EST.DTVAL), 'YYYY-MM-DD') AS DTVALID,
@@ -17,6 +18,7 @@ async function consultarCodigoFeltrin({ nunota, codigo, executeQuery }) {
     JOIN TGFEST EST ON EST.CODEMP = CAB.CODEMP
     JOIN TGFPRO PRO ON PRO.CODPROD = EST.CODPROD
     WHERE CAB.NUNOTA = ${nunota}
+      ${codProd === undefined ? '' : `AND EST.CODPROD = ${codProd}`}
       AND UPPER(TRIM(PRO.MARCA)) LIKE '%FELTRIN%'
       AND TRIM(EST.CONTROLE) = '${controle}'
       AND NVL(EST.ATIVO, 'S') = 'S'
@@ -27,7 +29,7 @@ async function consultarCodigoFeltrin({ nunota, codigo, executeQuery }) {
     GROUP BY EST.CODPROD, TRIM(EST.CONTROLE)
     HAVING SUM(NVL(EST.ESTOQUE, 0)) > 0
   `);
-  if (!rows.length) throw new Error(`Lote ${controle} não encontrado com estoque para um produto Feltrin deste pedido.`);
+  if (!rows.length) throw new Error(`Lote ${controle} não encontrado com estoque para ${codProd === undefined ? 'um produto Feltrin' : `o produto ${codProd}`} deste pedido.`);
   if (rows.length !== 1) throw new Error(`Lote ${controle} corresponde a mais de um produto. Não foi possível identificar a caixa com segurança.`);
   return { codProd: Number(rows[0].CODPROD), controle, dtValidade: rows[0].DTVALID || null };
 }

@@ -3,11 +3,55 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const vm = require('node:vm');
 const { extrairLoteFeltrin, consultarCodigoFeltrin, consultarMultiplicadorFeltrin, calcularQuantidadeFeltrin } = require('../api/separacaoFeltrin');
 const { criarSeparacaoStore } = require('../api/separacaoStore');
 
 const codigos = ['0173202900230025300420100004510010', '0172952200230025300590100002200010'];
 const lotes = ['0023002530042010', '0023002530059010'];
+
+test('lote compartilhado é identificado pelo produto previamente bipado sem conflito com outros produtos', async () => {
+  for (const codProd of [1113, 2222]) {
+    const lote = await consultarCodigoFeltrin({ nunota: 123, codigo: codigos[0], codProd, executeQuery: async (sql) => {
+      assert.match(sql, new RegExp(`AND EST.CODPROD = ${codProd}\\b`));
+      assert.match(sql, /TRIM\(ITE.CONTROLE\) = TRIM\(EST.CONTROLE\)/);
+      return [{ CODPROD: codProd }];
+    } });
+    assert.equal(lote.codProd, codProd);
+    assert.equal(lote.controle, lotes[0]);
+  }
+  await assert.rejects(consultarCodigoFeltrin({ nunota: 123, codigo: codigos[0], codProd: 1113, executeQuery: async () => [] }), /produto 1113/);
+  for (const codProd of [null, 0, -1, 1.5, '1113 OR 1=1']) {
+    await assert.rejects(consultarCodigoFeltrin({ nunota: 123, codigo: codigos[0], codProd, executeQuery: () => assert.fail() }), /Produto inválido/);
+  }
+});
+
+test('gravação usa produto da linha da separação e não produto arbitrário enviado na requisição', async () => {
+  const fonte = fs.readFileSync(path.join(__dirname, '../routes.js'), 'utf8');
+  let handler;
+  let gravado;
+  const contexto = vm.createContext({
+    router: { post(_url, callback) { handler = callback; } }, obterNumeroInteiro: Number,
+    garantirPedidoNaoConferidoParaSeparacao: async () => {}, executeQuery() { assert.fail(); },
+    separacaoStore: {
+      obter: () => ({ itens: [{ chave: 'seq:2', codProd: 2222 }] }),
+      registrarLeituraFeltrin: (dados) => { gravado = dados; return {}; }
+    },
+    consultarCodigoFeltrin: async (dados) => { assert.equal(dados.codProd, 2222); return { codProd: 2222, controle: lotes[0] }; },
+    consultarMultiplicadorFeltrin: async (dados) => { assert.equal(dados.codProd, 2222); return 10; },
+    calcularQuantidadeFeltrin
+  });
+  vm.runInContext(fonte.slice(fonte.indexOf("router.post('/fila-conferencia/separacao/:nunota/leitura-feltrin'"), fonte.indexOf("router.get('/fila-conferencia/separacao/:nunota/produtos/:codprod/lotes'")), contexto);
+  const res = { status(code) { this.code = code; return this; }, json(payload) { this.payload = payload; } };
+  await handler({ params: { nunota: '123' }, body: { chave: 'seq:2', codProd: 1113, codigo: codigos[0], codigoProduto: '7891234567890', leituraId: 'leitura-compartilhada-1' } }, res);
+  assert.equal(gravado.lote.codProd, 2222);
+  assert.equal(gravado.quantidade, 10);
+  assert.ok(res.payload.separacao);
+  gravado = null;
+  await handler({ params: { nunota: '123' }, body: { chave: 'invalida', leituraId: 'leitura-compartilhada-1' } }, res);
+  assert.equal(res.code, 400);
+  assert.equal(gravado, null);
+});
 
 test('acumula leituras com multiplicador do servidor e rejeita contagens inválidas', () => {
   assert.equal(calcularQuantidadeFeltrin(10, 2), 20);
@@ -15,6 +59,21 @@ test('acumula leituras com multiplicador do servidor e rejeita contagens inváli
   assert.equal(calcularQuantidadeFeltrin(0.5, 2), 1);
   assert.equal(calcularQuantidadeFeltrin(10), 10);
   for (const valor of [0, -1, 1.5, '2', null, Infinity, Number.MAX_SAFE_INTEGER + 1]) assert.throws(() => calcularQuantidadeFeltrin(10, valor), /leituras inválido/);
+});
+
+test('produtos distintos com lote idêntico guardam quantidades independentes', (t) => {
+  const baseDir = fs.mkdtempSync(path.join(os.tmpdir(), 'feltrin-produtos-lote-igual-'));
+  t.after(() => fs.rmSync(baseDir, { recursive: true, force: true }));
+  const store = criarSeparacaoStore({ baseDir });
+  store.iniciar({ nunota: 123, itens: [
+    { chave: '1', codProd: 1113, controlePedido: lotes[0], qtdEsperada: 20 },
+    { chave: '2', codProd: 2222, controlePedido: lotes[0], qtdEsperada: 30 }
+  ] });
+  for (const [chave, codProd, quantidade] of [['1', 1113, 10], ['2', 2222, 20]]) {
+    store.registrarLeituraFeltrin({ nunota: 123, chave, lote: { codProd, controle: lotes[0] }, quantidade });
+  }
+  assert.deepEqual(store.obter(123).itens.map((item) => item.qtdSeparada), [10, 20]);
+  assert.deepEqual(store.obter(123).itens.map((item) => item.lotesSeparados[0].controle), [lotes[0], lotes[0]]);
 });
 
 test('registra total acumulado atomicamente no lote e não duplica após repetir confirmação', (t) => {

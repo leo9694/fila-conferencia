@@ -101,6 +101,24 @@ test('caixa de outro produto não registra quantidade na separação', async () 
   assert.match(contexto.separacaoConfirmStatus.textContent, /outro produto/);
 });
 
+test('leitura de lote compartilhado consulta apenas o produto recém bipado e confirma sua própria linha', async () => {
+  const { contexto, gravacoes } = ambiente(2222, 10);
+  const original = contexto.itemSeparacaoPendente.item;
+  const selecionado = { ...original, codProd: 2222, chaveSeparacao: 'seq:2' };
+  contexto.itensSeparacao.push(selecionado);
+  contexto.itemSeparacaoPendente.item = selecionado;
+  contexto.fetch = async (_url, options) => {
+    assert.deepEqual(JSON.parse(options.body), { codigo, codProd: 2222 });
+    return { ok: true, json: async () => ({ lote: { codProd: 2222, controle } }) };
+  };
+  await vm.runInContext('processarLoteFeltrinSeparacao()', contexto);
+  assert.equal(contexto.itemSeparacaoPendente.item, selecionado);
+  assert.equal(contexto.itemSeparacaoPendente.quantidade, 10);
+  assert.equal(original.qtdSeparada, 0);
+  await vm.runInContext('confirmarItemSeparacao()', contexto);
+  assert.equal(gravacoes[0].body.chave, 'seq:2');
+});
+
 test('primeira leitura que completa o lote confirma automaticamente sem duplicar com Enter consecutivo', async () => {
   const { contexto, gravacoes } = ambiente(1113, 20);
   await Promise.all([vm.runInContext('processarLoteFeltrinSeparacao()', contexto), vm.runInContext('processarLoteFeltrinSeparacao()', contexto)]);

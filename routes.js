@@ -2897,7 +2897,8 @@ router.get('/fila-conferencia/separacao/:nunota', (req, res) => {
 router.post('/fila-conferencia/separacao/:nunota/codigo-feltrin', async (req, res) => {
   try {
     const lote = await consultarCodigoFeltrin({
-      nunota: obterNumeroInteiro(req.params.nunota), codigo: req.body?.codigo, executeQuery
+      nunota: obterNumeroInteiro(req.params.nunota), codigo: req.body?.codigo,
+      codProd: req.body?.codProd === undefined ? undefined : Number(req.body.codProd), executeQuery
     });
     res.json({ lote });
   } catch (error) {
@@ -2911,7 +2912,9 @@ router.post('/fila-conferencia/separacao/:nunota/leitura-feltrin', async (req, r
     const leituraId = String(req.body?.leituraId || '');
     if (!/^[a-zA-Z0-9-]{10,80}$/.test(leituraId)) throw new Error('Identificação da leitura inválida. Bipe novamente.');
     await garantirPedidoNaoConferidoParaSeparacao(nunota);
-    const lote = await consultarCodigoFeltrin({ nunota, codigo: req.body?.codigo, executeQuery });
+    const item = separacaoStore.obter(nunota)?.itens.find((registro) => registro.chave === req.body?.chave);
+    if (!item) throw new Error('Item não pertence a esta separação.');
+    const lote = await consultarCodigoFeltrin({ nunota, codigo: req.body?.codigo, codProd: Number(item.codProd), executeQuery });
     const multiplicador = await consultarMultiplicadorFeltrin({ nunota, codProd: lote.codProd, codigoProduto: req.body?.codigoProduto, executeQuery });
     const quantidade = calcularQuantidadeFeltrin(multiplicador, req.body?.numeroLeituras);
     res.json({ separacao: separacaoStore.registrarLeituraFeltrin({

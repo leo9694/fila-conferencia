@@ -8901,9 +8901,9 @@ function focarLoteFeltrinSeparacao() {
   navigator.virtualKeyboard?.hide?.();
 }
 
-async function consultarCaixaFeltrinSeparacao(codigo) {
+async function consultarCaixaFeltrinSeparacao(codigo, codProd) {
   const resposta = await fetch(`/api/fila-conferencia/separacao/${Number(pedidoPreviewSelecionado?.NUNOTA)}/codigo-feltrin`, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codigo })
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ codigo, codProd })
   });
   const payload = await resposta.json();
   if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível identificar o lote Feltrin.');
@@ -8928,7 +8928,7 @@ async function processarLoteFeltrinSeparacao(codigoEnfileirado) {
     if (!valorLido) return;
     const codigo = valorLido === pendente.loteExtraidoFeltrin
       ? pendente.codigoCompletoFeltrin : valorLido;
-    const caixa = await consultarCaixaFeltrinSeparacao(codigo);
+    const caixa = await consultarCaixaFeltrinSeparacao(codigo, Number(pendente.item.codProd));
     if (itemSeparacaoPendente !== pendente) return;
     if (codigoEnfileirado === undefined && separacaoFeltrinCodigo.value.trim() !== valorLido) return;
     if (Number(caixa.codProd) !== Number(pendente.item.codProd)) throw new Error('A caixa bipada pertence a outro produto do pedido.');
@@ -9046,7 +9046,7 @@ async function processarCodigoSeparacao() {
     leituraCaixaFeltrinEmAndamento = true;
     const pedido = pedidoPreviewSelecionado;
     try {
-      const caixa = await consultarCaixaFeltrinSeparacao(codigo);
+      const caixa = await consultarCaixaFeltrinSeparacao(codigo, correspondencia ? Number(correspondencia.item.codProd) : undefined);
       if (pedidoPreviewSelecionado !== pedido || separacaoScreen.hidden || separacaoConcluida) return;
       const candidatos = itensSeparacao.filter((item) => produtoSeparacaoFeltrin(item) && Number(item.codProd) === Number(caixa.codProd) && !itemSeparacaoProcessado(item));
       const item = candidatos.find((entrada) => String(entrada.controle || '').trim() === caixa.controle)
