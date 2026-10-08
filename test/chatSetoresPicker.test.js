@@ -32,3 +32,23 @@ test('permite o mesmo atendente em outros setores e retorna vazio para busca sem
   assert.equal(filtrar(usuarios, [], 'LEONARDO').length, 1);
   assert.equal(filtrar(usuarios, [], 'inexistente').length, 0);
 });
+
+test('cartões de setores preservam os controles de edição e vínculos dos atendentes', () => {
+  const inicioRender = fonte.indexOf('    const render = () => {', fim);
+  const fimRender = fonte.indexOf('    const openAttendantPicker', inicioRender);
+  const sectorsList = {};
+  const contexto = vm.createContext({ sectorsList,
+    payload: { usuarios },
+    setores: [{ id: 'setor-1', nome: 'Financeiro', atendentes: ['40', '72'] }, { nome: '', atendentes: [] }],
+    escapeHtml: (valor) => String(valor ?? '').replace(/</g, '&lt;').replace(/"/g, '&quot;'),
+    window: { lucide: { createIcons() {} } }
+  });
+  vm.runInContext(`${fonte.slice(inicioRender, fimRender)}; render();`, contexto);
+  assert.equal((sectorsList.innerHTML.match(/<fieldset data-sector/g) || []).length, 2);
+  assert.match(sectorsList.innerHTML, /value="Financeiro"/);
+  assert.match(sectorsList.innerHTML, /data-user="40"/);
+  assert.match(sectorsList.innerHTML, /data-user="72"/);
+  assert.match(sectorsList.innerHTML, /chat-call-avatar/);
+  assert.match(sectorsList.innerHTML, /data-add-attendant="0"/);
+  assert.match(sectorsList.innerHTML, /data-remove="1"/);
+});

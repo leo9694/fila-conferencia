@@ -577,3 +577,85 @@
   .chat-contact-dialog>footer span { flex-basis:100%; }
   .chat-contact-dialog>footer button { width:100%; justify-content:center; }
 }
+
+/* Painel de setores: cartões por equipe e controles de telefonia agrupados. */
+.chat-call-settings-panel { width:min(1120px,calc(100vw - 32px)); padding:24px; border-radius:20px; background:#f7fbfa; }
+.chat-call-settings-panel>header { margin-bottom:8px; }
+.chat-call-settings-panel>header h2 { font-size:1.6rem; letter-spacing:-.025em; }
+.chat-call-settings-panel>header span { font-size:.72rem; }
+.chat-call-settings-panel>header>button { width:36px; height:36px; cursor:pointer; }
+.chat-call-settings-panel .chat-call-intro { margin:0 0 20px; color:#5f7887; font-size:.86rem; }
+.chat-call-channel-panel { padding:16px; border:1px solid #c3e5dc; border-radius:12px; background:#eaf7f2; margin-bottom:16px; }
+.chat-call-channel-row { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+.chat-call-channel-icon { display:grid; place-items:center; flex:0 0 46px; height:46px; border-radius:12px; background:#0c9f86; color:white; }
+.chat-call-channel-icon svg { width:24px; height:24px; }
+.chat-call-channel-row>label:first-of-type { flex:1 1 300px; min-width:0; display:grid; gap:5px; font-size:.75rem; color:#527180; }
+.chat-call-channel-row select { width:100%; min-width:0; font-size:.85rem; font-weight:600; }
+.chat-call-channel-row .chat-ura-toggle { position:relative; flex:1 1 300px; display:flex; align-items:center; gap:12px; font-size:.8rem; cursor:pointer; color:#17394b; }
+.chat-call-channel-row .chat-ura-toggle input { position:absolute; left:0; top:0; width:48px; height:28px; min-height:0; opacity:0; margin:0; cursor:pointer; }
+.chat-call-switch { flex:0 0 48px; height:28px; padding:3px; border-radius:20px; background:#b3c6c4; }
+.chat-call-switch::after { content:''; display:block; width:22px; height:22px; border-radius:50%; background:white; box-shadow:0 1px 3px #17394b40; transition:transform .15s; }
+.chat-ura-toggle input:checked+.chat-call-switch { background:#18c8a7; }
+.chat-ura-toggle input:checked+.chat-call-switch::after { transform:translateX(20px); }
+.chat-ura-toggle input:focus-visible+.chat-call-switch { outline:2px solid #087f6d; outline-offset:3px; }
+.chat-ura-toggle input:disabled~span { opacity:.5; }
+.chat-call-ura-info { display:flex; gap:12px; margin-top:14px; padding:12px; border:1px dashed #a8c5c0; border-radius:10px; color:#456574; font-size:.78rem; line-height:1.5; }
+.chat-call-ura-info>svg { flex-shrink:0; width:20px; color:#26a1c9; }
+.chat-call-ura-info small { display:block; margin-top:4px; }
+.chat-call-settings-panel fieldset[data-sector] { --sector:#398ace; position:relative; display:flex; gap:18px; margin:12px 0; padding:18px; border:1px solid #d1e2dd; border-left:4px solid var(--sector); border-radius:12px; background:white; }
+.chat-call-settings-panel fieldset[data-tone="1"] { --sector:#42ad70; }
+.chat-call-settings-panel fieldset[data-tone="2"] { --sector:#dc9142; }
+.chat-call-settings-panel fieldset>legend { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); }
+.chat-call-sector-icon { display:grid; place-items:center; flex:0 0 52px; height:52px; margin-top:4px; background:var(--sector); color:white; border-radius:12px; }
+.chat-call-sector-icon svg { width:26px; height:26px; }
+.chat-call-sector-content { flex:1; min-width:0; }
+.chat-call-sector-head>div { flex:1; min-width:0; }
+.chat-call-sector-kicker { display:block; font-size:.65rem; letter-spacing:.08em; font-weight:800; color:var(--sector); }
+.chat-call-settings-panel [data-name] { width:100%; height:34px; min-height:34px; padding:3px 0; border:1px solid transparent; border-radius:4px; background:transparent; color:#17394b; font-size:1.12rem; font-weight:700; }
+.chat-call-settings-panel [data-name]:focus { border-color:var(--sector); outline-offset:2px; }
+.chat-call-settings-panel .chat-call-sector-head button { border:0; width:36px; padding:6px; flex-shrink:0; }
+.chat-call-sector-head button svg { width:18px; height:18px; }
+.chat-call-sector-description { margin:3px 0 10px; font-size:.78rem; color:#738895; }
+.chat-call-settings-panel .chat-call-sector-members { margin:0; align-items:center; }
+.chat-call-settings-panel .chat-call-sector-member { padding:5px 8px; background:#f6faf9; border-radius:10px; font-size:.78rem; }
+.chat-call-avatar { display:grid; place-items:center; width:28px; height:28px; flex-shrink:0; border-radius:50%; background:#8bc0f0; color:#163e5a; font-weight:700; }
+.chat-call-avatar[data-color="1"] { background:#c8a0f3; }
+.chat-call-avatar[data-color="2"] { background:#b3e896; }
+.chat-call-avatar[data-color="3"] { background:#f5a5b2; }
+.chat-call-avatar[data-color="4"] { background:#f4d776; }
+.chat-call-avatar[data-color="5"] { background:#87d9c5; }
+.chat-call-settings-panel .chat-call-sector-member button { padding:0; width:24px; min-height:28px; border:0; font-size:1.15rem; }
+.chat-call-settings-panel [data-add-attendant] { display:inline-flex; gap:8px; align-items:center; border-style:dashed; min-height:40px; border-radius:10px; font-size:.78rem; }
+.chat-call-settings-panel [data-add-attendant] svg { width:18px; }
+.chat-call-settings-panel>footer { position:sticky; bottom:-24px; background:#f7fbfa; padding:14px 0; flex-wrap:wrap; }
+.chat-call-settings-panel>footer button { display:inline-flex; gap:8px; align-items:center; min-height:44px; padding:0 18px; border-radius:9px; }
+.chat-call-settings-panel>footer button svg { width:19px; height:19px; }
+.chat-call-settings-panel>footer [data-add] { margin-right:auto; border-style:dashed; background:transparent; }
+.chat-theme-dark .chat-call-settings-panel { background:linear-gradient(135deg,#142126,#18272d); }
+.chat-theme-dark .chat-call-settings-panel .chat-call-channel-panel { background:#123331; border-color:#20524c; }
+.chat-theme-dark .chat-call-settings-panel :is(.chat-call-channel-row>label,.chat-ura-toggle,.chat-call-ura-info,.chat-call-sector-description) { color:#aec2cf; }
+.chat-theme-dark .chat-call-settings-panel .chat-call-ura-info { border-color:#456674; }
+.chat-theme-dark .chat-call-settings-panel fieldset[data-sector] { background:#1a2a30; border-color:#30464e; border-left-color:var(--sector); }
+.chat-theme-dark .chat-call-settings-panel [data-name] { background:transparent; border-color:transparent; color:#f0f5f8; }
+.chat-theme-dark .chat-call-settings-panel [data-name]:focus { border-color:var(--sector); }
+.chat-theme-dark .chat-call-settings-panel .chat-call-sector-member { background:#1c2c34; border-color:#435761; color:#dbe7ee; }
+.chat-theme-dark .chat-call-settings-panel>footer { background:#18272d; }
+.chat-theme-dark .chat-call-settings-panel>footer [data-save] { background:#20d6b3; border-color:#20d6b3; color:#07382e; }
+@media(max-width:700px) {
+  .chat-call-settings-panel { width:calc(100vw - 16px); max-height:calc(100dvh - 16px); padding:16px; }
+  .chat-call-settings-panel>header h2 { font-size:1.25rem; }
+  .chat-call-settings-panel .chat-call-intro { font-size:.78rem; }
+  .chat-call-channel-row { gap:10px; }
+  .chat-call-channel-icon { display:none; }
+  .chat-call-channel-row>label:first-of-type,.chat-call-channel-row .chat-ura-toggle { flex-basis:100%; }
+  .chat-call-settings-panel fieldset[data-sector] { padding:12px; gap:10px; }
+  .chat-call-sector-icon { flex-basis:34px; height:34px; border-radius:8px; }
+  .chat-call-sector-icon svg { width:20px; }
+  .chat-call-settings-panel [data-name],.chat-call-channel-row select { font-size:16px; }
+  .chat-call-settings-panel .chat-call-sector-member { width:100%; }
+  .chat-call-settings-panel .chat-call-sector-member button { margin-left:auto; width:36px; min-height:40px; }
+  .chat-call-settings-panel [data-add-attendant] { width:100%; justify-content:center; min-height:44px; }
+  .chat-call-settings-panel>footer { bottom:-16px; gap:8px; }
+  .chat-call-settings-panel>footer [data-add] { flex-basis:100%; justify-content:center; margin:0; }
+  .chat-call-settings-panel>footer button { flex:1; justify-content:center; padding:0 12px; }
+}

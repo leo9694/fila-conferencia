@@ -50,12 +50,12 @@
     const paginas = Math.max(1, Math.ceil(lista.length / 25));
     pagina = Math.min(pagina, paginas);
     $('diario-linhas').innerHTML = lista.slice((pagina - 1) * 25, pagina * 25).map((item) => `<tr>
-      <td>${escape(data(item.saida))}<small>${item.retorno ? escape(data(item.retorno)) : 'Ainda não devolvido'}</small></td>
-      <td><strong>${escape(item.placa)}</strong><small>${escape(item.veiculo)}${item.empresa ? ` · ${escape(item.empresa)}` : ''}</small></td>
-      <td>${escape(item.motorista)}</td><td>${escape(item.origem)} → ${escape(item.destino)}</td>
-      <td>${window.diarioBordoQuilometragem.distanciaViagem(item) === null ? 'Sem distância cadastrada' : `${numero(window.diarioBordoQuilometragem.distanciaViagem(item))} km (ida e volta)`}<small>${item.distanciaIda ? `${numero(item.distanciaIda)} km até o destino · ${item.retorno ? 'Concluída' : 'Prevista'}` : 'Registro antigo: não contabilizado'}</small></td>
-      <td><span class="diario-bordo-tag ${item.retorno ? '' : 'aberto'}">${item.retorno ? 'Encerrado' : 'Em uso'}</span><div><button type="button" data-detalhes="${escape(item.id)}">Detalhes</button>${!item.retorno ? `<button type="button" data-devolver="${escape(item.id)}">Devolver</button>` : ''}${podeExcluirRegistro ? `<button type="button" class="diario-danger" data-excluir-registro="${escape(item.id)}" title="Excluir registro" aria-label="Excluir registro do veículo ${escape(item.placa)}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>` : ''}</div></td>
-      </tr>`).join('') || '<tr><td colspan="6">Nenhum registro encontrado.</td></tr>';
+      <td data-label="Saída">${escape(data(item.saida))}</td><td data-label="Retorno">${item.retorno ? escape(data(item.retorno)) : '—'}</td>
+      <td data-label="Veículo"><strong title="${escape(`${item.placa} · ${item.veiculo} · ${item.empresa || ''}`)}">${escape(item.placa)}</strong><small>${escape(item.veiculo)}${item.empresa ? ` · ${escape(item.empresa)}` : ''}</small></td>
+      <td data-label="Motorista"><span class="diario-celula-texto" title="${escape(item.motorista)}">${escape(item.motorista)}</span></td><td data-label="Rota"><span class="diario-celula-texto" title="${escape(`${item.origem} → ${item.destino}`)}">${escape(item.destino)}</span><small>Origem: ${escape(item.origem)}</small></td>
+      <td data-label="Quilometragem">${window.diarioBordoQuilometragem.distanciaViagem(item) === null ? 'Sem distância cadastrada' : `${numero(window.diarioBordoQuilometragem.distanciaViagem(item))} km (ida e volta)`}<small>${item.distanciaIda ? `${numero(item.distanciaIda)} km até o destino · ${item.retorno ? 'Concluída' : 'Prevista'}` : 'Registro antigo: não contabilizado'}</small></td>
+      <td data-label="Situação"><span class="diario-bordo-tag ${item.retorno ? '' : 'aberto'}">${item.retorno ? 'Encerrado' : 'Em uso'}</span></td><td data-label="Ações"><div class="diario-linha-acoes"><button type="button" data-detalhes="${escape(item.id)}">Detalhes</button>${!item.retorno ? `<button type="button" data-devolver="${escape(item.id)}">Devolver</button>` : ''}${podeExcluirRegistro ? `<button type="button" class="diario-danger" data-excluir-registro="${escape(item.id)}" title="Excluir registro" aria-label="Excluir registro do veículo ${escape(item.placa)}"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7"/></svg></button>` : ''}</div></td>
+      </tr>`).join('') || '<tr class="diario-linha-vazia"><td colspan="8">Nenhum registro encontrado.</td></tr>';
     $('diario-pagina').textContent = `Página ${pagina} de ${paginas} · ${lista.length} registros`;
     $('diario-anterior').disabled = pagina === 1;
     $('diario-proxima').disabled = pagina === paginas;
@@ -80,16 +80,21 @@
   function campo(nome, titulo, tipo = 'text', valor = '', obrigatorio = true) {
     return `<label>${escape(titulo)}<input name="${nome}" type="${tipo}" value="${escape(valor)}" ${obrigatorio ? 'required' : ''} ${tipo === 'number' ? 'min="0" max="9999999" step="0.01"' : 'maxlength="1000"'}></label>`;
   }
-  const observacoes = (nome) => `<label class="diario-wide">OBSERVAÇÕES<textarea name="${nome}" maxlength="1000" placeholder="Condições do veículo, ocorrências ou outras informações"></textarea></label>`;
+  const observacoes = (nome) => `<label class="diario-wide"><span>Observações <span class="diario-opcional">(opcional)</span></span><textarea name="${nome}" rows="2" maxlength="1000" placeholder="Condições do veículo ou ocorrências"></textarea></label>`;
   function selecionarCadastro(nome, titulo, tipo, descricao, obrigatorio = false) {
-    return `<label>${titulo}<select name="${nome}" ${obrigatorio ? 'required' : ''}><option value="">${obrigatorio ? 'Selecione um cadastro' : 'Preenchimento manual'}</option>${cadastros[tipo].map((item) => `<option value="${escape(item.id)}">${escape(descricao(item))}</option>`).join('')}</select></label>`;
+    return `<label>${titulo}<select name="${nome}" ${obrigatorio ? 'required' : ''}><option value="">${obrigatorio ? 'Selecione' : 'Preenchimento manual'}</option>${cadastros[tipo].map((item) => `<option value="${escape(item.id)}">${escape(descricao(item))}</option>`).join('')}</select>${nome === 'carroId' || nome === 'motoristaId' ? `<small id="diario-${nome}-resumo" class="diario-campo-resumo" hidden></small>` : ''}</label>`;
   }
   function resumoSelecionados() {
     const carro = cadastros.carros.find((item) => item.id === form.elements.carroId.value);
     const motorista = cadastros.motoristas.find((item) => item.id === form.elements.motoristaId.value);
     const viagens = carro ? registros.filter((item) => item.placa === carro.placa) : [];
     const distancia = window.diarioBordoQuilometragem.totalPercorrido(viagens);
-    $('diario-selecionados').innerHTML = `<div><strong>Veículo selecionado</strong>${carro ? `<p>${escape(carro.placa)} · ${escape(carro.veiculo)}</p><p>Empresa: ${escape(carro.empresa || 'Não informada')}</p><p>Total percorrido no diário: <strong>${numero(distancia)} km</strong></p>` : '<p>Selecione um carro cadastrado.</p>'}</div><div><strong>Motorista selecionado</strong>${motorista ? `<p>${escape(motorista.nome)}</p><p>CNH: ${motorista.cnh ? escape(`•••••••${motorista.cnh.slice(-4)}`) : 'Não informada'} · Categoria: ${escape(motorista.categoriaCnh || 'Não informada')}</p><p>Usuário Sankhya: ${motorista.codUsu !== null && motorista.codUsu !== undefined ? escape(`${motorista.codUsu} - ${motorista.nomeUsuario}`) : 'Não vinculado'}</p>` : '<p>Selecione um motorista cadastrado.</p>'}</div>`;
+    const carroResumo = $('diario-carroId-resumo');
+    const motoristaResumo = $('diario-motoristaId-resumo');
+    carroResumo.hidden = !carro;
+    motoristaResumo.hidden = !motorista;
+    carroResumo.textContent = carro ? `${carro.empresa || 'Empresa não informada'} · ${numero(distancia)} km no diário` : '';
+    motoristaResumo.textContent = motorista ? `CNH ${motorista.cnh ? `•••••••${motorista.cnh.slice(-4)}` : 'não informada'} · ${motorista.categoriaCnh || 'Categoria não informada'} · ${motorista.codUsu !== null && motorista.codUsu !== undefined ? `Usuário ${motorista.codUsu} - ${motorista.nomeUsuario}` : 'Sem vínculo Sankhya'}` : '';
   }
   function abrirRegistro(item = null) {
     selecionado = item;
@@ -100,8 +105,8 @@
     $('diario-modal-titulo').textContent = item ? `Devolução · ${item.placa}` : 'Registrar saída do veículo';
     $('diario-salvar').textContent = item ? 'Confirmar devolução' : 'Registrar saída';
     $('diario-campos').innerHTML = item
-      ? campo('retorno', 'DATA / HORA DA DEVOLUÇÃO', 'datetime-local', dataInput()) + observacoes('observacoesRetorno')
-      : selecionarCadastro('carroId', 'CARRO CADASTRADO', 'carros', (carro) => `${carro.placa} · ${carro.veiculo}`, true) + selecionarCadastro('motoristaId', 'MOTORISTA CADASTRADO', 'motoristas', (motorista) => motorista.nome, true) + '<div id="diario-selecionados" class="diario-wide diario-bordo-selecionados"></div>' + selecionarCadastro('rotaId', 'DESTINO CADASTRADO', 'rotas', (rota) => `${rota.nome} · ${rota.distanciaIda ? `${numero(rota.distanciaIda)} km (ida)` : 'Distância não cadastrada'}`, true) + campo('saida', 'DATA / HORA DA SAÍDA', 'datetime-local', dataInput()) + '<div id="diario-rota-resumo" class="diario-wide">Origem: Norte Sul Sementes MT (Empresa 1). Selecione o destino.</div>' + campo('finalidade', 'FINALIDADE') + observacoes('observacoes');
+      ? campo('retorno', 'Data e hora da devolução', 'datetime-local', dataInput()) + observacoes('observacoesRetorno')
+      : selecionarCadastro('carroId', 'Veículo', 'carros', (carro) => `${carro.placa} · ${carro.veiculo}`, true) + selecionarCadastro('motoristaId', 'Motorista', 'motoristas', (motorista) => motorista.nome, true) + selecionarCadastro('rotaId', 'Destino', 'rotas', (rota) => `${rota.nome} · ${rota.distanciaIda ? `${numero(rota.distanciaIda)} km (ida)` : 'Distância não cadastrada'}`, true) + campo('saida', 'Data e hora da saída', 'datetime-local', dataInput()) + '<small id="diario-rota-resumo" class="diario-wide diario-rota-resumo">Origem: Norte Sul Sementes MT (Empresa 1)</small>' + `<div class="diario-wide">${campo('finalidade', 'Finalidade')}</div>` + observacoes('observacoes');
     if (!item) {
       resumoSelecionados();
       if (!cadastros.carros.length || !cadastros.motoristas.length) $('diario-form-status').textContent = 'Cadastre um carro e um motorista pelo botão Cadastros antes de registrar a saída.';
@@ -199,9 +204,9 @@
     $('diario-cadastro-titulo').textContent = { rotas: 'Cadastro de destinos / rotas', carros: 'Cadastro de carros', motoristas: 'Cadastro de motoristas' }[tipo];
     $('diario-cadastro-status').textContent = '';
     $('diario-cadastro-campos').innerHTML = tipo === 'carros'
-      ? campo('placa', 'PLACA') + campo('veiculo', 'VEÍCULO / MODELO') + campo('empresa', 'EMPRESA', 'text', '', false)
-      : tipo === 'rotas' ? '<p class="diario-wide">Origem fixa: Norte Sul Sementes MT (Empresa 1)</p>' + campo('nome', 'NOME DO DESTINO / ROTA') + campo('destino', 'DESTINO / PERCURSO') + campo('distanciaIda', 'DISTÂNCIA ATÉ O DESTINO (KM DE IDA)', 'number')
-        : campo('nome', 'NOME COMPLETO') + '<label>CNH<input name="cnh" type="text" inputmode="numeric" pattern="[0-9]{11}" minlength="11" maxlength="11" required placeholder="11 números"></label><label>CATEGORIA DA CNH<select name="categoriaCnh" required><option value="">Selecione</option>' + ['ACC', 'A', 'B', 'AB', 'C', 'AC', 'D', 'AD', 'E', 'AE'].map((categoria) => `<option value="${categoria}">${categoria}</option>`).join('') + '</select></label><div class="diario-wide diario-bordo-busca-usuario"><label>BUSCAR USUÁRIO NO SANKHYA<input id="diario-usuario-busca" type="search" maxlength="100" placeholder="Código ou nome do usuário"></label><button type="button" id="diario-usuario-buscar">Buscar</button></div><label class="diario-wide">USUÁRIO VINCULADO (OPCIONAL)<select name="codUsu"><option value="">Sem vínculo</option></select></label>';
+      ? campo('placa', 'Placa') + campo('veiculo', 'Veículo / modelo') + `<div class="diario-wide">${campo('empresa', 'Empresa (opcional)', 'text', '', false)}</div>`
+      : tipo === 'rotas' ? '<small class="diario-wide diario-rota-resumo">Origem fixa: Norte Sul Sementes MT (Empresa 1)</small>' + campo('nome', 'Nome do destino / rota') + campo('destino', 'Destino / percurso') + campo('distanciaIda', 'Distância de ida (km)', 'number') + '<small class="diario-cadastro-ajuda">Informe a distância até o destino. O diário considera o dobro para ida e volta.</small>'
+        : `<div class="diario-wide">${campo('nome', 'Nome completo')}</div>` + '<label>CNH<input name="cnh" type="text" inputmode="numeric" pattern="[0-9]{11}" minlength="11" maxlength="11" required placeholder="11 números"></label><label>Categoria da CNH<select name="categoriaCnh" required><option value="">Selecione</option>' + ['ACC', 'A', 'B', 'AB', 'C', 'AC', 'D', 'AD', 'E', 'AE'].map((categoria) => `<option value="${categoria}">${categoria}</option>`).join('') + '</select></label><div class="diario-wide diario-cadastro-vinculo"><span class="diario-cadastro-subtitulo">Vínculo com Sankhya <small>(opcional)</small></span><div class="diario-bordo-busca-usuario"><label>Pesquisar usuário<input id="diario-usuario-busca" type="search" maxlength="100" placeholder="Código ou nome"></label><button type="button" id="diario-usuario-buscar">Buscar</button></div><label>Usuário vinculado<select name="codUsu"><option value="">Sem vínculo</option></select></label></div>';
     listarCadastros();
   }
   $('diario-cadastros').addEventListener('click', () => tipoModal.showModal());
@@ -217,6 +222,7 @@
     try { cadastros = await api('/cadastros'); listarCadastros(); }
     catch (error) { $('diario-cadastro-status').textContent = error.message; }
     finally { $('diario-cadastro-salvar').disabled = false; }
+    cadastroForm.querySelector('input, select')?.focus();
   });
   function fecharCadastro() { if (!salvandoCadastro) { buscaUsuarioVersao++; cadastroModal.close(); } }
   $('diario-cadastro-fechar').addEventListener('click', fecharCadastro);
