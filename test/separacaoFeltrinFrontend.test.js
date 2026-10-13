@@ -24,7 +24,7 @@ function ambienteConfirmacao(entradaCodigo = null) {
     separacaoConfirmTitulo: elemento(), separacaoConfirmField: elemento(), separacaoAjustePainel: elemento(),
     separacaoAjusteQtd: elemento(), separacaoConfirmQtd: elemento(), separacaoConfirmStatus: elemento(), separacaoConfirmModal: elemento()
   });
-  vm.runInContext(fonte.slice(fonte.indexOf('function obterLoteSelecionadoConfirmacao('), fonte.indexOf('async function confirmarItemSeparacao(')), contexto);
+  vm.runInContext(fonte.slice(fonte.indexOf('function produtoSeparacaoSemControle('), fonte.indexOf('async function confirmarItemSeparacao(')), contexto);
   contexto.item = { codProd: 1113, qtdSeparada: 0, controle };
   contexto.entrada = entradaCodigo;
   vm.runInContext('abrirConfirmacaoSeparacao(item, entrada)', contexto);
@@ -74,6 +74,7 @@ function ambiente(codProd = 1113, multiplicador = 1) {
     formatarQuantidade: String
   });
   vm.runInContext(fonte.slice(fonte.indexOf('function produtoSeparacaoFeltrin('), fonte.indexOf('function capturarTeclaLeitorSeparacao(')), contexto);
+  vm.runInContext(fonte.slice(fonte.indexOf('function produtoSeparacaoSemControle('), fonte.indexOf('function obterLoteSelecionadoConfirmacao(')), contexto);
   vm.runInContext(fonte.slice(fonte.indexOf('async function confirmarItemSeparacao('), fonte.indexOf('function abrirAjusteQuantidadeSeparacao(')), contexto);
   return { contexto, gravacoes };
 }
