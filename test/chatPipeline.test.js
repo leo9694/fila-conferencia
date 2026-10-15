@@ -37,6 +37,31 @@ function resposta() {
   return { code: 200, status(value) { this.code = value; return this; }, json(payload) { this.payload = payload; } };
 }
 
+test('assume sem pipeline somente com janela de resposta aberta pelo cliente e escolha explícita', async () => {
+  for (const window of [{}, { canSendFreeform: false }, { canSendFreeform: true }]) {
+    for (const body of [{ withoutPipeline: true }, {}, { withoutPipeline: true, pipelineId: 0 }]) {
+      const eventos = [];
+      const { handler } = rota("router.post('/conversations/:id/claim'", "router.post('/conversations/:id/bitrix-pipelines'", {
+        obterConversaConsolidada: async () => ({ id: 1, serviceWindow: window }),
+        obterAtribuicaoConversa: () => null, impedirReassumirAtendimento() {},
+        vincularPipelineBitrix: () => assert.fail('Não deve criar card nesta escolha'),
+        atribuirGrupoConversa: () => { eventos.push('assumir'); return { historico: [{}] }; },
+        idsRelacionadosConversa: () => [1, 2],
+        atendentes: { marcarConversaSemPipeline: (id) => eventos.push(id) },
+        mensagemInternaAtribuicao: () => null, marcarGrupoConversaComoLida: async () => {},
+        comAtribuicao: (v) => v, eventosAtendimento: { emit() {} }
+      });
+      const res = resposta();
+      await handler({ params: { id: '1' }, body, atendente: { id: 72 } }, res);
+      const permitido = window.canSendFreeform === true && body.withoutPipeline && body.pipelineId === undefined;
+      assert.equal(res.code, permitido ? 200 : 400);
+      assert.deepEqual(eventos, permitido ? ['assumir', 1, 2] : []);
+    }
+  }
+  assert.equal(Pipeline.canAssumeWithoutPipeline({ metaWindow: { canSendFreeform: true } }), true);
+  assert.equal(Pipeline.canAssumeWithoutPipeline({ lastMessage: { direction: 'OUTBOUND' } }), false);
+});
+
 test('assumir exige pipeline antes de atribuir e falha do Bitrix não deixa atendimento assumido', async () => {
   for (const body of [{}, { withoutPipeline: true }, { pipelineId: -1 }, { pipelineId: 0 }]) {
     const eventos = [];
@@ -138,8 +163,9 @@ test('filtra todas as páginas antes de paginar resultados e combina histórico 
   assert.equal(res.payload.pagination.total, 1);
 });
 
-test('interface exige pipeline no cadastro e não oferece assumir sem pipeline', () => {
-  assert.doesNotMatch(frontend, /Assumir sem pipeline|data-without-pipeline|Sem pipeline por enquanto/);
+test('interface exige pipeline no cadastro e restringe assumir sem pipeline a mensagens do cliente', () => {
+  assert.match(frontend, /if \(allowWithoutPipeline\)/);
+  assert.match(frontend, /allowWithoutPipeline: Pipeline.canAssumeWithoutPipeline\(state.conversation\)/);
   const ctx = vm.createContext({ Pipeline, state: { manualContact: true }, refs: {
     manualContactName: { value: 'Cliente' }, manualContactPhone: { value: '65999999999' },
     newChannel: { value: '1' }, newPipeline: { value: '' }, contactSubmit: {}

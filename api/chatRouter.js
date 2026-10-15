@@ -1884,7 +1884,9 @@ router.post('/conversations/:id/claim', asyncRoute(async (req, res) => {
   impedirReassumirAtendimento(atual, req.atendente);
   const possuiPipeline = (atual?.bitrixPipelines || []).some((link) => link.dealId);
   const pipelineInformado = req.body?.pipelineId !== undefined && req.body?.pipelineId !== null && req.body.pipelineId !== '';
-  if (req.body?.withoutPipeline === true || (pipelineInformado && pipelineId === null) || (!possuiPipeline && pipelineId === null)) {
+  const semPipeline = req.body?.withoutPipeline === true;
+  const permiteSemPipeline = semPipeline && Pipeline.canAssumeWithoutPipeline(conversation);
+  if ((semPipeline && (!permiteSemPipeline || pipelineInformado)) || (pipelineInformado && pipelineId === null) || (!possuiPipeline && pipelineId === null && !permiteSemPipeline)) {
     return res.status(400).json({ erro: 'Selecione um pipeline do Bitrix antes de assumir o atendimento.' });
   }
   if (pipelineId !== null) {
@@ -1893,6 +1895,9 @@ router.post('/conversations/:id/claim', asyncRoute(async (req, res) => {
   }
   impedirReassumirAtendimento(obterAtribuicaoConversa(conversation), req.atendente);
   const assignment = atribuirGrupoConversa(conversation, { acao: 'CLAIM', ator: req.atendente, destino: req.atendente });
+  if (permiteSemPipeline && !possuiPipeline) {
+    idsRelacionadosConversa(conversation).forEach((relatedId) => atendentes.marcarConversaSemPipeline(relatedId));
+  }
   const ultimoEvento = assignment?.historico?.[assignment.historico.length - 1];
   const internalMessage = mensagemInternaAtribuicao(ultimoEvento, conversationId);
   let readConfirmed = false;

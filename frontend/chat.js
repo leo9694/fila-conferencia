@@ -2288,12 +2288,19 @@
     loadConversations();
   }
 
-  function choosePipeline({ title = 'Selecionar pipeline', description = '' } = {}) {
+  function choosePipeline({ title = 'Selecionar pipeline', description = '', allowWithoutPipeline = false } = {}) {
     return new Promise((resolve) => {
       const modal = document.createElement('div');
       modal.className = 'chat-agent-modal';
       modal.innerHTML = `<form class="chat-agent-dialog"><header><div><span>BITRIX</span><h2>${escapeHtml(title)}</h2></div><button type="button" data-close aria-label="Fechar">×</button></header>${description ? `<p>${escapeHtml(description)}</p>` : ''}<label>Pipeline<select required><option value="">Carregando pipelines...</option></select></label><p class="chat-agent-feedback"></p><footer><button type="button" data-close>Cancelar</button><button type="submit">Confirmar pipeline</button></footer></form>`;
       const select = modal.querySelector('select');
+      if (allowWithoutPipeline) {
+        const skip = document.createElement('button');
+        skip.type = 'button';
+        skip.textContent = 'Assumir sem pipeline';
+        skip.addEventListener('click', () => finish({ withoutPipeline: true }));
+        modal.querySelector('footer').prepend(skip);
+      }
       let settled = false;
       const finish = (value) => { if (settled) return; settled = true; modal.remove(); resolve(value); };
       modal.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', () => finish(null)));
@@ -2325,7 +2332,10 @@
       ? { pipelineId: options.pipelineId }
       : await choosePipeline({
         title: 'Assumir atendimento',
-        description: 'Selecione um pipeline do Bitrix para assumir este atendimento.'
+        description: Pipeline.canAssumeWithoutPipeline(state.conversation)
+          ? 'O cliente enviou uma mensagem. Você pode assumir sem pipeline até identificar o motivo do contato.'
+          : 'Selecione um pipeline do Bitrix para assumir este atendimento.',
+        allowWithoutPipeline: Pipeline.canAssumeWithoutPipeline(state.conversation)
       });
     if (!choice) return null;
     try {
@@ -2346,7 +2356,7 @@
       renderUnreadAlert();
       const feedback = replacingAgent
         ? 'Atendimento assumido e registrado no histórico interno.'
-        : 'Atendimento assumido e card do Bitrix vinculado.';
+        : choice.withoutPipeline ? 'Atendimento assumido sem pipeline.' : 'Atendimento assumido e card do Bitrix vinculado.';
       setFeedback(feedback);
       return conversation;
     } catch (error) {

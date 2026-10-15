@@ -30,5 +30,10 @@
     return [...values.values()].sort((a, b) => a.name.localeCompare(b.name, 'pt-BR'));
   }
 
-  return { id, matches, options };
+  function canAssumeWithoutPipeline(conversation = {}) {
+    const window = conversation.serviceWindow || conversation.metaWindow || {};
+    return window.canSendFreeform === true;
+  }
+
+  return { id, matches, options, canAssumeWithoutPipeline };
 }));
