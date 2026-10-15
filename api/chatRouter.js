@@ -1823,8 +1823,15 @@ router.post('/conversations/:id/sankhya-link', asyncRoute(async (req, res) => {
     expiresAt: Date.now() + CADASTRO_SANKHYA_CACHE_MS,
     cadastro: cadastroSankhya
   });
+  idsRelacionadosConversa(conversation).forEach((conversationId) => {
+    if (atendentes.obterConversa(conversationId)?.contatoAvulso === true) {
+      atendentes.marcarConversaAvulsa(conversationId, false);
+    }
+  });
+  const atualizada = { ...comAtribuicao(conversation), cadastroSankhya };
+  eventosAtendimento.emit('updated', { conversation: atualizada });
   res.json({
-    conversation: { ...conversation, cadastroSankhya },
+    conversation: atualizada,
     vinculo: { ...vinculo, codParc, nomeParc: resultado.parceiro.nome }
   });
 }));

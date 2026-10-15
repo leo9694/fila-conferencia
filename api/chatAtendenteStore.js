@@ -166,13 +166,13 @@ function criarChatAtendenteStore(options = {}) {
     return obterConversa(chave);
   }
 
-  function marcarConversaAvulsa(id) {
+  function marcarConversaAvulsa(id, avulso = true) {
     const chave = normalizarConversa(id);
     if (!chave) throw new TypeError('Conversa inválida.');
     const atual = state.conversas[chave] || {};
     state.conversas[chave] = {
       ...atual,
-      contatoAvulso: true,
+      contatoAvulso: avulso === true,
       atualizadoEm: new Date().toISOString()
     };
     persistir();

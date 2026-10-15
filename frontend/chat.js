@@ -1507,7 +1507,7 @@
       } else {
         refs.sankhyaData.classList.remove('is-verified');
         refs.sankhyaData.innerHTML = item.contatoAvulso === true
-          ? '<strong>Contato avulso</strong><p>Este contato foi criado sem vínculo com o Sankhya.</p>'
+          ? '<strong>Contato avulso</strong><p>Este contato foi criado sem vínculo com o Sankhya.</p><button type="button" class="chat-link-partner-button" data-chat-link-partner><i data-lucide="link" aria-hidden="true"></i>Vincular cliente Sankhya</button>'
           : '<strong>Telefone não localizado no Sankhya</strong><p>Este número não está vinculado a um parceiro ou contato ativo.</p><button type="button" class="chat-link-partner-button" data-chat-link-partner><i data-lucide="link" aria-hidden="true"></i>Vincular parceiro</button>';
       }
     }
@@ -3027,7 +3027,7 @@
   }
 
   function openLinkPartner() {
-    if (!state.conversationId || sankhyaCadastro(state.conversation) || state.conversation?.contatoAvulso === true) return;
+    if (!state.conversationId || sankhyaCadastro(state.conversation)) return;
     state.linkPartnerSearchToken += 1;
     resetLinkPartnerSelection();
     refs.linkPartnerSearch.value = '';
