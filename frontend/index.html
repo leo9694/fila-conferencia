@@ -15,7 +15,7 @@
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
   <link rel="stylesheet" href="/transporte-dashboard.css?v=20260917-9">
-  <link rel="stylesheet" href="/chat.css?v=20261008-1">
+  <link rel="stylesheet" href="/chat.css?v=20261015-1">
   <link rel="stylesheet" href="/chat-theme.css?v=20261002-3">
   <link rel="stylesheet" href="/rastreio-produto.css?v=20261005-5">
   <link rel="stylesheet" href="/diario-bordo.css?v=20261008-3">
@@ -12787,7 +12787,7 @@
           <div class="chat-panel-title">
             <div><strong>Conversas</strong><span id="chat-conversation-count">0</span></div>
             <div class="chat-panel-actions">
-              <button id="chat-agent-filter-toggle" type="button" aria-label="Filtrar por atendente" title="Filtrar por atendente" aria-expanded="false" hidden>
+              <button id="chat-agent-filter-toggle" type="button" aria-label="Filtrar por atendente e pipeline" title="Filtrar conversas" aria-expanded="false" hidden>
                 <i data-lucide="list-filter" aria-hidden="true"></i>
               </button>
               <button id="chat-profile-open" type="button" aria-label="Meu perfil de atendimento" title="Meu perfil">
@@ -12817,6 +12817,14 @@
                 <i data-lucide="x" aria-hidden="true"></i>
               </button>
             </div>
+            <label class="chat-pipeline-filter-label" for="chat-pipeline-filter">Pipeline do Bitrix</label>
+            <div><select id="chat-pipeline-filter"><option value="">Todos os pipelines</option></select></div>
+            <label class="chat-pipeline-filter-label" for="chat-pipeline-scope">Pesquisar vínculo</label>
+            <div><select id="chat-pipeline-scope">
+              <option value="all">Atual e histórico</option>
+              <option value="current">Somente atual</option>
+              <option value="history">Somente histórico</option>
+            </select></div>
           </div>
           <label class="chat-search" for="chat-search-input">
             <i data-lucide="search" aria-hidden="true"></i>
@@ -13070,11 +13078,11 @@
             <option value="">Carregando números...</option>
           </select>
         </label>
-        <label class="chat-pipeline-field" id="chat-new-pipeline-field">Pipeline do Bitrix <small>(opcional)</small>
-          <select id="chat-new-pipeline">
-            <option value="">Sem pipeline por enquanto</option>
+        <label class="chat-pipeline-field" id="chat-new-pipeline-field">Pipeline do Bitrix <small>(obrigatório)</small>
+          <select id="chat-new-pipeline" required>
+            <option value="">Selecione um pipeline...</option>
           </select>
-          <small>Se escolher um pipeline, um card será criado automaticamente. Você também poderá vinculá-lo depois.</small>
+          <small>Selecione um pipeline para criar o card no Bitrix e iniciar o atendimento.</small>
         </label>
       </div>
       <footer><button id="chat-contact-cancel" class="chat-contact-cancel" type="button">Cancelar</button><span id="chat-contact-feedback"></span><button id="chat-contact-submit" type="submit" disabled><i data-lucide="file-plus-2" aria-hidden="true"></i>Criar e escolher template</button></footer>
@@ -13346,7 +13354,8 @@
   <script src="whatsapp-call-core.js?v=20260909-1"></script>
   <script src="whatsapp-call.js?v=20261008-rollback-1"></script>
   <script src="chat-dom.js?v=20260909-1"></script>
-  <script src="chat.js?v=20261008-rollback-1"></script>
+  <script src="chat-pipeline.js?v=20261015-1"></script>
+  <script src="chat.js?v=20261015-1"></script>
   <script src="rastreio-produto.js?v=20261005-4"></script>
   <script src="diario-bordo-quilometragem.js?v=20261007-2"></script>
   <script src="diario-bordo.js?v=20261008-3"></script>

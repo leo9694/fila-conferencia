@@ -2,7 +2,8 @@
   'use strict';
 
   const Core = window.ChatCore;
-  if (!Core) return;
+  const Pipeline = window.ChatPipeline;
+  if (!Core || !Pipeline) return;
 
   const MESSAGE_PAGE_SIZE = 20;
   const MESSAGE_SCROLL_THRESHOLD = 80;
@@ -26,6 +27,7 @@
     clearFilters: byId('chat-clear-filters'),
     agentFilterToggle: byId('chat-agent-filter-toggle'), agentFilter: byId('chat-agent-filter'),
     agentFilterSelect: byId('chat-agent-filter-select'), agentFilterClear: byId('chat-agent-filter-clear'),
+    pipelineFilter: byId('chat-pipeline-filter'), pipelineScope: byId('chat-pipeline-scope'),
     refresh: byId('chat-refresh'), newContact: byId('chat-new-contact'), more: byId('chat-load-more'), empty: byId('chat-empty-state'),
     active: byId('chat-active-view'), messages: byId('chat-message-list'), input: byId('chat-message-input'),
     form: byId('chat-composer'), send: byId('chat-send'), feedback: byId('chat-composer-feedback'),
@@ -94,6 +96,7 @@
     recordingStartedAt: 0, recordingTimer: null, pendingUpload: null, loadToken: 0, activeLoadToken: 0,
     activeRefreshToken: 0,
     totalConversations: 0, assignment: 'ALL', agentId: '', unreadOnly: false, access: null, profile: null, agents: [],
+    pipelineId: '', pipelineScope: 'all', filterPipelines: [],
     hiddenConversationIds: new Set(), selectedPartner: null, manualContact: false, partnerSearchToken: 0,
     linkPartner: null, linkPartnerSearchToken: 0, pipelines: [], pipelinesPromise: null,
     mediaZoom: 1, replyingTo: null, conversationCache: new Map(),
@@ -226,11 +229,19 @@
       labels.push(`Atendente: ${agent?.name || state.agentId}`);
     }
     if (state.search) labels.push(`Busca: ${state.search}`);
+    if (state.pipelineId !== '') {
+      const pipeline = state.filterPipelines.find((item) => String(item.categoryId) === state.pipelineId);
+      labels.push(`Pipeline: ${pipeline?.name || state.pipelineId} (${state.pipelineScope === 'history' ? 'histórico' : state.pipelineScope === 'current' ? 'atual' : 'atual e histórico'})`);
+    }
     refs.activeFilters.hidden = labels.length === 0;
     refs.activeFiltersText.textContent = labels.length ? `Filtros ativos: ${labels.join(' · ')}` : '';
   }
 
   function clearConversationFilters() {
+    state.pipelineId = '';
+    state.pipelineScope = 'all';
+    if (refs.pipelineFilter) refs.pipelineFilter.value = '';
+    if (refs.pipelineScope) refs.pipelineScope.value = 'all';
     state.search = '';
     state.status = '';
     state.assignment = 'ALL';
@@ -406,6 +417,7 @@
   }
 
   function matchesAssignment(item = {}) {
+    if (!Pipeline.matches(item, state.pipelineId, state.pipelineScope)) return false;
     const assigned = assignedUser(item);
     if (state.agentId) return Boolean(assigned && assigned.id === String(state.agentId));
     if (state.assignment === 'ALL') return true;
@@ -632,9 +644,9 @@
     return state.pipelinesPromise;
   }
 
-  function fillPipelineSelect(select, selected = '', { allowEmpty = false } = {}) {
+  function fillPipelineSelect(select, selected = '') {
     if (!select) return;
-    select.innerHTML = `<option value="">${allowEmpty ? 'Sem pipeline por enquanto' : 'Selecione um pipeline...'}</option>` + state.pipelines.map((pipeline) =>
+    select.innerHTML = '<option value="">Selecione um pipeline...</option>' + state.pipelines.map((pipeline) =>
       `<option value="${escapeHtml(pipeline.categoryId)}"${String(pipeline.categoryId) === String(selected) ? ' selected' : ''}>${escapeHtml(pipeline.name)}</option>`
     ).join('');
   }
@@ -710,7 +722,7 @@
     const contatoValido = state.manualContact
       ? Boolean(refs.manualContactName?.value.trim() && refs.manualContactPhone?.value.trim())
       : Boolean(state.selectedPartner && refs.partnerContact.value);
-    refs.contactSubmit.disabled = !contatoValido || !refs.newChannel?.value;
+    refs.contactSubmit.disabled = !contatoValido || !refs.newChannel?.value || Pipeline.id(refs.newPipeline?.value) === null;
   }
 
   function renderConversationSkeleton() {
@@ -992,7 +1004,7 @@
     renderActiveFilters();
     const requestedPage = state.page;
     const token = ++state.loadToken;
-    const listKey = JSON.stringify([state.profile?.id, state.selectedChannelId, state.search, state.status, state.assignment, state.agentId, state.unreadOnly]);
+    const listKey = JSON.stringify([state.profile?.id, state.selectedChannelId, state.search, state.status, state.assignment, state.agentId, state.unreadOnly, state.pipelineId, state.pipelineScope]);
     if (!append && !state.conversations.length) {
       const cachedList = conversationListCache.get(listKey);
       if (cachedList) {
@@ -1012,6 +1024,7 @@
       query.set('assignment', state.assignment);
       if (state.unreadOnly) query.set('unreadOnly', 'true');
       if (state.agentId) query.set('agentId', state.agentId);
+      if (state.pipelineId !== '') { query.set('pipelineId', state.pipelineId); query.set('pipelineScope', state.pipelineScope); }
       const payload = await api(`/conversations?${query}`);
       if (token !== state.loadToken) return;
       const received = Array.isArray(payload?.data) ? payload.data : [];
@@ -2206,6 +2219,7 @@
     refs.agentFilter.hidden = !opening;
     refs.agentFilterToggle.setAttribute('aria-expanded', String(opening));
     if (!opening) return;
+    loadPipelineFilterOptions();
     if (!state.agents.length) {
       refs.agentFilterSelect.disabled = true;
       refs.agentFilterSelect.innerHTML = '<option>Carregando atendentes...</option>';
@@ -2223,7 +2237,7 @@
   function applyAgentFilter(agentId = '') {
     state.agentId = String(agentId || '');
     refs.agentFilterClear.hidden = !state.agentId;
-    refs.agentFilterToggle.classList.toggle('is-active', Boolean(state.agentId));
+    refs.agentFilterToggle.classList.toggle('is-active', Boolean(state.agentId || state.pipelineId !== ''));
     const selected = state.agents.find((agent) => String(agent.id) === state.agentId);
     refs.agentFilterToggle.title = selected ? `Atendente: ${selected.name}` : 'Filtrar por atendente';
     state.assignment = 'ALL';
@@ -2255,17 +2269,35 @@
     }
   }
 
-  function choosePipeline({ allowNone = false, title = 'Selecionar pipeline', description = '' } = {}) {
+  async function loadPipelineFilterOptions() {
+    refs.pipelineFilter.disabled = true;
+    try {
+      const payload = await api('/bitrix/pipelines?history=1');
+      state.filterPipelines = payload.filterPipelines || payload.pipelines || [];
+      refs.pipelineFilter.innerHTML = '<option value="">Todos os pipelines</option>' + state.filterPipelines.map((item) => `<option value="${escapeHtml(item.categoryId)}">${escapeHtml(item.name)}</option>`).join('');
+      refs.pipelineFilter.value = state.pipelineId;
+    } catch (error) { setFeedback(error.message, true); }
+    finally { refs.pipelineFilter.disabled = false; }
+  }
+
+  function applyPipelineFilter() {
+    state.pipelineId = refs.pipelineFilter.value;
+    state.pipelineScope = refs.pipelineScope.value;
+    refs.agentFilterToggle.classList.toggle('is-active', Boolean(state.agentId || state.pipelineId !== ''));
+    state.page = 1;
+    loadConversations();
+  }
+
+  function choosePipeline({ title = 'Selecionar pipeline', description = '' } = {}) {
     return new Promise((resolve) => {
       const modal = document.createElement('div');
       modal.className = 'chat-agent-modal';
-      modal.innerHTML = `<form class="chat-agent-dialog"><header><div><span>BITRIX</span><h2>${escapeHtml(title)}</h2></div><button type="button" data-close aria-label="Fechar">×</button></header>${description ? `<p>${escapeHtml(description)}</p>` : ''}<label>Pipeline<select required><option value="">Carregando pipelines...</option></select></label><p class="chat-agent-feedback"></p><footer><button type="button" data-close>Cancelar</button>${allowNone ? '<button type="button" class="is-light" data-without-pipeline>Assumir sem pipeline</button>' : ''}<button type="submit">Confirmar pipeline</button></footer></form>`;
+      modal.innerHTML = `<form class="chat-agent-dialog"><header><div><span>BITRIX</span><h2>${escapeHtml(title)}</h2></div><button type="button" data-close aria-label="Fechar">×</button></header>${description ? `<p>${escapeHtml(description)}</p>` : ''}<label>Pipeline<select required><option value="">Carregando pipelines...</option></select></label><p class="chat-agent-feedback"></p><footer><button type="button" data-close>Cancelar</button><button type="submit">Confirmar pipeline</button></footer></form>`;
       const select = modal.querySelector('select');
       let settled = false;
       const finish = (value) => { if (settled) return; settled = true; modal.remove(); resolve(value); };
       modal.querySelectorAll('[data-close]').forEach((button) => button.addEventListener('click', () => finish(null)));
       modal.addEventListener('click', (event) => { if (event.target === modal) finish(null); });
-      modal.querySelector('[data-without-pipeline]')?.addEventListener('click', () => finish({ withoutPipeline: true }));
       modal.querySelector('form').addEventListener('submit', (event) => {
         event.preventDefault();
         if (select.value === '') return;
@@ -2287,14 +2319,13 @@
       return null;
     }
     const replacingAgent = Boolean(assignedUser(state.conversation));
-    const choice = replacingAgent
+    const choice = pipelineLinks(state.conversation).some((link) => link.dealId)
       ? {}
       : options.prompt === false
       ? { pipelineId: options.pipelineId }
       : await choosePipeline({
-        allowNone: true,
         title: 'Assumir atendimento',
-        description: 'Selecione um pipeline para criar o card no Bitrix ou assuma sem pipeline para vincular depois.'
+        description: 'Selecione um pipeline do Bitrix para assumir este atendimento.'
       });
     if (!choice) return null;
     try {
@@ -2315,12 +2346,8 @@
       renderUnreadAlert();
       const feedback = replacingAgent
         ? 'Atendimento assumido e registrado no histórico interno.'
-        : conversation.bitrixError
-          ? `Atendimento assumido. O pipeline ficou pendente: ${conversation.bitrixError}`
-          : choice.withoutPipeline
-            ? 'Atendimento assumido sem pipeline. Vincule-o depois nos dados do contato.'
-            : 'Atendimento assumido e card do Bitrix vinculado.';
-      setFeedback(feedback, Boolean(conversation.bitrixError));
+        : 'Atendimento assumido e card do Bitrix vinculado.';
+      setFeedback(feedback);
       return conversation;
     } catch (error) {
       setFeedback(error.message, true);
@@ -2967,7 +2994,7 @@
     if (refs.newPipeline) {
       refs.newPipeline.innerHTML = '<option value="">Carregando pipelines...</option>';
       loadPipelines().then(() => {
-        fillPipelineSelect(refs.newPipeline, '', { allowEmpty: true });
+        fillPipelineSelect(refs.newPipeline);
         updateNewContactSubmit();
       }).catch((error) => {
         refs.newPipeline.innerHTML = '<option value="">Pipelines indisponíveis</option>';
@@ -3115,7 +3142,7 @@
     const manualContact = state.manualContact === true;
     const nome = refs.manualContactName?.value.trim() || '';
     const telefone = refs.manualContactPhone?.value.trim() || '';
-    if (!Number.isInteger(channelId) || (manualContact ? !nome || !telefone : !Number.isInteger(codParc) || !contactKey)) return;
+    if (Pipeline.id(pipelineValue) === null || !Number.isInteger(channelId) || (manualContact ? !nome || !telefone : !Number.isInteger(codParc) || !contactKey)) return;
     const pipelineId = pipelineValue === '' ? null : Number(pipelineValue);
     refs.contactSubmit.disabled = true;
     refs.contactFeedback.textContent = 'Criando contato...';
@@ -3140,7 +3167,6 @@
       // Versões anteriores do backend exigiam uma segunda chamada para assumir.
       // Mantém o fallback sem atrasar o fluxo normal, que já retorna atribuído.
       if (!assignedUser(state.conversation)) await claimConversation(created.id, { prompt: false, pipelineId });
-      if (result.bitrixError) setFeedback(`Conversa criada, mas o card do Bitrix ficou pendente: ${result.bitrixError}`, true);
       if (ownsConversation()) openTemplates();
     } catch (error) {
       refs.contactFeedback.textContent = error.message || 'Não foi possível criar a conversa.';
@@ -3326,12 +3352,14 @@
     refs.agentFilterToggle?.addEventListener('click', (event) => { event.stopPropagation(); toggleAgentFilter(); });
     refs.agentFilter?.addEventListener('click', (event) => event.stopPropagation());
     refs.agentFilterSelect?.addEventListener('change', () => applyAgentFilter(refs.agentFilterSelect.value));
+    refs.pipelineFilter?.addEventListener('change', applyPipelineFilter);
+    refs.pipelineScope?.addEventListener('change', applyPipelineFilter);
     refs.agentFilterClear?.addEventListener('click', () => { refs.agentFilterSelect.value = ''; applyAgentFilter(''); });
     refs.newContact.addEventListener('click', openNewContact);
     refs.more.addEventListener('click', () => { state.page += 1; loadConversations({ append: true }); });
     refs.list.addEventListener('scroll', loadMoreConversationsIfNeeded, { passive: true });
     refs.search.addEventListener('input', Core.debounce(() => { state.search = refs.search.value.trim(); state.page = 1; loadConversations(); }, 350));
-    refs.filters.addEventListener('click', (event) => { const button = event.target.closest('[data-chat-assignment]'); if (!button) return; refs.filters.querySelectorAll('button').forEach((item) => item.classList.toggle('is-active', item === button)); state.assignment = button.dataset.chatAssignment; state.agentId = ''; if (refs.agentFilterSelect) refs.agentFilterSelect.value = ''; if (refs.agentFilterClear) refs.agentFilterClear.hidden = true; refs.agentFilterToggle?.classList.remove('is-active'); state.page = 1; loadConversations(); });
+    refs.filters.addEventListener('click', (event) => { const button = event.target.closest('[data-chat-assignment]'); if (!button) return; refs.filters.querySelectorAll('button').forEach((item) => item.classList.toggle('is-active', item === button)); state.assignment = button.dataset.chatAssignment; state.agentId = ''; if (refs.agentFilterSelect) refs.agentFilterSelect.value = ''; if (refs.agentFilterClear) refs.agentFilterClear.hidden = true; refs.agentFilterToggle?.classList.toggle('is-active', state.pipelineId !== ''); state.page = 1; loadConversations(); });
     refs.mobileBack.addEventListener('click', () => {
       if (history.state?.tela === 'chat' && history.state?.conversationId) history.back();
       else showConversationList({ replaceHistory: true });
@@ -3516,6 +3544,9 @@
     state.totalPages = 1;
     state.totalConversations = 0;
     state.agentId = '';
+    state.pipelineId = '';
+    state.pipelineScope = 'all';
+    state.filterPipelines = [];
     state.unreadOnly = false;
     state.access = null;
     state.profile = null;

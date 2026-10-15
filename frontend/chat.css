@@ -39,6 +39,7 @@
 .chat-agent-filter { margin:0 12px 9px; padding:8px 9px; border:1px solid #d3e2df; border-radius:10px; background:#f3f9f7; }
 .chat-agent-filter[hidden] { display:none; }
 .chat-agent-filter>label { display:block; margin-bottom:4px; color:#58717b; font-size:.62rem; font-weight:800; text-transform:uppercase; }
+.chat-agent-filter>label.chat-pipeline-filter-label { margin-top:10px; }
 .chat-agent-filter>div { display:flex; align-items:center; gap:5px; }
 .chat-agent-filter select { flex:1; min-width:0; height:32px; padding:0 28px 0 9px; border:1px solid #c9dcd8; border-radius:8px; background:#fff; color:#274752; font-size:.7rem; font-weight:700; outline:0; }
 .chat-agent-filter select:focus { border-color:#20a88e; box-shadow:0 0 0 2px rgba(32,168,142,.1); }

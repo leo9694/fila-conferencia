@@ -3,6 +3,7 @@ const multer = require('multer');
 const { EventEmitter } = require('node:events');
 const whatsappApi = require('./whatsappApi');
 const bitrixService = require('./bitrixService');
+const Pipeline = require('../frontend/chat-pipeline');
 const { executeQuery, executeService } = require('./sankhyaApi');
 const { criarChatAtendenteStore } = require('./chatAtendenteStore');
 const { criarChatSetoresStore } = require('./chatSetoresStore');
@@ -13,6 +14,7 @@ const atendentes = criarChatAtendenteStore();
 const setoresChamadas = criarChatSetoresStore();
 const { configurarUra } = require('./chatUra');
 const configurandoUra = new Set();
+const vinculandoPipelines = new Map();
 const eventosAtendimento = new EventEmitter();
 const CONTROLE_CHAMADA_TTL_MS = 4 * 60 * 60 * 1000;
 const ATRIBUICAO_SEM_INTERACAO_MS = 24 * 60 * 60 * 1000;
@@ -188,6 +190,7 @@ function acessoPermitido(usuario = {}) {
 }
 
 function conversaCorrespondeFiltroAtendente(conversa = {}, filtros = {}) {
+  if (!Pipeline.matches(conversa, filtros.pipelineId, filtros.pipelineScope)) return false;
   if (filtros.unreadOnly === true && Number(conversa.unreadCount || 0) <= 0) return false;
   const agentId = String(filtros.agentId || '').trim();
   const assignedId = String(conversa.assignment?.userId || '');
@@ -1172,7 +1175,17 @@ async function contatoBitrixDaConversa(conversa = {}) {
   return { contactId, cadastro, telefone, nome };
 }
 
-async function vincularPipelineBitrix(conversa, categoryId) {
+function vincularPipelineBitrix(conversa, categoryId) {
+  const conversationId = id(conversa.id);
+  const anterior = vinculandoPipelines.get(conversationId) || Promise.resolve();
+  const tarefa = anterior.catch(() => {}).then(() => criarOuReutilizarPipelineBitrix(conversa, categoryId));
+  vinculandoPipelines.set(conversationId, tarefa);
+  return tarefa.finally(() => {
+    if (vinculandoPipelines.get(conversationId) === tarefa) vinculandoPipelines.delete(conversationId);
+  });
+}
+
+async function criarOuReutilizarPipelineBitrix(conversa, categoryId) {
   const pipelineId = idPipelineBitrix(categoryId);
   if (pipelineId === null) throw new Error('Selecione um pipeline valido.');
   const conversationId = id(conversa.id);
@@ -1465,8 +1478,11 @@ router.get('/agents', asyncRoute(async (_req, res) => {
 }));
 
 router.get('/bitrix/pipelines', asyncRoute(async (req, res) => {
-  const pipelines = await listarPipelinesBitrix(req.query.refresh === '1');
-  res.json({ pipelines });
+  const history = req.query.history === '1';
+  let pipelines;
+  try { pipelines = await listarPipelinesBitrix(req.query.refresh === '1'); }
+  catch (error) { if (!history) throw error; pipelines = []; }
+  res.json({ pipelines, ...(history ? { filterPipelines: Pipeline.options(pipelines, Object.values(atendentes.state.conversas)) } : {}) });
 }));
 
 router.get('/partners', asyncRoute(async (req, res) => {
@@ -1556,7 +1572,10 @@ router.get('/conversations', asyncRoute(async (req, res) => {
   const busca = String(req.query.search || '').trim();
   const codParcBusca = /^\d+$/.test(busca) ? Number(busca) : null;
   const unreadOnly = ['1', 'true'].includes(String(req.query.unreadOnly || '').toLowerCase());
-  const filtroLocalAtivo = Boolean(agentId || assignment !== 'ALL' || codParcBusca || unreadOnly);
+  const pipelineId = idPipelineBitrix(req.query.pipelineId);
+  const pipelineScope = ['current', 'history'].includes(req.query.pipelineScope) ? req.query.pipelineScope : 'all';
+  if (req.query.pipelineId !== undefined && req.query.pipelineId !== '' && pipelineId === null) return res.status(400).json({ erro: 'Pipeline inválido.' });
+  const filtroLocalAtivo = Boolean(agentId || assignment !== 'ALL' || codParcBusca || unreadOnly || pipelineId !== null);
   const incluirTransferenciasEntreCanais = assignment === 'MINE' && !agentId && !unreadOnly;
   const parametros = {
     page: filtroLocalAtivo ? 1 : page,
@@ -1599,6 +1618,8 @@ router.get('/conversations', asyncRoute(async (req, res) => {
       assignment,
       agentId,
       unreadOnly,
+      pipelineId,
+      pipelineScope,
       currentAgentId: req.atendente.id
     });
   });
@@ -1637,7 +1658,7 @@ router.post('/conversations', asyncRoute(async (req, res) => {
     && req.body?.pipelineId !== null
     && String(req.body.pipelineId).trim() !== '';
   const requestedChannelId = String(req.body?.channelId ?? '').trim();
-  if (pipelineInformado && pipelineId === null) {
+  if (!pipelineInformado || pipelineId === null) {
     return res.status(400).json({ erro: 'Selecione um pipeline válido do Bitrix.' });
   }
   if (contatoAvulso) {
@@ -1688,23 +1709,17 @@ router.post('/conversations', asyncRoute(async (req, res) => {
   atendentes.revelarConversa(req.usuario.codUsu, chavesIdentidadeConversa(conversation));
   const atribuicaoAtual = comAtribuicao(conversation).assignment;
   let atribuicaoCriada = null;
+  try {
+    await vincularPipelineBitrix(conversation, pipelineId);
+  } catch (error) {
+    return res.status(502).json({ erro: 'Não foi possível vincular o pipeline no Bitrix. A conversa não foi assumida.', detalhes: error.message });
+  }
   if (!atribuicaoAtual) {
     atribuicaoCriada = atendentes.atribuirConversa(conversation.id, {
       acao: 'START',
       ator: req.atendente,
       destino: req.atendente
     });
-  }
-  let bitrixError = '';
-  if (pipelineId !== null) {
-    try {
-      await vincularPipelineBitrix(conversation, pipelineId);
-    } catch (error) {
-      bitrixError = error.message || 'Não foi possível criar o card no Bitrix.';
-      atendentes.marcarPipelinePendente(conversation.id, bitrixError);
-    }
-  } else if (!resposta.reused) {
-    atendentes.marcarConversaSemPipeline(conversation.id);
   }
   const conversationWithAssignment = comAtribuicao(conversation);
   if (atribuicaoCriada) {
@@ -1720,7 +1735,6 @@ router.post('/conversations', asyncRoute(async (req, res) => {
   res.status(existente ? 200 : 201).json({
     ...resposta,
     conversation: conversationWithAssignment,
-    bitrixError,
     selectedContact: contatoAvulso
       ? { ...contato, avulso: true }
       : { ...contato, codParc, parceiro: resultado.parceiro.nome }
@@ -1859,23 +1873,21 @@ router.post('/conversations/:id/claim', asyncRoute(async (req, res) => {
   const conversationId = id(req.params.id);
   const conversation = await obterConversaConsolidada(conversationId);
   const pipelineId = idPipelineBitrix(req.body?.pipelineId);
-  const withoutPipeline = req.body?.withoutPipeline === true;
   const atual = obterAtribuicaoConversa(conversation);
   impedirReassumirAtendimento(atual, req.atendente);
+  const possuiPipeline = (atual?.bitrixPipelines || []).some((link) => link.dealId);
+  const pipelineInformado = req.body?.pipelineId !== undefined && req.body?.pipelineId !== null && req.body.pipelineId !== '';
+  if (req.body?.withoutPipeline === true || (pipelineInformado && pipelineId === null) || (!possuiPipeline && pipelineId === null)) {
+    return res.status(400).json({ erro: 'Selecione um pipeline do Bitrix antes de assumir o atendimento.' });
+  }
+  if (pipelineId !== null) {
+    try { await vincularPipelineBitrix(conversation, pipelineId); }
+    catch (error) { return res.status(502).json({ erro: 'Não foi possível vincular o pipeline. O atendimento não foi assumido.', detalhes: error.message }); }
+  }
+  impedirReassumirAtendimento(obterAtribuicaoConversa(conversation), req.atendente);
   const assignment = atribuirGrupoConversa(conversation, { acao: 'CLAIM', ator: req.atendente, destino: req.atendente });
   const ultimoEvento = assignment?.historico?.[assignment.historico.length - 1];
   const internalMessage = mensagemInternaAtribuicao(ultimoEvento, conversationId);
-  let bitrixError = '';
-  if (pipelineId !== null) {
-    try {
-      await vincularPipelineBitrix(conversation, pipelineId);
-    } catch (error) {
-      bitrixError = error.message || 'Não foi possível criar o card no Bitrix.';
-      atendentes.marcarPipelinePendente(conversationId, bitrixError);
-    }
-  } else if (withoutPipeline || !(atual?.bitrixPipelines || []).length) {
-    atendentes.marcarPipelinePendente(conversationId, 'Atendimento assumido sem pipeline.');
-  }
   let readConfirmed = false;
   try {
     await marcarGrupoConversaComoLida(conversationId);
@@ -1886,8 +1898,7 @@ router.post('/conversations/:id/claim', asyncRoute(async (req, res) => {
   const resultado = {
     ...comAtribuicao(conversation),
     internalMessage,
-    readConfirmed,
-    ...(bitrixError ? { bitrixError } : {})
+    readConfirmed
   };
   eventosAtendimento.emit('assignment', { conversationId, conversation: resultado, assignment, internalMessage });
   res.json(resultado);
