@@ -1175,17 +1175,17 @@ async function contatoBitrixDaConversa(conversa = {}) {
   return { contactId, cadastro, telefone, nome };
 }
 
-function vincularPipelineBitrix(conversa, categoryId) {
+function vincularPipelineBitrix(conversa, categoryId, nomeUsuario) {
   const conversationId = id(conversa.id);
   const anterior = vinculandoPipelines.get(conversationId) || Promise.resolve();
-  const tarefa = anterior.catch(() => {}).then(() => criarOuReutilizarPipelineBitrix(conversa, categoryId));
+  const tarefa = anterior.catch(() => {}).then(() => criarOuReutilizarPipelineBitrix(conversa, categoryId, nomeUsuario));
   vinculandoPipelines.set(conversationId, tarefa);
   return tarefa.finally(() => {
     if (vinculandoPipelines.get(conversationId) === tarefa) vinculandoPipelines.delete(conversationId);
   });
 }
 
-async function criarOuReutilizarPipelineBitrix(conversa, categoryId) {
+async function criarOuReutilizarPipelineBitrix(conversa, categoryId, nomeUsuario) {
   const pipelineId = idPipelineBitrix(categoryId);
   if (pipelineId === null) throw new Error('Selecione um pipeline valido.');
   const conversationId = id(conversa.id);
@@ -1210,12 +1210,18 @@ async function criarOuReutilizarPipelineBitrix(conversa, categoryId) {
   let dealId = existentes[0]?.ID || null;
   const dealTitle = `WhatsApp - ${contato.nome}`.slice(0, 255);
   if (!dealId) {
+    const usuarioBitrix = await bitrixService.buscarUsuarioPorNome(nomeUsuario);
+    const responsavelId = Number(usuarioBitrix?.ID);
+    if (!Number.isSafeInteger(responsavelId) || responsavelId <= 0) {
+      throw new Error('O Bitrix não retornou um responsável válido para o atendente.');
+    }
     const negocio = await bitrixService.criarNegocio({
       contactId: contato.contactId,
       fields: {
         TITLE: dealTitle,
         CATEGORY_ID: pipeline.categoryId,
         STAGE_ID: pipeline.stageId,
+        ASSIGNED_BY_ID: responsavelId,
         ORIGINATOR_ID: 'CHAT_APP',
         ORIGIN_ID: originId,
         COMMENTS: [
@@ -1710,7 +1716,7 @@ router.post('/conversations', asyncRoute(async (req, res) => {
   const atribuicaoAtual = comAtribuicao(conversation).assignment;
   let atribuicaoCriada = null;
   try {
-    await vincularPipelineBitrix(conversation, pipelineId);
+    await vincularPipelineBitrix(conversation, pipelineId, req.usuario?.nome || req.atendente.name);
   } catch (error) {
     return res.status(502).json({ erro: 'Não foi possível vincular o pipeline no Bitrix. A conversa não foi assumida.', detalhes: error.message });
   }
@@ -1890,7 +1896,7 @@ router.post('/conversations/:id/claim', asyncRoute(async (req, res) => {
     return res.status(400).json({ erro: 'Selecione um pipeline do Bitrix antes de assumir o atendimento.' });
   }
   if (pipelineId !== null) {
-    try { await vincularPipelineBitrix(conversation, pipelineId); }
+    try { await vincularPipelineBitrix(conversation, pipelineId, req.usuario?.nome || req.atendente.name); }
     catch (error) { return res.status(502).json({ erro: 'Não foi possível vincular o pipeline. O atendimento não foi assumido.', detalhes: error.message }); }
   }
   impedirReassumirAtendimento(obterAtribuicaoConversa(conversation), req.atendente);
@@ -1922,7 +1928,7 @@ router.post('/conversations/:id/bitrix-pipelines', asyncRoute(async (req, res) =
   if (pipelineId === null) return res.status(400).json({ erro: 'Selecione um pipeline válido.' });
   const conversation = await obterConversaConsolidada(conversationId);
   try {
-    const link = await vincularPipelineBitrix(conversation, pipelineId);
+    const link = await vincularPipelineBitrix(conversation, pipelineId, req.usuario?.nome || req.atendente.name);
     res.status(link.reused ? 200 : 201).json({ conversation: comAtribuicao(conversation), link });
   } catch (error) {
     atendentes.marcarPipelinePendente(conversationId, error.message);
