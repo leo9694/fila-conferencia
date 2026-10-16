@@ -10421,7 +10421,7 @@ function atualizarModoFilaConferencia() {
   botaoModoEntrada.setAttribute('aria-checked', entrada ? 'true' : 'false');
   botaoModoEntrada.setAttribute('aria-label', entrada ? 'Modo atual: conferência de entrada' : 'Modo atual: conferência de saída');
   filaModoTitulo.textContent = entrada ? 'Conferência de entrada' : 'Conferência de saída';
-  filaModoDescricao.textContent = entrada ? 'Recebimento de mercadorias' : notaSaida ? 'Conferência e confirmação de notas de venda · Base de teste' : 'Separação e expedição de pedidos';
+  filaModoDescricao.textContent = entrada ? 'Recebimento de mercadorias' : notaSaida ? 'Conferência e confirmação de notas de venda' : 'Separação e expedição de pedidos';
   filaModoIcone.setAttribute('data-lucide', entrada ? 'package-plus' : 'package-check');
   filaTituloOperacao.textContent = entrada ? 'Conferência de Entrada' : 'Fila de Conferência';
   if (filaPageTitle) filaPageTitle.textContent = entrada ? 'Fila de conferência de entrada' : 'Fila de conferência';

@@ -10,8 +10,7 @@ async function consultarNotaSaida({ nunota, executeQuery }) {
   return nota || null;
 }
 
-async function confirmarNotaSaidaTeste({ nunota, ambienteTeste, executeQuery, executeService }) {
-  if (ambienteTeste !== true) throw new Error('Confirmação de nota pela saída disponível somente na base de teste.');
+async function confirmarNotaSaidaTeste({ nunota, executeQuery, executeService }) {
   let nota = await consultarNotaSaida({ nunota, executeQuery });
   if (!nota || ![35, 10].includes(Number(nota.CODTIPOPER)) || nota.TIPMOV !== 'V') throw new Error('Nota de venda das TOPs 35 ou 10 não encontrada.');
   if (nota.STATUS_CONF !== 'F') throw new Error('Conclua a conferência da nota antes de confirmá-la.');

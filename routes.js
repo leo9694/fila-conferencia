@@ -119,7 +119,7 @@ const exigirGerenciaOuDiretoria = autorizacaoVendas.exigirAlgumGrupo(['Gerente',
 const APP_TIMEZONE = process.env.APP_TIMEZONE || 'America/Cuiaba';
 const SANKHYA_TIMEZONE = process.env.SANKHYA_TIMEZONE || 'America/Sao_Paulo';
 const TOPS_CONFERENCIA = Object.freeze({
-  saida: [5, 6, 237],
+  saida: [35, 10],
   entrada: [13, 21, 90]
 });
 const TOPS_ROMANEIO = Object.freeze([10, 35]);
@@ -206,7 +206,7 @@ function obterTopsConferencia(modo) {
 }
 
 function conferenciaSaidaPorNota(modo) {
-  return obterModoConferencia(modo) === 'saida' && ambienteSankhyaTeste();
+  return obterModoConferencia(modo) === 'saida';
 }
 
 function sqlTopsConferencia(modo) {
@@ -2593,8 +2593,9 @@ function montarSqlConferencias(intervalo, empresa) {
       ON ITE.NUNOTA = CAB.NUNOTA
     WHERE CAB.DTNEG >= TO_DATE('${intervalo.inicio}', 'YYYY-MM-DD')
       AND CAB.DTNEG < TO_DATE('${intervalo.fim}', 'YYYY-MM-DD') + 1
-      AND CAB.CODTIPOPER IN (5, 6, 237)
-      AND CAB.STATUSNOTA = 'L'
+      AND CAB.CODTIPOPER IN (${sqlTopsConferencia('saida')})
+      AND CAB.TIPMOV = 'V'
+      AND ((CAB.LIBCONF = 'S' AND CAB.STATUSNOTA IN ('A', 'P')) OR CONF.STATUS = 'F')
       ${sqlFiltroEmpresa(empresa)}
     GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.CODEMP, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA,
       CAB.AD_STATUSINTPED, CAB.AD_STATUSCOMERCIAL,
@@ -6836,7 +6837,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     }
 
     if (saidaPorNota && pedido.STATUS === 'F') {
-      const faturamento = await confirmarNotaSaidaTeste({ nunota, ambienteTeste: ambienteSankhyaTeste(), executeQuery, executeService });
+      const faturamento = await confirmarNotaSaidaTeste({ nunota, executeQuery, executeService });
       conferenciaProgressStore.remover(nunota);
       res.json({ ok: true, nunota, nuconf: Number(pedido.NUCONFATUAL), status: 'CONFERIDO', confirmacaoNota: true, faturamento });
       return;
@@ -7120,7 +7121,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       await atualizarRegistroApi('CabecalhoNota', { NUNOTA: nunota }, { NUCONFATUAL: nuconf });
       await finalizarConferenciaOperacional(nuconf, nunota, codUsu, pedido.QTDVOL);
       await preservarConferenteFinalizacao(nuconf, codUsu, dhInicioConferencia);
-      const faturamento = await confirmarNotaSaidaTeste({ nunota, ambienteTeste: ambienteSankhyaTeste(), executeQuery, executeService });
+      const faturamento = await confirmarNotaSaidaTeste({ nunota, executeQuery, executeService });
       conferenciaProgressStore.remover(nunota);
       res.json({ ok: true, nunota, nuconf, status: 'CONFERIDO', confirmacaoNota: true, cortesAplicados, faturamento });
       return;

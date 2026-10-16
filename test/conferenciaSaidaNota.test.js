@@ -13,14 +13,14 @@ function politica(teste) {
   return contexto;
 }
 
-test('apenas saída de teste usa notas TOP 35 e 10; produção e entrada permanecem iguais', () => {
+test('saída de produção e teste usa notas TOP 35 e 10 sem alterar entrada', () => {
   for (const teste of [false, true]) {
     const ctx = politica(teste);
     assert.equal(vm.runInContext("sqlTopsConferencia('entrada')", ctx), '13, 21, 90');
     assert.equal(vm.runInContext("tipoMovimentoConferencia('entrada')", ctx), 'C');
-    assert.equal(vm.runInContext("sqlTopsConferencia('saida')", ctx), teste ? '35, 10' : '5, 6, 237');
-    assert.equal(vm.runInContext("tipoMovimentoConferencia('saida')", ctx), teste ? 'V' : 'P');
-    if (!teste) assert.equal(vm.runInContext("condicaoStatusConferencia('saida')", ctx), "CAB.STATUSNOTA = 'L'");
+    assert.equal(vm.runInContext("sqlTopsConferencia('saida')", ctx), '35, 10');
+    assert.equal(vm.runInContext("tipoMovimentoConferencia('saida')", ctx), 'V');
+    assert.equal(vm.runInContext("condicaoStatusConferencia('saida')", ctx), "CAB.STATUSNOTA IN ('A', 'P', 'L')");
   }
 });
 
@@ -45,8 +45,20 @@ test('saída sem separação abre aviso e só inicia se o usuário optar por con
   assert.equal(ctx.iniciadas, 2);
 });
 
-test('separação na base de teste aceita TOP 35 e 10 somente com liberação para conferência', async () => {
-  const ctx = politica(true);
+test('acompanhamento da saída consulta notas TOP 35 e 10 liberadas e já conferidas', () => {
+  const ctx = politica(false);
+  ctx.sqlFiltroEmpresa = () => '';
+  vm.runInContext(fonte.slice(fonte.indexOf('function montarSqlConferencias('), fonte.indexOf("router.get('/empresas'")), ctx);
+  const sql = vm.runInContext("montarSqlConferencias({ inicio: '2026-10-15', fim: '2026-10-16' }, 1)", ctx);
+  assert.match(sql, /CAB.CODTIPOPER IN \(35, 10\)/);
+  assert.match(sql, /CAB.TIPMOV = 'V'/);
+  assert.match(sql, /CAB.LIBCONF = 'S'/);
+  assert.match(sql, /OR CONF.STATUS = 'F'/);
+  assert.doesNotMatch(sql, /IN \(5, 6, 237\)/);
+});
+
+test('separação na produção aceita TOP 35 e 10 somente com liberação para conferência', async () => {
+  const ctx = politica(false);
   vm.runInContext(fonte.slice(fonte.indexOf('async function garantirPedidoNaoConferidoParaSeparacao('), fonte.indexOf("router.post('/fila-conferencia/separacao/:nunota/iniciar'")), ctx);
   for (const top of [35, 10]) {
     ctx.executeQuery = async () => [{ CODTIPOPER: top, TIPMOV: 'V', STATUSNOTA: 'A', LIBCONF: 'S' }];
@@ -99,7 +111,7 @@ test('confirma a mesma nota pelo serviço nativo e verifica status real sem fatu
   for (const codTipOper of [35, 10]) {
     let confirmada = false;
     const chamadas = [];
-    const retorno = await confirmarNotaSaidaTeste({ nunota: 123, ambienteTeste: true,
+    const retorno = await confirmarNotaSaidaTeste({ nunota: 123, ambienteTeste: false,
       executeQuery: async (sql) => {
         assert.match(sql, /CAB.NUNOTA = 123 AND CAB.CODTIPOPER IN \(35, 10\)/);
         return [{ NUNOTA: 123, CODTIPOPER: codTipOper, TIPMOV: 'V', STATUSNOTA: confirmada ? 'L' : 'A', LIBCONF: 'S', STATUS_CONF: 'F' }];
@@ -117,10 +129,9 @@ test('confirma a mesma nota pelo serviço nativo e verifica status real sem fatu
   }
 });
 
-test('não confirma em produção, sem aprovação ou antes de conferir e não assume sucesso HTTP', async () => {
+test('não confirma sem aprovação ou antes de conferir e não assume sucesso HTTP', async () => {
   const params = { nunota: 123, ambienteTeste: true, executeService: async () => {},
     executeQuery: async () => [{ CODTIPOPER: 35, TIPMOV: 'V', STATUSNOTA: 'A', STATUS_CONF: 'F', LIBCONF: 'S' }] };
-  await assert.rejects(confirmarNotaSaidaTeste({ ...params, ambienteTeste: false, executeQuery: () => assert.fail() }), /somente na base de teste/);
   for (const alteracoes of [{ LIBCONF: 'N' }, { STATUS_CONF: 'A' }, { CODTIPOPER: 5 }, { TIPMOV: 'P' }]) {
     await assert.rejects(confirmarNotaSaidaTeste({ ...params,
       executeQuery: async () => [{ CODTIPOPER: 35, TIPMOV: 'V', STATUSNOTA: 'A', STATUS_CONF: 'F', LIBCONF: 'S', ...alteracoes }],
@@ -139,9 +150,9 @@ test('nova tentativa com nota já confirmada não repete confirmação', async (
   assert.equal(retorno.nota.NUNOTA, 123);
 });
 
-test('documentos da saída teste só ficam disponíveis após confirmar a própria nota', async () => {
+test('documentos da saída em produção só ficam disponíveis após confirmar a própria nota', async () => {
   for (const confirmada of [false, true]) {
-    const ctx = politica(true);
+    const ctx = politica(false);
     Object.assign(ctx, {
       consultarNotaSaida: async () => ({ NUNOTA: 123, STATUSNOTA: confirmada ? 'L' : 'A', STATUS_CONF: 'F' }),
       consultarFaturamentoExistente: () => assert.fail('Não deve procurar uma nota gerada por faturamento'),
@@ -160,8 +171,8 @@ test('documentos da saída teste só ficam disponíveis após confirmar a própr
   }
 });
 
-test('fila de teste exige aprovação mesmo ao buscar pelo número, sem filtros comerciais do pedido', async () => {
-  const ctx = politica(true);
+test('fila em produção encontra nota 3885419 TOP 35 liberada, sem filtros comerciais do pedido', async () => {
+  const ctx = politica(false);
   let handler;
   let sqlFila;
   Object.assign(ctx, { router: { get(_url, fn) { handler = fn; } },
@@ -171,7 +182,7 @@ test('fila de teste exige aprovação mesmo ao buscar pelo número, sem filtros 
   });
   vm.runInContext(fonte.slice(fonte.indexOf("router.get('/fila-conferencia/pedidos',"), fonte.indexOf("router.get('/fila-conferencia/romaneio/transportadoras'")), ctx);
   let payload;
-  await handler({ query: { modo: 'saida', pedido: 123 } }, { json(value) { payload = value; } });
+  await handler({ query: { modo: 'saida', pedido: 3885419 } }, { json(value) { payload = value; } });
   assert.equal(payload.saidaPorNota, true);
   assert.match(sqlFila, /CAB.CODTIPOPER IN \(35, 10\)/);
   assert.match(sqlFila, /CAB.TIPMOV = 'V'/);
@@ -179,9 +190,9 @@ test('fila de teste exige aprovação mesmo ao buscar pelo número, sem filtros 
   assert.doesNotMatch(sqlFila, /AD_STATUSCOMERCIAL|AD_STATUSINTPED/);
 });
 
-test('finalização de saída teste não chama finalização nativa que fatura e preserva progresso se nota falhar', async () => {
+test('finalização de saída em produção só confirma a nota e preserva progresso se nota falhar', async () => {
   for (const falhar of [false, true]) {
-    const ctx = politica(true);
+    const ctx = politica(false);
     let handler;
     const eventos = [];
     Object.assign(ctx, {
