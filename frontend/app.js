@@ -1,4 +1,5 @@
 let periodoSelecionado = null;
+let filaSaidaPorNota = false;
 let refreshLoop = null;
 let relogioInterval = null;
 let usuarioLogado = null;
@@ -7390,7 +7391,7 @@ function abrirModalPosConferencia(pedido, faturamento, documentosAuxiliares = nu
     ? `Nota de entrada ${pedido.NUNOTA}`
     : faturamentoPendente
     ? `Pedido ${pedido.NUNOTA} conferido com sucesso. O faturamento ficou pendente no Sankhya.`
-    : `Pedido ${pedido.NUNOTA} conferido com sucesso.`;
+    : `${pedido.SAIDA_POR_NOTA ? 'Nota de venda' : 'Pedido'} ${pedido.NUNOTA} ${faturamento?.status === 'CONFIRMADA' ? 'conferida e confirmada no Sankhya' : 'conferido com sucesso'}.`;
   posConferenciaModal.hidden = false;
   atualizarIcones();
   if (entrada) {
@@ -7844,9 +7845,10 @@ async function imprimirEtiquetaVolume() {
 
 function formatarTituloPedidoConferencia(pedido) {
   if (!pedido) return filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido';
-  const base = `${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}`;
+  const nota = filaModoConferencia === 'entrada' || pedido.SAIDA_POR_NOTA;
+  const base = `${nota ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}`;
   const numeroNota = Number(pedido.NUMNOTA || 0);
-  if (filaModoConferencia !== 'entrada' || !numeroNota) return base;
+  if (!nota || !numeroNota) return base;
   return `Nro. Nota ${numeroNota} | ${base}`;
 }
 
@@ -8165,7 +8167,7 @@ function renderizarPedidosFila() {
           : ''}
       </div>
       ${entrada ? `<div class="pedido-num-nota">NF ${escaparHtml(numeroNotaFiscal)}</div>` : ''}
-      <strong class="pedido-numero">${entrada ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}</strong>
+      <strong class="pedido-numero">${entrada || pedido.SAIDA_POR_NOTA ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}</strong>
       <div class="pedido-meta pedido-data">${formatarData(pedido.DTNEG)}</div>
       <div class="pedido-cliente" title="${escaparAtributo(`${pedido.CODIGO_PARCEIRO || '-'} - ${pedido.EMPRESA || '-'}`)}">${escaparHtml(`${pedido.CODIGO_PARCEIRO || '-'} - ${pedido.EMPRESA || '-'}`)}</div>
       <div class="pedido-meta pedido-valor">${formatarMoeda(pedido.VLRNOTA)}</div>
@@ -8269,6 +8271,10 @@ function refletirSeparacaoConcluidaNaInterface() {
   if (pedidoFila) pedidoFila.STATUS_SEPARACAO = 'SEPARADO';
   botaoAbrirSeparacaoPedido.disabled = true;
   botaoAbrirSeparacaoPedido.textContent = 'Separação concluída';
+  if (pedidoPreviewSelecionado?.SAIDA_POR_NOTA) {
+    botaoConfirmarPreviewPedido.disabled = !pedidoPodeIniciarConferencia(pedidoPreviewSelecionado);
+    botaoConfirmarPreviewPedido.textContent = pedidoPreviewSelecionado.STATUS_CONFERENCIA === 'EM ANDAMENTO' ? 'Continuar conferência' : 'Iniciar conferência';
+  }
   renderizarPedidosFila();
 }
 
@@ -9292,9 +9298,13 @@ async function buscarFilaConferencia() {
     }
 
     filaPedidos = payload.itens || [];
+    if (filaModoConferencia === 'saida' && filaSaidaPorNota !== (payload.saidaPorNota === true)) {
+      filaSaidaPorNota = payload.saidaPorNota === true;
+      atualizarModoFilaConferencia();
+    }
     scanStatus.textContent = pedidoBusca
       ? `${filaModoConferencia === 'entrada' ? 'Nota de entrada localizada' : 'Pedido ou nota localizado'}. Selecione para visualizar os itens.`
-      : `Selecione ${filaModoConferencia === 'entrada' ? 'uma nota de entrada' : 'um pedido'} para conferir.`;
+      : `Selecione ${filaModoConferencia === 'entrada' ? 'uma nota de entrada' : filaSaidaPorNota ? 'uma nota de venda' : 'um pedido'} para conferir.`;
     renderizarPedidosFila();
     salvarNavegacaoFila({ etapa: 'pedidos', pedido: null });
   } catch (error) {
@@ -9443,7 +9453,7 @@ function preencherDetalhesFrete(estimativa) {
 
 async function carregarEstimativaFretePedido(pedido) {
   if (!pedidoPreviewFreteEstimado || !pedidoPreviewFreteValor || !pedidoPreviewFreteValorPedido || !pedidoPreviewFreteMeta) return;
-  if (filaModoConferencia !== 'saida' || !pedido?.NUNOTA) {
+  if (filaModoConferencia !== 'saida' || !pedido?.NUNOTA || pedido.SAIDA_POR_NOTA) {
     pedidoPreviewFreteEstimado.hidden = true;
     return;
   }
@@ -9509,7 +9519,7 @@ async function abrirPreviewPedido(pedido) {
     pedidoPreviewVolumesCard.hidden = filaModoConferencia !== 'entrada';
     pedidoPreviewVolumes.textContent = formatarQuantidade(pedido.QTDVOL || 0);
   }
-  botaoImprimirPreviewPedido.innerHTML = `<i data-lucide="printer" aria-hidden="true"></i>Imprimir ${filaModoConferencia === 'entrada' ? 'nota' : 'pedido'}`;
+  botaoImprimirPreviewPedido.innerHTML = `<i data-lucide="printer" aria-hidden="true"></i>Imprimir ${filaModoConferencia === 'entrada' || pedido.SAIDA_POR_NOTA ? 'nota' : 'pedido'}`;
   botaoAbrirSeparacaoPedido.hidden = filaModoConferencia !== 'saida'
     || pedido.STATUS_CONFERENCIA === 'CONFERIDO';
   botaoAbrirSeparacaoPedido.disabled = true;
@@ -9536,7 +9546,7 @@ async function abrirPreviewPedido(pedido) {
       : pedido.STATUS_CONFERENCIA === 'EM ANDAMENTO'
         ? 'Continuar conferência'
         : 'Iniciar conferência'
-    : `${filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido'} ja conferido`;
+    : `${filaModoConferencia === 'entrada' || pedido.SAIDA_POR_NOTA ? 'Nota' : 'Pedido'} ja conferido`;
   pedidoPreviewDocumentos.hidden = pedido.STATUS_CONFERENCIA !== 'CONFERIDO' || filaModoConferencia === 'entrada';
   pedidoPreviewDocumentos.innerHTML = '';
   if (pedido.STATUS_CONFERENCIA === 'CONFERIDO' && filaModoConferencia === 'saida') {
@@ -10168,7 +10178,7 @@ async function confirmarConferencia(volumes) {
     confirmarStatus.textContent = payload.recuperado ? 'Faturamento localizado no Sankhya.' : 'Conferência confirmada.';
     filaPedidos = filaPedidos.filter((pedido) => pedido.NUNOTA !== pedidoSelecionado.NUNOTA);
     limparNavegacaoFilaSalva();
-    limparPedidoConferencia('Pedido conferido. Selecione o próximo pedido.');
+    limparPedidoConferencia(pedidoFinalizado.SAIDA_POR_NOTA ? 'Nota conferida e confirmada. Selecione a próxima nota.' : 'Pedido conferido. Selecione o próximo pedido.');
     abrirModalPosConferencia(pedidoFinalizado, payload.faturamento, payload.documentosAuxiliares);
   } catch (error) {
     console.error('Erro ao confirmar conferência:', error);
@@ -10405,18 +10415,19 @@ function valorPadraoQuantidadeConferencia() {
 
 function atualizarModoFilaConferencia() {
   const entrada = filaModoConferencia === 'entrada';
+  const notaSaida = !entrada && filaSaidaPorNota;
   filaScreen.classList.toggle('fila-modo-entrada', entrada);
   botaoModoEntrada.classList.toggle('active', entrada);
   botaoModoEntrada.setAttribute('aria-checked', entrada ? 'true' : 'false');
   botaoModoEntrada.setAttribute('aria-label', entrada ? 'Modo atual: conferência de entrada' : 'Modo atual: conferência de saída');
   filaModoTitulo.textContent = entrada ? 'Conferência de entrada' : 'Conferência de saída';
-  filaModoDescricao.textContent = entrada ? 'Recebimento de mercadorias' : 'Separação e expedição de pedidos';
+  filaModoDescricao.textContent = entrada ? 'Recebimento de mercadorias' : notaSaida ? 'Conferência e confirmação de notas de venda · Base de teste' : 'Separação e expedição de pedidos';
   filaModoIcone.setAttribute('data-lucide', entrada ? 'package-plus' : 'package-check');
   filaTituloOperacao.textContent = entrada ? 'Conferência de Entrada' : 'Fila de Conferência';
   if (filaPageTitle) filaPageTitle.textContent = entrada ? 'Fila de conferência de entrada' : 'Fila de conferência';
-  botaoBuscarFilaConferencia.textContent = entrada ? 'Buscar entradas' : 'Buscar pedidos';
-  filaBuscaPedido.placeholder = entrada ? 'Número da nota de entrada' : 'Número do pedido ou nota fiscal';
-  filaSidebarTitle.textContent = entrada ? 'Entrada em conferência' : 'Pedido em conferência';
+  botaoBuscarFilaConferencia.textContent = entrada ? 'Buscar entradas' : notaSaida ? 'Buscar notas' : 'Buscar pedidos';
+  filaBuscaPedido.placeholder = entrada ? 'Número da nota de entrada' : notaSaida ? 'Número da nota de venda ou número único' : 'Número do pedido ou nota fiscal';
+  filaSidebarTitle.textContent = entrada ? 'Entrada em conferência' : notaSaida ? 'Nota de venda em conferência' : 'Pedido em conferência';
   botaoAbrirRomaneio.hidden = entrada;
   if (entrada && !romaneioModal.hidden) fecharRomaneioCargas();
   scanControleField.hidden = !entrada;
@@ -10434,7 +10445,7 @@ function atualizarModoFilaConferencia() {
   fecharOpcoesControleEntrada();
   atualizarProdutoLeituraEntrada();
   const tituloLista = filaCountPedidos.previousElementSibling;
-  if (tituloLista) tituloLista.textContent = entrada ? 'Notas de entrada' : 'Pedidos';
+  if (tituloLista) tituloLista.textContent = entrada ? 'Notas de entrada' : notaSaida ? 'Notas de venda' : 'Pedidos';
   atualizarCaixaEntrada();
   atualizarIcones();
 }

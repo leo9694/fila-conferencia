@@ -15,6 +15,7 @@ const {
 const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
 const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
 const { garantirContaFaturamento } = require('./api/faturamentoBanco');
+const { consultarNotaSaida, confirmarNotaSaidaTeste, aplicarCortesNotaSaidaTeste } = require('./api/conferenciaSaidaNota');
 const { gravarDetalhesConferenciaSaida } = require('./api/conferenciaSaida');
 const {
   consolidarLeiturasEntrada,
@@ -200,7 +201,12 @@ function obterModoConferencia(valor) {
 }
 
 function obterTopsConferencia(modo) {
+  if (conferenciaSaidaPorNota(modo)) return [35, 10];
   return TOPS_CONFERENCIA[obterModoConferencia(modo)];
+}
+
+function conferenciaSaidaPorNota(modo) {
+  return obterModoConferencia(modo) === 'saida' && ambienteSankhyaTeste();
 }
 
 function sqlTopsConferencia(modo) {
@@ -208,10 +214,12 @@ function sqlTopsConferencia(modo) {
 }
 
 function tipoMovimentoConferencia(modo) {
+  if (conferenciaSaidaPorNota(modo)) return 'V';
   return obterModoConferencia(modo) === 'entrada' ? 'C' : 'P';
 }
 
 function condicaoStatusConferencia(modo, alias = 'CAB') {
+  if (conferenciaSaidaPorNota(modo)) return `${alias}.STATUSNOTA IN ('A', 'P', 'L')`;
   return obterModoConferencia(modo) === 'entrada'
     ? `${alias}.STATUSNOTA IN ('A', 'P', 'L')`
     : `${alias}.STATUSNOTA = 'L'`;
@@ -968,7 +976,11 @@ function extrairAvisosDocumento(resultado = {}) {
 }
 
 async function obterSituacaoDocumentosPedido(nunotaPedido) {
-  const nota = await consultarFaturamentoExistente(nunotaPedido);
+  const notaSaida = conferenciaSaidaPorNota('saida')
+    ? await consultarNotaSaida({ nunota: nunotaPedido, executeQuery }) : null;
+  const nota = conferenciaSaidaPorNota('saida')
+    ? (notaSaida?.STATUSNOTA === 'L' && notaSaida.STATUS_CONF === 'F' ? notaSaida : null)
+    : await consultarFaturamentoExistente(nunotaPedido);
 
   if (!nota) {
     return {
@@ -1433,7 +1445,8 @@ async function salvarQuantidadeLoteItemNotaApi(nunota, item, dados, incluir = fa
             CODLOCALORIG: campoApi(item.CODLOCALORIG || 0),
             CONTROLE: campoApi(dados.controle || ''),
             VLRDESC: campoApi(numeroApiPreciso(dados.vlrDesc)),
-            PERCDESC: campoApi(numeroApiPreciso(item.PERCDESC || 0))
+            PERCDESC: campoApi(numeroApiPreciso(item.PERCDESC || 0)),
+            ...(dados.zerarCorte ? { QTDCONFERIDA: campoApi('0') } : {})
           }
         }
       }
@@ -2118,12 +2131,12 @@ async function finalizarConferenciaOperacional(nuconf, nunota, codUsu, qtdVol = 
   );
 }
 
-function dataValida(valor) {
+function dataValida(valor, normalizar = normalizarDataSankhya) {
   if (!valor) {
     return null;
   }
 
-  const data = new Date(normalizarDataSankhya(valor));
+  const data = new Date(normalizar(valor));
   return Number.isNaN(data.getTime()) ? null : data;
 }
 
@@ -2132,8 +2145,9 @@ async function preservarConferenteFinalizacao(nuconf, codUsu, dhInicioOriginal =
     CODUSUCONF: codUsu
   };
 
-  const dataInicio = dataValida(dhInicioOriginal);
-  const dataFim = dataValida(dhFimAtual);
+  // Datas sem offset pertencem aos fusos da operação e do Sankhya, não ao da VPS.
+  const dataInicio = dataValida(dhInicioOriginal, normalizarInicioConferencia);
+  const dataFim = dataValida(dhFimAtual, normalizarFimConferencia);
 
   if (dhInicioOriginal) {
     campos.DHINICONF = dataInicio
@@ -2598,7 +2612,7 @@ router.get('/empresas', async (req, res) => {
       LEFT JOIN TSIEMP EMP
         ON EMP.CODEMP = CAB.CODEMP
       WHERE (
-        (CAB.CODTIPOPER IN (${TOPS_CONFERENCIA.saida.join(', ')}) AND CAB.TIPMOV = 'P' AND CAB.STATUSNOTA = 'L')
+        (CAB.CODTIPOPER IN (${sqlTopsConferencia('saida')}) AND CAB.TIPMOV = '${tipoMovimentoConferencia('saida')}' AND ${condicaoStatusConferencia('saida')})
         OR
         (CAB.CODTIPOPER IN (${TOPS_CONFERENCIA.entrada.join(', ')}) AND CAB.TIPMOV = 'C' AND CAB.STATUSNOTA = 'A')
       )
@@ -2971,7 +2985,7 @@ router.get('/fila-conferencia/separacao/:nunota/produtos/:codprod/lotes', async 
 
 async function garantirPedidoNaoConferidoParaSeparacao(nunota) {
   const rows = await executeQuery(`
-    SELECT CONF.STATUS
+    SELECT CONF.STATUS, CAB.CODTIPOPER, CAB.TIPMOV, CAB.STATUSNOTA, CAB.LIBCONF
       FROM TGFCAB CAB
       LEFT JOIN TGFCON2 CONF
         ON CONF.NUCONF = CAB.NUCONFATUAL
@@ -2980,6 +2994,14 @@ async function garantirPedidoNaoConferidoParaSeparacao(nunota) {
   if (rows.length === 0) {
     const erro = new Error('Pedido não encontrado.');
     erro.statusCode = 404;
+    throw erro;
+  }
+  if (conferenciaSaidaPorNota('saida') && (
+    ![35, 10].includes(Number(rows[0].CODTIPOPER)) || rows[0].TIPMOV !== 'V'
+    || !['A', 'P'].includes(rows[0].STATUSNOTA) || rows[0].LIBCONF !== 'S'
+  )) {
+    const erro = new Error('Somente notas TOP 35 ou 10 liberadas para conferência podem ser separadas.');
+    erro.statusCode = 409;
     throw erro;
   }
   if (String(rows[0].STATUS || '').trim().toUpperCase() === 'F') {
@@ -3045,12 +3067,13 @@ router.post('/fila-conferencia/separacao/:nunota/finalizar', async (req, res) =>
 router.get('/fila-conferencia/pedidos', async (req, res) => {
   try {
     const modo = obterModoConferencia(req.query.modo);
+    const saidaPorNota = conferenciaSaidaPorNota(modo);
     const tops = sqlTopsConferencia(modo);
     const tipMov = tipoMovimentoConferencia(modo);
     const intervalo = obterIntervaloDatas(req.query.dataInicial, req.query.dataFinal);
     const empresa = obterFiltroEmpresa(req.query.empresa);
     const pedidoBusca = obterNumeroInteiro(req.query.pedido);
-    const pedidosOrigemBusca = pedidoBusca && modo === 'saida'
+    const pedidosOrigemBusca = pedidoBusca && modo === 'saida' && !saidaPorNota
       ? await executeQuery(`
           SELECT DISTINCT VAR_BUSCA.NUNOTAORIG
           FROM TGFVAR VAR_BUSCA
@@ -3072,7 +3095,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
       : `CAB.DTNEG >= TO_DATE('${intervalo.inicio}', 'YYYY-MM-DD')
         AND CAB.DTNEG < TO_DATE('${intervalo.fim}', 'YYYY-MM-DD') + 1
         AND (CAB.NUCONFATUAL IS NULL OR CONF.STATUS IN (${modo === 'entrada' ? "'A', 'D', 'F'" : "'A', 'F'"}))
-        ${modo === 'saida' ? `AND NVL(CAB.AD_STATUSINTPED, '0') = '1'
+        ${modo === 'saida' && !saidaPorNota ? `AND NVL(CAB.AD_STATUSINTPED, '0') = '1'
         AND NVL(CAB.AD_STATUSCOMERCIAL, '0') = '1'` : ''}
         ${modo === 'entrada' ? `AND (CAB.LIBCONF = 'S' OR CONF.STATUS = 'D')
         ` : ''}
@@ -3086,6 +3109,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         CAB.CODEMP,
         CAB.CODTIPOPER,
         CAB.TIPMOV,
+        CAB.STATUSNOTA,
         CASE WHEN CAB.CODTIPOPER = 90 THEN 1 ELSE 0 END AS TRANSFERENCIA_FILIAIS,
         PAR.RAZAOSOCIAL AS EMPRESA,
         CAB.CODPARC AS CODIGO_PARCEIRO,
@@ -3149,11 +3173,13 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         AND CAB.CODTIPOPER IN (${tops})
         AND CAB.TIPMOV = '${tipMov}'
         AND ${condicaoStatusConferencia(modo)}
+        ${saidaPorNota ? `AND ((CAB.LIBCONF = 'S' AND CAB.STATUSNOTA IN ('A', 'P')) OR CONF.STATUS = 'F')
+        AND EXISTS (SELECT 1 FROM TGFITE ITE_PRONTA WHERE ITE_PRONTA.NUNOTA = CAB.NUNOTA)` : ''}
         ${modo === 'entrada' ? `AND TOP_ATUAL.NUCCO IS NOT NULL
         AND NVL(CCO_ATUAL.EXPLODIRLOTE, 'N') = 'N'
         AND (CAB.LIBCONF = 'S' OR CONF.STATUS IN ('D', 'F'))
         AND EXISTS (SELECT 1 FROM TGFITE ITE_PRONTA WHERE ITE_PRONTA.NUNOTA = CAB.NUNOTA)` : ''}
-      GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.NUMNOTA, CAB.CODEMP, CAB.CODTIPOPER, CAB.TIPMOV, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA, CAB.QTDVOL,
+      GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.NUMNOTA, CAB.CODEMP, CAB.CODTIPOPER, CAB.TIPMOV, CAB.STATUSNOTA, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA, CAB.QTDVOL,
         CAB.NUCONFATUAL, CONF.STATUS, CONF.DHINICONF, CONF.DHFINCONF, USU.NOMEUSU
       ORDER BY
         CASE
@@ -3173,6 +3199,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
       empresa,
       pedido: pedidoBusca,
       modo,
+      saidaPorNota,
       itens: rows.map((row) => {
         const separacao = modo === 'saida' ? separacaoStore.obter(row.NUNOTA) : null;
         return {
@@ -3184,7 +3211,9 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
           NUCONFATUAL: row.NUCONFATUAL ? Number(row.NUCONFATUAL) : null,
           STATUS_CONF: row.STATUS_CONF || null,
           TRANSFERENCIA_FILIAIS: modo === 'entrada' && Number(row.TRANSFERENCIA_FILIAIS) === 1,
-          STATUS_CONFERENCIA: modo === 'entrada'
+          STATUS_CONFERENCIA: saidaPorNota && row.STATUS_CONF === 'F' && row.STATUSNOTA !== 'L'
+            ? 'EM ANDAMENTO'
+            : modo === 'entrada'
             ? statusVisualConferencia(row.STATUS_CONF, Boolean(row.NUCONFATUAL))
             : row.STATUS_CONFERENCIA,
           STATUS_SEPARACAO: separacao?.status || null,
@@ -3194,7 +3223,8 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
           QTD_ITENS: normalizarNumero(row.QTD_ITENS),
           QTD_TOTAL: normalizarNumero(row.QTD_TOTAL),
           NECESSITA_GUIA_FASE: modo === 'saida' && Number(row.NECESSITA_GUIA_FASE) === 1,
-          FATURADO: modo === 'saida' && Number(row.FATURADO) === 1,
+          FATURADO: saidaPorNota ? row.STATUSNOTA === 'L' && row.STATUS_CONF === 'F' : modo === 'saida' && Number(row.FATURADO) === 1,
+          SAIDA_POR_NOTA: saidaPorNota,
           GUIAS_FASE_QTD: modo === 'saida' ? guiaFaseStore.quantidade(row.NUNOTA) : 0,
           PEDIDO_IMPRESSO: Boolean(pedidoPrintStore.obter(row.NUNOTA)),
           IMPRESSAO_PEDIDO: pedidoPrintStore.obter(row.NUNOTA)
@@ -6400,7 +6430,7 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
 
   try {
     const pedidoRows = await executeQuery(`
-      SELECT CAB.NUNOTA, CAB.NUCONFATUAL, CAB.QTDVOL, CAB.LIBCONF, CONF.STATUS,
+      SELECT CAB.NUNOTA, CAB.NUCONFATUAL, CAB.QTDVOL, CAB.LIBCONF, CAB.STATUSNOTA, CONF.STATUS,
              (SELECT COUNT(*) FROM TGFITE ITE WHERE ITE.NUNOTA = CAB.NUNOTA) AS QTD_ITENS,
              TOP.NUCCO, NVL(CCO.EXPLODIRLOTE, 'N') AS EXPLODIRLOTE
       FROM TGFCAB CAB
@@ -6420,6 +6450,15 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
     const pedido = pedidoRows[0];
     if (!pedido) {
       res.status(404).json({ erro: 'Pedido nao encontrado ou nao esta liberado para conferencia' });
+      return;
+    }
+
+    if (conferenciaSaidaPorNota(modo) && pedido.STATUS === 'F') {
+      res.json({ ok: true, nunota, nuconf: Number(pedido.NUCONFATUAL), status: 'EM ANDAMENTO', confirmacaoPendente: true });
+      return;
+    }
+    if (conferenciaSaidaPorNota(modo) && (pedido.LIBCONF !== 'S' || !Number(pedido.QTD_ITENS) || !['A', 'P'].includes(pedido.STATUSNOTA))) {
+      res.status(409).json({ erro: 'Nota de venda não aprovada para conferência ou sem itens.' });
       return;
     }
 
@@ -6567,7 +6606,7 @@ router.post('/fila-conferencia/iniciar', async (req, res) => {
     });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ erro: 'Erro ao iniciar conferencia' });
+    res.status(err.statusCode || 500).json({ erro: err.statusCode ? err.message : 'Erro ao iniciar conferencia' });
   }
 });
 
@@ -6626,6 +6665,13 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
       res.status(409).json({ erro: 'A nota não está liberada para conferência de entrada no Sankhya' });
       return;
     }
+    if (conferenciaSaidaPorNota(modo) && (
+      ![35, 10].includes(Number(pedido.CODTIPOPER)) || pedido.TIPMOV !== 'V'
+      || !['A', 'P'].includes(pedido.STATUSNOTA) || pedido.LIBCONF !== 'S'
+    )) {
+      res.status(409).json({ erro: 'Nota de venda não aprovada para conferência.' });
+      return;
+    }
 
     if (modo === 'entrada') {
       const erroProntidao = erroProntidaoConferenciaEntrada({
@@ -6640,7 +6686,7 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
 
     const statusProgressoPermitido = modo === 'entrada'
       ? ['A', 'D'].includes(String(pedido.STATUS || '').toUpperCase())
-      : pedido.STATUS === 'A';
+      : pedido.STATUS === 'A' || (conferenciaSaidaPorNota(modo) && pedido.STATUS === 'F');
     if (pedido.NUCONFATUAL && pedido.STATUS && !statusProgressoPermitido) {
       conferenciaProgressStore.remover(nunota);
       res.status(409).json({ erro: 'Conferência já finalizada ou em outro status no Sankhya' });
@@ -6674,7 +6720,7 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
     res.json({ ok: true, progresso, sincronizadoSankhya: modo !== 'entrada' || sincronizarSankhya });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ erro: 'Erro ao salvar o progresso da conferência' });
+    res.status(err.statusCode || 500).json({ erro: err.statusCode ? err.message : 'Erro ao salvar o progresso da conferência' });
   }
 });
 
@@ -6735,6 +6781,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
   const modo = obterModoConferencia(req.body?.modo);
   const tops = sqlTopsConferencia(modo);
   const tipMov = tipoMovimentoConferencia(modo);
+  const saidaPorNota = conferenciaSaidaPorNota(modo);
 
   const volumesInvalidos = modo === 'saida' ? !volumes : volumes === null;
   if (!nunota || codUsu === null || volumesInvalidos || itens.length === 0) {
@@ -6760,6 +6807,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
         CAB.QTDVOL,
         CAB.TIPMOV,
         CAB.LIBCONF,
+        CAB.STATUSNOTA,
         (SELECT COUNT(*) FROM TGFITE ITE WHERE ITE.NUNOTA = CAB.NUNOTA) AS QTD_ITENS,
         TOP.NUCCO,
         NVL(CCO.EXPLODIRLOTE, 'N') AS EXPLODIRLOTE,
@@ -6784,6 +6832,17 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     const pedido = pedidoRows[0];
     if (!pedido) {
       res.status(404).json({ erro: 'Pedido não encontrado ou não está liberado para conferência' });
+      return;
+    }
+
+    if (saidaPorNota && pedido.STATUS === 'F') {
+      const faturamento = await confirmarNotaSaidaTeste({ nunota, ambienteTeste: ambienteSankhyaTeste(), executeQuery, executeService });
+      conferenciaProgressStore.remover(nunota);
+      res.json({ ok: true, nunota, nuconf: Number(pedido.NUCONFATUAL), status: 'CONFERIDO', confirmacaoNota: true, faturamento });
+      return;
+    }
+    if (saidaPorNota && (pedido.LIBCONF !== 'S' || !Number(pedido.QTD_ITENS) || !['A', 'P'].includes(pedido.STATUSNOTA))) {
+      res.status(409).json({ erro: 'Nota de venda não aprovada para conferência ou sem itens.' });
       return;
     }
 
@@ -6874,7 +6933,8 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
           qtdEsperada,
           qtdConferida,
           qtdCortada,
-          ok: quantidadeExcedenteEntrada
+          ok: (saidaPorNota && qtdCortada > 0 && Math.abs(qtdEsperada - qtdConferida) < 0.0001)
+            || quantidadeExcedenteEntrada
             || Math.abs(qtdEsperada - (qtdConferida + qtdCortada)) < 0.0001
         };
       })
@@ -6977,7 +7037,10 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
       );
     }
 
-    const cortesAplicados = modo === 'saida'
+    const cortesAplicados = saidaPorNota
+      ? await aplicarCortesNotaSaidaTeste({ nunota, itensPedido, conferidosPorSequencia, cortadosPorSequencia,
+          salvarQuantidade: salvarQuantidadeLoteItemNotaApi, excluirItem: excluirItemNotaApi, executeQuery })
+      : modo === 'saida'
       ? await aplicarCortesNoPedido({
           nunota,
           itensPedido,
@@ -7052,6 +7115,16 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     let resultadoFinalizacao = null;
     let resultadoDivergenciaEntrada = null;
     let erroFinalizacaoNativa = null;
+
+    if (saidaPorNota) {
+      await atualizarRegistroApi('CabecalhoNota', { NUNOTA: nunota }, { NUCONFATUAL: nuconf });
+      await finalizarConferenciaOperacional(nuconf, nunota, codUsu, pedido.QTDVOL);
+      await preservarConferenteFinalizacao(nuconf, codUsu, dhInicioConferencia);
+      const faturamento = await confirmarNotaSaidaTeste({ nunota, ambienteTeste: ambienteSankhyaTeste(), executeQuery, executeService });
+      conferenciaProgressStore.remover(nunota);
+      res.json({ ok: true, nunota, nuconf, status: 'CONFERIDO', confirmacaoNota: true, cortesAplicados, faturamento });
+      return;
+    }
 
     try {
       resultadoFinalizacao = await finalizarConferenciaNativa(nuconf, nunota);
@@ -7208,8 +7281,8 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     console.error(err);
     const erroRevisavel = ['LOTES_LEITURAS_DIVERGENTES', 'LOTES_QUANTIDADE_DIVERGENTE']
       .includes(err.tipo);
-    res.status(erroRevisavel ? 409 : 500).json({
-      erro: erroRevisavel ? 'Revise os lotes e as quantidades antes de concluir' : 'Erro ao confirmar conferência',
+    res.status(err.statusCode || (erroRevisavel ? 409 : 500)).json({
+      erro: err.statusCode ? err.message : erroRevisavel ? 'Revise os lotes e as quantidades antes de concluir' : 'Erro ao confirmar conferência',
       codigo: err.tipo || null,
       detalhesSankhya: [err.message].filter(Boolean)
     });
