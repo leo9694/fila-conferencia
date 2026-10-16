@@ -66,4 +66,17 @@ async function aplicarCortesNotaSaidaTeste({ nunota, itensPedido, conferidosPorS
   return cortes.map(({ item, ...corte }) => corte);
 }
 
-module.exports = { consultarNotaSaida, confirmarNotaSaidaTeste, aplicarCortesNotaSaidaTeste };
+function sqlHistoricoPedidosSaida(separacoes = {}) {
+  const ids = Object.entries(separacoes)
+    .filter(([, registro]) => ['SEPARADO', 'EM_SEPARACAO'].includes(registro?.status))
+    .map(([nunota]) => Number(nunota))
+    .filter((nunota) => Number.isSafeInteger(nunota) && nunota > 0);
+  const grupos = [];
+  for (let i = 0; i < ids.length; i += 500) {
+    grupos.push(`CAB.NUNOTA IN (${ids.slice(i, i + 500).join(', ')})`);
+  }
+  return `(CAB.CODTIPOPER IN (5, 6, 237) AND CAB.TIPMOV = 'P' AND CAB.STATUSNOTA = 'L'
+    AND (CONF.STATUS = 'F'${grupos.length ? ` OR ${grupos.join(' OR ')}` : ''}))`;
+}
+
+module.exports = { consultarNotaSaida, confirmarNotaSaidaTeste, aplicarCortesNotaSaidaTeste, sqlHistoricoPedidosSaida };

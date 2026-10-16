@@ -15,7 +15,7 @@ const {
 const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
 const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
 const { garantirContaFaturamento } = require('./api/faturamentoBanco');
-const { consultarNotaSaida, confirmarNotaSaidaTeste, aplicarCortesNotaSaidaTeste } = require('./api/conferenciaSaidaNota');
+const { consultarNotaSaida, confirmarNotaSaidaTeste, aplicarCortesNotaSaidaTeste, sqlHistoricoPedidosSaida } = require('./api/conferenciaSaidaNota');
 const { gravarDetalhesConferenciaSaida } = require('./api/conferenciaSaida');
 const {
   consolidarLeiturasEntrada,
@@ -978,7 +978,7 @@ function extrairAvisosDocumento(resultado = {}) {
 async function obterSituacaoDocumentosPedido(nunotaPedido) {
   const notaSaida = conferenciaSaidaPorNota('saida')
     ? await consultarNotaSaida({ nunota: nunotaPedido, executeQuery }) : null;
-  const nota = conferenciaSaidaPorNota('saida')
+  const nota = notaSaida
     ? (notaSaida?.STATUSNOTA === 'L' && notaSaida.STATUS_CONF === 'F' ? notaSaida : null)
     : await consultarFaturamentoExistente(nunotaPedido);
 
@@ -2593,9 +2593,10 @@ function montarSqlConferencias(intervalo, empresa) {
       ON ITE.NUNOTA = CAB.NUNOTA
     WHERE CAB.DTNEG >= TO_DATE('${intervalo.inicio}', 'YYYY-MM-DD')
       AND CAB.DTNEG < TO_DATE('${intervalo.fim}', 'YYYY-MM-DD') + 1
-      AND CAB.CODTIPOPER IN (${sqlTopsConferencia('saida')})
+      AND ((CAB.CODTIPOPER IN (${sqlTopsConferencia('saida')})
       AND CAB.TIPMOV = 'V'
-      AND ((CAB.LIBCONF = 'S' AND CAB.STATUSNOTA IN ('A', 'P')) OR CONF.STATUS = 'F')
+      AND ((CAB.LIBCONF = 'S' AND CAB.STATUSNOTA IN ('A', 'P')) OR CONF.STATUS = 'F'))
+      OR ${sqlHistoricoPedidosSaida(separacaoStore.state)})
       ${sqlFiltroEmpresa(empresa)}
     GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.CODEMP, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA,
       CAB.AD_STATUSINTPED, CAB.AD_STATUSCOMERCIAL,
@@ -2612,8 +2613,10 @@ router.get('/empresas', async (req, res) => {
       FROM TGFCAB CAB
       LEFT JOIN TSIEMP EMP
         ON EMP.CODEMP = CAB.CODEMP
+      LEFT JOIN TGFCON2 CONF ON CONF.NUCONF = CAB.NUCONFATUAL
       WHERE (
         (CAB.CODTIPOPER IN (${sqlTopsConferencia('saida')}) AND CAB.TIPMOV = '${tipoMovimentoConferencia('saida')}' AND ${condicaoStatusConferencia('saida')})
+        OR ${sqlHistoricoPedidosSaida(separacaoStore.state)}
         OR
         (CAB.CODTIPOPER IN (${TOPS_CONFERENCIA.entrada.join(', ')}) AND CAB.TIPMOV = 'C' AND CAB.STATUSNOTA = 'A')
       )
@@ -3171,11 +3174,12 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
       LEFT JOIN TGFCCO CCO_ATUAL
         ON CCO_ATUAL.NUCCO = TOP_ATUAL.NUCCO
       WHERE ${filtroBusca}
-        AND CAB.CODTIPOPER IN (${tops})
-        AND CAB.TIPMOV = '${tipMov}'
+        AND ${saidaPorNota ? `((CAB.CODTIPOPER IN (${tops}) AND CAB.TIPMOV = '${tipMov}'
         AND ${condicaoStatusConferencia(modo)}
-        ${saidaPorNota ? `AND ((CAB.LIBCONF = 'S' AND CAB.STATUSNOTA IN ('A', 'P')) OR CONF.STATUS = 'F')
-        AND EXISTS (SELECT 1 FROM TGFITE ITE_PRONTA WHERE ITE_PRONTA.NUNOTA = CAB.NUNOTA)` : ''}
+        AND ((CAB.LIBCONF = 'S' AND CAB.STATUSNOTA IN ('A', 'P')) OR CONF.STATUS = 'F')
+        AND EXISTS (SELECT 1 FROM TGFITE ITE_PRONTA WHERE ITE_PRONTA.NUNOTA = CAB.NUNOTA))
+        OR ${sqlHistoricoPedidosSaida(separacaoStore.state)})`
+        : `CAB.CODTIPOPER IN (${tops}) AND CAB.TIPMOV = '${tipMov}' AND ${condicaoStatusConferencia(modo)}`}
         ${modo === 'entrada' ? `AND TOP_ATUAL.NUCCO IS NOT NULL
         AND NVL(CCO_ATUAL.EXPLODIRLOTE, 'N') = 'N'
         AND (CAB.LIBCONF = 'S' OR CONF.STATUS IN ('D', 'F'))
@@ -3203,6 +3207,8 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
       saidaPorNota,
       itens: rows.map((row) => {
         const separacao = modo === 'saida' ? separacaoStore.obter(row.NUNOTA) : null;
+        const historicoSaida = saidaPorNota && row.TIPMOV === 'P';
+        const notaSaida = saidaPorNota && !historicoSaida;
         return {
           ...row,
           DTNEG: normalizarDataSankhya(row.DTNEG),
@@ -3212,7 +3218,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
           NUCONFATUAL: row.NUCONFATUAL ? Number(row.NUCONFATUAL) : null,
           STATUS_CONF: row.STATUS_CONF || null,
           TRANSFERENCIA_FILIAIS: modo === 'entrada' && Number(row.TRANSFERENCIA_FILIAIS) === 1,
-          STATUS_CONFERENCIA: saidaPorNota && row.STATUS_CONF === 'F' && row.STATUSNOTA !== 'L'
+          STATUS_CONFERENCIA: notaSaida && row.STATUS_CONF === 'F' && row.STATUSNOTA !== 'L'
             ? 'EM ANDAMENTO'
             : modo === 'entrada'
             ? statusVisualConferencia(row.STATUS_CONF, Boolean(row.NUCONFATUAL))
@@ -3224,8 +3230,9 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
           QTD_ITENS: normalizarNumero(row.QTD_ITENS),
           QTD_TOTAL: normalizarNumero(row.QTD_TOTAL),
           NECESSITA_GUIA_FASE: modo === 'saida' && Number(row.NECESSITA_GUIA_FASE) === 1,
-          FATURADO: saidaPorNota ? row.STATUSNOTA === 'L' && row.STATUS_CONF === 'F' : modo === 'saida' && Number(row.FATURADO) === 1,
-          SAIDA_POR_NOTA: saidaPorNota,
+          FATURADO: notaSaida ? row.STATUSNOTA === 'L' && row.STATUS_CONF === 'F' : modo === 'saida' && Number(row.FATURADO) === 1,
+          SAIDA_POR_NOTA: notaSaida,
+          HISTORICO_SAIDA: historicoSaida,
           GUIAS_FASE_QTD: modo === 'saida' ? guiaFaseStore.quantidade(row.NUNOTA) : 0,
           PEDIDO_IMPRESSO: Boolean(pedidoPrintStore.obter(row.NUNOTA)),
           IMPRESSAO_PEDIDO: pedidoPrintStore.obter(row.NUNOTA)

@@ -3,12 +3,12 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
-const { confirmarNotaSaidaTeste, consultarNotaSaida, aplicarCortesNotaSaidaTeste } = require('../api/conferenciaSaidaNota');
+const { confirmarNotaSaidaTeste, consultarNotaSaida, aplicarCortesNotaSaidaTeste, sqlHistoricoPedidosSaida } = require('../api/conferenciaSaidaNota');
 const fonte = fs.readFileSync(path.join(__dirname, '../routes.js'), 'utf8');
 const frontend = fs.readFileSync(path.join(__dirname, '../frontend/app.js'), 'utf8');
 
 function politica(teste) {
-  const contexto = vm.createContext({ ambienteSankhyaTeste: () => teste, TOPS_CONFERENCIA: { saida: [5, 6, 237], entrada: [13, 21, 90] } });
+  const contexto = vm.createContext({ sqlHistoricoPedidosSaida, separacaoStore: { state: {}, obter: () => null }, ambienteSankhyaTeste: () => teste, TOPS_CONFERENCIA: { saida: [5, 6, 237], entrada: [13, 21, 90] } });
   vm.runInContext(fonte.slice(fonte.indexOf('function obterModoConferencia('), fonte.indexOf('function obterDataHoje(')), contexto);
   return contexto;
 }
@@ -54,7 +54,7 @@ test('acompanhamento da saída consulta notas TOP 35 e 10 liberadas e já confer
   assert.match(sql, /CAB.TIPMOV = 'V'/);
   assert.match(sql, /CAB.LIBCONF = 'S'/);
   assert.match(sql, /OR CONF.STATUS = 'F'/);
-  assert.doesNotMatch(sql, /IN \(5, 6, 237\)/);
+  assert.match(sql, /IN \(5, 6, 237\)/, 'Preserva histórico das TOPs antigas');
 });
 
 test('separação na produção aceita TOP 35 e 10 somente com liberação para conferência', async () => {
@@ -178,8 +178,15 @@ test('fila em produção encontra nota 3885419 TOP 35 liberada, sem filtros come
   Object.assign(ctx, { router: { get(_url, fn) { handler = fn; } },
     obterIntervaloDatas: () => ({ inicio: '2026-10-01', fim: '2026-10-13' }),
     obterFiltroEmpresa: () => 1, obterNumeroInteiro: (v) => Number(v) || null, sqlFiltroEmpresa: () => '',
-    executeQuery: async (sql) => { sqlFila = sql; return []; }
+    normalizarDataSankhya: (v) => v, normalizarInicioConferencia: (v) => v, normalizarFimConferencia: (v) => v,
+    normalizarNumero: Number, guiaFaseStore: { quantidade: () => 0 }, pedidoPrintStore: { obter: () => null },
+    executeQuery: async (sql) => { sqlFila = sql; return [
+      { NUNOTA: 3885419, TIPMOV: 'V', CODTIPOPER: 35, STATUSNOTA: 'A', STATUS_CONFERENCIA: 'AGUARDANDO CONFERENCIA' },
+      { NUNOTA: 3885300, TIPMOV: 'P', CODTIPOPER: 5, STATUSNOTA: 'L', STATUS_CONF: 'F', STATUS_CONFERENCIA: 'CONFERIDO', FATURADO: 1 },
+      { NUNOTA: 3885299, TIPMOV: 'P', CODTIPOPER: 6, STATUSNOTA: 'L', STATUS_CONFERENCIA: 'AGUARDANDO CONFERENCIA' }
+    ]; }
   });
+  ctx.separacaoStore = { state: { 3885299: { status: 'SEPARADO' } }, obter: (n) => n === 3885299 ? { status: 'SEPARADO' } : null };
   vm.runInContext(fonte.slice(fonte.indexOf("router.get('/fila-conferencia/pedidos',"), fonte.indexOf("router.get('/fila-conferencia/romaneio/transportadoras'")), ctx);
   let payload;
   await handler({ query: { modo: 'saida', pedido: 3885419 } }, { json(value) { payload = value; } });
@@ -188,6 +195,43 @@ test('fila em produção encontra nota 3885419 TOP 35 liberada, sem filtros come
   assert.match(sqlFila, /CAB.TIPMOV = 'V'/);
   assert.match(sqlFila, /CAB.LIBCONF = 'S' AND CAB.STATUSNOTA IN \('A', 'P'\)/);
   assert.doesNotMatch(sqlFila, /AD_STATUSCOMERCIAL|AD_STATUSINTPED/);
+  assert.match(sqlFila, /CAB.NUNOTA IN \(3885299\)/);
+  assert.equal(payload.itens[0].SAIDA_POR_NOTA, true);
+  assert.equal(payload.itens[1].HISTORICO_SAIDA, true);
+  assert.equal(payload.itens[1].SAIDA_POR_NOTA, false);
+  assert.equal(payload.itens[1].FATURADO, true);
+  assert.equal(payload.itens[2].STATUS_SEPARACAO, 'SEPARADO');
+  const ui = vm.createContext({});
+  vm.runInContext(frontend.slice(frontend.indexOf('function pedidoPodeIniciarConferencia('), frontend.indexOf('function pedidoExigeConfirmacaoSemSeparacao(')), ui);
+  assert.equal(ui.pedidoPodeIniciarConferencia(payload.itens[2]), false);
+  assert.equal(ui.pedidoPodeIniciarConferencia(payload.itens[0]), true);
+});
+
+test('histórico mantém apenas pedidos antigos conferidos ou com separação registrada e valida IDs', () => {
+  const sql = sqlHistoricoPedidosSaida({ 123: { status: 'SEPARADO' }, 124: { status: 'EM_SEPARACAO' },
+    125: { status: 'NOVO' }, '1 OR 1=1': { status: 'SEPARADO' } });
+  assert.match(sql, /CONF.STATUS = 'F'/);
+  assert.match(sql, /CAB.TIPMOV = 'P' AND CAB.STATUSNOTA = 'L'/);
+  assert.match(sql, /CAB.NUNOTA IN \(123, 124\)/);
+  assert.doesNotMatch(sql, /125|1 OR 1=1/);
+});
+
+test('documentos de pedido histórico continuam apontando para a nota faturada original', async () => {
+  const ctx = politica(false);
+  Object.assign(ctx, {
+    consultarNotaSaida: async () => null,
+    consultarFaturamentoExistente: async (nunota) => { assert.equal(nunota, 123); return { NUNOTA: 456 }; },
+    normalizarNumero: Number,
+    executeQuery: async (sql) => {
+      assert.match(sql, /CAB.NUNOTA = 456/);
+      return [{ NUNOTA: 456, NFE_AUTORIZADA: 'S', QTD_TITULOS: 1 }];
+    }
+  });
+  vm.runInContext(fonte.slice(fonte.indexOf('async function obterSituacaoDocumentosPedido('), fonte.indexOf('async function pedidoNecessitaGuiaFase(')), ctx);
+  const resultado = await ctx.obterSituacaoDocumentosPedido(123);
+  assert.equal(resultado.nota.NUNOTA, 456);
+  assert.equal(resultado.danfe.disponivel, true);
+  assert.equal(resultado.boleto.disponivel, true);
 });
 
 test('finalização de saída em produção só confirma a nota e preserva progresso se nota falhar', async () => {

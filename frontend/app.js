@@ -3971,7 +3971,7 @@ function obterClasseItem(item) {
 }
 
 function pedidoPodeIniciarConferencia(pedido) {
-  return pedido?.STATUS_CONFERENCIA !== 'CONFERIDO';
+  return pedido?.HISTORICO_SAIDA !== true && pedido?.STATUS_CONFERENCIA !== 'CONFERIDO';
 }
 
 function pedidoExigeConfirmacaoSemSeparacao(pedido) {
@@ -9166,6 +9166,7 @@ async function concluirSeparacao() {
 
 async function abrirSeparacaoPedido() {
   if (!pedidoPreviewSelecionado || filaModoConferencia !== 'saida') return;
+  if (pedidoPreviewSelecionado.HISTORICO_SAIDA) return;
   if (pedidoPreviewSelecionado.STATUS_CONFERENCIA === 'CONFERIDO') return;
   if (pedidoPreviewSelecionado.STATUS_SEPARACAO === 'SEPARADO') return;
   if (itensPedidoPreview.length === 0) {
@@ -9521,6 +9522,7 @@ async function abrirPreviewPedido(pedido) {
   }
   botaoImprimirPreviewPedido.innerHTML = `<i data-lucide="printer" aria-hidden="true"></i>Imprimir ${filaModoConferencia === 'entrada' || pedido.SAIDA_POR_NOTA ? 'nota' : 'pedido'}`;
   botaoAbrirSeparacaoPedido.hidden = filaModoConferencia !== 'saida'
+    || pedido.HISTORICO_SAIDA
     || pedido.STATUS_CONFERENCIA === 'CONFERIDO';
   botaoAbrirSeparacaoPedido.disabled = true;
   if (pedido.STATUS_SEPARACAO === 'SEPARADO') {
@@ -9546,6 +9548,7 @@ async function abrirPreviewPedido(pedido) {
       : pedido.STATUS_CONFERENCIA === 'EM ANDAMENTO'
         ? 'Continuar conferência'
         : 'Iniciar conferência'
+    : pedido.HISTORICO_SAIDA ? 'Histórico · somente consulta'
     : `${filaModoConferencia === 'entrada' || pedido.SAIDA_POR_NOTA ? 'Nota' : 'Pedido'} ja conferido`;
   pedidoPreviewDocumentos.hidden = pedido.STATUS_CONFERENCIA !== 'CONFERIDO' || filaModoConferencia === 'entrada';
   pedidoPreviewDocumentos.innerHTML = '';
@@ -9568,6 +9571,7 @@ async function abrirPreviewPedido(pedido) {
     itensPedidoPreview = payload.itens || [];
     renderizarItensPlanilha(pedidoPreviewItensLista, itensPedidoPreview);
     botaoAbrirSeparacaoPedido.disabled = filaModoConferencia !== 'saida'
+      || pedido.HISTORICO_SAIDA
       || itensPedidoPreview.length === 0
       || pedido.STATUS_CONFERENCIA === 'CONFERIDO'
       || pedido.STATUS_SEPARACAO === 'SEPARADO';
