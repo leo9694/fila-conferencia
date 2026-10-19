@@ -7772,7 +7772,7 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
   const cidadeUf = escaparHtml([etiqueta.cidade, etiqueta.uf].filter(Boolean).join('-') || '-');
   const endereco = escaparHtml(etiqueta.endereco || '-');
   const transportadora = escaparHtml(etiqueta.transportadora || 'TRANSPORTADORA NAO INFORMADA');
-  const pedido = escaparHtml(etiqueta.nunota || '-');
+  const pedido = escaparHtml(etiqueta.numeroPedido || '-');
   const logoUrl = `${window.location.origin}/logo-norte-sul-label.png`;
 
   const paginas = Array.from({ length: volumes }, (_, index) => {
@@ -7789,7 +7789,7 @@ function montarHtmlEtiquetas(etiqueta, volumes) {
           </div>
           <div class="pedido-area">
             <div class="section-label">Pedido</div>
-            <div class="pedido-numero">${pedido}</div>
+            <div class="pedido-numero fit-one-line" data-min-font="10">${pedido}</div>
             <div class="pedido-info">Informacao consta no rodape da NF-e</div>
           </div>
           <div class="separator"></div>

@@ -7645,6 +7645,7 @@ router.post('/fila-conferencia/pedidos/:nunota/etiquetas-volume', async (req, re
     const [pedido] = await executeQuery(`
       SELECT
         CAB.NUNOTA,
+        CAB.TIPMOV,
         CAB.NUCONFATUAL,
         CAB.CODPARC,
         PAR.RAZAOSOCIAL,
@@ -7678,6 +7679,18 @@ router.post('/fila-conferencia/pedidos/:nunota/etiquetas-volume', async (req, re
       return;
     }
 
+    const pedidosOrigem = pedido.TIPMOV === 'V'
+      ? await executeQuery(`
+          SELECT DISTINCT ORIG.NUNOTA
+          FROM TGFVAR VAR
+          JOIN TGFCAB ORIG ON ORIG.NUNOTA = VAR.NUNOTAORIG
+          WHERE VAR.NUNOTA = ${nunota}
+            AND ORIG.TIPMOV = 'P'
+          ORDER BY ORIG.NUNOTA
+        `)
+      : [{ NUNOTA: pedido.NUNOTA }];
+    const numeroPedido = pedidosOrigem.map((origem) => obterNumeroInteiro(origem.NUNOTA)).filter(Boolean).join(' / ');
+
     await atualizarRegistroApi(
       'CabecalhoNota',
       { NUNOTA: nunota },
@@ -7697,6 +7710,7 @@ router.post('/fila-conferencia/pedidos/:nunota/etiquetas-volume', async (req, re
       volumes,
       etiqueta: {
         nunota: pedido.NUNOTA,
+        numeroPedido: numeroPedido || null,
         codParc: pedido.CODPARC,
         nomeParc: pedido.NOMEPARC || pedido.RAZAOSOCIAL || `Parceiro ${pedido.CODPARC}`,
         razaoSocial: pedido.RAZAOSOCIAL || pedido.NOMEPARC || `Parceiro ${pedido.CODPARC}`,
