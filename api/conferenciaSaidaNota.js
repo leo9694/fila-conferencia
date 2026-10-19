@@ -17,9 +17,14 @@ async function confirmarNotaSaidaTeste({ nunota, executeQuery, executeService })
   if (nota.STATUSNOTA !== 'L') {
     if (!['A', 'P'].includes(nota.STATUSNOTA) || nota.LIBCONF !== 'S') throw new Error('Nota não aprovada para conferência.');
     let erroConfirmacao = null;
+    let respostaConfirmacao = null;
     try {
-      await executeService('CACSP.confirmarNota', {
-        nota: { NUNOTA: { $: String(nunota) }, confirmacaoCentralNota: true, ehPedidoWeb: false, atualizaPrecoItemPedCompra: false },
+      respostaConfirmacao = await executeService('CACSP.confirmarNota', {
+        nota: {
+          NUNOTA: { $: String(nunota) }, confirmacaoCentralNota: true, ehPedidoWeb: false, atualizaPrecoItemPedCompra: false,
+          // Mesmo TXProperties usado pela Central de Vendas ao escolher manter a data original.
+          txProperties: { prop: [{ name: 'br.com.utiliza.dtneg.servidor', value: false }] }
+        },
         clientEventList: { clientEvent: [{ $: 'br.com.utiliza.dtneg.servidor' }] }
       }, { modulePath: 'mgecom', forceAccessSession: true });
     } catch (error) {
@@ -28,6 +33,10 @@ async function confirmarNotaSaidaTeste({ nunota, executeQuery, executeService })
     // O retorno pode falhar depois de o ERP confirmar. Consulte antes de repetir qualquer escrita.
     nota = await consultarNotaSaida({ nunota, executeQuery });
     if (nota?.STATUSNOTA !== 'L') {
+      if (String(respostaConfirmacao?.status) === '4') {
+        const eventos = Array.isArray(respostaConfirmacao.clientEvents) ? respostaConfirmacao.clientEvents : [];
+        throw new Error(`A conferência foi preservada, mas o Sankhya exige uma confirmação adicional: ${eventos.map((evento) => evento.id).filter(Boolean).join(', ') || 'consulte a Central de Vendas'}. A nota ainda não foi confirmada.`);
+      }
       throw new Error(`O Sankhya ainda não confirmou a nota. A conferência foi preservada; verifique as pendências e tente novamente.${erroConfirmacao ? ` Motivo: ${erroConfirmacao.message}` : ''}`);
     }
   }

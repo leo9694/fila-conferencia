@@ -6,6 +6,33 @@ const vm = require('node:vm');
 const { confirmarNotaSaidaTeste } = require('../api/conferenciaSaidaNota');
 const frontend = fs.readFileSync(path.join(__dirname, '../frontend/app.js'), 'utf8');
 
+test('responde ao evento de data via TXProperties nativo mantendo a data original sem repetir confirmação', async () => {
+  let confirmada = false;
+  let chamadas = 0;
+  const resultado = await confirmarNotaSaidaTeste({ nunota: 3885442,
+    executeQuery: async () => [{ NUNOTA: 3885442, CODTIPOPER: 35, TIPMOV: 'V', LIBCONF: 'S', STATUS_CONF: 'F', STATUSNOTA: confirmada ? 'L' : 'A' }],
+    executeService: async (_servico, body) => {
+      chamadas++;
+      if (body.nota.txProperties?.prop.some((p) => p.name === 'br.com.utiliza.dtneg.servidor' && p.value === false)) {
+        confirmada = true;
+        return { status: '1', responseBody: { pk: { NUNOTA: { $: '3885442' } } } };
+      }
+      return { status: '4', clientEvents: [{ id: 'br.com.utiliza.dtneg.servidor' }] };
+    }
+  });
+  assert.equal(resultado.status, 'CONFIRMADA');
+  assert.equal(chamadas, 1);
+});
+
+test('evento adicional desconhecido não é aceito automaticamente nem confundido com confirmação', async () => {
+  let chamadas = 0;
+  await assert.rejects(confirmarNotaSaidaTeste({ nunota: 3885442,
+    executeQuery: async () => [{ NUNOTA: 3885442, CODTIPOPER: 35, TIPMOV: 'V', LIBCONF: 'S', STATUS_CONF: 'F', STATUSNOTA: 'A' }],
+    executeService: async () => { chamadas++; return { status: '4', clientEvents: [{ id: 'autorizacao.adicional' }] }; }
+  }), /confirmação adicional: autorizacao.adicional/);
+  assert.equal(chamadas, 1);
+});
+
 test('confirmação recupera resposta perdida consultando a nota sem repetir serviço nem contagem', async () => {
   for (const confirmada of [true, false]) {
     let consultas = 0;
