@@ -7326,7 +7326,7 @@ async function abrirPdfPedido() {
     return;
   }
 
-  novaAba.document.write('<p style="font-family:Arial;padding:20px">Gerando PDF do pedido...</p>');
+  novaAba.document.write('<p style="font-family:Arial;padding:20px">Gerando PDF do documento...</p>');
   novaAba.document.close();
   botaoImprimirPreviewPedido.disabled = true;
 
@@ -7862,10 +7862,18 @@ async function imprimirEtiquetaVolume() {
   }
 }
 
+function rotuloDocumentoConferencia(pedido) {
+  if (filaModoConferencia === 'entrada') return 'Nota';
+  if (pedido?.SAIDA_POR_NOTA || pedido?.TIPMOV === 'V') {
+    return Number(pedido.CODTIPOPER) === 10 ? 'Nota de bonificação' : 'Nota de venda';
+  }
+  return 'Pedido';
+}
+
 function formatarTituloPedidoConferencia(pedido) {
   if (!pedido) return filaModoConferencia === 'entrada' ? 'Nota' : 'Pedido';
   const nota = filaModoConferencia === 'entrada' || pedido.SAIDA_POR_NOTA;
-  const base = `${nota ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}`;
+  const base = `${rotuloDocumentoConferencia(pedido)} ${pedido.NUNOTA}`;
   const numeroNota = Number(pedido.NUMNOTA || 0);
   if (!nota || !numeroNota) return base;
   return `Nro. Nota ${numeroNota} | ${base}`;
@@ -8137,7 +8145,7 @@ function renderizarPedidosFila() {
     const separacaoIniciada = !entrada && estadoOperacional === 'em-separacao';
     const transferenciaFiliais = entrada
       && (pedido.TRANSFERENCIA_FILIAIS === true || Number(pedido.CODTIPOPER) === 90);
-    const bonificacao = Number(pedido.CODTIPOPER) === (entrada ? 21 : 6);
+    const bonificacao = Number(pedido.CODTIPOPER) === (entrada ? 21 : pedido.SAIDA_POR_NOTA ? 10 : 6);
     const iconeTipoPedido = transferenciaFiliais
       ? '<span class="pedido-status-type-icon transferencia" aria-label="Transferencia entre filiais" title="Transferencia entre filiais - TOP 90"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h11"/><path d="m15 3 4 4-4 4"/><path d="M17 17H6"/><path d="m9 13-4 4 4 4"/></svg></span>'
       : bonificacao
@@ -8148,8 +8156,8 @@ function renderizarPedidosFila() {
     const tituloTipoPedido = transferenciaFiliais
       ? 'Transferencia entre filiais - TOP 90'
       : bonificacao
-      ? (entrada ? 'Bonificação de entrada' : 'Pedido de bonificação')
-      : (entrada ? 'Compra de produtos' : 'Pedido de venda');
+      ? (entrada ? 'Bonificação de entrada' : pedido.SAIDA_POR_NOTA ? 'Nota de bonificação' : 'Pedido de bonificação')
+      : (entrada ? 'Compra de produtos' : pedido.SAIDA_POR_NOTA ? 'Nota de venda' : 'Pedido de venda');
     const numeroNotaFiscal = Number(pedido.NUMNOTA || 0) > 0 ? String(pedido.NUMNOTA) : '-';
     card.className = `pedido-operacao-card ${estadoOperacional} ${transferenciaFiliais ? 'transferencia-entre-filiais' : ''} ${pedidoSelecionado?.NUNOTA === pedido.NUNOTA ? 'active' : ''}`;
     card.innerHTML = `
@@ -8186,7 +8194,7 @@ function renderizarPedidosFila() {
           : ''}
       </div>
       ${entrada ? `<div class="pedido-num-nota">NF ${escaparHtml(numeroNotaFiscal)}</div>` : ''}
-      <strong class="pedido-numero">${entrada || pedido.SAIDA_POR_NOTA ? 'Nota' : 'Pedido'} ${pedido.NUNOTA}</strong>
+      <strong class="pedido-numero">${rotuloDocumentoConferencia(pedido)} ${pedido.NUNOTA}</strong>
       <div class="pedido-meta pedido-data">${formatarData(pedido.DTNEG)}</div>
       <div class="pedido-cliente" title="${escaparAtributo(`${pedido.CODIGO_PARCEIRO || '-'} - ${pedido.EMPRESA || '-'}`)}">${escaparHtml(`${pedido.CODIGO_PARCEIRO || '-'} - ${pedido.EMPRESA || '-'}`)}</div>
       <div class="pedido-meta pedido-valor">${formatarMoeda(pedido.VLRNOTA)}</div>

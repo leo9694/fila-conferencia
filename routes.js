@@ -7465,6 +7465,8 @@ router.get('/fila-conferencia/pedidos/:nunota/pdf', async (req, res) => {
         AND (
           (CAB.TIPMOV = 'P' AND CAB.STATUSNOTA = 'L')
           OR
+          (CAB.TIPMOV = 'V' AND CAB.CODTIPOPER IN (35, 10) AND CAB.STATUSNOTA IN ('A', 'P', 'L'))
+          OR
           (CAB.TIPMOV = 'C' AND CAB.STATUSNOTA IN ('A', 'P', 'L'))
         )
     `);
@@ -7499,7 +7501,7 @@ router.get('/fila-conferencia/pedidos/:nunota/pdf', async (req, res) => {
       [pedido.CIDADE_EMPRESA, pedido.UF_EMPRESA].filter(Boolean).join('-')
     ].filter(Boolean).join(' - ');
 
-    const separacao = separacaoStore.obter(nunota);
+    const separacao = pedido.TIPMOV === 'V' ? null : separacaoStore.obter(nunota);
     const itensSeparacao = separacao?.status === 'SEPARADO'
       ? new Map((separacao.itens || []).map((item) => [Number(item.sequencia), item]))
       : null;
@@ -7524,7 +7526,7 @@ router.get('/fila-conferencia/pedidos/:nunota/pdf', async (req, res) => {
     res.send(pdf);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ erro: 'Erro ao gerar PDF do pedido', detalhes: err.message });
+    res.status(500).json({ erro: 'Erro ao gerar PDF do documento de conferência', detalhes: err.message });
   }
 });
 

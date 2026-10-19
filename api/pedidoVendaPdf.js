@@ -64,6 +64,15 @@ function criarBufferPdf(construir) {
   });
 }
 
+function tituloDocumentoConferencia(pedido) {
+  const entrada = String(pedido.TIPMOV || '').toUpperCase() === 'C';
+  const notaVenda = String(pedido.TIPMOV || '').toUpperCase() === 'V';
+  const bonificacao = Number(pedido.CODTIPOPER) === (entrada ? 21 : notaVenda ? 10 : 6);
+  if (entrada) return bonificacao ? 'BONIFICACAO DE ENTRADA' : 'NOTA DE COMPRA';
+  if (notaVenda) return bonificacao ? 'NOTA DE BONIFICACAO' : 'NOTA DE VENDA';
+  return bonificacao ? 'PEDIDO DE BONIFICACAO' : 'PEDIDO DE VENDA';
+}
+
 function desenharCabecalho(doc, pedido, logoPath) {
   const esquerda = PAGE.margin;
   const direita = PAGE.width - PAGE.margin;
@@ -79,10 +88,7 @@ function desenharCabecalho(doc, pedido, logoPath) {
 
   doc.moveTo(82, 76).lineTo(direita, 76).lineWidth(1).strokeColor(COLORS.grid).stroke();
   const entrada = String(pedido.TIPMOV || '').toUpperCase() === 'C';
-  const bonificacao = Number(pedido.CODTIPOPER) === (entrada ? 21 : 6);
-  const tituloPedido = bonificacao
-    ? (entrada ? 'BONIFICACAO DE ENTRADA' : 'PEDIDO DE BONIFICACAO')
-    : (entrada ? 'NOTA DE COMPRA' : 'PEDIDO DE VENDA');
+  const tituloPedido = tituloDocumentoConferencia(pedido);
   escreverLinhaAjustada(doc, `${tituloPedido} ${pedido.NUNOTA}`, 82, 82, 330, {
     font: 'Helvetica-Bold',
     maxSize: 16,
@@ -91,7 +97,7 @@ function desenharCabecalho(doc, pedido, logoPath) {
   });
   doc.fontSize(7.5)
     .text(`DT IMPRESSAO: ${new Date().toLocaleString('pt-BR')}`, 405, 82, { width: direita - 405, align: 'right' })
-    .text(`${entrada ? 'DT NOTA' : 'DT PEDIDO'}: ${dataHora(pedido.DTNEG)}`, 405, 94, { width: direita - 405, align: 'right' });
+    .text(`${entrada || pedido.TIPMOV === 'V' ? 'DT NOTA' : 'DT PEDIDO'}: ${dataHora(pedido.DTNEG)}`, 405, 94, { width: direita - 405, align: 'right' });
   doc.moveTo(esquerda, 109).lineTo(direita, 109).stroke();
 
   const rotuloParceiro = entrada ? 'FORNECEDOR' : 'CLIENTE';
@@ -230,4 +236,4 @@ async function gerarPedidoVendaPdf({ pedido, itens, logoPath }) {
   });
 }
 
-module.exports = { gerarPedidoVendaPdf, quantidadeSeparadaExibida };
+module.exports = { gerarPedidoVendaPdf, quantidadeSeparadaExibida, tituloDocumentoConferencia };
