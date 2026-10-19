@@ -377,6 +377,18 @@ const heroPeriodo = document.getElementById('hero-periodo');
 const countPendentes = document.getElementById('count-pendentes');
 const countConferidos = document.getElementById('count-conferidos');
 const consultaProdutoCodigo = document.getElementById('consulta-produto-codigo');
+const consultaProdutoGrupo = document.getElementById('consulta-produto-grupo');
+const consultaProdutoMarca = document.getElementById('consulta-produto-marca');
+const consultaProdutoGrupoBusca = document.getElementById('consulta-produto-grupo-busca');
+const consultaProdutoMarcaBusca = document.getElementById('consulta-produto-marca-busca');
+const consultaProdutoGrupoResultados = document.getElementById('consulta-produto-grupo-resultados');
+const consultaProdutoMarcaResultados = document.getElementById('consulta-produto-marca-resultados');
+const consultaProdutoFiltros = document.getElementById('consulta-produto-filtros');
+const consultaProdutoFiltrosStatus = document.getElementById('consulta-produto-filtros-status');
+const botaoConsultaProdutoFiltros = document.getElementById('consulta-produto-filtros-toggle');
+const botaoConsultaProdutoLimparFiltros = document.getElementById('consulta-produto-filtros-limpar');
+const botaoConsultaProdutoFecharFiltros = document.getElementById('consulta-produto-filtros-fechar');
+const botaoConsultaProdutoAplicarFiltros = document.getElementById('consulta-produto-filtros-aplicar');
 const botaoConsultaProdutoBuscar = document.getElementById('consulta-produto-buscar');
 const botaoConsultaProdutoVoltar = document.getElementById('consulta-produto-voltar');
 const consultaProdutoTitulo = document.getElementById('consulta-produto-titulo');
@@ -445,6 +457,12 @@ let romaneioTransportadorasSelecionadas = new Set();
 let romaneioBuscaPedidosId = 0;
 let pedidoSelecionado = null;
 let consultaProdutoAtual = null;
+let consultaProdutosResultados = [];
+let consultaProdutoBuscaVersao = 0;
+let consultaProdutoFiltrosCarregados = false;
+let consultaProdutoFiltrosCarregando = false;
+let consultaProdutoFiltrosOpcoes = { grupo: [], marca: [] };
+let consultaProdutoDetalheVersao = 0;
 let sincronizacaoCaixaEntradaInterval = null;
 let sincronizacaoCaixaEntradaEmAndamento = false;
 let salvamentoProgressoEmAndamento = false;
@@ -4067,10 +4085,15 @@ function renderizarResumoConferencia() {
     : '-';
 }
 
-function renderizarConsultaVazia(mensagem = 'Digite o código do produto para visualizar o estoque.') {
+function renderizarConsultaVazia(mensagem = 'Pesquise por código, referência, barras ou nome do produto.') {
+  ConsultaTabela.fecharMenu();
+  consultaProdutoBuscaVersao++;
+  consultaProdutoDetalheVersao++;
+  consultaProdutosResultados = [];
   consultaProdutoAtual = null;
+  botaoConsultaProdutoBuscar.disabled = false;
   consultaProdutoTitulo.textContent = 'Produto';
-  consultaProdutoLegenda.textContent = 'Informe um código para consultar.';
+  consultaProdutoLegenda.textContent = 'Pesquise um produto para consultar.';
   consultaProdutoFoto.innerHTML = '<div class="consulta-empty">Sem produto selecionado.</div>';
   botaoConsultaProdutoEtiquetas.disabled = true;
   consultaProdutoResumo.innerHTML = `<div class="consulta-empty">${escaparHtml(mensagem)}</div>`;
@@ -4079,29 +4102,7 @@ function renderizarConsultaVazia(mensagem = 'Digite o código do produto para vi
   consultaEstoqueStatus.textContent = '0 registros';
 }
 
-function montarTabelaConsulta(colunas, linhas) {
-  if (!linhas.length) {
-    return '<div class="consulta-empty">Nenhum estoque ativo com saldo positivo.</div>';
-  }
-
-  const cabecalho = colunas
-    .map((coluna) => `<th class="${coluna.numero ? 'numero' : ''}">${escaparHtml(coluna.titulo)}</th>`)
-    .join('');
-  const corpo = linhas
-    .map((linha) => `
-      <tr>
-        ${colunas.map((coluna) => {
-          const valor = coluna.render ? coluna.render(linha) : linha[coluna.campo];
-          return `<td class="${coluna.numero ? 'numero' : ''}">${escaparHtml(valor ?? '-')}</td>`;
-        }).join('')}
-      </tr>
-    `)
-    .join('');
-
-  return `<table class="consulta-table"><thead><tr>${cabecalho}</tr></thead><tbody>${corpo}</tbody></table>`;
-}
-
-function renderizarConsultaProduto(payload) {
+function renderizarConsultaProduto(payload, preservarResultados = false) {
   const produto = payload.produto;
   const estoquePorEmpresa = payload.estoquePorEmpresa || [];
   const estoque = payload.estoque || [];
@@ -4118,6 +4119,7 @@ function renderizarConsultaProduto(payload) {
   `;
   const img = consultaProdutoFoto.querySelector('img');
   img.addEventListener('error', () => {
+    if (!consultaProdutoFoto.contains(img)) return;
     consultaProdutoFoto.innerHTML = '<div class="consulta-empty">Foto não cadastrada para este produto.</div>';
   }, { once: true });
 
@@ -4135,7 +4137,7 @@ function renderizarConsultaProduto(payload) {
     { titulo: 'Total disponível', numero: true, render: () => formatarQuantidade(estoquePorEmpresa.reduce((total, item) => total + Number(item.DISPONIVEL || 0), 0)) }
   ];
 
-  consultaProdutoResumo.innerHTML = montarTabelaConsulta(colunasResumo, [produto]);
+  if (!preservarResultados) ConsultaTabela.criar(consultaProdutoResumo, colunasResumo, [produto]);
 
   const colunasDetalhes = [
     { titulo: 'Cód. empresa', campo: 'CODEMP', numero: true },
@@ -4152,9 +4154,108 @@ function renderizarConsultaProduto(payload) {
     { titulo: 'Qtde de dias', numero: true, render: (linha) => calcularDiasAte(linha.DTVAL) }
   ];
 
-  consultaProdutoDetalhes.innerHTML = montarTabelaConsulta(colunasDetalhes, estoque);
-  consultaProdutoStatus.textContent = `${estoquePorEmpresa.length} empresas com estoque positivo`;
+  ConsultaTabela.criar(consultaProdutoDetalhes, colunasDetalhes, estoque);
+  if (!preservarResultados) consultaProdutoStatus.textContent = `${estoquePorEmpresa.length} empresas com estoque positivo`;
   consultaEstoqueStatus.textContent = `${estoque.length} registros`;
+}
+
+function renderizarResultadosConsultaProdutos(payload) {
+  const produtos = payload.produtos || [];
+  const colunas = [
+    { titulo: 'Referência', campo: 'REFERENCIA' }, { titulo: 'Código', campo: 'CODPROD' },
+    { titulo: 'Descrição', campo: 'DESCRPROD' }, { titulo: 'Unidade', campo: 'CODVOL' },
+    ...(payload.empresas || []).map((empresa) => ({
+      titulo: empresa.NOMEEMPRESA || `Emp. ${empresa.CODEMP}`, numero: true,
+      render: (produto) => formatarQuantidade(produto.estoquePorEmpresa?.find((e) => Number(e.CODEMP) === Number(empresa.CODEMP))?.DISPONIVEL || 0)
+    })),
+    { titulo: 'Total estoque', numero: true, render: (p) => formatarQuantidade((p.estoquePorEmpresa || []).reduce((s, e) => s + Number(e.ESTOQUE || 0), 0)) },
+    { titulo: 'Total disponível', numero: true, render: (p) => formatarQuantidade((p.estoquePorEmpresa || []).reduce((s, e) => s + Number(e.DISPONIVEL || 0), 0)) }
+  ];
+  ConsultaTabela.criar(consultaProdutoResumo, colunas, produtos, (produto) => selecionarConsultaProduto(produto.CODPROD));
+  consultaProdutoStatus.textContent = payload.limitado
+    ? 'Exibindo os primeiros 100 resultados. Refine a pesquisa.'
+    : `${produtos.length} produtos encontrados. Selecione para ver os detalhes.`;
+}
+
+async function selecionarConsultaProduto(codProd) {
+  const buscaVersao = consultaProdutoBuscaVersao;
+  const detalheVersao = ++consultaProdutoDetalheVersao;
+  consultaProdutoAtual = null;
+  botaoConsultaProdutoEtiquetas.disabled = true;
+  consultaProdutoTitulo.textContent = 'Carregando produto...';
+  consultaProdutoLegenda.textContent = 'Consultando o produto selecionado.';
+  consultaProdutoFoto.innerHTML = '<div class="consulta-empty">Carregando produto...</div>';
+  consultaProdutoDetalhes.innerHTML = '<div class="consulta-empty">Carregando detalhes...</div>';
+  consultaEstoqueStatus.textContent = 'Carregando...';
+  try {
+    const res = await fetch(`/api/produtos/consulta?codProd=${encodeURIComponent(codProd)}`, { cache: 'no-store' });
+    const payload = await res.json();
+    if (buscaVersao !== consultaProdutoBuscaVersao || detalheVersao !== consultaProdutoDetalheVersao) return;
+    if (!res.ok) throw new Error(payload.erro || 'Produto não encontrado');
+    consultaProdutoAtual = payload;
+    renderizarConsultaProduto(payload, consultaProdutosResultados.length > 1);
+    consultaProdutoResumo.querySelectorAll('[data-cod-prod]').forEach((linha) => {
+      linha.classList.toggle('is-selected', Number(linha.dataset.codProd) === Number(codProd));
+    });
+  } catch (error) {
+    if (buscaVersao !== consultaProdutoBuscaVersao || detalheVersao !== consultaProdutoDetalheVersao) return;
+    consultaProdutoTitulo.textContent = 'Produto';
+    consultaProdutoFoto.innerHTML = '<div class="consulta-empty">Nenhum produto carregado.</div>';
+    consultaProdutoDetalhes.innerHTML = `<div class="consulta-empty">${escaparHtml(error.message)}</div>`;
+    consultaEstoqueStatus.textContent = 'Erro ao carregar detalhes';
+  }
+}
+
+function inicializarDivisorConsultaEstoque() {
+  const divisor = document.getElementById('consulta-paineis-divisor');
+  const resumo = document.getElementById('consulta-painel-resumo');
+  const detalhes = document.getElementById('consulta-painel-detalhes');
+  const paineis = divisor.parentElement;
+  let arraste = null;
+
+  function ajustar(fracao) {
+    const disponivel = resumo.getBoundingClientRect().height + detalhes.getBoundingClientRect().height;
+    if (disponivel <= 0) return;
+    const minimo = Math.min(140 / disponivel, 0.5);
+    const proporcao = Math.max(minimo, Math.min(1 - minimo, fracao));
+    paineis.style.setProperty('--consulta-resumo-altura', `${proporcao}fr`);
+    paineis.style.setProperty('--consulta-detalhes-altura', `${1 - proporcao}fr`);
+    divisor.setAttribute('aria-valuenow', String(Math.round(proporcao * 100)));
+    divisor.setAttribute('aria-valuetext', `Lista de produtos: ${Math.round(proporcao * 100)}%; detalhes de estoque: ${Math.round((1 - proporcao) * 100)}%`);
+  }
+
+  divisor.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0 || event.isPrimary === false) return;
+    event.preventDefault();
+    ConsultaTabela.fecharMenu();
+    divisor.focus();
+    arraste = { id: event.pointerId, y: event.clientY, altura: resumo.getBoundingClientRect().height,
+      disponivel: resumo.getBoundingClientRect().height + detalhes.getBoundingClientRect().height };
+    divisor.setPointerCapture(event.pointerId);
+    paineis.classList.add('is-redimensionando');
+  });
+  divisor.addEventListener('pointermove', (event) => {
+    if (!arraste || arraste.id !== event.pointerId || !arraste.disponivel) return;
+    ajustar((arraste.altura + event.clientY - arraste.y) / arraste.disponivel);
+  });
+  function encerrar(event) {
+    if (!arraste || event.pointerId !== arraste.id) return;
+    arraste = null;
+    paineis.classList.remove('is-redimensionando');
+    if (divisor.hasPointerCapture(event.pointerId)) divisor.releasePointerCapture(event.pointerId);
+  }
+  divisor.addEventListener('pointerup', encerrar);
+  divisor.addEventListener('pointercancel', encerrar);
+  divisor.addEventListener('lostpointercapture', encerrar);
+  divisor.addEventListener('dblclick', () => ajustar(1 / 2.2));
+  divisor.addEventListener('keydown', (event) => {
+    if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+    event.preventDefault();
+    const disponivel = resumo.getBoundingClientRect().height + detalhes.getBoundingClientRect().height;
+    if (!disponivel) return;
+    const atual = resumo.getBoundingClientRect().height / disponivel;
+    ajustar(event.key === 'Home' ? 0 : event.key === 'End' ? 1 : atual + (event.key === 'ArrowDown' ? 0.05 : -0.05));
+  });
 }
 
 function imprimirEtiquetaProdutoConsultado() {
@@ -4634,15 +4735,169 @@ function confirmarSelecaoEtiquetaProduto() {
   abrirEtiquetaProdutoParaImpressao(estoque);
 }
 
+function atualizarIndicadorFiltrosConsulta() {
+  botaoConsultaProdutoFiltros.dataset.ativo = String(Boolean(consultaProdutoGrupo.value || consultaProdutoMarca.value));
+}
+
+function obterCampoFiltroConsulta(tipo) {
+  return tipo === 'grupo'
+    ? { campo: consultaProdutoGrupo, busca: consultaProdutoGrupoBusca, resultados: consultaProdutoGrupoResultados }
+    : { campo: consultaProdutoMarca, busca: consultaProdutoMarcaBusca, resultados: consultaProdutoMarcaResultados };
+}
+
+function normalizarFiltroConsulta(texto) {
+  return String(texto || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+}
+
+function selecionarFiltroConsulta(tipo, opcao) {
+  const { campo, busca, resultados } = obterCampoFiltroConsulta(tipo);
+  campo.value = opcao.valor;
+  busca.value = opcao.nome;
+  resultados.innerHTML = '';
+  atualizarIndicadorFiltrosConsulta();
+  consultaProdutoFiltrosStatus.textContent = 'Filtro selecionado. Clique em Aplicar filtros para atualizar a consulta.';
+  busca.focus();
+}
+
+function pesquisarFiltroConsulta(tipo) {
+  const { campo, busca, resultados } = obterCampoFiltroConsulta(tipo);
+  campo.value = '';
+  atualizarIndicadorFiltrosConsulta();
+  const palavras = normalizarFiltroConsulta(busca.value).split(/\s+/).filter(Boolean);
+  if (!palavras.length) {
+    resultados.innerHTML = '';
+    return;
+  }
+  const encontrados = consultaProdutoFiltrosOpcoes[tipo].filter((opcao) => {
+    const nome = normalizarFiltroConsulta(opcao.nome);
+    return palavras.every((palavra) => nome.includes(palavra));
+  });
+  const visiveis = encontrados.slice(0, 30);
+  resultados.innerHTML = visiveis.map((opcao, indice) =>
+    `<button type="button" data-filtro-indice="${indice}">${escaparHtml(opcao.nome)}</button>`).join('')
+    + (!encontrados.length ? '<span class="consulta-status">Nenhuma correspondência encontrada.</span>' : '')
+    + (encontrados.length > 30 ? '<span class="consulta-status">Digite mais para refinar os resultados.</span>' : '');
+  resultados.querySelectorAll('button').forEach((botao, indice) => {
+    botao.addEventListener('click', () => selecionarFiltroConsulta(tipo, visiveis[indice]));
+  });
+}
+
+function fecharFiltrosConsultaProdutos() {
+  consultaProdutoFiltros.hidden = true;
+  botaoConsultaProdutoFiltros.setAttribute('aria-expanded', 'false');
+  botaoConsultaProdutoFiltros.focus();
+}
+
+function limparFiltrosConsultaProdutos() {
+  for (const tipo of ['grupo', 'marca']) {
+    const { campo, busca, resultados } = obterCampoFiltroConsulta(tipo);
+    campo.value = '';
+    busca.value = '';
+    resultados.innerHTML = '';
+  }
+  atualizarIndicadorFiltrosConsulta();
+  consultaProdutoFiltrosStatus.textContent = 'Filtros limpos. Digite para selecionar ou clique em Aplicar filtros.';
+  consultaProdutoGrupoBusca.focus();
+}
+
+function aplicarFiltrosConsultaProdutos() {
+  for (const tipo of ['grupo', 'marca']) {
+    const { campo, busca } = obterCampoFiltroConsulta(tipo);
+    if (busca.value.trim() && !campo.value) {
+      consultaProdutoFiltrosStatus.textContent = `Selecione uma correspondência de ${tipo} ou limpe o campo.`;
+      busca.focus();
+      return;
+    }
+  }
+  fecharFiltrosConsultaProdutos();
+  return buscarConsultaProduto();
+}
+
+function tecladoFiltrosConsultaProdutos(event) {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    event.stopPropagation();
+    fecharFiltrosConsultaProdutos();
+    return;
+  }
+  if (event.key === 'Tab') {
+    const focaveis = [...consultaProdutoFiltros.querySelectorAll('button:not(:disabled), input:not([type="hidden"]):not(:disabled)')];
+    const primeiro = focaveis[0];
+    const ultimo = focaveis[focaveis.length - 1];
+    if (event.shiftKey && event.target === primeiro) {
+      event.preventDefault();
+      ultimo?.focus();
+    } else if (!event.shiftKey && event.target === ultimo) {
+      event.preventDefault();
+      primeiro?.focus();
+    }
+  }
+  for (const tipo of ['grupo', 'marca']) {
+    const { busca, resultados } = obterCampoFiltroConsulta(tipo);
+    const botoes = [...resultados.querySelectorAll('button')];
+    if (event.target === busca && (event.key === 'ArrowDown' || event.key === 'Enter')) {
+      event.preventDefault();
+      if (event.key === 'Enter') botoes[0]?.click();
+      else botoes[0]?.focus();
+    } else if (botoes.includes(event.target) && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
+      event.preventDefault();
+      const indice = botoes.indexOf(event.target) + (event.key === 'ArrowDown' ? 1 : -1);
+      (botoes[indice] || busca).focus();
+    }
+  }
+}
+
+async function alternarFiltrosConsultaProdutos() {
+  ConsultaTabela.fecharMenu();
+  if (!consultaProdutoFiltros.hidden) {
+    fecharFiltrosConsultaProdutos();
+    return;
+  }
+  consultaProdutoFiltros.hidden = false;
+  botaoConsultaProdutoFiltros.setAttribute('aria-expanded', 'true');
+  botaoConsultaProdutoFecharFiltros.focus();
+  if (consultaProdutoFiltrosCarregados) {
+    consultaProdutoGrupoBusca.focus();
+    return;
+  }
+  if (consultaProdutoFiltrosCarregando) return;
+  consultaProdutoFiltrosCarregando = true;
+  consultaProdutoGrupoBusca.disabled = true;
+  consultaProdutoMarcaBusca.disabled = true;
+  botaoConsultaProdutoAplicarFiltros.disabled = true;
+  consultaProdutoFiltrosStatus.textContent = 'Carregando grupos e marcas...';
+  try {
+    const res = await fetch('/api/produtos/filtros', { cache: 'no-store' });
+    const payload = await res.json();
+    if (!res.ok) throw new Error(payload.erro || 'Erro ao carregar filtros.');
+    consultaProdutoFiltrosOpcoes = {
+      grupo: (payload.grupos || []).map((grupo) => ({ valor: String(grupo.CODGRUPOPROD), nome: grupo.DESCRGRUPOPROD })),
+      marca: (payload.marcas || []).map((marca) => ({ valor: marca, nome: marca }))
+    };
+    consultaProdutoFiltrosCarregados = true;
+    consultaProdutoFiltrosStatus.textContent = 'Digite parte do nome e selecione uma correspondência. Campos vazios não filtram.';
+  } catch (error) {
+    consultaProdutoFiltrosStatus.textContent = `${error.message} Feche e abra os filtros para tentar novamente.`;
+  } finally {
+    consultaProdutoFiltrosCarregando = false;
+    consultaProdutoGrupoBusca.disabled = false;
+    consultaProdutoMarcaBusca.disabled = false;
+    botaoConsultaProdutoAplicarFiltros.disabled = false;
+    if (!consultaProdutoFiltros.hidden) consultaProdutoGrupoBusca.focus();
+  }
+}
+
 async function buscarConsultaProduto() {
   const codigo = consultaProdutoCodigo.value.trim();
 
-  if (!codigo) {
-    renderizarConsultaVazia('Informe um código, referência ou código de barras.');
+  if (!codigo && !consultaProdutoGrupo.value && !consultaProdutoMarca.value) {
+    renderizarConsultaVazia('Informe código, referência, código de barras, nome ou selecione um filtro.');
     consultaProdutoCodigo.focus();
     return;
   }
 
+  renderizarConsultaVazia('Buscando produtos e estoque por empresa...');
+  const buscaVersao = consultaProdutoBuscaVersao;
   botaoConsultaProdutoBuscar.disabled = true;
   consultaProdutoAtual = null;
   botaoConsultaProdutoEtiquetas.disabled = true;
@@ -4651,20 +4906,33 @@ async function buscarConsultaProduto() {
   consultaProdutoDetalhes.innerHTML = '<div class="consulta-empty">Carregando detalhes...</div>';
 
   try {
-    const res = await fetch(`/api/produtos/consulta?codigo=${encodeURIComponent(codigo)}`);
+    const parametros = new URLSearchParams({ busca: codigo });
+    if (consultaProdutoGrupo.value) parametros.set('grupo', consultaProdutoGrupo.value);
+    if (consultaProdutoMarca.value) parametros.set('marca', consultaProdutoMarca.value);
+    const res = await fetch(`/api/produtos/pesquisa?${parametros}`, { cache: 'no-store' });
     const payload = await res.json();
+    if (buscaVersao !== consultaProdutoBuscaVersao) return;
 
     if (!res.ok) {
       throw new Error(payload.erro || 'Produto não encontrado');
     }
 
-    consultaProdutoAtual = payload;
-    renderizarConsultaProduto(payload);
+    consultaProdutosResultados = payload.produtos || [];
+    if (!consultaProdutosResultados.length) {
+      renderizarConsultaVazia('Nenhum produto encontrado. Revise a pesquisa e os filtros de grupo e marca.');
+      return;
+    }
+    if (consultaProdutosResultados.length === 1) await selecionarConsultaProduto(consultaProdutosResultados[0].CODPROD);
+    else {
+      renderizarResultadosConsultaProdutos(payload);
+      consultaProdutoDetalhes.innerHTML = '<div class="consulta-empty">Selecione um produto na lista acima.</div>';
+    }
   } catch (error) {
-    consultaProdutoStatus.textContent = 'Erro na consulta';
+    if (buscaVersao !== consultaProdutoBuscaVersao) return;
     renderizarConsultaVazia(error.message);
+    consultaProdutoStatus.textContent = 'Erro na consulta';
   } finally {
-    botaoConsultaProdutoBuscar.disabled = false;
+    if (buscaVersao === consultaProdutoBuscaVersao) botaoConsultaProdutoBuscar.disabled = false;
   }
 }
 
@@ -4681,6 +4949,9 @@ function abrirConsultaProdutos() {
 
 function fecharConsultaProdutosModal() {
   if (!consultaProdutosScreen.classList.contains('is-modal')) return false;
+  ConsultaTabela.fecharMenu();
+  consultaProdutoFiltros.hidden = true;
+  botaoConsultaProdutoFiltros.setAttribute('aria-expanded', 'false');
   consultaProdutosScreen.classList.remove('active', 'is-modal');
   consultaProdutosScreen.removeAttribute('role');
   consultaProdutosScreen.removeAttribute('aria-modal');
@@ -4699,6 +4970,7 @@ function abrirConsultaProdutosMesmaTela() {
 }
 
 function voltarConsultaProdutos() {
+  ConsultaTabela.fecharMenu();
   if (fecharConsultaProdutosModal()) return;
 
   if (history.state?.origem) {
@@ -9585,7 +9857,6 @@ async function abrirPreviewPedido(pedido) {
   renderizarEstadoVazio(pedidoPreviewItensLista, 'Carregando itens do pedido...');
   atualizarIcones();
   pedidoPreview.hidden = false;
-  carregarEstimativaFretePedido(pedido);
 
   try {
     const res = await fetch(`/api/fila-conferencia/pedidos/${pedido.NUNOTA}/itens`);
@@ -10783,7 +11054,8 @@ document.addEventListener('keydown', (event) => {
     homeGlobalSearch?.focus();
   }
   if (event.key === 'Escape') {
-    if (!consultaEtiquetaDuasColunasModal.hidden) fecharEtiquetaDuasColunas();
+    if (!consultaProdutoFiltros.hidden) fecharFiltrosConsultaProdutos();
+    else if (!consultaEtiquetaDuasColunasModal.hidden) fecharEtiquetaDuasColunas();
     else if (!consultaEtiquetaReferenciaModal.hidden) fecharQuantidadeEtiquetaReferencia();
     else if (!consultaEtiquetaModal.hidden) fecharSelecaoEtiquetaProduto();
     else if (!consultaEtiquetasModal.hidden) fecharPainelEtiquetas();
@@ -10796,6 +11068,17 @@ consultaProdutosScreen.addEventListener('click', (event) => {
   if (event.target === consultaProdutosScreen) fecharConsultaProdutosModal();
 });
 botaoConsultaProdutoBuscar.addEventListener('click', buscarConsultaProduto);
+inicializarDivisorConsultaEstoque();
+botaoConsultaProdutoFiltros.addEventListener('click', alternarFiltrosConsultaProdutos);
+consultaProdutoGrupoBusca.addEventListener('input', () => pesquisarFiltroConsulta('grupo'));
+consultaProdutoMarcaBusca.addEventListener('input', () => pesquisarFiltroConsulta('marca'));
+botaoConsultaProdutoFecharFiltros.addEventListener('click', fecharFiltrosConsultaProdutos);
+botaoConsultaProdutoAplicarFiltros.addEventListener('click', aplicarFiltrosConsultaProdutos);
+botaoConsultaProdutoLimparFiltros.addEventListener('click', limparFiltrosConsultaProdutos);
+consultaProdutoFiltros.addEventListener('keydown', tecladoFiltrosConsultaProdutos);
+consultaProdutoFiltros.addEventListener('click', (event) => {
+  if (event.target === consultaProdutoFiltros) fecharFiltrosConsultaProdutos();
+});
 botaoConsultaProdutoEtiquetas.addEventListener('click', abrirPainelEtiquetas);
 consultaEtiquetasCancelar.addEventListener('click', fecharPainelEtiquetas);
 consultaEtiquetasModal.addEventListener('click', (event) => {

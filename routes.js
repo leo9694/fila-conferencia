@@ -13,6 +13,7 @@ const {
   executeService
 } = require('./api/sankhyaApi');
 const { criarConferenciaTimerStore } = require('./api/conferenciaTimerStore');
+const { pesquisarProdutos, listarFiltrosProdutos } = require('./api/produtoConsulta');
 const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
 const { garantirContaFaturamento } = require('./api/faturamentoBanco');
 const { consultarNotaSaida, confirmarNotaSaidaTeste, aplicarCortesNotaSaidaTeste, sqlHistoricoPedidosSaida } = require('./api/conferenciaSaidaNota');
@@ -3872,9 +3873,25 @@ router.get('/produtos/rastreio/filtros', async (req, res) => {
   }
 });
 
+router.get('/produtos/filtros', async (req, res) => {
+  try {
+    res.json(await listarFiltrosProdutos({ executeQuery }));
+  } catch (error) {
+    res.status(500).json({ erro: 'Erro ao carregar grupos e marcas.' });
+  }
+});
+
+router.get('/produtos/pesquisa', async (req, res) => {
+  try {
+    res.json(await pesquisarProdutos({ busca: req.query.busca, grupo: req.query.grupo, marca: req.query.marca, executeQuery }));
+  } catch (error) {
+    res.status(error.statusCode || 500).json({ erro: error.statusCode ? error.message : 'Erro ao pesquisar produtos.' });
+  }
+});
+
 router.get('/produtos/consulta', async (req, res) => {
   try {
-    const codigo = String(req.query.codigo || '').trim();
+    const codigo = String(req.query.codProd ?? req.query.codigo ?? '').trim();
 
     if (!codigo) {
       res.status(400).json({ erro: 'Informe o código do produto' });
@@ -3883,6 +3900,10 @@ router.get('/produtos/consulta', async (req, res) => {
 
     const codigoSql = textoSql(codigo);
     const codigoNumero = obterNumeroInteiro(codigo);
+    if (req.query.codProd !== undefined && (!Number.isSafeInteger(Number(codigo)) || Number(codigo) <= 0)) {
+      res.status(400).json({ erro: 'Código do produto inválido.' });
+      return;
+    }
     const filtroCodigoProduto = codigoNumero ? `OR PRO.CODPROD = ${codigoNumero}` : '';
 
     const produtos = await executeQuery(`
@@ -3916,6 +3937,7 @@ router.get('/produtos/consulta', async (req, res) => {
             AND EST.CODBARRA = '${codigoSql}'
         )
       )
+      ${req.query.codProd !== undefined ? `AND PRO.CODPROD = ${Number(codigo)}` : ''}
       ORDER BY PRO.CODPROD
     `);
 

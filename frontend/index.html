@@ -2776,7 +2776,7 @@
       overflow: hidden;
     }
 
-    body.has-global-sidebar .consulta-produtos-screen.is-modal {
+    body.has-global-sidebar .screen.consulta-produtos-screen.active.is-modal:not(#home-screen):not(#login-screen) {
       position: fixed;
       inset: 0;
       z-index: 4100;
@@ -2790,8 +2790,9 @@
     }
 
     .consulta-produtos-screen.is-modal .consulta-produtos-app {
-      width: min(1480px, calc(100vw - 32px));
-      min-height: min(820px, calc(100dvh - 32px));
+      width: 100%;
+      height: calc(100dvh - 32px);
+      min-height: 0;
       max-height: calc(100dvh - 32px);
       overflow: auto;
       border: 1px solid rgba(255, 255, 255, 0.72);
@@ -2823,6 +2824,85 @@
     .atualizacao-contato-app {
       grid-template-rows: auto auto auto minmax(0, 1fr);
     }
+
+    .consulta-produtos-app {
+      display: flex;
+      flex-direction: column;
+      width: 100%;
+      height: calc(100dvh - 24px);
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .consulta-produtos-app > .consulta-toolbar {
+      flex: 0 0 auto;
+    }
+
+    .consulta-produtos-app > .consulta-grid {
+      flex: 1 0 340px;
+    }
+
+    .consulta-titulo-linha {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .consulta-filtros-botao {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      flex: 0 0 36px;
+      width: 36px;
+      height: 36px;
+      padding: 7px;
+      border: 1px solid #8dccbf;
+      border-radius: 10px;
+      color: #00866a;
+      background: #f4fbf8;
+      cursor: pointer;
+    }
+
+    .consulta-filtros-botao[aria-expanded="true"],
+    .consulta-filtros-botao[data-ativo="true"] {
+      color: #fff;
+      background: #00866a;
+    }
+
+    .consulta-filtros {
+      position: fixed;
+      inset: 0;
+      z-index: 4300;
+      display: grid;
+      place-items: center;
+      padding: 16px;
+      background: rgba(7, 48, 71, .5);
+    }
+
+    .consulta-filtros[hidden] { display: none; }
+    .consulta-filtros-dialogo {
+      width: min(560px, 100%);
+      max-height: calc(100dvh - 32px);
+      overflow: auto;
+      padding: 20px;
+      display: grid;
+      gap: 16px;
+      background: #fff;
+      border-radius: 18px;
+      box-shadow: 0 20px 60px rgba(7, 48, 71, .25);
+    }
+    .consulta-filtros-cabecalho,
+    .consulta-filtros-acoes { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+    .consulta-filtros-cabecalho h2 { margin: 0; font-size: 1.2rem; }
+    .consulta-filtros .fila-field { min-width: 0; }
+    .consulta-filtros-resultados { max-height: 180px; overflow: auto; display: grid; gap: 4px; }
+    .consulta-filtros-resultados:empty { display: none; }
+    .consulta-filtros-resultados button {
+      padding: 10px; border: 1px solid #d0e5e0; border-radius: 8px;
+      background: #f4fbf8; color: #163c46; text-align: left; cursor: pointer;
+    }
+    .consulta-filtros-resultados button:hover,
+    .consulta-filtros-resultados button:focus-visible { background: #d7f4e8; outline: 2px solid #00866a; }
 
     .contato-page-heading {
       padding: 2px 2px 0;
@@ -2861,6 +2941,15 @@
       gap: 10px;
       padding: 14px 16px;
       border-radius: 13px;
+    }
+
+    .consulta-toolbar {
+      grid-template-columns: minmax(220px, 1fr) minmax(240px, 520px) auto auto auto;
+    }
+
+    @media (min-width: 901px) and (max-width: 1200px) {
+      .consulta-toolbar { grid-template-columns: minmax(0, 1fr) auto auto auto; }
+      .consulta-toolbar > div:first-child { grid-column: 1 / -1; }
     }
 
     .contato-toolbar > * { grid-column: auto; }
@@ -3220,11 +3309,39 @@
 
     .consulta-produto-info {
       display: grid;
-      grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 1.2fr);
+      grid-template-rows: minmax(140px, var(--consulta-resumo-altura, 1fr)) 14px minmax(140px, var(--consulta-detalhes-altura, 1.2fr));
       gap: 8px;
       min-height: 0;
       padding: 12px;
     }
+
+    .consulta-painel-estoque {
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: 8px;
+      min-height: 0;
+      min-width: 0;
+    }
+    .consulta-painel-estoque .consulta-table-scroll { min-height: 0; }
+    .consulta-paineis-divisor {
+      display: grid;
+      place-items: center;
+      cursor: ns-resize;
+      touch-action: none;
+      border-radius: 5px;
+      outline-offset: 2px;
+    }
+    .consulta-paineis-divisor::before {
+      content: '';
+      width: 40px;
+      height: 5px;
+      border-top: 1px solid #75a69b;
+      border-bottom: 1px solid #75a69b;
+    }
+    .consulta-paineis-divisor:hover,
+    .consulta-paineis-divisor:focus-visible,
+    .consulta-produto-info.is-redimensionando .consulta-paineis-divisor { background: #d7f4e8; outline: 2px solid #00866a; }
+    .consulta-produto-info.is-redimensionando { user-select: none; cursor: ns-resize; }
 
     .consulta-card-title {
       display: flex;
@@ -3255,6 +3372,11 @@
       font-weight: 700;
     }
 
+    .consulta-produto-resultado { cursor: pointer; }
+    .consulta-produto-resultado:hover,
+    .consulta-produto-resultado:focus-visible { background: #eef7f3; }
+    .consulta-produto-resultado.is-selected { background: #d7f4e8; outline: 2px solid #00866a; outline-offset: -2px; }
+
     .consulta-table th,
     .consulta-table td {
       border: 1px solid rgba(18, 66, 75, 0.12);
@@ -3277,6 +3399,20 @@
     .consulta-table th.numero {
       text-align: right;
     }
+
+    .consulta-coluna-cabecalho { display: flex; align-items: center; gap: 6px; }
+    .consulta-coluna-nome { flex: 1; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; white-space: nowrap; }
+    .consulta-coluna-filtro { flex: 0 0 25px; padding: 2px; border: 1px solid #c1ddd5; border-radius: 5px; background: #fff; color: #00866a; cursor: pointer; }
+    .consulta-coluna-filtro.ativo { background: #00866a; color: #fff; }
+    .consulta-coluna-menu { position: fixed; z-index: 4400; width: min(300px, calc(100vw - 16px)); max-height: min(420px, calc(100dvh - 16px)); overflow: auto; padding: 8px; border: 1px solid #bcd5cf; border-radius: 10px; background: #fff; color: #163c46; box-shadow: 0 12px 30px #07304733; font-size: .85rem; }
+    .consulta-coluna-menu > button, .consulta-coluna-opcoes > button { display: block; width: 100%; padding: 10px; border: 0; border-radius: 6px; background: #fff; color: inherit; text-align: left; cursor: pointer; }
+    .consulta-coluna-menu button:hover, .consulta-coluna-menu button:focus-visible { background: #d7f4e8; }
+    .consulta-coluna-opcoes { display: grid; gap: 8px; padding-top: 8px; border-top: 1px solid #d0e5e0; }
+    .consulta-coluna-opcoes[hidden], .consulta-coluna-valores label[hidden] { display: none; }
+    .consulta-coluna-opcoes input[type="search"] { width: 100%; padding: 8px; border: 1px solid #bcd5cf; border-radius: 6px; }
+    .consulta-coluna-valores { max-height: 160px; overflow: auto; }
+    .consulta-coluna-opcoes label { display: flex; gap: 8px; align-items: center; padding: 6px 2px; overflow-wrap: anywhere; }
+    .consulta-coluna-opcoes input[type="checkbox"] { width: 16px; height: 16px; flex: 0 0 16px; }
 
     .consulta-table tr:nth-child(even) td {
       background: #f1f4f5;
@@ -10401,11 +10537,25 @@
         min-height: auto;
       }
 
+      .consulta-produtos-app,
+      .consulta-produtos-screen.is-modal .consulta-produtos-app {
+        height: auto;
+        min-height: calc(100dvh - 56px);
+        max-height: none;
+        overflow: visible;
+      }
+
+      .consulta-produtos-app > .consulta-grid { flex-basis: auto; }
+      .consulta-foto-frame { max-height: 360px; }
+
       .consulta-toolbar,
       .contato-toolbar {
         align-items: stretch;
         padding: 12px;
       }
+
+      .consulta-toolbar { grid-template-columns: minmax(0, 1fr) auto; }
+      .consulta-toolbar > div:first-child { grid-column: 1 / -1; }
 
       .consulta-toolbar .btn-start,
       .consulta-toolbar .btn-back,
@@ -10425,6 +10575,8 @@
       .consulta-table-scroll {
         min-height: 180px;
       }
+
+      .consulta-produto-info { height: max(440px, 70dvh); }
     }
     /* Polimento visual: filtros e cabecalho do perfil de contato */
     .atualizacao-contato-screen {
@@ -11869,43 +12021,6 @@
                 </div>
               </div>
 
-              <div class="pedido-preview-frete-estimado" id="pedido-preview-frete-estimado" hidden>
-                <div class="pedido-preview-frete-head">
-                  <i data-lucide="truck" aria-hidden="true"></i>
-                  <div>
-                    <h3>Frete aproximado</h3>
-                    <p>Estimativa sujeita a variações conforme origem, transportadora e faixa de peso.</p>
-                  </div>
-                </div>
-                <div class="pedido-preview-frete-valores">
-                  <section class="pedido-preview-frete-valor-item">
-                    <i class="pedido-preview-frete-icone" data-lucide="weight" aria-hidden="true"></i>
-                    <div>
-                      <small>Por peso</small>
-                      <strong id="pedido-preview-frete-valor">Consultando histórico…</strong>
-                      <small class="pedido-preview-frete-faixa" id="pedido-preview-frete-faixa-peso"></small>
-                      <span class="pedido-preview-frete-confianca" id="pedido-preview-frete-confianca-peso"></span>
-                    </div>
-                  </section>
-                  <section class="pedido-preview-frete-valor-item">
-                    <i class="pedido-preview-frete-icone" data-lucide="file-text" aria-hidden="true"></i>
-                    <div>
-                      <small>Por valor do pedido</small>
-                      <strong id="pedido-preview-frete-valor-pedido">Consultando histórico…</strong>
-                      <small class="pedido-preview-frete-faixa" id="pedido-preview-frete-faixa-valor"></small>
-                      <span class="pedido-preview-frete-confianca" id="pedido-preview-frete-confianca-valor"></span>
-                    </div>
-                  </section>
-                </div>
-                <div class="pedido-preview-frete-dados">
-                  <div class="pedido-preview-frete-dado"><i data-lucide="tag" aria-hidden="true"></i><div><strong id="pedido-preview-frete-custo-kg">-</strong><small>Custo por kg</small></div></div>
-                  <div class="pedido-preview-frete-dado"><i data-lucide="pie-chart" aria-hidden="true"></i><div><strong id="pedido-preview-frete-percentual">-</strong><small>Representatividade</small></div></div>
-                  <div class="pedido-preview-frete-dado"><i data-lucide="weight" aria-hidden="true"></i><div><strong id="pedido-preview-frete-peso">-</strong><small>Peso total</small></div></div>
-                  <div class="pedido-preview-frete-dado"><i data-lucide="map-pin" aria-hidden="true"></i><div><strong id="pedido-preview-frete-destino">-</strong><small>Local de entrega</small></div></div>
-                </div>
-                <small class="pedido-preview-frete-contexto" id="pedido-preview-frete-meta"></small>
-              </div>
-
               <div class="documentos-fiscais-panel" id="pedido-preview-documentos" hidden></div>
 
               <div class="pedido-preview-items" id="pedido-preview-itens-lista"></div>
@@ -12311,22 +12426,52 @@
       <div class="consulta-toolbar">
         <div>
           <div class="home-kicker">Consulta Operacional</div>
-          <h1 id="consulta-produtos-titulo">Consulta de Produtos</h1>
+          <div class="consulta-titulo-linha">
+            <h1 id="consulta-produtos-titulo">Consulta de Produtos</h1>
+          </div>
         </div>
         <div class="fila-field">
-          <label for="consulta-produto-codigo">Código do produto</label>
-          <input id="consulta-produto-codigo" autocomplete="off" placeholder="Digite codigo, referencia ou barras">
+          <label for="consulta-produto-codigo">Código ou nome do produto</label>
+          <input id="consulta-produto-codigo" autocomplete="off" maxlength="120" placeholder="Digite código, referência, barras ou nome">
         </div>
+        <button class="consulta-filtros-botao" id="consulta-produto-filtros-toggle" type="button" title="Filtros de grupo e marca" aria-label="Filtros de grupo e marca" aria-expanded="false" aria-controls="consulta-produto-filtros">
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 5h16M7 12h10M10 19h4"/></svg>
+        </button>
         <button class="btn-start" id="consulta-produto-buscar" type="button">Buscar produto</button>
         <button class="btn-back" id="consulta-produto-voltar" type="button">Voltar</button>
       </div>
 
+      <div class="consulta-filtros" id="consulta-produto-filtros" hidden>
+        <div class="consulta-filtros-dialogo" role="dialog" aria-modal="true" aria-labelledby="consulta-filtros-titulo" tabindex="-1">
+          <div class="consulta-filtros-cabecalho">
+            <h2 id="consulta-filtros-titulo">Filtrar produtos</h2>
+            <button class="btn-back" id="consulta-produto-filtros-fechar" type="button" aria-label="Fechar filtros">Fechar</button>
+          </div>
+          <div class="fila-field">
+            <label for="consulta-produto-grupo-busca">Grupo</label>
+            <input id="consulta-produto-grupo" type="hidden">
+            <input id="consulta-produto-grupo-busca" autocomplete="off" placeholder="Digite o nome do grupo" aria-controls="consulta-produto-grupo-resultados">
+            <div class="consulta-filtros-resultados" id="consulta-produto-grupo-resultados" role="group" aria-label="Grupos encontrados" aria-live="polite"></div>
+          </div>
+          <div class="fila-field">
+            <label for="consulta-produto-marca-busca">Marca</label>
+            <input id="consulta-produto-marca" type="hidden">
+            <input id="consulta-produto-marca-busca" autocomplete="off" placeholder="Digite o nome da marca" aria-controls="consulta-produto-marca-resultados">
+            <div class="consulta-filtros-resultados" id="consulta-produto-marca-resultados" role="group" aria-label="Marcas encontradas" aria-live="polite"></div>
+          </div>
+          <span class="consulta-status" id="consulta-produto-filtros-status" role="status"></span>
+          <div class="consulta-filtros-acoes">
+            <button class="btn-back" id="consulta-produto-filtros-limpar" type="button">Limpar filtros</button>
+            <button class="btn-start" id="consulta-produto-filtros-aplicar" type="button">Aplicar filtros</button>
+          </div>
+        </div>
+      </div>
       <div class="consulta-grid">
         <section class="consulta-card consulta-foto-card">
           <div class="consulta-foto-heading">
             <div>
               <strong id="consulta-produto-titulo">Produto</strong>
-              <div class="consulta-status" id="consulta-produto-legenda">Informe um codigo para consultar.</div>
+              <div class="consulta-status" id="consulta-produto-legenda">Pesquise um produto para consultar.</div>
             </div>
             <div class="consulta-etiqueta-actions">
               <button class="btn-consulta-etiqueta" id="consulta-produto-etiquetas" type="button" disabled>
@@ -12340,20 +12485,25 @@
         </section>
 
         <section class="consulta-card consulta-produto-info">
-          <div class="consulta-card-title">
-            <strong>Produto e estoque por empresa</strong>
-            <span class="consulta-status" id="consulta-produto-status">Aguardando consulta</span>
-          </div>
-          <div class="consulta-table-scroll" id="consulta-produto-resumo">
-            <div class="consulta-empty">Digite o código do produto para visualizar o estoque.</div>
+          <div class="consulta-painel-estoque" id="consulta-painel-resumo">
+            <div class="consulta-card-title">
+              <strong>Produto e estoque por empresa</strong>
+              <span class="consulta-status" id="consulta-produto-status">Aguardando consulta</span>
+            </div>
+            <div class="consulta-table-scroll" id="consulta-produto-resumo">
+              <div class="consulta-empty">Pesquise por código, referência, barras ou nome do produto.</div>
+            </div>
           </div>
 
-          <div class="consulta-card-title">
-            <strong>Detalhes de estoque</strong>
-            <span class="consulta-status" id="consulta-estoque-status">0 registros</span>
-          </div>
-          <div class="consulta-table-scroll" id="consulta-produto-detalhes">
-            <div class="consulta-empty">Nenhum detalhe carregado.</div>
+          <div class="consulta-paineis-divisor" id="consulta-paineis-divisor" role="separator" tabindex="0" aria-label="Redimensionar lista de produtos e detalhes de estoque" aria-orientation="horizontal" aria-controls="consulta-painel-resumo consulta-painel-detalhes" aria-valuemin="0" aria-valuemax="100" aria-valuenow="45" title="Arraste para redimensionar. Use as setas para cima/baixo ou dê dois cliques para restaurar."></div>
+          <div class="consulta-painel-estoque" id="consulta-painel-detalhes">
+            <div class="consulta-card-title">
+              <strong>Detalhes de estoque</strong>
+              <span class="consulta-status" id="consulta-estoque-status">0 registros</span>
+            </div>
+            <div class="consulta-table-scroll" id="consulta-produto-detalhes">
+              <div class="consulta-empty">Nenhum detalhe carregado.</div>
+            </div>
           </div>
         </section>
       </div>
@@ -13359,6 +13509,7 @@
   <script src="rastreio-produto.js?v=20261005-4"></script>
   <script src="diario-bordo-quilometragem.js?v=20261007-2"></script>
   <script src="diario-bordo.js?v=20261008-3"></script>
-  <script src="app.js?v=20261019-parceiro-conferencia"></script>
+  <script src="consulta-tabela.js?v=20261019-2"></script>
+  <script src="app.js?v=20261019-sem-frete-preview"></script>
 </body>
 </html>
