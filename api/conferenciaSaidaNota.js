@@ -16,11 +16,20 @@ async function confirmarNotaSaidaTeste({ nunota, executeQuery, executeService })
   if (nota.STATUS_CONF !== 'F') throw new Error('Conclua a conferência da nota antes de confirmá-la.');
   if (nota.STATUSNOTA !== 'L') {
     if (!['A', 'P'].includes(nota.STATUSNOTA) || nota.LIBCONF !== 'S') throw new Error('Nota não aprovada para conferência.');
-    await executeService('CACSP.confirmarNota', {
-      nota: { NUNOTA: { $: String(nunota) }, confirmacaoCentralNota: true, ehPedidoWeb: false, atualizaPrecoItemPedCompra: false }
-    }, { modulePath: 'mgecom', forceAccessSession: true });
+    let erroConfirmacao = null;
+    try {
+      await executeService('CACSP.confirmarNota', {
+        nota: { NUNOTA: { $: String(nunota) }, confirmacaoCentralNota: true, ehPedidoWeb: false, atualizaPrecoItemPedCompra: false },
+        clientEventList: { clientEvent: [{ $: 'br.com.utiliza.dtneg.servidor' }] }
+      }, { modulePath: 'mgecom', forceAccessSession: true });
+    } catch (error) {
+      erroConfirmacao = error;
+    }
+    // O retorno pode falhar depois de o ERP confirmar. Consulte antes de repetir qualquer escrita.
     nota = await consultarNotaSaida({ nunota, executeQuery });
-    if (nota?.STATUSNOTA !== 'L') throw new Error('O Sankhya ainda não confirmou a nota. A conferência foi preservada; verifique as pendências e tente novamente.');
+    if (nota?.STATUSNOTA !== 'L') {
+      throw new Error(`O Sankhya ainda não confirmou a nota. A conferência foi preservada; verifique as pendências e tente novamente.${erroConfirmacao ? ` Motivo: ${erroConfirmacao.message}` : ''}`);
+    }
   }
   return { status: 'CONFIRMADA', automatico: false, nota, detalhes: [] };
 }

@@ -7167,10 +7167,10 @@ function renderizarPainelDocumentosFiscais(container, situacao = {}, fallback = 
 
   container.hidden = false;
   const botoesDocumentos = documentosCombinados
-    ? `<button class="documento-fiscal-button" type="button" data-documento="${tipoDocumentoCombinado}" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(textoDocumentoCombinado)}">
+    ? `<button class="documento-fiscal-button" type="button" data-documento="${tipoDocumentoCombinado}" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(textoDocumentoCombinado)}" ${danfeIndisponivel && boletoIndisponivel ? 'disabled' : ''}>
         <i data-lucide="files" aria-hidden="true"></i>${textoDocumentoCombinado}
       </button>`
-    : `<button class="documento-fiscal-button" type="button" data-documento="danfe" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(situacao.danfe?.motivo || 'Abrir DANFE')}">
+    : `<button class="documento-fiscal-button" type="button" data-documento="danfe" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(situacao.danfe?.motivo || 'Abrir DANFE')}" ${danfeIndisponivel ? 'disabled' : ''}>
         <i data-lucide="file-text" aria-hidden="true"></i>Abrir DANFE
       </button>
       <button class="documento-fiscal-button" type="button" data-documento="boleto" data-nunota="${escaparAtributo(nunota)}" title="${escaparAtributo(desabilitarBoleto ? 'Bonificação não gera boleto' : situacao.boleto?.motivo || 'Abrir boleto')}" ${boletoIndisponivel ? 'disabled' : ''}>
@@ -7190,18 +7190,37 @@ function renderizarPainelDocumentosFiscais(container, situacao = {}, fallback = 
   atualizarIcones();
 }
 
-async function carregarDocumentosFiscaisPedido(pedido, container, fallback = null, documentosCombinados = false, desabilitarBoleto = false) {
+const consultasDocumentosFiscais = new WeakMap();
+
+async function carregarDocumentosFiscaisPedido(pedido, container, fallback = null, documentosCombinados = false, desabilitarBoleto = false, tentativa = 0, consulta = null) {
   if (!pedido?.NUNOTA || !container) return;
+  if (!consulta) {
+    consulta = {};
+    consultasDocumentosFiscais.set(container, consulta);
+  }
+  const consultaAtiva = () => consultasDocumentosFiscais.get(container) === consulta
+    && container.isConnected && !container.closest('[hidden]');
+  if (tentativa > 0 && !consultaAtiva()) return;
 
   container.hidden = false;
-  container.innerHTML = '<div class="documentos-fiscais-info"><strong>Consultando faturamento...</strong><span>Buscando nota e documentos no Sankhya.</span></div>';
+  if (tentativa === 0) container.innerHTML = '<div class="documentos-fiscais-info"><strong>Consultando documentos...</strong><span>Buscando nota e documentos no Sankhya.</span></div>';
 
   try {
-    const res = await fetch(`/api/fila-conferencia/pedidos/${pedido.NUNOTA}/documentos`);
+    const res = await fetch(`/api/fila-conferencia/pedidos/${pedido.NUNOTA}/documentos`, { cache: 'no-store' });
     const payload = await res.json();
     if (!res.ok) throw new Error(payload.erro || 'Erro ao consultar documentos');
+    if (!consultaAtiva()) return;
     renderizarPainelDocumentosFiscais(container, payload, fallback, documentosCombinados, desabilitarBoleto);
+    if (pedido.SAIDA_POR_NOTA && payload.nota && tentativa < 20
+      && (!payload.danfe?.disponivel || (!desabilitarBoleto && !payload.boleto?.disponivel))) {
+      const feedback = container.querySelector('.documentos-fiscais-feedback');
+      if (feedback) feedback.textContent += ' Atualizando automaticamente enquanto aguarda os documentos.';
+      setTimeout(() => {
+        return carregarDocumentosFiscaisPedido(pedido, container, fallback, documentosCombinados, desabilitarBoleto, tentativa + 1, consulta);
+      }, 3000);
+    }
   } catch (error) {
+    if (!consultaAtiva()) return;
     renderizarPainelDocumentosFiscais(container, {}, {
       status: 'ERRO',
       detalhes: [error.message]

@@ -119,6 +119,7 @@ test('confirma a mesma nota pelo serviço nativo e verifica status real sem fatu
       executeService: async (servico, corpo, options) => {
         chamadas.push(servico);
         assert.equal(corpo.nota.NUNOTA.$, '123');
+        assert.deepEqual(corpo.clientEventList, { clientEvent: [{ $: 'br.com.utiliza.dtneg.servidor' }] });
         assert.equal(options.modulePath, 'mgecom');
         confirmada = true;
       }
