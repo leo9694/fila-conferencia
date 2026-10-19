@@ -7632,6 +7632,43 @@ router.get('/fila-conferencia/notas/:nunota/documentos/:tipo', async (req, res) 
   }
 });
 
+async function consultarNumeroPedidoEtiqueta(pedido) {
+  const pedidosOrigem = pedido.TIPMOV === 'V'
+    ? await executeQuery(`
+        SELECT DISTINCT ORIG.NUNOTA
+        FROM TGFVAR VAR
+        JOIN TGFCAB ORIG ON ORIG.NUNOTA = VAR.NUNOTAORIG
+        WHERE VAR.NUNOTA = ${obterNumeroInteiro(pedido.NUNOTA)}
+          AND ORIG.TIPMOV = 'P'
+        ORDER BY ORIG.NUNOTA
+      `)
+    : [{ NUNOTA: pedido.NUNOTA }];
+  return pedidosOrigem.map((origem) => obterNumeroInteiro(origem.NUNOTA)).filter(Boolean).join(' / ') || null;
+}
+
+router.get('/fila-conferencia/pedidos/:nunota/etiquetas-volume', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+  if (!nunota) {
+    res.status(400).json({ erro: 'Informe um documento válido' });
+    return;
+  }
+  try {
+    const [pedido] = await executeQuery(`
+      SELECT CAB.NUNOTA, CAB.TIPMOV, CAB.QTDVOL
+      FROM TGFCAB CAB
+      WHERE CAB.NUNOTA = ${nunota}
+    `);
+    if (!pedido) {
+      res.status(404).json({ erro: 'Documento não encontrado' });
+      return;
+    }
+    res.json({ numeroPedido: await consultarNumeroPedidoEtiqueta(pedido), volumes: Number(pedido.QTDVOL || 0) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ erro: 'Não foi possível consultar o pedido de origem da etiqueta' });
+  }
+});
+
 router.post('/fila-conferencia/pedidos/:nunota/etiquetas-volume', async (req, res) => {
   const nunota = obterNumeroInteiro(req.params.nunota);
   const volumes = obterNumeroInteiro(req.body?.volumes);
@@ -7679,17 +7716,7 @@ router.post('/fila-conferencia/pedidos/:nunota/etiquetas-volume', async (req, re
       return;
     }
 
-    const pedidosOrigem = pedido.TIPMOV === 'V'
-      ? await executeQuery(`
-          SELECT DISTINCT ORIG.NUNOTA
-          FROM TGFVAR VAR
-          JOIN TGFCAB ORIG ON ORIG.NUNOTA = VAR.NUNOTAORIG
-          WHERE VAR.NUNOTA = ${nunota}
-            AND ORIG.TIPMOV = 'P'
-          ORDER BY ORIG.NUNOTA
-        `)
-      : [{ NUNOTA: pedido.NUNOTA }];
-    const numeroPedido = pedidosOrigem.map((origem) => obterNumeroInteiro(origem.NUNOTA)).filter(Boolean).join(' / ');
+    const numeroPedido = await consultarNumeroPedidoEtiqueta(pedido);
 
     await atualizarRegistroApi(
       'CabecalhoNota',

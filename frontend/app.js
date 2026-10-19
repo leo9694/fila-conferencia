@@ -7679,6 +7679,7 @@ function abrirModalPosConferencia(pedido, faturamento, documentosAuxiliares = nu
   pedidoConcluido = pedido;
   posConferenciaDocumentos.hidden = entrada;
   botaoImprimirEtiquetaVolume.hidden = entrada;
+  botaoImprimirEtiquetaVolume.disabled = false;
   botaoImprimirEtiquetaVolume.textContent = 'Imprimir etiqueta';
   posConferenciaTexto.textContent = entrada
     ? `Nota de entrada ${pedido.NUNOTA}`
@@ -7730,7 +7731,7 @@ function exibirErroModalConferencia(payload, error = null) {
   botaoVoltarListaPosConferencia.textContent = 'Fechar e revisar';
 }
 
-function abrirModalEtiquetaPedido(pedido) {
+async function abrirModalEtiquetaPedido(pedido) {
   posConferenciaModal.classList.remove('is-processing', 'has-error', 'has-billing-warning');
   posConferenciaTitulo.textContent = 'Imprimir etiqueta de volume';
   botaoVoltarListaPosConferencia.textContent = 'Voltar para lista';
@@ -7739,11 +7740,24 @@ function abrirModalEtiquetaPedido(pedido) {
   posConferenciaDocumentos.hidden = true;
   posConferenciaDocumentos.innerHTML = '';
   botaoImprimirEtiquetaVolume.textContent = 'Gerar etiqueta';
-  posConferenciaTexto.textContent = Number(pedido.QTDVOL || 0) > 0
-    ? `O pedido ${pedido.NUNOTA} possui ${pedido.QTDVOL} volume(s) registrado(s).`
-    : `O pedido ${pedido.NUNOTA} nao possui quantidade de volumes registrada.`;
+  posConferenciaTexto.textContent = 'Consultando pedido de origem da etiqueta...';
+  botaoImprimirEtiquetaVolume.disabled = true;
   posConferenciaModal.hidden = false;
   atualizarIcones();
+  try {
+    const res = await fetch(`/api/fila-conferencia/pedidos/${pedido.NUNOTA}/etiquetas-volume`, { cache: 'no-store' });
+    const payload = await res.json();
+    if (pedidoConcluido !== pedido || posConferenciaModal.hidden) return;
+    if (!res.ok) throw new Error(payload.erro || 'Não foi possível consultar o pedido da etiqueta.');
+    pedido.QTDVOL = Number(payload.volumes || 0);
+    const documento = payload.numeroPedido ? `O pedido ${payload.numeroPedido}` : 'A nota sem pedido de origem vinculado';
+    posConferenciaTexto.textContent = pedido.QTDVOL > 0
+      ? `${documento} possui ${pedido.QTDVOL} volume(s) registrado(s).`
+      : `${documento} não possui quantidade de volumes registrada.`;
+    botaoImprimirEtiquetaVolume.disabled = pedido.QTDVOL <= 0;
+  } catch (error) {
+    if (pedidoConcluido === pedido && !posConferenciaModal.hidden) posConferenciaTexto.textContent = error.message;
+  }
 }
 
 function fecharModalPosConferenciaEVoltar() {
@@ -8126,7 +8140,9 @@ async function imprimirEtiquetaVolume() {
     printWindow.document.open();
     printWindow.document.write(montarHtmlEtiquetas(payload.etiqueta, volumes));
     printWindow.document.close();
-    posConferenciaTexto.textContent = `${volumes} etiqueta(s) gerada(s) para o pedido ${pedidoConcluido.NUNOTA}.`;
+    posConferenciaTexto.textContent = payload.etiqueta.numeroPedido
+      ? `${volumes} etiqueta(s) gerada(s) para o pedido ${payload.etiqueta.numeroPedido}.`
+      : `${volumes} etiqueta(s) gerada(s) para a nota sem pedido de origem vinculado.`;
   } catch (error) {
     printWindow.close();
     posConferenciaTexto.textContent = error.message;
