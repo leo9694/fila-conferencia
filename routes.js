@@ -4,6 +4,7 @@ const path = require('path');
 const { PDFDocument } = require('pdf-lib');
 const router = express.Router();
 const { semControleAdicional, validarRastreabilidadeNovoItem } = require('./api/estoqueContagemControle');
+const { montarFiltrosAjusteIndividual, criarOperacoesDatasEstoque } = require('./api/estoqueOperacoes');
 const {
   downloadDirectFile,
   downloadGatewayFile,
@@ -4921,6 +4922,9 @@ async function localizarProdutoParaContagem(codigo) {
 
 async function prepararNovoItemContagem(sessao, dados) {
   const produto = await localizarProdutoParaContagem(dados?.codigo);
+  if (sessao.filtros?.ajusteIndividual && Number(produto.CODPROD) !== Number(sessao.filtros.codProd)) {
+    throw new Error('Esta contagem individual aceita somente o produto selecionado na abertura.');
+  }
   const codLocal = sessao.local === null || sessao.local === undefined
     ? obterNumeroInteiro(dados?.codLocal)
     : Number(sessao.local);
@@ -5015,6 +5019,30 @@ router.get('/estoque-contagem/disponibilidade', (req, res) => {
   });
 });
 
+const operacoesDatasEstoque = criarOperacoesDatasEstoque({
+  executeQuery, atualizarRegistroApi,
+  normalizarData: normalizarDataIsoRastreabilidade, formatarData: formatarDataCampoSankhya
+});
+
+router.get('/estoque-contagem/datas', async (req, res) => {
+  try {
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.json({ itens: await operacoesDatasEstoque.listar(req.query) });
+  } catch (err) {
+    res.status(err.status || 422).json({ erro: err.message });
+  }
+});
+
+router.put('/estoque-contagem/datas', async (req, res) => {
+  try {
+    const chaveFila = `datas:${Number(req.body?.empresa)}:${Number(req.body?.codProd)}`;
+    const item = await executarEmFilaContagemEstoque(chaveFila, () => operacoesDatasEstoque.atualizar(req.body || {}));
+    res.json({ item });
+  } catch (err) {
+    res.status(err.status || 422).json({ erro: err.message });
+  }
+});
+
 router.get('/estoque-contagem/config', async (req, res) => {
   try {
     const empresas = await executeQuery(`
@@ -5027,7 +5055,7 @@ router.get('/estoque-contagem/config', async (req, res) => {
       WHERE NVL(EST.ATIVO, 'S') = 'S'
         AND NVL(EST.TIPO, 'P') = 'P'
         AND NVL(EST.CODPARC, 0) = 0
-        AND ABS(NVL(EST.ESTOQUE, 0)) > 0.000001
+        ${req.query?.incluirZerados === '1' ? '' : 'AND ABS(NVL(EST.ESTOQUE, 0)) > 0.000001'}
       GROUP BY EST.CODEMP, NVL(EMP.NOMEFANTASIA, EMP.RAZAOSOCIAL)
       ORDER BY EST.CODEMP
     `);
@@ -5067,7 +5095,7 @@ router.get('/estoque-contagem/locais', async (req, res) => {
         AND NVL(EST.ATIVO, 'S') = 'S'
         AND NVL(EST.TIPO, 'P') = 'P'
         AND NVL(EST.CODPARC, 0) = 0
-        AND ABS(NVL(EST.ESTOQUE, 0)) > 0.000001
+        ${req.query?.incluirZerados === '1' ? '' : 'AND ABS(NVL(EST.ESTOQUE, 0)) > 0.000001'}
       GROUP BY EST.CODLOCAL, NVL(LOC.DESCRLOCAL, 'Local ' || EST.CODLOCAL)
       ORDER BY EST.CODLOCAL
     `);
@@ -5198,7 +5226,9 @@ router.delete('/estoque-contagem/sessoes/:id', (req, res) => {
 
 router.post('/estoque-contagem/sessoes', async (req, res) => {
   try {
-    const filtros = normalizarFiltrosCopiaEstoque(req.body);
+    const filtros = req.body?.ajusteIndividual === true
+      ? montarFiltrosAjusteIndividual(req.body)
+      : normalizarFiltrosCopiaEstoque(req.body);
     const { empresa, local } = filtros;
     if (!empresa) {
       res.status(400).json({ erro: 'Informe uma empresa valida.' });
@@ -5228,6 +5258,10 @@ router.post('/estoque-contagem/sessoes', async (req, res) => {
       WHERE ${montarSqlFiltrosCopiaEstoque(filtros)}
       ORDER BY NVL(GRU.DESCRGRUPOPROD, 'Sem grupo'), PRO.DESCRPROD, EST.CODLOCAL, EST.CONTROLE
     `);
+
+    if (filtros.ajusteIndividual && !itens.length) {
+      await localizarProdutoParaContagem(String(filtros.codProd));
+    }
 
     const [empresaRegistro, grupoRegistro] = await Promise.all([
       executeQuery(`

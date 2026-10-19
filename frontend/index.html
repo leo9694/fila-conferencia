@@ -3323,6 +3323,26 @@
       min-width: 0;
     }
     .consulta-painel-estoque .consulta-table-scroll { min-height: 0; }
+    .estoque-operacoes-menu-host { position: relative; }
+    #estoque-operacoes-menu-toggle { font-size: 1.5rem; padding-inline: 12px; }
+    .estoque-operacoes-menu { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; width: 200px; padding: 6px; background: #fff; border: 1px solid #c1ddd5; border-radius: 10px; box-shadow: 0 10px 28px #07304726; }
+    .estoque-operacoes-menu[hidden] { display: none; }
+    .estoque-operacoes-menu button { display: block; width: 100%; padding: 12px; text-align: left; border: 0; border-radius: 6px; background: #fff; color: #163c46; cursor: pointer; }
+    .estoque-operacoes-menu button:hover, .estoque-operacoes-menu button:focus-visible { background: #d7f4e8; }
+    .estoque-operacoes-dialogo { margin: auto; width: min(1050px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); padding: 20px; border: 1px solid #c1ddd5; border-radius: 18px; color: #163c46; background: #fff; overflow: auto; }
+    #estoque-operacoes-local-campo[hidden] { display: none; }
+    .estoque-operacoes-dialogo::backdrop { background: #07304788; }
+    .estoque-operacoes-cabecalho { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+    .estoque-operacoes-cabecalho h2 { margin: 0; font-size: 1.3rem; }
+    .estoque-operacoes-campos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr)); gap: 14px; }
+    .estoque-operacoes-produto { grid-column: 1 / -1; }
+    .estoque-operacoes-produtos { max-height: 220px; overflow: auto; display: grid; gap: 4px; }
+    .estoque-operacoes-produtos button { text-align: left; padding: 10px; border: 1px solid #c1ddd5; border-radius: 6px; background: #f4fbf8; color: #163c46; cursor: pointer; }
+    .estoque-operacoes-posicoes { margin-top: 18px; max-height: 50dvh; overflow: auto; }
+    .estoque-operacoes-posicoes input[type="date"] { min-width: 145px; padding: 8px; border: 1px solid #c1ddd5; border-radius: 6px; }
+    .estoque-operacoes-posicoes button { padding: 8px; border: 1px solid #00866a; border-radius: 6px; background: #f4fbf8; color: #00866a; cursor: pointer; white-space: nowrap; }
+    .estoque-operacao-salvo { display: block; color: #00866a; font-size: .75rem; }
+
     .consulta-paineis-divisor {
       display: grid;
       place-items: center;
@@ -9341,6 +9361,12 @@
       background: #dff3ec;
     }
 
+    .estoque-sessao-status.individual {
+      margin-top: 6px;
+      color: #5b3894 !important;
+      background: #f0e9ff;
+    }
+
     .estoque-sessao-status.ajuste {
       color: #a65300 !important;
       background: #fff0dd;
@@ -11444,6 +11470,13 @@
                   <i data-lucide="plus" aria-hidden="true"></i>
                   Nova
                 </button>
+                <div class="estoque-operacoes-menu-host">
+                  <button class="estoque-heading-button" id="estoque-operacoes-menu-toggle" type="button" aria-label="Mais opções de estoque" aria-expanded="false" aria-controls="estoque-operacoes-menu">⋮</button>
+                  <div class="estoque-operacoes-menu" id="estoque-operacoes-menu" hidden>
+                    <button type="button" data-operacao="individual">Ajuste individual</button>
+                    <button type="button" data-operacao="datas">Data de validade</button>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -13509,7 +13542,25 @@
   <script src="rastreio-produto.js?v=20261005-4"></script>
   <script src="diario-bordo-quilometragem.js?v=20261007-2"></script>
   <script src="diario-bordo.js?v=20261008-3"></script>
+  <dialog class="estoque-operacoes-dialogo" id="estoque-operacoes-dialogo" aria-labelledby="estoque-operacoes-titulo">
+    <div class="estoque-operacoes-cabecalho">
+      <h2 id="estoque-operacoes-titulo">Operações de estoque</h2>
+      <button class="btn-back" id="estoque-operacoes-fechar" type="button">Fechar</button>
+    </div>
+    <div class="estoque-operacoes-campos">
+      <div class="estoque-field"><label for="estoque-operacoes-empresa">Empresa</label><select id="estoque-operacoes-empresa"></select></div>
+      <div class="estoque-field" id="estoque-operacoes-local-campo"><label for="estoque-operacoes-local">Local</label><select id="estoque-operacoes-local"></select></div>
+      <div class="estoque-field estoque-operacoes-produto"><label for="estoque-operacoes-produto">Produto</label>
+        <input id="estoque-operacoes-produto" maxlength="120" autocomplete="off" placeholder="Digite código, barras, referência ou nome" aria-controls="estoque-operacoes-produtos">
+        <div class="estoque-operacoes-produtos" id="estoque-operacoes-produtos" aria-live="polite"></div>
+      </div>
+    </div>
+    <p class="separacao-status" id="estoque-operacoes-mensagem" role="status"></p>
+    <button class="btn-start" id="estoque-operacoes-continuar" type="button" disabled>Continuar</button>
+    <div class="estoque-operacoes-posicoes" id="estoque-operacoes-posicoes"></div>
+  </dialog>
+  <script src="estoque-operacoes.js?v=20261019-1"></script>
   <script src="consulta-tabela.js?v=20261019-2"></script>
-  <script src="app.js?v=20261019-sem-frete-preview"></script>
+  <script src="app.js?v=20261019-ajuste-individual-selo"></script>
 </body>
 </html>

@@ -2474,6 +2474,7 @@ async function carregarOpcoesFiltrosContagemEstoque() {
 }
 
 function resumirFiltrosCopiaEstoque(filtros = {}) {
+  if (filtros.ajusteIndividual) return `Ajuste individual do produto ${filtros.codProd} · todos os saldos, inclusive zerados`;
   const partes = [];
   const grupos = Array.isArray(filtros.grupos) && filtros.grupos.length
     ? filtros.grupos
@@ -2560,6 +2561,7 @@ function renderizarCardsContagemEstoque(sessoes) {
             </span>
             ${seloStatus}
           </span>
+          ${sessao.filtros?.ajusteIndividual === true ? '<span class="estoque-sessao-status individual">Ajuste individual</span>' : ''}
           <span class="estoque-sessao-escopo">${escaparHtml(escopo.grupo)}</span>
           <span class="estoque-sessao-escopo secondary">${escaparHtml(escopo.detalhes)}</span>
           <span>${formatarDataHora(sessao.criadoEm)}</span>
@@ -11231,6 +11233,14 @@ estoqueHistoricoDataFinal.addEventListener('change', () => {
 botaoNovaContagemEstoque.addEventListener('click', () => {
   mostrarSelecaoContagemEstoque();
   reiniciarFiltrosContagemEstoque();
+});
+EstoqueOperacoes.iniciar({
+  formatarQuantidade,
+  aoCriarSessao: async (id) => {
+    await carregarListaContagensEstoque();
+    await abrirSessaoContagemEstoque(id);
+    atualizarMensagemContagemEstoque('Contagem individual aberta, incluindo os lotes com saldo zero.');
+  }
 });
 estoqueContagemSessoes.addEventListener('click', (event) => {
   const excluir = event.target.closest('[data-estoque-excluir]');
