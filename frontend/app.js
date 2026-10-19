@@ -8912,7 +8912,7 @@ async function carregarLotesConfirmacaoSeparacao(item) {
     return;
   }
   botaoConfirmarSeparacao.disabled = true;
-  separacaoConfirmStatus.textContent = 'Consultando lotes disponiveis no estoque...';
+  separacaoConfirmStatus.textContent = 'Consultando lotes e quantidades da nota...';
 
   try {
     const nunota = Number(pedidoPreviewSelecionado?.NUNOTA || 0);
@@ -8921,32 +8921,32 @@ async function carregarLotesConfirmacaoSeparacao(item) {
     if (!resposta.ok) throw new Error(payload.erro || 'Não foi possível consultar os lotes.');
     if (!itemSeparacaoPendente || itemSeparacaoPendente.item !== item) return;
 
-    const lotesEstoque = Array.isArray(payload.lotes)
-      ? payload.lotes.filter((lote) => Number(lote.estoque || 0) > 0)
+    const lotesNota = Array.isArray(payload.lotes)
+      ? payload.lotes.filter((lote) => Number(lote.quantidadeNota || 0) > 0)
       : [];
     const controlePedido = String(item.controle || '').trim();
     const lotes = !itemSeparacaoPendente.leituraFeltrinPorCodigo && controlePedido
-      ? lotesEstoque.filter((lote) => lote.controle === controlePedido) : lotesEstoque;
+      ? lotesNota.filter((lote) => lote.controle === controlePedido) : lotesNota;
     itemSeparacaoPendente.lotesDisponiveis = lotes;
     const controleAtual = controlePedido || String(item.controleSeparado || '').trim();
     const loteAtual = lotes.find((lote) => lote.controle === controleAtual) || null;
 
     if (lotes.length === 1) {
       itemSeparacaoPendente.loteSelecionado = lotes[0];
-      separacaoLoteInfo.textContent = `Lote unico do estoque: ${lotes[0].controle}.`;
+      separacaoLoteInfo.textContent = `Lote da nota: ${lotes[0].controle}.`;
     } else if (lotes.length > 1) {
       separacaoLoteField.hidden = false;
       separacaoLoteSelect.innerHTML = `
         <option value="">Selecione o lote separado</option>
         ${lotes.map((lote) => {
           const validade = formatarData(lote.dtValidade) || 'Sem validade';
-          const disponivel = formatarQuantidade(lote.disponivel);
-          return `<option value="${escaparAtributo(lote.controle)}">${escaparHtml(lote.controle)} | Validade: ${escaparHtml(validade)} | Disponivel: ${disponivel}</option>`;
+          const disponivel = formatarQuantidade(lote.quantidadeNota);
+          return `<option value="${escaparAtributo(lote.controle)}">${escaparHtml(lote.controle)} | Validade: ${escaparHtml(validade)} | Na nota: ${disponivel}</option>`;
         }).join('')}
       `;
       if (loteAtual) separacaoLoteSelect.value = loteAtual.controle;
       itemSeparacaoPendente.loteSelecionado = loteAtual;
-      separacaoLoteInfo.textContent = `${lotes.length} lotes positivos encontrados na empresa do pedido.`;
+      separacaoLoteInfo.textContent = `${lotes.length} lotes previstos na nota.`;
     } else {
       itemSeparacaoPendente.loteSelecionado = null;
     }
@@ -8959,7 +8959,7 @@ async function carregarLotesConfirmacaoSeparacao(item) {
         ? `${obterDescricaoEntradaCodigo(itemSeparacaoPendente.entradaCodigo)} identificado. Confirme a quantidade total do item.`
         : 'Confirme a quantidade separada.';
     botaoConfirmarSeparacao.disabled = !itemSeparacaoProcessado(item) && (itemSeparacaoPendente.leituraFeltrinPorCodigo || Boolean(controlePedido && !lotes.length));
-    if (controlePedido && !lotes.length && !itemSeparacaoProcessado(item)) separacaoConfirmStatus.textContent = `Lote ${controlePedido} do pedido não disponível no estoque. Não é permitido substituí-lo por outro lote.`;
+    if (controlePedido && !lotes.length && !itemSeparacaoProcessado(item)) separacaoConfirmStatus.textContent = `Lote ${controlePedido} não encontrado nas posições da nota. Atualize os itens; não é permitido substituí-lo por outro lote.`;
     if (itemSeparacaoPendente.leituraFeltrinPorCodigo) {
       separacaoLoteField.hidden = true;
       if (!itemSeparacaoProcessado(item)) separacaoConfirmStatus.textContent = 'Bipe o lote. A quantidade segue o código da caixa ou unidade selecionado.';

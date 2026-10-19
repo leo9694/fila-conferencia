@@ -11,25 +11,22 @@ async function consultarCodigoFeltrin({ nunota, codigo, codProd, executeQuery })
   // O prefixo varia entre caixas do mesmo produto. A identificação é feita
   // pelo produto previamente bipado e lote exato. Sem produto, exige lote único.
   const rows = await executeQuery(`
-    SELECT EST.CODPROD, TRIM(EST.CONTROLE) AS CONTROLE,
-      TO_CHAR(MAX(EST.DTVAL), 'YYYY-MM-DD') AS DTVALID,
-      SUM(NVL(EST.ESTOQUE, 0)) AS ESTOQUE
+    SELECT ITE.CODPROD, TRIM(ITE.CONTROLE) AS CONTROLE,
+      TO_CHAR(MAX(EST.DTVAL), 'YYYY-MM-DD') AS DTVALID
     FROM TGFCAB CAB
-    JOIN TGFEST EST ON EST.CODEMP = CAB.CODEMP
-    JOIN TGFPRO PRO ON PRO.CODPROD = EST.CODPROD
+    JOIN TGFITE ITE ON ITE.NUNOTA = CAB.NUNOTA
+    JOIN TGFPRO PRO ON PRO.CODPROD = ITE.CODPROD
+    LEFT JOIN TGFEST EST ON EST.CODEMP = CAB.CODEMP
+      AND EST.CODPROD = ITE.CODPROD AND EST.CODLOCAL = ITE.CODLOCALORIG
+      AND TRIM(ITE.CONTROLE) = TRIM(EST.CONTROLE)
     WHERE CAB.NUNOTA = ${nunota}
-      ${codProd === undefined ? '' : `AND EST.CODPROD = ${codProd}`}
+      ${codProd === undefined ? '' : `AND ITE.CODPROD = ${codProd}`}
       AND UPPER(TRIM(PRO.MARCA)) LIKE '%FELTRIN%'
-      AND TRIM(EST.CONTROLE) = '${controle}'
-      AND NVL(EST.ATIVO, 'S') = 'S'
-      AND NVL(EST.ESTOQUE, 0) > 0
-      AND EXISTS (SELECT 1 FROM TGFITE ITE
-        WHERE ITE.NUNOTA = CAB.NUNOTA AND ITE.CODPROD = EST.CODPROD
-          AND (TRIM(ITE.CONTROLE) = TRIM(EST.CONTROLE) OR TRIM(ITE.CONTROLE) IS NULL))
-    GROUP BY EST.CODPROD, TRIM(EST.CONTROLE)
-    HAVING SUM(NVL(EST.ESTOQUE, 0)) > 0
+      AND TRIM(ITE.CONTROLE) = '${controle}'
+      AND ITE.SEQUENCIA > 0 AND NVL(ITE.QTDNEG, 0) > 0
+    GROUP BY ITE.CODPROD, TRIM(ITE.CONTROLE)
   `);
-  if (!rows.length) throw new Error(`Lote ${controle} não encontrado com estoque para ${codProd === undefined ? 'um produto Feltrin' : `o produto ${codProd}`} deste pedido.`);
+  if (!rows.length) throw new Error(`Lote ${controle} não encontrado na nota para ${codProd === undefined ? 'um produto Feltrin' : `o produto ${codProd}`}.`);
   if (rows.length !== 1) throw new Error(`Lote ${controle} corresponde a mais de um produto. Não foi possível identificar a caixa com segurança.`);
   return { codProd: Number(rows[0].CODPROD), controle, dtValidade: rows[0].DTVALID || null };
 }

@@ -7,17 +7,17 @@ const fonte = fs.readFileSync(path.join(__dirname, '../frontend/app.js'), 'utf8'
 const codigo = '0173202900230025300420100004510010';
 const controle = '0023002530042010';
 
-function ambienteConfirmacao(entradaCodigo = null) {
+function ambienteConfirmacao(entradaCodigo = null, lotesNota = null, quantidadeEsperada = 20) {
   const elemento = () => ({ hidden: false, value: '', textContent: '', innerHTML: '', dataset: {}, focus() {}, classList: { toggle() {} } });
   const contexto = vm.createContext({
     itemSeparacaoPendente: null, separacaoConcluida: false, pedidoPreviewSelecionado: { NUNOTA: 123 },
-    itemSeparacaoProcessado: () => false, normalizarQuantidade: Number, quantidadeEsperadaSeparacao: () => 20,
+    itemSeparacaoProcessado: () => false, normalizarQuantidade: Number, quantidadeEsperadaSeparacao: () => quantidadeEsperada,
     produtoSeparacaoFeltrin: () => true, limparCodigoSeparacao() {}, atualizarProdutoConfirmacaoSeparacao() {},
     obterUnidadeExibicaoItem: () => 'UN', formatarQuantidade: String, formatarData: String,
     escaparAtributo: String, escaparHtml: String, obterDescricaoEntradaCodigo: () => 'Caixa',
     focarLoteFeltrinSeparacao() {},
-    fetch: async () => ({ ok: true, json: async () => ({ lotes: [
-      { controle, estoque: 100, disponivel: 100 }, { controle: '0023002530059010', estoque: 100, disponivel: 100 }
+    fetch: async () => ({ ok: true, json: async () => ({ lotes: lotesNota || [
+      { controle, quantidadeNota: 100 }, { controle: '0023002530059010', quantidadeNota: 100 }
     ] }) }),
     separacaoFeltrinField: elemento(), separacaoFeltrinCodigo: elemento(), separacaoFeltrinInfo: elemento(), separacaoLoteField: elemento(),
     separacaoLoteSelect: elemento(), separacaoLoteInfo: elemento(), botaoConfirmarSeparacao: elemento(),
@@ -43,6 +43,26 @@ test('clicar sem bipar restringe a seleção ao lote original do pedido sem camp
   assert.equal(contexto.itemSeparacaoPendente.lotesDisponiveis.length, 1);
   const html = fs.readFileSync(path.join(__dirname, '../frontend/index.html'), 'utf8');
   assert.doesNotMatch(html, /id="separacao-feltrin-produto-codigo"/);
+});
+
+test('nota com cinco unidades libera lote com estoque virtual zero ou posição ausente', async () => {
+  for (const saldo of [0, undefined]) {
+    const contexto = ambienteConfirmacao(null, [{ controle, quantidadeNota: 5, disponivel: 5, estoque: saldo }], 5);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(contexto.botaoConfirmarSeparacao.disabled, false);
+    assert.equal(contexto.itemSeparacaoPendente.lotesDisponiveis.length, 1);
+    assert.equal(contexto.itemSeparacaoPendente.loteSelecionado.controle, controle);
+    assert.equal(contexto.itemSeparacaoPendente.quantidade, 5);
+    assert.match(contexto.separacaoLoteInfo.textContent, /Lote da nota/);
+  }
+});
+
+test('estoque virtual positivo não libera lote ausente da nota', async () => {
+  const contexto = ambienteConfirmacao(null, [{ controle: 'OUTRO-LOTE', quantidadeNota: 5, estoque: 100 }], 5);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(contexto.botaoConfirmarSeparacao.disabled, true);
+  assert.equal(contexto.itemSeparacaoPendente.lotesDisponiveis.length, 0);
+  assert.match(contexto.separacaoConfirmStatus.textContent, /não encontrado nas posições da nota/);
 });
 
 test('bipar na tela principal mantém o multiplicador e exige leitura do lote na confirmação', async () => {

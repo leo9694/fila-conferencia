@@ -2956,31 +2956,38 @@ router.get('/fila-conferencia/separacao/:nunota/produtos/:codprod/lotes', async 
   try {
     const lotes = await executeQuery(`
       SELECT
-        TRIM(EST.CONTROLE) AS CONTROLE,
+        TRIM(ITE.CONTROLE) AS CONTROLE,
         TO_CHAR(MAX(EST.DTVAL), 'YYYY-MM-DD') AS DTVALID,
-        SUM(NVL(EST.ESTOQUE, 0)) AS ESTOQUE,
-        SUM(NVL(EST.RESERVADO, 0)) AS RESERVADO,
-        SUM(NVL(EST.ESTOQUE, 0) - NVL(EST.RESERVADO, 0)) AS DISPONIVEL
+        SUM(NVL(ITE.QTDNEG, 0)) AS QUANTIDADE_NOTA
       FROM TGFCAB CAB
-      JOIN TGFEST EST
+      JOIN TGFITE ITE ON ITE.NUNOTA = CAB.NUNOTA
+      LEFT JOIN (
+        SELECT CODEMP, CODPROD, CODLOCAL, TRIM(CONTROLE) AS CONTROLE, MAX(DTVAL) AS DTVAL
+        FROM TGFEST
+        WHERE CODPROD = ${codProd}
+          AND CODEMP IN (SELECT CODEMP FROM TGFCAB WHERE NUNOTA = ${nunota})
+        GROUP BY CODEMP, CODPROD, CODLOCAL, TRIM(CONTROLE)
+      ) EST
         ON EST.CODEMP = CAB.CODEMP
-       AND EST.CODPROD = ${codProd}
+       AND EST.CODPROD = ITE.CODPROD
+       AND EST.CODLOCAL = ITE.CODLOCALORIG
+       AND EST.CONTROLE = TRIM(ITE.CONTROLE)
       WHERE CAB.NUNOTA = ${nunota}
-        AND NVL(EST.ATIVO, 'S') = 'S'
-        AND NVL(EST.ESTOQUE, 0) > 0
-        AND TRIM(EST.CONTROLE) IS NOT NULL
-      GROUP BY TRIM(EST.CONTROLE)
-      HAVING SUM(NVL(EST.ESTOQUE, 0)) > 0
-      ORDER BY TRIM(EST.CONTROLE)
+        AND ITE.CODPROD = ${codProd}
+        AND ITE.SEQUENCIA > 0
+        AND TRIM(ITE.CONTROLE) IS NOT NULL
+      GROUP BY TRIM(ITE.CONTROLE)
+      HAVING SUM(NVL(ITE.QTDNEG, 0)) > 0
+      ORDER BY TRIM(ITE.CONTROLE)
     `);
 
     res.json({
+      origem: 'NOTA',
       lotes: lotes.map((lote) => ({
         controle: String(lote.CONTROLE || '').trim(),
         dtValidade: String(lote.DTVALID || '').trim() || null,
-        estoque: Number(lote.ESTOQUE || 0),
-        reservado: Number(lote.RESERVADO || 0),
-        disponivel: Number(lote.DISPONIVEL || 0)
+        quantidadeNota: Number(lote.QUANTIDADE_NOTA || 0),
+        disponivel: Number(lote.QUANTIDADE_NOTA || 0)
       }))
     });
   } catch (err) {

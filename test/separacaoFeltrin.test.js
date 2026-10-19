@@ -13,7 +13,7 @@ const lotes = ['0023002530042010', '0023002530059010'];
 test('lote compartilhado é identificado pelo produto previamente bipado sem conflito com outros produtos', async () => {
   for (const codProd of [1113, 2222]) {
     const lote = await consultarCodigoFeltrin({ nunota: 123, codigo: codigos[0], codProd, executeQuery: async (sql) => {
-      assert.match(sql, new RegExp(`AND EST.CODPROD = ${codProd}\\b`));
+      assert.match(sql, new RegExp(`AND ITE.CODPROD = ${codProd}\\b`));
       assert.match(sql, /TRIM\(ITE.CONTROLE\) = TRIM\(EST.CONTROLE\)/);
       return [{ CODPROD: codProd }];
     } });
@@ -146,13 +146,16 @@ test('extrai exatamente os lotes Feltrin dos exemplos preservando os zeros', () 
   }
 });
 
-test('consulta identifica o produto pelo lote no estoque da empresa e somente Feltrin do pedido', async () => {
+test('consulta identifica produto Feltrin e lote da nota mesmo sem estoque virtual positivo', async () => {
   const result = await consultarCodigoFeltrin({ nunota: 123, codigo: codigos[0], executeQuery: async (sql) => {
     assert.match(sql, /EST.CODEMP = CAB.CODEMP/);
     assert.match(sql, /UPPER\(TRIM\(PRO.MARCA\)\) LIKE '%FELTRIN%'/);
-    assert.match(sql, /ITE.NUNOTA = CAB.NUNOTA AND ITE.CODPROD = EST.CODPROD/);
+    assert.match(sql, /ITE.NUNOTA = CAB.NUNOTA/);
+    assert.match(sql, /PRO.CODPROD = ITE.CODPROD/);
     assert.match(sql, /TRIM\(ITE.CONTROLE\) = TRIM\(EST.CONTROLE\)/);
     assert.match(sql, /0023002530042010/);
+    assert.doesNotMatch(sql, /EST\.ESTOQUE|EST\.ATIVO|TRIM\(ITE.CONTROLE\) IS NULL/);
+    assert.match(sql, /NVL\(ITE.QTDNEG, 0\) > 0/);
     return [{ CODPROD: 1113, DTVALID: '2028-01-01' }];
   } });
   assert.deepEqual(result, { codProd: 1113, controle: lotes[0], dtValidade: '2028-01-01' });
