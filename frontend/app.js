@@ -8232,7 +8232,7 @@ function renderizarPedidoEmConferencia() {
         <span><i data-lucide="calendar-days"></i>${formatarData(pedidoSelecionado.DTNEG)}</span>
         <span><i data-lucide="tag"></i>${formatarMoeda(pedidoSelecionado.VLRNOTA)}</span>
       </div>
-      <div class="pedido-side-cliente">${pedidoSelecionado.EMPRESA || '-'}</div>
+      <div class="pedido-side-cliente">${escaparHtml(pedidoSelecionado.CODIGO_PARCEIRO || '-')} - ${escaparHtml(pedidoSelecionado.EMPRESA || '-')}</div>
       <div class="pedido-side-meta">
         <span><i data-lucide="package"></i>${pedidoSelecionado.QTD_ITENS} itens</span>
         <span><i data-lucide="boxes"></i>${formatarQuantidade(pedidoSelecionado.QTD_TOTAL)} un.</span>
@@ -9539,7 +9539,7 @@ async function abrirPreviewPedido(pedido) {
   pedidoPreviewSelecionado = pedido;
   itensPedidoPreview = [];
   pedidoPreviewTitulo.textContent = formatarTituloPedidoConferencia(pedido);
-  pedidoPreviewMeta.textContent = `${formatarData(pedido.DTNEG)} | ${pedido.EMPRESA || '-'}`;
+  pedidoPreviewMeta.textContent = `${formatarData(pedido.DTNEG)} | ${pedido.CODIGO_PARCEIRO || '-'} - ${pedido.EMPRESA || '-'}`;
   pedidoPreviewValor.textContent = formatarMoeda(pedido.VLRNOTA);
   pedidoPreviewItens.textContent = pedido.QTD_ITENS;
   pedidoPreviewUnidades.textContent = formatarQuantidade(pedido.QTD_TOTAL);
