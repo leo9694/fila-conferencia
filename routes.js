@@ -18,6 +18,7 @@ const { pesquisarProdutos, listarFiltrosProdutos } = require('./api/produtoConsu
 const { criarConferenciaProgressStore } = require('./api/conferenciaProgressStore');
 const { garantirContaFaturamento } = require('./api/faturamentoBanco');
 const { consultarNotaSaida, confirmarNotaSaidaTeste, aplicarCortesNotaSaidaTeste, sqlHistoricoPedidosSaida } = require('./api/conferenciaSaidaNota');
+const { planejarAjusteLote, remapearProgressoAjusteLote, validarItensPreservados } = require('./api/conferenciaAjusteLote');
 const { gravarDetalhesConferenciaSaida } = require('./api/conferenciaSaida');
 const {
   consolidarLeiturasEntrada,
@@ -1871,7 +1872,7 @@ async function validarDesmembramentoLotes({
   );
   const camposExtrasSql = camposFinanceiros.length > 0 ? `, ${camposFinanceiros.join(', ')}` : '';
   const linhas = await executeQuery(`
-    SELECT SEQUENCIA, CONTROLE, QTDNEG, VLRTOT, VLRDESC${camposExtrasSql}
+    SELECT SEQUENCIA, CODPROD, CODLOCALORIG, CODVOL, CONTROLE, QTDNEG, VLRTOT, VLRDESC${camposExtrasSql}
     FROM TGFITE
     WHERE NUNOTA = ${nunota}
       AND SEQUENCIA IN (${sequencias.join(',')})
@@ -1882,6 +1883,9 @@ async function validarDesmembramentoLotes({
   for (const grupo of gruposAplicados) {
     const linha = linhasPorSequencia.get(Number(grupo.sequencia));
     if (!linha) throw new Error(`A linha do lote ${grupo.controle} nao foi gravada no Sankhya.`);
+    if (['CODPROD', 'CODLOCALORIG', 'CODVOL'].some((campo) => String(linha[campo] ?? '').trim() !== String(itemOriginal[campo] ?? '').trim())) {
+      throw new Error(`Produto, local ou unidade do lote ${grupo.controle} mudou durante o ajuste.`);
+    }
     if (String(linha.CONTROLE ?? '').trim() !== String(grupo.controle ?? '').trim()) {
       throw new Error(`O lote ${grupo.controle} nao foi aplicado corretamente na nota.`);
     }
@@ -1915,15 +1919,21 @@ async function validarDesmembramentoLotes({
   }
 }
 
-async function desmembrarItensEntradaPorLote({ nunota, itensPedido, itensInformados }) {
-  const planos = planejarDesmembramentoLotesEntrada(itensPedido, itensInformados);
+async function desmembrarItensEntradaPorLote({ nunota, itensPedido, itensInformados, planos: planosInformados }) {
+  const planos = planosInformados || planejarDesmembramentoLotesEntrada(itensPedido, itensInformados);
   if (planos.length === 0) {
     return { separacoes: [], itensPedido };
   }
 
   const operacoes = [];
+  let itensAntesAjuste = null;
+  const consultarItensIntegridade = () => executeQuery(`
+    SELECT SEQUENCIA, CODPROD, CODLOCALORIG, CODVOL, CONTROLE, QTDNEG, VLRTOT, VLRDESC
+    FROM TGFITE WHERE NUNOTA = ${nunota} ORDER BY SEQUENCIA
+  `);
 
   try {
+    if (planosInformados) itensAntesAjuste = await consultarItensIntegridade();
     for (const plano of planos) {
       const itemOriginal = itensPedido.find(
         (item) => Number(item.SEQUENCIA) === Number(plano.sequencia)
@@ -1965,13 +1975,24 @@ async function desmembrarItensEntradaPorLote({ nunota, itensPedido, itensInforma
         }
 
         const antesInclusao = await consultarSequenciasNota(nunota);
-        await salvarQuantidadeLoteItemNotaApi(nunota, itemOriginal, dados, true);
-        const depoisInclusao = await consultarSequenciasNota(nunota);
-        const novas = [...depoisInclusao].filter((sequencia) => !antesInclusao.has(sequencia));
+        let novas;
+        try {
+          await salvarQuantidadeLoteItemNotaApi(nunota, itemOriginal, dados, true);
+        } finally {
+          // A resposta HTTP pode falhar depois da inclusão. Descubra a linha
+          // mesmo nesse caso para não duplicar estoque ao restaurar o original.
+          try {
+            const depoisInclusao = await consultarSequenciasNota(nunota);
+            novas = [...depoisInclusao].filter((sequencia) => !antesInclusao.has(sequencia));
+            sequenciasCriadas.push(...novas);
+          } catch (erroConsulta) {
+            operacao.inclusaoIncerta = true;
+            throw erroConsulta;
+          }
+        }
         if (novas.length !== 1) {
           throw new Error(`O Sankhya nao retornou uma nova linha unica para o lote ${grupo.controle}.`);
         }
-        sequenciasCriadas.push(novas[0]);
         gruposAplicados.push({ ...grupo, sequencia: novas[0] });
       }
 
@@ -2025,12 +2046,19 @@ async function desmembrarItensEntradaPorLote({ nunota, itensPedido, itensInforma
         }))
       };
     }
+    if (itensAntesAjuste) {
+      validarItensPreservados(itensAntesAjuste, await consultarItensIntegridade(),
+        operacoes.map((op) => Number(op.itemOriginal.SEQUENCIA)), operacoes.flatMap((op) => op.sequenciasCriadas));
+    }
   } catch (erro) {
+    const falhasRestauracao = [];
     for (const operacao of [...operacoes].reverse()) {
+      if (operacao.inclusaoIncerta) falhasRestauracao.push('Inclusão sem resposta verificável.');
       for (const sequencia of [...operacao.sequenciasCriadas].reverse()) {
         try {
           await excluirItemNotaApi(nunota, sequencia);
         } catch (erroExclusao) {
+          falhasRestauracao.push(erroExclusao.message);
           console.error('Falha ao desfazer item criado na separacao por lote:', erroExclusao);
         }
       }
@@ -2068,14 +2096,34 @@ async function desmembrarItensEntradaPorLote({ nunota, itensPedido, itensInforma
         if (Object.keys(camposCabecalho).length > 0) {
           await atualizarRegistroApi('CabecalhoNota', { NUNOTA: nunota }, camposCabecalho);
         }
+        if (planosInformados) {
+          const gruposRestaurados = [{ sequencia: Number(operacao.itemOriginal.SEQUENCIA), controle: operacao.itemOriginal.CONTROLE, quantidade: Number(operacao.itemOriginal.QTDNEG) }];
+          await validarDesmembramentoLotes({ nunota, itemOriginal: operacao.itemOriginal,
+            cabecalhoOriginal: operacao.cabecalhoOriginal, gruposAplicados: gruposRestaurados });
+          await validarVinculosAtendimentoDesmembramento({ nunota, itemOriginal: operacao.itemOriginal,
+            vinculosOriginais: operacao.vinculosOriginais, gruposAplicados: gruposRestaurados });
+          const sequenciasAtuais = await consultarSequenciasNota(nunota);
+          if (operacao.sequenciasCriadas.some((sequencia) => sequenciasAtuais.has(sequencia))) {
+            throw new Error('Uma linha criada no ajuste ainda existe na nota.');
+          }
+        }
       } catch (erroRestauracao) {
+        falhasRestauracao.push(erroRestauracao.message);
         console.error('Falha ao restaurar item apos erro na separacao por lote:', erroRestauracao);
       }
     }
+    if (itensAntesAjuste) {
+      try {
+        validarItensPreservados(itensAntesAjuste, await consultarItensIntegridade());
+      } catch (erroIntegridade) {
+        falhasRestauracao.push(erroIntegridade.message);
+      }
+    }
+    erro.ajusteLoteRestaurado = falhasRestauracao.length === 0;
     throw erro;
   }
 
-  const itensAtualizados = await executeQuery(`
+  const itensAtualizados = planosInformados ? [] : await executeQuery(`
     SELECT CAB.CODEMP, ITE.*
     FROM TGFITE ITE
     JOIN TGFCAB CAB ON CAB.NUNOTA = ITE.NUNOTA
@@ -3537,6 +3585,113 @@ router.get('/fila-conferencia/pedidos/:nunota/estimativa-frete', async (req, res
   }
 });
 
+function validarVersaoLotesConferencia(nunota, versaoInformada) {
+  const progresso = conferenciaProgressStore.obter(nunota);
+  if (progresso?.ajusteLotePendente) {
+    const erro = new Error('Ajuste de lote interrompido ou em andamento. Revise a nota no Sankhya antes de continuar; não repita a operação.');
+    erro.statusCode = 409;
+    throw erro;
+  }
+  const versaoAtual = Number(progresso?.versaoLotes || 0);
+  if (Number(versaoInformada || 0) !== versaoAtual) {
+    const erro = new Error('Os lotes desta nota foram ajustados. Reabra a conferência para atualizar os itens.');
+    erro.statusCode = 409;
+    throw erro;
+  }
+}
+
+async function consultarItemAjusteLote(nunota, sequencia) {
+  const [item] = await executeQuery(`
+    SELECT ITE.*, CAB.CODEMP, CAB.TIPMOV, CAB.CODTIPOPER, CAB.STATUSNOTA, CAB.LIBCONF,
+      CAB.NUCONFATUAL, CONF.STATUS AS STATUS_CONF
+    FROM TGFITE ITE
+    JOIN TGFCAB CAB ON CAB.NUNOTA = ITE.NUNOTA
+    LEFT JOIN TGFCON2 CONF ON CONF.NUCONF = CAB.NUCONFATUAL
+    WHERE ITE.NUNOTA = ${nunota} AND ITE.SEQUENCIA = ${sequencia}
+  `);
+  if (!item || item.TIPMOV !== 'V' || ![35, 10].includes(Number(item.CODTIPOPER))
+    || !['A', 'P'].includes(item.STATUSNOTA) || item.LIBCONF !== 'S' || item.STATUS_CONF !== 'A') {
+    const erro = new Error('Ajuste de lote permitido apenas em notas de saída com conferência em andamento e ainda não confirmadas.');
+    erro.statusCode = 409;
+    throw erro;
+  }
+  return item;
+}
+
+async function consultarLotesAjusteConferencia(item) {
+  return executeQuery(`
+    SELECT TRIM(CONTROLE) AS CONTROLE, SUM(NVL(ESTOQUE, 0)) AS ESTOQUE,
+      TO_CHAR(MAX(DTVAL), 'YYYY-MM-DD') AS DTVALID
+    FROM TGFEST
+    WHERE CODEMP = ${obterNumeroInteiro(item.CODEMP)}
+      AND CODPROD = ${obterNumeroInteiro(item.CODPROD)}
+      AND CODLOCAL = ${obterNumeroInteiro(item.CODLOCALORIG)}
+      AND TRIM(CONTROLE) IS NOT NULL
+    GROUP BY TRIM(CONTROLE)
+    ORDER BY TRIM(CONTROLE)
+  `);
+}
+
+router.get('/fila-conferencia/pedidos/:nunota/itens/:sequencia/lotes-ajuste', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+  const sequencia = obterNumeroInteiro(req.params.sequencia);
+  if (!nunota || !sequencia) return res.status(400).json({ erro: 'Informe nota e item válidos.' });
+  try {
+    const item = await consultarItemAjusteLote(nunota, sequencia);
+    const lotes = await consultarLotesAjusteConferencia(item);
+    res.json({ lotes: lotes.map((lote) => ({ controle: String(lote.CONTROLE).trim(), estoque: Number(lote.ESTOQUE || 0), dtValidade: lote.DTVALID || null })) });
+  } catch (erro) {
+    res.status(erro.statusCode || 500).json({ erro: erro.message });
+  }
+});
+
+router.post('/fila-conferencia/pedidos/:nunota/itens/:sequencia/ajustar-lote', async (req, res) => {
+  const nunota = obterNumeroInteiro(req.params.nunota);
+  const sequencia = obterNumeroInteiro(req.params.sequencia);
+  const codUsu = obterCodigoUsuario(req.usuario?.codUsu);
+  if (!nunota || !sequencia || codUsu === null) return res.status(400).json({ erro: 'Informe nota, item e usuário válidos.' });
+  if (finalizacoesConferenciaEmAndamento.has(nunota)) return res.status(409).json({ erro: 'Aguarde a operação em andamento nesta nota.' });
+  finalizacoesConferenciaEmAndamento.add(nunota);
+  let escritaIniciada = false;
+  try {
+    validarVersaoLotesConferencia(nunota, req.body?.versaoLotes);
+    const item = await consultarItemAjusteLote(nunota, sequencia);
+    const progresso = conferenciaProgressStore.obter(nunota);
+    const progressoItem = progresso?.itens.find((registro) => Number(registro.sequencia) === sequencia);
+    if (!progressoItem) throw new Error('Salve o progresso da conferência antes de ajustar o lote.');
+    const plano = planejarAjusteLote({ item, progresso: progressoItem,
+      controle: req.body?.controle, quantidade: req.body?.quantidade,
+      quantidadeOriginal: req.body?.quantidadeOriginal, controleOriginal: req.body?.controleOriginal });
+    const lotes = await consultarLotesAjusteConferencia(item);
+    if (!lotes.some((lote) => String(lote.CONTROLE).trim() === String(req.body.controle).trim())) {
+      throw new Error('O lote escolhido não pertence ao produto, empresa e local desta nota.');
+    }
+    // O serviço de itens do Sankhya estorna o lote original e movimenta o novo.
+    // Não gravar TGFEST diretamente nem gerar um segundo ajuste de estoque.
+    conferenciaProgressStore.iniciarAjusteLote(nunota, { sequencia, controleAnterior: item.CONTROLE,
+      controle: req.body.controle, quantidade: Number(req.body.quantidade), codUsu });
+    escritaIniciada = true;
+    const resultado = await desmembrarItensEntradaPorLote({
+      nunota, itensPedido: [item], planos: [plano],
+      itensInformados: [{ sequencia, qtdConferida: Number(item.QTDNEG), qtdCortada: 0, leituras: [] }]
+    });
+    const ajuste = resultado.separacoes[0];
+    const atualizado = conferenciaProgressStore.salvar({
+      nunota, nuconf: item.NUCONFATUAL, codUsu,
+      itens: remapearProgressoAjusteLote(progresso.itens, ajuste),
+      ajusteLote: { ...ajuste, controleAnterior: String(item.CONTROLE).trim(), empresa: item.CODEMP, local: item.CODLOCALORIG }
+    });
+    res.json({ ok: true, versaoLotes: atualizado.versaoLotes, ajuste });
+  } catch (erro) {
+    if (escritaIniciada && erro.ajusteLoteRestaurado) conferenciaProgressStore.cancelarAjusteLote(nunota);
+    const revisao = escritaIniciada && !erro.ajusteLoteRestaurado
+      ? ' A operação ficou bloqueada para revisão da nota no Sankhya. Não repita o ajuste.' : '';
+    res.status(erro.statusCode || 409).json({ erro: `${erro.message}${revisao}` });
+  } finally {
+    finalizacoesConferenciaEmAndamento.delete(nunota);
+  }
+});
+
 router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
   try {
     const nunota = obterNumeroInteiro(req.params.nunota);
@@ -3775,6 +3930,7 @@ router.get('/fila-conferencia/pedidos/:nunota/itens', async (req, res) => {
 
     res.json({
       nunota,
+      versaoLotes: Number(progresso?.versaoLotes || 0),
       itens: [...itensResposta, ...itensExtras]
     });
   } catch (err) {
@@ -6768,6 +6924,11 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
       itens = await normalizarItensExtrasConferenciaEntrada(itens, { nunota });
     }
 
+    if (finalizacoesConferenciaEmAndamento.has(nunota)) {
+      res.status(409).json({ erro: 'Aguarde a operação em andamento nesta nota.' });
+      return;
+    }
+    validarVersaoLotesConferencia(nunota, req.body?.versaoLotes);
     const progresso = conferenciaProgressStore.salvar({
       nunota,
       nuconf: nuconf || pedido.NUCONFATUAL || null,
@@ -6870,6 +7031,7 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     }
     finalizacoesConferenciaEmAndamento.add(nunota);
     finalizacaoRegistrada = true;
+    validarVersaoLotesConferencia(nunota, req.body?.versaoLotes);
 
     const pedidoRows = await executeQuery(`
       SELECT

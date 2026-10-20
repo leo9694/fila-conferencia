@@ -93,7 +93,7 @@ function criarConferenciaProgressStore(options = {}) {
       .map((leitura) => normalizarNumero(leitura.caixaId)));
   }
 
-  function salvar({ nunota, nuconf, codUsu, itens }) {
+  function salvar({ nunota, nuconf, codUsu, itens, ajusteLote }) {
     const chave = String(nunota);
     const caixasJaEncerradas = caixasEncerradas(state[chave]);
     const itensNormalizados = normalizarItens(itens).map((item) => ({
@@ -105,11 +105,16 @@ function criarConferenciaProgressStore(options = {}) {
       }))
     }));
 
+    const versaoLotes = Number(state[chave]?.versaoLotes || 0) + (ajusteLote ? 1 : 0);
+    const ajustesLote = [...(state[chave]?.ajustesLote || [])];
+    if (ajusteLote) ajustesLote.push({ ...ajusteLote, codUsu, registradoEm: new Date().toISOString() });
     state[chave] = {
       nunota: Number(nunota),
       nuconf: nuconf ? Number(nuconf) : null,
       codUsu: codUsu === null || codUsu === undefined ? null : Number(codUsu),
       atualizadoEm: new Date().toISOString(),
+      ...(versaoLotes > 0 ? { versaoLotes, ajustesLote } : {}),
+      ...(!ajusteLote && state[chave]?.ajusteLotePendente ? { ajusteLotePendente: state[chave].ajusteLotePendente } : {}),
       itens: itensNormalizados
     };
     persistir();
@@ -138,6 +143,20 @@ function criarConferenciaProgressStore(options = {}) {
       maiorCaixaId: Math.max(0, ...caixas.keys()),
       caixas: [...caixas.values()].sort((a, b) => a.caixaId - b.caixaId)
     };
+  }
+
+  function iniciarAjusteLote(nunota, ajuste) {
+    const progresso = obter(nunota);
+    if (!progresso || progresso.ajusteLotePendente) throw new Error('Existe um ajuste de lote pendente de revisão nesta nota.');
+    progresso.ajusteLotePendente = { ...ajuste, iniciadoEm: new Date().toISOString() };
+    persistir();
+  }
+
+  function cancelarAjusteLote(nunota) {
+    const progresso = obter(nunota);
+    if (!progresso) return;
+    delete progresso.ajusteLotePendente;
+    persistir();
   }
 
   function encerrarCaixa({ nunota, caixaId }) {
@@ -182,6 +201,8 @@ function criarConferenciaProgressStore(options = {}) {
     state,
     obter,
     salvar,
+    iniciarAjusteLote,
+    cancelarAjusteLote,
     resumoCaixas,
     encerrarCaixa,
     remover

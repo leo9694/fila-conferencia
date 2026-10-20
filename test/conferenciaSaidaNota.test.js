@@ -78,6 +78,7 @@ test('API não impõe separação obrigatória para iniciar, salvar progresso ou
     obterNumeroInteiro: Number, obterCodigoUsuario: Number,
     separacaoStore: { obter: () => null }, executeQuery: async () => [],
     finalizacoesConferenciaEmAndamento: new Set(),
+    validarVersaoLotesConferencia() {},
     console: { error() {} }
   });
   vm.runInContext(fonte.slice(fonte.indexOf("router.post('/fila-conferencia/iniciar',"), fonte.indexOf("router.get('/fila-conferencia/progresso/caixas'")), ctx);
@@ -245,6 +246,7 @@ test('finalização de saída em produção só confirma a nota e preserva progr
       router: { post(_url, fn) { handler = fn; } }, obterNumeroInteiro: Number, obterCodigoUsuario: Number,
       normalizarNumero: Number, formatarDataHoraSankhya: () => '13/10/2026 10:00:00',
       finalizacoesConferenciaEmAndamento: new Set(),
+      validarVersaoLotesConferencia() {},
       executeQuery: async (sql) => {
         if (sql.includes('FROM TGFCAB CAB')) return [{ NUNOTA: 123, NUCONFATUAL: 9, QTDVOL: 1, LIBCONF: 'S', STATUSNOTA: 'A', QTD_ITENS: 1, STATUS: 'A' }];
         if (sql.includes('FROM TSIUSU')) return [{ CODUSU: 72 }];

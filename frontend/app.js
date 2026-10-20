@@ -352,6 +352,13 @@ const corteQtd = document.getElementById('corte-qtd');
 const corteStatus = document.getElementById('corte-status');
 const botaoCancelarCorte = document.getElementById('cancelar-corte');
 const botaoConfirmarCorte = document.getElementById('confirmar-corte');
+const ajusteLoteModal = document.getElementById('ajuste-lote-modal');
+const ajusteLoteProduto = document.getElementById('ajuste-lote-produto');
+const ajusteLoteSelect = document.getElementById('ajuste-lote-select');
+const ajusteLoteQtd = document.getElementById('ajuste-lote-qtd');
+const ajusteLoteStatus = document.getElementById('ajuste-lote-status');
+const botaoConfirmarAjusteLote = document.getElementById('confirmar-ajuste-lote');
+const botaoCancelarAjusteLote = document.getElementById('cancelar-ajuste-lote');
 const posConferenciaModal = document.getElementById('pos-conferencia-modal');
 const posConferenciaTitulo = document.getElementById('pos-conferencia-titulo');
 const posConferenciaTexto = document.getElementById('pos-conferencia-texto');
@@ -480,6 +487,8 @@ let separacaoSyncTimer = null;
 let separacaoSyncEmAndamento = false;
 let itensPedidoSelecionado = [];
 let itemCorteSelecionado = null;
+let itemAjusteLoteSelecionado = null;
+let ajusteLoteEmAndamento = false;
 let pedidoConcluido = null;
 let contatoBuscaTimer = null;
 let contatoClientesAtuais = [];
@@ -495,8 +504,8 @@ let contatoDetalheAtual = null;
 let contatoOrigemLista = 'nenhuma';
 let produtoFotoAtual = null;
 let ordenacaoItens = { coluna: '', direcao: '' };
-const itensGridMinimos = [34, 78, 210, 122, 148, 118];
-const itensGridLarguras = [34, 92, 240, 142, 170, 132];
+const itensGridMinimos = [68, 78, 210, 122, 148, 118];
+const itensGridLarguras = [68, 92, 240, 142, 170, 132];
 const STORAGE_NAVEGACAO_FILA = 'filaConferencia:navegacaoAtual';
 const STORAGE_SEPARACAO_PREFIX = 'filaConferencia:separacao:';
 const TEMPO_TOQUE_LONGO_SEPARACAO_MS = 550;
@@ -6576,6 +6585,7 @@ function salvarProgressoConferencia(options = {}) {
   const dados = {
     nunota: pedidoSelecionado.NUNOTA,
     nuconf: pedidoSelecionado.nuconf || pedidoSelecionado.NUCONFATUAL || null,
+    versaoLotes: Number(pedidoSelecionado.versaoLotes || 0),
     itens: itensPedidoSelecionado.map((item) => ({
       sequencia: item.sequencia,
       extra: item.extra === true,
@@ -7062,6 +7072,19 @@ function criarLinhaItemConferencia(item, quantidade, classe, rotuloQuantidade, o
       event.stopPropagation();
       abrirModalCorte(item.sequencia);
     });
+    if (filaModoConferencia === 'saida' && pedidoSelecionado?.SAIDA_POR_NOTA && String(item.controle || '').trim()) {
+      const botaoLote = document.createElement('button');
+      botaoLote.className = 'item-action item-action-cut';
+      botaoLote.type = 'button';
+      botaoLote.title = 'Ajustar lote';
+      botaoLote.setAttribute('aria-label', 'Ajustar lote');
+      botaoLote.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h15l-4-4M20 17H5l4 4M20 7v5M4 17v-5"/></svg>';
+      botaoLote.addEventListener('click', (event) => {
+        event.stopPropagation();
+        abrirModalAjusteLote(item.sequencia);
+      });
+      row.firstElementChild.appendChild(botaoLote);
+    }
   }
 
   if (options.selecionavel !== false) {
@@ -7337,6 +7360,85 @@ function desfazerConferenciaItem(sequencia) {
   renderizarItensConferencia();
   salvarProgressoConferencia();
   scanCodigo.focus();
+}
+
+async function abrirModalAjusteLote(sequencia) {
+  const item = itensPedidoSelecionado.find((registro) => Number(registro.sequencia) === Number(sequencia));
+  if (!item || !pedidoSelecionado?.SAIDA_POR_NOTA || filaModoConferencia !== 'saida') return;
+  itemAjusteLoteSelecionado = item;
+  ajusteLoteProduto.textContent = `${item.codProd} - ${item.descrProd} | Lote atual: ${item.controle}`;
+  ajusteLoteQtd.value = String(quantidadePendenteItem(item));
+  ajusteLoteQtd.max = String(quantidadePendenteItem(item));
+  ajusteLoteSelect.innerHTML = '<option value="">Selecione outro lote</option>';
+  ajusteLoteStatus.textContent = 'Consultando lotes com estoque positivo...';
+  botaoConfirmarAjusteLote.disabled = true;
+  ajusteLoteModal.hidden = false;
+  try {
+    const res = await fetch(`/api/fila-conferencia/pedidos/${pedidoSelecionado.NUNOTA}/itens/${item.sequencia}/lotes-ajuste`);
+    const payload = await res.json();
+    if (itemAjusteLoteSelecionado !== item || ajusteLoteModal.hidden) return;
+    if (!res.ok) throw new Error(payload.erro || 'Não foi possível consultar os lotes.');
+    const lotes = (payload.lotes || []).filter((lote) => Number(lote.estoque) > 0 && lote.controle !== String(item.controle).trim());
+    ajusteLoteSelect.innerHTML += lotes.map((lote) => `<option value="${escaparAtributo(lote.controle)}">${escaparHtml(lote.controle)} | Virtual: ${formatarQuantidade(lote.estoque)} | Validade: ${escaparHtml(formatarData(lote.dtValidade) || '-')}</option>`).join('');
+    ajusteLoteStatus.textContent = lotes.length ? 'A quantidade será transferida na nota para o lote escolhido e ficará pendente de conferência.' : 'Nenhum outro lote com estoque positivo neste produto, empresa e local.';
+    botaoConfirmarAjusteLote.disabled = !lotes.length;
+  } catch (erro) {
+    if (itemAjusteLoteSelecionado === item) ajusteLoteStatus.textContent = erro.message;
+  }
+}
+
+function fecharModalAjusteLote() {
+  if (ajusteLoteEmAndamento) return;
+  ajusteLoteModal.hidden = true;
+  itemAjusteLoteSelecionado = null;
+}
+
+async function recarregarItensAposAjusteLote(pedido) {
+  const res = await fetch(`/api/fila-conferencia/pedidos/${pedido.NUNOTA}/itens`, { cache: 'no-store' });
+  const payload = await res.json();
+  if (!res.ok) throw new Error(payload.erro || 'Reabra a conferência para atualizar os lotes.');
+  if (pedidoSelecionado !== pedido) return;
+  pedido.versaoLotes = Number(payload.versaoLotes || 0);
+  itensPedidoSelecionado = payload.itens || [];
+  itensPedidoPreview = [];
+  renderizarItensConferencia();
+  salvarNavegacaoFila({ etapa: 'conferencia' });
+}
+
+async function confirmarAjusteLote() {
+  const item = itemAjusteLoteSelecionado;
+  const pedido = pedidoSelecionado;
+  if (!item || !pedido || ajusteLoteEmAndamento) return;
+  const quantidade = Number(ajusteLoteQtd.value);
+  if (!ajusteLoteSelect.value || !Number.isFinite(quantidade) || quantidade <= 0 || quantidade > quantidadePendenteItem(item)) {
+    ajusteLoteStatus.textContent = 'Selecione outro lote e uma quantidade positiva, até o saldo pendente.';
+    return;
+  }
+  ajusteLoteEmAndamento = true;
+  botaoConfirmarAjusteLote.disabled = true;
+  botaoCancelarAjusteLote.disabled = true;
+  ajusteLoteStatus.textContent = 'Salvando progresso e ajustando os lotes na nota...';
+  try {
+    const salvo = await salvarProgressoConferencia();
+    if (!salvo?.ok) throw new Error('Não foi possível salvar o progresso. Reabra a conferência antes de ajustar o lote.');
+    const res = await fetch(`/api/fila-conferencia/pedidos/${pedido.NUNOTA}/itens/${item.sequencia}/ajustar-lote`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ controle: ajusteLoteSelect.value, quantidade, quantidadeOriginal: item.qtdNeg,
+        controleOriginal: item.controle, versaoLotes: Number(pedido.versaoLotes || 0) })
+    });
+    const payload = await res.json();
+    await recarregarItensAposAjusteLote(pedido);
+    if (!res.ok) throw new Error(payload.erro || 'Não foi possível ajustar o lote.');
+    ajusteLoteEmAndamento = false;
+    fecharModalAjusteLote();
+    scanStatus.textContent = 'Lote ajustado na nota. Confira a quantidade transferida na nova linha do lote.';
+  } catch (erro) {
+    ajusteLoteStatus.textContent = `${erro.message} Não repita sem revisar os itens da nota.`;
+  } finally {
+    ajusteLoteEmAndamento = false;
+    botaoConfirmarAjusteLote.disabled = false;
+    botaoCancelarAjusteLote.disabled = false;
+  }
 }
 
 function abrirModalCorte(sequencia) {
@@ -9669,6 +9771,7 @@ async function restaurarConferenciaEmAndamento(estado) {
       throw new Error(payload.erro || 'Erro ao restaurar itens da conferência');
     }
 
+    pedidoSelecionado.versaoLotes = Number(payload.versaoLotes || 0);
     itensPedidoSelecionado = (payload.itens || []).map((item) => ({
       ...item,
       qtdConferida: normalizarQuantidade(item.qtdConferida),
@@ -9884,6 +9987,7 @@ async function abrirPreviewPedido(pedido) {
       throw new Error(payload.erro || 'Erro ao buscar itens');
     }
 
+    pedido.versaoLotes = Number(payload.versaoLotes || 0);
     itensPedidoPreview = payload.itens || [];
     renderizarItensPlanilha(pedidoPreviewItensLista, itensPedidoPreview);
     botaoAbrirSeparacaoPedido.disabled = filaModoConferencia !== 'saida'
@@ -9957,6 +10061,7 @@ async function selecionarPedidoConferencia(pedido) {
         throw new Error(payload.erro || 'Erro ao buscar itens');
       }
 
+      pedidoSelecionado.versaoLotes = Number(payload.versaoLotes || 0);
       itensPedidoPreview = payload.itens || [];
     }
 
@@ -10465,6 +10570,7 @@ async function confirmarConferencia(volumes) {
       body: JSON.stringify({
         nunota: pedidoSelecionado.NUNOTA,
         nuconf: pedidoSelecionado.nuconf,
+        versaoLotes: Number(pedidoSelecionado.versaoLotes || 0),
         codUsu: usuarioLogado.codUsu,
         modo: filaModoConferencia,
         volumes,
@@ -11693,6 +11799,11 @@ guiaFaseLista?.addEventListener('click', (event) => {
   excluirGuiaFase(botao.dataset.guiaFaseId, botao.dataset.guiaFaseNome || 'Guia FASE');
 });
 botaoCancelarCorte.addEventListener('click', fecharModalCorte);
+botaoCancelarAjusteLote.addEventListener('click', fecharModalAjusteLote);
+botaoConfirmarAjusteLote.addEventListener('click', confirmarAjusteLote);
+ajusteLoteModal.addEventListener('click', (event) => {
+  if (event.target === ajusteLoteModal) fecharModalAjusteLote();
+});
 botaoConfirmarCorte.addEventListener('click', confirmarCorteItem);
 corteModal.addEventListener('click', (event) => {
   if (event.target === corteModal) {
