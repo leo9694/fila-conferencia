@@ -3629,6 +3629,11 @@ function criarIndicadorStatusPedido(tipo, valor) {
   `;
 }
 
+function criarIndicadorFluxoPedido(icone, ok, descricao) {
+  const titulo = escaparAtributo(descricao);
+  return `<span class="pedido-status-indicador pedido-fluxo-indicador ${ok ? 'ok' : 'pendente'}" tabindex="0" title="${titulo}" aria-label="${titulo}"><i data-lucide="${icone}" aria-hidden="true"></i></span>`;
+}
+
 function criarCard(item) {
   const div = document.createElement('div');
 
@@ -3671,10 +3676,12 @@ function criarCard(item) {
 
   const pedidosOrigem = Array.isArray(item.PEDIDOS_ORIGEM) ? item.PEDIDOS_ORIGEM.join(' / ') : '';
   const origemTexto = pedidosOrigem ? `${item.PEDIDOS_ORIGEM.length > 1 ? 'Pedidos' : 'Pedido'} ${pedidosOrigem} faturado${item.PEDIDOS_ORIGEM.length > 1 ? 's' : ''}` : '';
-  const etapaTexto = item.TIPMOV === 'V'
-    ? `${origemTexto || 'Nota sem pedido de origem vinculado'} · ${item.LIBERADO_CONFERENCIA ? 'Liberado para conferência' : 'Não liberado para conferência'}`
+  const indicadoresFluxo = item.TIPMOV === 'V'
+    ? criarIndicadorFluxoPedido('receipt', true, origemTexto || 'Nota sem pedido de origem vinculado')
+      + criarIndicadorFluxoPedido('clipboard-check', item.LIBERADO_CONFERENCIA, item.LIBERADO_CONFERENCIA ? 'Liberado para conferência' : 'Não liberado para conferência')
     : item.STATUS_CONFERENCIA === 'AGUARDANDO FATURAMENTO'
-      ? `${item.FATURAMENTO_PARCIAL ? `Saldo a faturar: ${formatarQuantidade(item.QTD_PENDENTE_FATURAMENTO)} · ` : ''}Pedido liberado no financeiro e comercial`
+      ? criarIndicadorFluxoPedido('receipt', false, item.FATURAMENTO_PARCIAL
+        ? `Faturamento parcial · Saldo a faturar: ${formatarQuantidade(item.QTD_PENDENTE_FATURAMENTO)}` : 'Aguardando faturamento')
       : '';
 
   const dataFormatada = formatarData(item.DTNEG);
@@ -3702,6 +3709,7 @@ function criarCard(item) {
     <span class="pedido-status-indicadores">
       ${criarIndicadorStatusPedido('financeiro', item.STATUS_FINANCEIRO)}
       ${criarIndicadorStatusPedido('comercial', item.STATUS_COMERCIAL)}
+      ${indicadoresFluxo}
     </span>
   `;
   const metaData = `
@@ -3756,7 +3764,6 @@ function criarCard(item) {
       </div>
     </div>
 
-    ${tipoCard !== 'conferido' && etapaTexto ? `<div class="acompanhamento-fluxo ${item.LIBERADO_CONFERENCIA ? 'liberado' : ''}">${escaparHtml(etapaTexto)}</div>` : ''}
     <div class="acompanhamento-card-meta">
       ${metas}
     </div>

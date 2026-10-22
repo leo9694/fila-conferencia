@@ -2358,7 +2358,7 @@ body.has-global-sidebar .board.acompanhamento-board {
   width: 100%;
   min-height: 0;
   flex: 1 1 auto;
-  grid-template-columns: minmax(340px, 0.88fr) minmax(500px, 1.35fr);
+  grid-template-columns: minmax(340px, 1.056fr) minmax(500px, 1.174fr);
   gap: 10px;
   margin: 0;
   overflow: visible;
@@ -2504,17 +2504,9 @@ body.has-global-sidebar .acompanhamento-card-head {
   gap: 7px;
 }
 
-.acompanhamento-fluxo {
-  margin-top: 5px;
-  color: #7b5c1a;
-  font-size: 0.62rem;
-  font-weight: 750;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-}
-
-.acompanhamento-fluxo.liberado {
-  color: #087151;
+.pedido-fluxo-indicador:focus-visible {
+  outline: 2px solid #087151;
+  outline-offset: 2px;
 }
 
 .acompanhamento-origem {
@@ -2680,7 +2672,7 @@ body.has-global-sidebar .acompanhamento-meta-item em {
 }
 
 body.has-global-sidebar .pool-fila .card-item {
-  padding: 7px 8px;
+  padding: 5px 8px;
   border-color: #f1dfaa;
   border-left-color: #efa900;
   background: #fff9e7;
@@ -2700,14 +2692,14 @@ body.has-global-sidebar .pool-fila .acompanhamento-card-identidade .empresa-nome
 body.has-global-sidebar .pool-fila .acompanhamento-card-meta {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 5px;
-  margin-top: 6px;
+  margin-top: 4px;
   padding-top: 0;
   border-top: 0;
 }
 
 body.has-global-sidebar .pool-fila .acompanhamento-meta-item {
-  min-height: 34px;
-  padding: 4px 6px;
+  min-height: 30px;
+  padding: 3px 6px;
   border: 1px solid #e4e8e8;
   border-radius: 7px;
   background: rgba(255, 255, 255, 0.92);

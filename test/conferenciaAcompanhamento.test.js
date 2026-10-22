@@ -7,6 +7,17 @@ const { sqlHistoricoPedidosSaida } = require('../api/conferenciaSaidaNota');
 const routes = fs.readFileSync(path.join(__dirname, '../routes.js'), 'utf8');
 const frontend = fs.readFileSync(path.join(__dirname, '../frontend/app.js'), 'utf8');
 
+test('painel de pedidos ganha 20% de largura relativa sem alterar o empilhamento em telas menores', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../frontend/home-dashboard.css'), 'utf8');
+  const board = css.match(/body\.has-global-sidebar \.board\.acompanhamento-board\s*\{([^}]+)\}/)[1];
+  const colunas = board.match(/minmax\(340px, ([\d.]+)fr\) minmax\(500px, ([\d.]+)fr\)/);
+  assert.ok(colunas);
+  const esquerda = Number(colunas[1]);
+  const direita = Number(colunas[2]);
+  assert.ok(Math.abs((esquerda / (esquerda + direita)) / (0.88 / (0.88 + 1.35)) - 1.2) < 0.000001);
+  assert.match(css.slice(css.indexOf('@media (max-width: 1240px)')), /\.board\.acompanhamento-board\s*\{\s*grid-template-columns: minmax\(0, 1fr\)/);
+});
+
 function contextoApi(executeQuery = async () => []) {
   const ctx = vm.createContext({ executeQuery, sqlHistoricoPedidosSaida, separacaoStore: { state: { 88: { status: 'SEPARADO' } } },
     obterNumeroInteiro: (v) => Number.isSafeInteger(Number(v)) && Number(v) > 0 ? Number(v) : null,
@@ -71,12 +82,13 @@ test('pedidos sem faturamento não fazem consulta de origem e grandes listas res
 
 function contextoCard() {
   const ctx = vm.createContext({ document: { createElement: () => ({}) },
+    escaparAtributo: (v) => String(v ?? '').replaceAll('"', '&quot;').replaceAll('<', '&lt;').replaceAll('>', '&gt;'),
     escaparHtml: (v) => String(v ?? '').replaceAll('<', '&lt;').replaceAll('>', '&gt;'),
     formatarData: () => '22/10/2026', formatarDataHora: () => '22/10/2026 10:00',
     minutosDesdeInicio: () => 5, formatarTempoMinutos: (v) => `${v} min`, formatarQuantidade: String,
     formatarResumoItensUnidadesPainel: () => ({ itens: '2 itens', unidades: '10 un.' }),
     criarIndicadorStatusPedido: () => '' });
-  vm.runInContext(frontend.slice(frontend.indexOf('function criarCard('), frontend.indexOf('function renderizarEstadoVazio(')), ctx);
+  vm.runInContext(frontend.slice(frontend.indexOf('function criarIndicadorFluxoPedido('), frontend.indexOf('function renderizarEstadoVazio(')), ctx);
   return ctx;
 }
 
@@ -92,6 +104,10 @@ test('cartões distinguem pedido aprovado, faturamento parcial e nota faturada s
   assert.match(nota.innerHTML, /Pedido 100 faturado/);
   assert.match(nota.innerHTML, /Não liberado para conferência/);
   assert.match(nota.innerHTML, /Nota 200/);
+  assert.doesNotMatch(nota.innerHTML, /class="acompanhamento-fluxo/);
+  assert.match(nota.innerHTML, /data-lucide="receipt"/);
+  assert.match(nota.innerHTML, /data-lucide="clipboard-check"/);
+  assert.match(nota.innerHTML, /tabindex="0" title="Não liberado para conferência" aria-label="Não liberado para conferência"/);
   const liberada = ctx.criarCard({ NUNOTA: 201, TIPMOV: 'V', PEDIDOS_ORIGEM: [100], LIBERADO_CONFERENCIA: true, STATUS_CONFERENCIA: 'AGUARDANDO CONFERENCIA' });
   assert.match(liberada.innerHTML, /Liberado para conferência/);
   const historico = ctx.criarCard({ NUNOTA: 88, TIPMOV: 'P', STATUS_CONFERENCIA: 'CONFERIDO', TEMPO_TOTAL_CONFERENCIA_MIN: 20 });
