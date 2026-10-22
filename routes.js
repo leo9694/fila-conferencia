@@ -6924,6 +6924,14 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
   }
 
   try {
+    if (req.body?.conferenciaRapida === true) {
+      if (codUsu !== 100 && !await autorizacaoGrupos.pertenceAoGrupo(codUsu, 'Diretoria')) {
+        return res.status(403).json({ erro: 'Conferência rápida restrita à Diretoria e à usuária 100 - Michele.' });
+      }
+      if (modo !== 'saida') {
+        return res.status(400).json({ erro: 'Conferência rápida disponível somente na saída.' });
+      }
+    }
     const [pedido] = await executeQuery(`
       SELECT CAB.NUNOTA, CAB.NUCONFATUAL, CAB.CODTIPOPER, CAB.TIPMOV,
              CAB.STATUSNOTA, CAB.LIBCONF, CONF.STATUS,

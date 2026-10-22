@@ -342,6 +342,8 @@ const resumoQtdOk = document.getElementById('resumo-qtd-ok');
 const resumoFaltando = document.getElementById('resumo-faltando');
 const resumoDivergencias = document.getElementById('resumo-divergencias');
 const botaoConfirmarConferencia = document.getElementById('confirmar-conferencia');
+const botaoConferenciaRapida = document.getElementById('conferencia-rapida');
+let conferenciaRapidaEmAndamento = false;
 const confirmarStatus = document.getElementById('confirmar-status');
 const corteModal = document.getElementById('corte-modal');
 const corteModalProduto = document.getElementById('corte-modal-produto');
@@ -4108,12 +4110,14 @@ function calcularResumoConferencia() {
 
 function renderizarResumoConferencia() {
   const resumo = calcularResumoConferencia();
+  botaoConferenciaRapida.hidden = !podeConferirRapidamente();
+  botaoConferenciaRapida.disabled = conferenciaRapidaEmAndamento || !itensPedidoSelecionado.length;
 
   resumoItensOk.textContent = `${resumo.itensOk}/${resumo.totalItens}`;
   resumoQtdOk.textContent = `${formatarQuantidade(resumo.qtdConferida)}/${formatarQuantidade(resumo.qtdEsperada)}${resumo.qtdCortada > 0 ? ` | corte ${formatarQuantidade(resumo.qtdCortada)}` : ''}`;
   resumoFaltando.textContent = formatarQuantidade(resumo.faltando);
   resumoDivergencias.textContent = resumo.divergencias;
-  botaoConfirmarConferencia.disabled = !resumo.pronto || !pedidoSelecionado || !temUsuarioLogado();
+  botaoConfirmarConferencia.disabled = conferenciaRapidaEmAndamento || !resumo.pronto || !pedidoSelecionado || !temUsuarioLogado();
 
   pedidoConferenciaStatus.textContent = pedidoSelecionado
     ? `${resumo.itensOk}/${resumo.totalItens} itens`
@@ -6607,6 +6611,7 @@ function salvarProgressoConferencia(options = {}) {
   salvarNavegacaoFila({ etapa: 'conferencia' });
 
   const dados = {
+    conferenciaRapida: options.conferenciaRapida === true,
     nunota: pedidoSelecionado.NUNOTA,
     nuconf: pedidoSelecionado.nuconf || pedidoSelecionado.NUCONFATUAL || null,
     versaoLotes: Number(pedidoSelecionado.versaoLotes || 0),
@@ -10109,6 +10114,65 @@ async function selecionarPedidoConferencia(pedido) {
   }
 }
 
+function podeConferirRapidamente() {
+  return filaModoConferencia === 'saida' && Boolean(pedidoSelecionado)
+    && (Number(usuarioLogado?.codUsu) === 100
+      || usuarioLogado?.grupos?.some((grupo) => String(grupo).trim().toLocaleUpperCase('pt-BR') === 'DIRETORIA') === true);
+}
+
+function preencherItensConferenciaRapida(itens) {
+  return itens.map((item) => ({
+    ...item,
+    qtdConferida: normalizarQuantidade(item.qtdNeg),
+    qtdCortada: 0,
+    leituras: [{
+      codigo: String(item.codProd), tipo: 'PRODUTO',
+      codVol: item.codVolPadrao || item.codVol || 'UN',
+      controle: item.controle || '', multiplicador: 1,
+      quantidade: normalizarQuantidade(item.qtdNeg),
+      quantidadeConvertida: normalizarQuantidade(item.qtdNeg)
+    }]
+  }));
+}
+
+async function concluirConferenciaRapida() {
+  if (!podeConferirRapidamente() || conferenciaRapidaEmAndamento || !itensPedidoSelecionado.length) return;
+  conferenciaRapidaEmAndamento = true;
+  botaoConferenciaRapida.disabled = true;
+  const pedido = pedidoSelecionado;
+  try {
+    const confirmado = await confirmarAcaoApp({
+      titulo: 'Conferência rápida',
+      mensagem: 'Marcar todos os itens como conferidos, nas quantidades e lotes do documento? Os cortes e leituras atuais serão substituídos. Depois, confirme a conferência informando os volumes.',
+      textoConfirmar: 'Conferir todos os itens'
+    });
+    if (!confirmado || pedidoSelecionado !== pedido) return;
+    await salvamentoProgressoPendente.catch(() => null);
+    if (pedidoSelecionado !== pedido) return;
+    itensPendentesLista.inert = true;
+    itensConferidosLista.inert = true;
+    scanCodigo.disabled = true;
+    scanQtd.disabled = true;
+    botaoScanAdicionar.disabled = true;
+    botaoConfirmarConferencia.disabled = true;
+    const anteriores = itensPedidoSelecionado;
+    itensPedidoSelecionado = preencherItensConferenciaRapida(anteriores);
+    const salvo = await salvarProgressoConferencia({ conferenciaRapida: true });
+    if (pedidoSelecionado !== pedido) return;
+    if (!salvo) itensPedidoSelecionado = anteriores;
+    renderizarItensConferencia();
+    scanStatus.textContent = salvo
+      ? 'Todos os itens foram conferidos. Confirme a conferência para informar os volumes e finalizar.'
+      : 'Não foi possível salvar a conferência rápida. As leituras anteriores foram mantidas.';
+  } finally {
+    conferenciaRapidaEmAndamento = false;
+    itensPendentesLista.inert = false;
+    itensConferidosLista.inert = false;
+    atualizarControlesConferencia();
+    renderizarResumoConferencia();
+  }
+}
+
 async function buscarProdutoExtraEntrada(codigo) {
   const resposta = await fetch(`/api/fila-conferencia/entrada/produto-extra?codigo=${encodeURIComponent(codigo)}`, {
     cache: 'no-store'
@@ -11845,6 +11909,7 @@ botaoImprimirEtiquetaVolume.addEventListener('click', imprimirEtiquetaVolume);
 botaoVoltarListaPosConferencia.addEventListener('click', fecharModalPosConferenciaEVoltar);
 botaoScanAdicionar.addEventListener('click', adicionarConferenciaPorCodigo);
 botaoConfirmarConferencia.addEventListener('click', solicitarVolumesConferencia);
+botaoConferenciaRapida.addEventListener('click', concluirConferenciaRapida);
 botaoCancelarVolumesConferencia.addEventListener('click', fecharModalVolumesConferencia);
 botaoConfirmarVolumesConferencia.addEventListener('click', () => {
   confirmarConferencia(Number(confirmarVolumesQtd.value));
