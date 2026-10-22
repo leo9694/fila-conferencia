@@ -3661,6 +3661,21 @@ function criarCard(item) {
     statusLabel = 'CONFERIDO';
     tipoCard = 'conferido';
   }
+  if (item.STATUS_CONFERENCIA === 'AGUARDANDO FATURAMENTO') {
+    statusClass = 'status-aguardando-faturamento';
+    statusLabel = item.FATURAMENTO_PARCIAL ? 'FATURAMENTO PARCIAL' : 'AGUARDANDO FATURAMENTO';
+  } else if (item.STATUS_CONFERENCIA === 'AGUARDANDO LIBERACAO') {
+    statusClass = 'status-aguardando-liberacao';
+    statusLabel = 'NÃO LIBERADO';
+  }
+
+  const pedidosOrigem = Array.isArray(item.PEDIDOS_ORIGEM) ? item.PEDIDOS_ORIGEM.join(' / ') : '';
+  const origemTexto = pedidosOrigem ? `${item.PEDIDOS_ORIGEM.length > 1 ? 'Pedidos' : 'Pedido'} ${pedidosOrigem} faturado${item.PEDIDOS_ORIGEM.length > 1 ? 's' : ''}` : '';
+  const etapaTexto = item.TIPMOV === 'V'
+    ? `${origemTexto || 'Nota sem pedido de origem vinculado'} · ${item.LIBERADO_CONFERENCIA ? 'Liberado para conferência' : 'Não liberado para conferência'}`
+    : item.STATUS_CONFERENCIA === 'AGUARDANDO FATURAMENTO'
+      ? `${item.FATURAMENTO_PARCIAL ? `Saldo a faturar: ${formatarQuantidade(item.QTD_PENDENTE_FATURAMENTO)} · ` : ''}Pedido liberado no financeiro e comercial`
+      : '';
 
   const dataFormatada = formatarData(item.DTNEG);
   const valor = Number(item.VLRNOTA) || 0;
@@ -3731,8 +3746,9 @@ function criarCard(item) {
   div.innerHTML = `
     <div class="acompanhamento-card-head">
       <div class="acompanhamento-card-identidade">
-        <span class="nota-numero">Nota ${escaparHtml(item.NUNOTA)}</span>
+        <span class="nota-numero">${item.TIPMOV === 'P' ? 'Pedido' : 'Nota'} ${escaparHtml(item.NUNOTA)}</span>
         <span class="empresa-nome">${escaparHtml(item.EMPRESA || '-')}</span>
+        ${tipoCard === 'conferido' && origemTexto ? `<small class="acompanhamento-origem">${escaparHtml(origemTexto)}</small>` : ''}
       </div>
       <div class="pedido-card-status-group">
         ${tipoCard === 'conferido' ? '' : indicadoresStatus}
@@ -3740,6 +3756,7 @@ function criarCard(item) {
       </div>
     </div>
 
+    ${tipoCard !== 'conferido' && etapaTexto ? `<div class="acompanhamento-fluxo ${item.LIBERADO_CONFERENCIA ? 'liberado' : ''}">${escaparHtml(etapaTexto)}</div>` : ''}
     <div class="acompanhamento-card-meta">
       ${metas}
     </div>
@@ -10654,11 +10671,12 @@ async function carregarFila() {
       EM_SEPARACAO: 1
     };
     const aguardando = dados
-      .filter((d) => d.STATUS_CONFERENCIA === 'AGUARDANDO CONFERENCIA')
+      .filter((d) => ['AGUARDANDO CONFERENCIA', 'AGUARDANDO LIBERACAO', 'AGUARDANDO FATURAMENTO'].includes(d.STATUS_CONFERENCIA))
       .sort((a, b) => {
+        const etapas = { 'AGUARDANDO CONFERENCIA': 0, 'AGUARDANDO LIBERACAO': 1, 'AGUARDANDO FATURAMENTO': 2 };
         const prioridadeA = prioridadeSeparacao[String(a.STATUS_SEPARACAO || '').toUpperCase()] ?? 2;
         const prioridadeB = prioridadeSeparacao[String(b.STATUS_SEPARACAO || '').toUpperCase()] ?? 2;
-        return prioridadeA - prioridadeB
+        return etapas[a.STATUS_CONFERENCIA] - etapas[b.STATUS_CONFERENCIA] || prioridadeA - prioridadeB
           || obterTimestamp(a.DTNEG) - obterTimestamp(b.DTNEG);
       });
 
@@ -10677,11 +10695,11 @@ async function carregarFila() {
     metricTotalFaturado.textContent = formatarMoeda(
       conferidos.reduce((total, item) => total + (Number(item.VLRNOTA) || 0), 0)
     );
-    countPendentes.textContent = `${emConferencia.length + aguardando.length} pedidos`;
-    countConferidos.textContent = `${conferidos.length} pedidos`;
+    countPendentes.textContent = `${emConferencia.length + aguardando.length} documentos`;
+    countConferidos.textContent = `${conferidos.length} documentos`;
 
     if (emConferencia.length === 0 && aguardando.length === 0) {
-      renderizarEstadoVazio(poolPendentes, 'Nenhuma nota pendente no período selecionado.');
+      renderizarEstadoVazio(poolPendentes, 'Nenhum pedido ou nota pendente no período selecionado.');
     } else {
       [...emConferencia, ...aguardando].forEach((item) => {
         poolPendentes.appendChild(criarCard(item));

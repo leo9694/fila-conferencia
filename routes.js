@@ -2611,10 +2611,27 @@ function normalizarLinhaConferencia(row) {
 
 function montarSqlConferencias(intervalo, empresa) {
   return `
+    WITH DOCUMENTOS_PERIODO AS (
+      SELECT CAB.* FROM TGFCAB CAB
+      WHERE CAB.DTNEG >= TO_DATE('${intervalo.inicio}', 'YYYY-MM-DD')
+        AND CAB.DTNEG < TO_DATE('${intervalo.fim}', 'YYYY-MM-DD') + 1
+        ${sqlFiltroEmpresa(empresa)}
+    ), FAT_ITEM AS (
+      SELECT VAR.NUNOTAORIG, VAR.SEQUENCIAORIG, SUM(NVL(VAR.QTDATENDIDA, 0)) AS QTD_FATURADA
+      FROM TGFVAR VAR
+      JOIN DOCUMENTOS_PERIODO ORIGEM ON ORIGEM.NUNOTA = VAR.NUNOTAORIG AND ORIGEM.TIPMOV = 'P'
+      JOIN TGFCAB NOTA ON NOTA.NUNOTA = VAR.NUNOTA
+        AND NOTA.TIPMOV = 'V' AND NOTA.CODTIPOPER IN (35, 10)
+        AND NOTA.STATUSNOTA IN ('A', 'P', 'L')
+      GROUP BY VAR.NUNOTAORIG, VAR.SEQUENCIAORIG
+    )
     SELECT
       CAB.DTNEG,
       CAB.NUNOTA,
       CAB.CODEMP,
+      CAB.TIPMOV,
+      CAB.NUMNOTA,
+      CAB.LIBCONF,
       PAR.RAZAOSOCIAL AS EMPRESA,
       CAB.CODPARC AS CODIGO_PARCEIRO,
       CAST(NVL(CAB.VLRNOTA, 0) AS NUMBER(15,2)) AS VLRNOTA,
@@ -2626,13 +2643,17 @@ function montarSqlConferencias(intervalo, empresa) {
       USU.NOMEUSU AS NOME_CONFERENTE,
       COUNT(ITE.SEQUENCIA) AS QTD_ITENS,
       SUM(NVL(ITE.QTDNEG, 0)) AS QTD_TOTAL,
+      SUM(NVL(FAT_ITEM.QTD_FATURADA, 0)) AS QTD_FATURADA,
+      SUM(GREATEST(NVL(ITE.QTDNEG, 0) - NVL(FAT_ITEM.QTD_FATURADA, 0), 0)) AS QTD_PENDENTE_FATURAMENTO,
       CASE
-        WHEN CAB.NUCONFATUAL IS NULL THEN 'AGUARDANDO CONFERENCIA'
         WHEN CONF.STATUS = 'F' THEN 'CONFERIDO'
         WHEN CONF.STATUS = 'A' THEN 'EM ANDAMENTO'
-        ELSE 'STATUS DESCONHECIDO'
+        WHEN CONF.STATUS = 'D' THEN 'EM ANDAMENTO'
+        WHEN CAB.TIPMOV = 'P' THEN 'AGUARDANDO FATURAMENTO'
+        WHEN NVL(CAB.LIBCONF, 'N') <> 'S' THEN 'AGUARDANDO LIBERACAO'
+        ELSE 'AGUARDANDO CONFERENCIA'
       END AS STATUS_CONFERENCIA
-    FROM TGFCAB CAB
+    FROM DOCUMENTOS_PERIODO CAB
     LEFT JOIN TGFCON2 CONF
       ON CONF.NUCONF = CAB.NUCONFATUAL
     LEFT JOIN TGFPAR PAR
@@ -2641,17 +2662,49 @@ function montarSqlConferencias(intervalo, empresa) {
       ON USU.CODUSU = CONF.CODUSUCONF
     LEFT JOIN TGFITE ITE
       ON ITE.NUNOTA = CAB.NUNOTA
-    WHERE CAB.DTNEG >= TO_DATE('${intervalo.inicio}', 'YYYY-MM-DD')
-      AND CAB.DTNEG < TO_DATE('${intervalo.fim}', 'YYYY-MM-DD') + 1
-      AND ((CAB.CODTIPOPER IN (${sqlTopsConferencia('saida')})
+    LEFT JOIN FAT_ITEM ON FAT_ITEM.NUNOTAORIG = ITE.NUNOTA AND FAT_ITEM.SEQUENCIAORIG = ITE.SEQUENCIA
+    WHERE ((CAB.CODTIPOPER IN (${sqlTopsConferencia('saida')})
       AND CAB.TIPMOV = 'V'
-      AND ((CAB.LIBCONF = 'S' AND CAB.STATUSNOTA IN ('A', 'P')) OR CONF.STATUS = 'F'))
+      AND (CAB.STATUSNOTA IN ('A', 'P', 'L') OR CONF.STATUS = 'F'))
+      OR (CAB.TIPMOV = 'P' AND CAB.CODTIPOPER IN (5, 6, 237) AND CAB.STATUSNOTA = 'L'
+        AND NVL(CAB.AD_STATUSINTPED, '0') = '1' AND NVL(CAB.AD_STATUSCOMERCIAL, '0') = '1'
+        AND EXISTS (
+          SELECT 1 FROM TGFITE PEND
+          LEFT JOIN FAT_ITEM FAT_PEND ON FAT_PEND.NUNOTAORIG = PEND.NUNOTA AND FAT_PEND.SEQUENCIAORIG = PEND.SEQUENCIA
+          WHERE PEND.NUNOTA = CAB.NUNOTA AND PEND.SEQUENCIA > 0
+            AND NVL(PEND.QTDNEG, 0) - NVL(FAT_PEND.QTD_FATURADA, 0) > 0.0001
+        ))
       OR ${sqlHistoricoPedidosSaida(separacaoStore.state)})
-      ${sqlFiltroEmpresa(empresa)}
-    GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.CODEMP, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA,
+    GROUP BY CAB.DTNEG, CAB.NUNOTA, CAB.CODEMP, CAB.TIPMOV, CAB.NUMNOTA, CAB.LIBCONF, PAR.RAZAOSOCIAL, CAB.CODPARC, CAB.VLRNOTA,
       CAB.AD_STATUSINTPED, CAB.AD_STATUSCOMERCIAL,
       CONF.STATUS, CONF.DHINICONF, CONF.DHFINCONF, USU.NOMEUSU, CAB.NUCONFATUAL
   `;
+}
+
+async function consultarOrigensAcompanhamento(rows) {
+  const ids = [...new Set(rows.filter((row) => row.TIPMOV === 'V').map((row) => obterNumeroInteiro(row.NUNOTA)).filter(Boolean))];
+  const origens = new Map();
+  for (let inicio = 0; inicio < ids.length; inicio += 500) {
+    const vinculos = await executeQuery(`
+      SELECT DISTINCT VAR.NUNOTA, ORIG.NUNOTA AS NUNOTAORIG
+      FROM TGFVAR VAR JOIN TGFCAB ORIG ON ORIG.NUNOTA = VAR.NUNOTAORIG AND ORIG.TIPMOV = 'P'
+      WHERE VAR.NUNOTA IN (${ids.slice(inicio, inicio + 500).join(', ')})
+      ORDER BY VAR.NUNOTA, ORIG.NUNOTA
+    `);
+    for (const vinculo of vinculos) {
+      const nunota = Number(vinculo.NUNOTA);
+      const pedido = obterNumeroInteiro(vinculo.NUNOTAORIG);
+      if (!pedido) continue;
+      if (!origens.has(nunota)) origens.set(nunota, []);
+      if (!origens.get(nunota).includes(pedido)) origens.get(nunota).push(pedido);
+    }
+  }
+  return rows.map((row) => ({ ...row,
+    PEDIDOS_ORIGEM: origens.get(Number(row.NUNOTA)) || [],
+    PEDIDO_FATURADO: row.TIPMOV === 'V',
+    LIBERADO_CONFERENCIA: row.LIBCONF === 'S',
+    FATURAMENTO_PARCIAL: row.TIPMOV === 'P' && Number(row.QTD_FATURADA) > 0 && Number(row.QTD_PENDENTE_FATURAMENTO) > 0.0001
+  }));
 }
 
 router.get('/empresas', async (req, res) => {
@@ -2667,6 +2720,8 @@ router.get('/empresas', async (req, res) => {
       WHERE (
         (CAB.CODTIPOPER IN (${sqlTopsConferencia('saida')}) AND CAB.TIPMOV = '${tipoMovimentoConferencia('saida')}' AND ${condicaoStatusConferencia('saida')})
         OR ${sqlHistoricoPedidosSaida(separacaoStore.state)}
+        OR (CAB.TIPMOV = 'P' AND CAB.CODTIPOPER IN (5, 6, 237) AND CAB.STATUSNOTA = 'L'
+          AND NVL(CAB.AD_STATUSINTPED, '0') = '1' AND NVL(CAB.AD_STATUSCOMERCIAL, '0') = '1')
         OR
         (CAB.CODTIPOPER IN (${TOPS_CONFERENCIA.entrada.join(', ')}) AND CAB.TIPMOV = 'C' AND CAB.STATUSNOTA = 'A')
       )
@@ -2690,7 +2745,7 @@ router.get('/conferencias', async (req, res) => {
   try {
     const intervalo = obterIntervaloDatas(req.query.dataInicial, req.query.dataFinal);
     const empresa = obterFiltroEmpresa(req.query.empresa);
-    const rows = await executeQuery(montarSqlConferencias(intervalo, empresa));
+    const rows = await consultarOrigensAcompanhamento(await executeQuery(montarSqlConferencias(intervalo, empresa)));
 
     const resultado = conferenciaTimerStore
       .atualizarComItens(rows.map(normalizarLinhaConferencia))

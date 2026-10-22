@@ -2504,6 +2504,35 @@ body.has-global-sidebar .acompanhamento-card-head {
   gap: 7px;
 }
 
+.acompanhamento-fluxo {
+  margin-top: 5px;
+  color: #7b5c1a;
+  font-size: 0.62rem;
+  font-weight: 750;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.acompanhamento-fluxo.liberado {
+  color: #087151;
+}
+
+.acompanhamento-origem {
+  color: #526578;
+  font-size: 0.52rem;
+  overflow-wrap: anywhere;
+}
+
+body.has-global-sidebar .pool-fila .card-item.status-aguardando-faturamento {
+  border-left-color: #4e83c4;
+  background: #f2f7fd;
+}
+
+body.has-global-sidebar .pool-fila .card-item.status-aguardando-liberacao {
+  border-left-color: #9470c5;
+  background: #f8f4ff;
+}
+
 body.has-global-sidebar .acompanhamento-card-identidade {
   display: flex;
   min-width: 0;

@@ -45,14 +45,14 @@ test('saída sem separação abre aviso e só inicia se o usuário optar por con
   assert.equal(ctx.iniciadas, 2);
 });
 
-test('acompanhamento da saída consulta notas TOP 35 e 10 liberadas e já conferidas', () => {
+test('acompanhamento consulta notas TOP 35 e 10 mesmo sem liberação e preserva conferidos antigos', () => {
   const ctx = politica(false);
   ctx.sqlFiltroEmpresa = () => '';
   vm.runInContext(fonte.slice(fonte.indexOf('function montarSqlConferencias('), fonte.indexOf("router.get('/empresas'")), ctx);
   const sql = vm.runInContext("montarSqlConferencias({ inicio: '2026-10-15', fim: '2026-10-16' }, 1)", ctx);
   assert.match(sql, /CAB.CODTIPOPER IN \(35, 10\)/);
   assert.match(sql, /CAB.TIPMOV = 'V'/);
-  assert.match(sql, /CAB.LIBCONF = 'S'/);
+  assert.match(sql, /NVL\(CAB.LIBCONF, 'N'\) <> 'S'/);
   assert.match(sql, /OR CONF.STATUS = 'F'/);
   assert.match(sql, /IN \(5, 6, 237\)/, 'Preserva histórico das TOPs antigas');
 });
