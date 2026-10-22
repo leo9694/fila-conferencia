@@ -1583,6 +1583,18 @@ router.get('/conversations', asyncRoute(async (req, res) => {
   if (req.query.pipelineId !== undefined && req.query.pipelineId !== '' && pipelineId === null) return res.status(400).json({ erro: 'Pipeline inválido.' });
   const filtroLocalAtivo = Boolean(agentId || assignment !== 'ALL' || codParcBusca || unreadOnly || pipelineId !== null);
   const incluirTransferenciasEntreCanais = assignment === 'MINE' && !agentId && !unreadOnly;
+  const messageSearch = String(req.query.messageSearch || '').trim();
+  if (messageSearch) {
+    if (messageSearch.length < 2 || messageSearch.length > 200) return res.status(400).json({ erro: 'Informe de 2 a 200 caracteres para pesquisar mensagens.' });
+    const resposta = await whatsappApi.getConversations({ page, limit: 8, messageSearch,
+      channelId: req.query.channelId, status: req.query.status, assignment: 'ALL' });
+    if ((resposta.data || []).some((conversa) => !conversa.matchedMessage)) return res.status(503).json({ erro: 'Atualize a API WhatsApp para habilitar a pesquisa no histórico de mensagens.' });
+    const data = vincularCadastrosSankhyaDoCache((resposta.data || []).map(comAtribuicao)).filter((conversa) =>
+      atendentePodeAcessarConversa(req.atendente, conversa) && !conversaOcultaParaUsuario(req.usuario.codUsu, conversa)
+      && conversaCorrespondeFiltroAtendente(conversa, { assignment, agentId, unreadOnly, pipelineId, pipelineScope, currentAgentId: req.atendente.id })
+    ).map((conversa) => comAcessoAtendente(conversa, req.atendente));
+    return res.json({ data, pagination: { ...resposta.pagination, page, limit: 8, total: data.length } });
+  }
   const parametros = {
     page: filtroLocalAtivo ? 1 : page,
     limit: filtroLocalAtivo ? 100 : limit,

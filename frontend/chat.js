@@ -28,6 +28,7 @@
     agentFilterToggle: byId('chat-agent-filter-toggle'), agentFilter: byId('chat-agent-filter'),
     agentFilterSelect: byId('chat-agent-filter-select'), agentFilterClear: byId('chat-agent-filter-clear'),
     pipelineFilter: byId('chat-pipeline-filter'), pipelineScope: byId('chat-pipeline-scope'),
+    messageSearch: byId('chat-message-search'), messageSearchButton: byId('chat-message-search-button'),
     refresh: byId('chat-refresh'), newContact: byId('chat-new-contact'), more: byId('chat-load-more'), empty: byId('chat-empty-state'),
     active: byId('chat-active-view'), messages: byId('chat-message-list'), input: byId('chat-message-input'),
     form: byId('chat-composer'), send: byId('chat-send'), feedback: byId('chat-composer-feedback'),
@@ -115,6 +116,7 @@
   state.listRefreshTimer = null;
   state.messagesScrollFrame = null;
   state.openingConversation = false;
+  state.messageSearch = '';
 
   const CONVERSATION_CACHE_LIMIT = 6;
   const CACHED_MESSAGES_LIMIT = 80;
@@ -235,6 +237,7 @@
       labels.push(`Atendente: ${agent?.name || state.agentId}`);
     }
     if (state.search) labels.push(`Busca: ${state.search}`);
+    if (state.messageSearch) labels.push(`Mensagem: ${state.messageSearch}`);
     if (state.pipelineId !== '') {
       const pipeline = state.filterPipelines.find((item) => String(item.categoryId) === state.pipelineId);
       labels.push(`Pipeline: ${pipeline?.name || state.pipelineId} (${state.pipelineScope === 'history' ? 'histórico' : state.pipelineScope === 'current' ? 'atual' : 'atual e histórico'})`);
@@ -244,6 +247,8 @@
   }
 
   function clearConversationFilters() {
+    state.messageSearch = '';
+    if (refs.messageSearch) refs.messageSearch.value = '';
     state.pipelineId = '';
     state.pipelineScope = 'all';
     if (refs.pipelineFilter) refs.pipelineFilter.value = '';
@@ -737,7 +742,7 @@
   }
 
   function conversationListKey() {
-    return JSON.stringify([state.profile?.id, state.selectedChannelId, state.search, state.status, state.assignment, state.agentId, state.unreadOnly, state.pipelineId, state.pipelineScope]);
+    return JSON.stringify([state.profile?.id, state.selectedChannelId, state.search, state.status, state.assignment, state.agentId, state.unreadOnly, state.pipelineId, state.pipelineScope, state.messageSearch]);
   }
 
   function matchesListFilters(item) {
@@ -921,8 +926,8 @@
       const transferidoOutroNumero = item.crossChannelTransfer === true;
       return `<button class="chat-conversation${active ? ' is-active' : ''}${unread ? ' has-unread' : ''}${transferidoOutroNumero ? ' is-cross-channel-transfer' : ''}" type="button" data-conversation-id="${escapeHtml(item.id)}">
         <span class="chat-list-avatar">${escapeHtml(Core.initials(name))}</span>
-        <span class="chat-list-copy"><span class="chat-list-line"><span class="chat-list-name"><strong>${escapeHtml(name)}</strong>${sankhyaBadge(item)}${pipelineBadges(item)}</span><time>${escapeHtml(formatDate(conversationTimestamp(item), true))}</time></span>
-        <span class="chat-list-line"><small>${escapeHtml(Core.messagePreview(item.lastMessage))}</small>${unread ? `<b>${unread > 99 ? '99+' : unread}</b>` : ''}</span>
+        <span class="chat-list-copy"><span class="chat-list-line"><span class="chat-list-name"><strong>${escapeHtml(name)}</strong>${sankhyaBadge(item)}${pipelineBadges(item)}</span><time>${escapeHtml(formatDate(state.messageSearch ? item.matchedMessage?.messageTimestamp : conversationTimestamp(item), true))}</time></span>
+        <span class="chat-list-line"><small>${escapeHtml(Core.messagePreview(state.messageSearch ? item.matchedMessage : item.lastMessage))}</small>${unread ? `<b>${unread > 99 ? '99+' : unread}</b>` : ''}</span>
         <span class="chat-list-meta"><span class="chat-list-agent${agent ? '' : ' is-unassigned'}">${escapeHtml(agent?.name || 'Sem atendente')}</span>${transferidoOutroNumero ? '<span class="chat-transfer-badge">Transferido</span>' : ''}<span class="chat-channel-badge">${escapeHtml(Core.channelLabel(item))}</span></span></span>
       </button>`;
     }).join(''));
@@ -1064,7 +1069,9 @@
     const isCurrent = () => token === state.loadToken && listKey === conversationListKey();
     renderConversations();
     try {
-      const query = new URLSearchParams({ page: String(requestedPage), limit: '30' });
+      const pageSize = state.messageSearch ? 8 : 30;
+      const query = new URLSearchParams({ page: String(requestedPage), limit: String(pageSize) });
+      if (state.messageSearch) query.set('messageSearch', state.messageSearch);
       if (state.search) query.set('search', state.search);
       if (state.status) query.set('status', state.status);
       if (state.selectedChannelId) query.set('channelId', state.selectedChannelId);
@@ -1078,11 +1085,12 @@
       migrateHiddenConversationIds(received);
       received.forEach((item) => syncUnreadConversation(item, { render: false }));
       const incoming = received.filter(matchesListFilters);
-      const retained = loadedPage > 1 ? state.conversations.slice(30).filter(matchesListFilters) : [];
+      const retained = loadedPage > 1 ? state.conversations.slice(pageSize).filter(matchesListFilters) : [];
       state.conversations = append
         ? Core.mergeConversationPages(state.conversations, incoming)
         : Core.mergeConversationPages(Core.mergeConversationList(state.conversations, incoming), retained);
       state.listReady = true;
+      if (state.messageSearch) state.conversations.sort((a, b) => new Date(b.matchedMessage?.messageTimestamp || 0) - new Date(a.matchedMessage?.messageTimestamp || 0));
       state.totalPages = Number(payload?.pagination?.totalPages || 1);
       state.totalConversations = Math.max(
         state.conversations.length,
@@ -1095,7 +1103,7 @@
         while (conversationListCache.size > 8) conversationListCache.delete(conversationListCache.keys().next().value);
       }
       scheduleUiCachePersist();
-      requestAnimationFrame(() => { if (isCurrent()) loadMoreConversationsIfNeeded(); });
+      if (!state.messageSearch || !state.conversations.length) requestAnimationFrame(() => { if (isCurrent()) loadMoreConversationsIfNeeded(); });
     } catch (error) {
       if (!isCurrent() || error?.name === 'AbortError') return;
       if (append) state.page = Math.max(1, requestedPage - 1);
@@ -2122,10 +2130,10 @@
     }
     // Busca textual é decidida pelo servidor (inclui parceiro e telefone).
     // Não inserir enriquecimentos antigos no resultado de outra busca.
-    if (index < 0 && (state.search || !state.listReady)) return;
+    if (index < 0 && (state.search || state.messageSearch || !state.listReady)) return;
     if (index >= 0) state.conversations[index] = merged;
     else if (merged.id) state.conversations.unshift(merged);
-    state.conversations.sort((a, b) => new Date(conversationTimestamp(b) || 0) - new Date(conversationTimestamp(a) || 0));
+    if (!state.messageSearch) state.conversations.sort((a, b) => new Date(conversationTimestamp(b) || 0) - new Date(conversationTimestamp(a) || 0));
     scheduleConversationsRender();
   }
 
@@ -3411,6 +3419,19 @@
   }
 
   function bindEvents() {
+    const buscarMensagem = () => {
+      const termo = refs.messageSearch.value.trim();
+      if (termo && termo.length < 2) { refs.messageSearch.setCustomValidity('Digite pelo menos 2 caracteres.'); refs.messageSearch.reportValidity(); return; }
+      refs.messageSearch.setCustomValidity('');
+      state.messageSearch = termo;
+      state.search = '';
+      refs.search.value = '';
+      state.page = 1;
+      loadConversations();
+    };
+    refs.messageSearchButton?.addEventListener('click', buscarMensagem);
+    refs.messageSearch?.addEventListener('keydown', (event) => { if (event.key === 'Enter') { event.preventDefault(); buscarMensagem(); } });
+    refs.messageSearch?.addEventListener('input', () => refs.messageSearch.setCustomValidity(''));
     syncRestingViewportHeight();
     window.visualViewport?.addEventListener('resize', () => syncRestingViewportHeight(180));
     window.addEventListener('resize', () => syncRestingViewportHeight(180));
@@ -3453,7 +3474,11 @@
     refs.newContact.addEventListener('click', openNewContact);
     refs.more.addEventListener('click', () => { state.page += 1; loadConversations({ append: true }); });
     refs.list.addEventListener('scroll', loadMoreConversationsIfNeeded, { passive: true });
-    refs.search.addEventListener('input', Core.debounce(() => { state.search = refs.search.value.trim(); state.page = 1; loadConversations(); }, 350));
+    refs.search.addEventListener('input', Core.debounce(() => {
+      state.messageSearch = '';
+      if (refs.messageSearch) refs.messageSearch.value = '';
+      state.search = refs.search.value.trim(); state.page = 1; loadConversations();
+    }, 350));
     refs.filters.addEventListener('click', (event) => { const button = event.target.closest('[data-chat-assignment]'); if (!button) return; refs.filters.querySelectorAll('button').forEach((item) => item.classList.toggle('is-active', item === button)); state.assignment = button.dataset.chatAssignment; state.agentId = ''; if (refs.agentFilterSelect) refs.agentFilterSelect.value = ''; if (refs.agentFilterClear) refs.agentFilterClear.hidden = true; refs.agentFilterToggle?.classList.toggle('is-active', state.pipelineId !== ''); state.page = 1; loadConversations(); });
     refs.mobileBack.addEventListener('click', () => {
       if (history.state?.tela === 'chat' && history.state?.conversationId) history.back();
