@@ -99,7 +99,15 @@
     return incoming.map((conversation) => {
       const keys = new Set(conversationIdentityKeys(conversation));
       const existing = current.find((item) => conversationIdentityKeys(item).some((key) => keys.has(key)));
-      return existing ? mergeConversationSnapshot(existing, conversation) : conversation;
+      if (!existing) return conversation;
+      const merged = mergeConversationSnapshot(existing, conversation);
+      const timestamp = (item) => new Date(item.lastMessageAt || item.lastMessage?.messageTimestamp || 0).getTime();
+      if (timestamp(conversation) > 0 && timestamp(existing) > timestamp(conversation)) {
+        ['lastMessage', 'lastMessageAt', 'unreadCount'].forEach((field) => {
+          if (existing[field] !== undefined) merged[field] = existing[field];
+        });
+      }
+      return merged;
     });
   }
 

@@ -2554,6 +2554,22 @@ body.has-global-sidebar .pedido-card-status-group {
   gap: 4px;
 }
 
+body.has-global-sidebar .pool-fila .pedido-card-status-group {
+  display: grid;
+  grid-template-columns: 103px 132px;
+  align-items: center;
+}
+
+body.has-global-sidebar .pool-fila .pedido-status-indicadores {
+  display: grid;
+  grid-template-columns: repeat(4, 22px);
+  gap: 5px;
+}
+
+body.has-global-sidebar .pool-fila .pedido-card-status-group .status-text {
+  text-align: center;
+}
+
 body.has-global-sidebar .acompanhamento-pedidos .status-text {
   padding: 3px 7px;
   border-radius: 999px;
@@ -2970,6 +2986,11 @@ body.has-global-sidebar .acompanhamento-pedidos .empty-state {
   body.has-global-sidebar .pedido-card-status-group {
     align-items: flex-end;
     flex-direction: column-reverse;
+  }
+
+  body.has-global-sidebar .pool-fila .pedido-card-status-group {
+    grid-template-columns: 132px;
+    align-items: center;
   }
 }
 

@@ -7,6 +7,13 @@ const { sqlHistoricoPedidosSaida } = require('../api/conferenciaSaidaNota');
 const routes = fs.readFileSync(path.join(__dirname, '../routes.js'), 'utf8');
 const frontend = fs.readFileSync(path.join(__dirname, '../frontend/app.js'), 'utf8');
 
+test('ícones e rótulos dos cartões pendentes usam colunas fixas sem afetar conferidos', () => {
+  const css = fs.readFileSync(path.join(__dirname, '../frontend/home-dashboard.css'), 'utf8');
+  assert.match(css, /\.pool-fila \.pedido-card-status-group\s*\{\s*display: grid;\s*grid-template-columns: 103px 132px/);
+  assert.match(css, /\.pool-fila \.pedido-status-indicadores\s*\{\s*display: grid;\s*grid-template-columns: repeat\(4, 22px\)/);
+  assert.match(css, /\.pool-fila \.pedido-card-status-group\s*\{\s*grid-template-columns: 132px/);
+});
+
 test('painel de pedidos ganha 20% de largura relativa sem alterar o empilhamento em telas menores', () => {
   const css = fs.readFileSync(path.join(__dirname, '../frontend/home-dashboard.css'), 'utf8');
   const board = css.match(/body\.has-global-sidebar \.board\.acompanhamento-board\s*\{([^}]+)\}/)[1];

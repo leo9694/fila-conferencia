@@ -1,6 +1,7 @@
 (function (root) {
   'use strict';
   const markup = new WeakMap();
+  const rendered = new WeakMap();
   function key(node) {
     if (node.nodeType !== 1) return null;
     for (const name of ['data-message-id', 'data-conversation-id', 'data-call-id']) {
@@ -43,9 +44,13 @@
   }
   root.ChatDOM = {
     render(element, html) {
+      const previous = rendered.get(element);
+      if (previous?.html === html && previous.first === element.firstChild && previous.count === element.childNodes.length) return false;
       const template = element.ownerDocument.createElement('template');
       template.innerHTML = html;
       sync(element, template.content);
+      rendered.set(element, { html, first: element.firstChild, count: element.childNodes.length });
+      return true;
     }
   };
 }(window));

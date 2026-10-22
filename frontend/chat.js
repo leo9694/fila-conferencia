@@ -109,6 +109,12 @@
     typingLastSentAt: new Map(),
     notificationAudio: [], sentMessageAudio: null, notificationAudioUnlocked: false
   };
+  state.listKey = null;
+  state.listReady = false;
+  state.listController = null;
+  state.listRefreshTimer = null;
+  state.messagesScrollFrame = null;
+  state.openingConversation = false;
 
   const CONVERSATION_CACHE_LIMIT = 6;
   const CACHED_MESSAGES_LIMIT = 80;
@@ -522,7 +528,8 @@
       }
       return Core.unwrap(payload);
     } catch (error) {
-      if (error instanceof TypeError || error?.name === 'AbortError') {
+      if (error?.name === 'AbortError') throw error;
+      if (error instanceof TypeError) {
         throw new Error('Falha ao conectar com a API de atendimento.');
       }
       throw error;
@@ -568,7 +575,7 @@
   }
 
   function conversationTimestamp(item) {
-    return item.lastMessageAt || item.lastMessage?.messageTimestamp || item.updatedAt;
+    return item.lastMessageAt || item.lastMessage?.messageTimestamp || item.createdAt || item.updatedAt;
   }
 
   function sankhyaCadastro(item = {}) {
@@ -726,7 +733,40 @@
   }
 
   function renderConversationSkeleton() {
-    refs.list.innerHTML = Array.from({ length: 7 }, () => '<div class="chat-conversation-skeleton"><i></i><span></span><b></b></div>').join('');
+    window.ChatDOM.render(refs.list, Array.from({ length: 7 }, () => '<div class="chat-conversation-skeleton"><i></i><span></span><b></b></div>').join(''));
+  }
+
+  function conversationListKey() {
+    return JSON.stringify([state.profile?.id, state.selectedChannelId, state.search, state.status, state.assignment, state.agentId, state.unreadOnly, state.pipelineId, state.pipelineScope]);
+  }
+
+  function matchesListFilters(item) {
+    return !isConversationHidden(item) && conversationMatchesChannel(item) && matchesAssignment(item)
+      && (!state.unreadOnly || Number(item.unreadCount || 0) > 0)
+      && (!state.status || String(item.status || '').toUpperCase() === String(state.status).toUpperCase());
+  }
+
+  function ensureConversationListScope() {
+    const key = conversationListKey();
+    if (state.listKey === key) return;
+    state.listController?.abort();
+    state.loadToken += 1;
+    state.loading = false;
+    const candidate = conversationListCache.get(key);
+    const cached = candidate && Date.now() - candidate.savedAt <= UI_CACHE_TTL ? candidate : null;
+    state.listKey = key;
+    state.listReady = Boolean(cached);
+    state.conversations = (cached?.items || []).filter(matchesListFilters);
+    state.page = cached?.page || 1;
+    state.totalPages = cached?.pages || 1;
+    state.totalConversations = cached?.total || 0;
+    refs.list.classList.remove('is-refreshing');
+    refs.list.scrollTop = 0;
+  }
+
+  function scheduleConversationListRefresh() {
+    clearTimeout(state.listRefreshTimer);
+    state.listRefreshTimer = setTimeout(() => { state.listRefreshTimer = null; loadConversations(); }, 180);
   }
 
   function persistUiCache() {
@@ -748,6 +788,7 @@
       sessionStorage.setItem(UI_CACHE_KEY, JSON.stringify({
         savedAt: Date.now(),
         profileId: String(state.profile.id),
+        listKey: state.listKey,
         conversations: state.conversations.slice(0, 40),
         totalConversations: state.totalConversations,
         totalPages: state.totalPages,
@@ -769,9 +810,13 @@
         sessionStorage.removeItem(UI_CACHE_KEY);
         return false;
       }
-      state.conversations = Array.isArray(cached.conversations) ? cached.conversations : [];
-      state.totalConversations = Number(cached.totalConversations || state.conversations.length);
-      state.totalPages = Number(cached.totalPages || 1);
+      if (cached.listKey === conversationListKey()) {
+        state.listKey = cached.listKey;
+        state.listReady = true;
+        state.conversations = (Array.isArray(cached.conversations) ? cached.conversations : []).filter(matchesListFilters);
+        state.totalConversations = Number(cached.totalConversations || state.conversations.length);
+        state.totalPages = Number(cached.totalPages || 1);
+      }
       if (cached.active?.id && cached.active?.conversation) {
         state.conversationCache.set(String(cached.active.id), {
           conversation: cached.active.conversation,
@@ -847,6 +892,8 @@
   }
 
   function cancelScheduledMessagesRender() {
+    if (state.messagesScrollFrame) cancelAnimationFrame(state.messagesScrollFrame);
+    state.messagesScrollFrame = null;
     if (!state.messagesRenderFrame) return;
     cancelAnimationFrame(state.messagesRenderFrame);
     state.messagesRenderFrame = null;
@@ -855,15 +902,17 @@
   }
 
   function renderConversations() {
+    ensureConversationListScope();
     refs.count.textContent = String(state.totalConversations || state.conversations.length);
     refs.more.hidden = state.page >= state.totalPages;
+    if (!state.listReady && !state.conversations.length) { renderConversationSkeleton(); return; }
     if (!state.conversations.length) {
       refs.list.innerHTML = '<div class="chat-list-empty"><i data-lucide="message-circle-off"></i><strong>Nenhuma conversa encontrada</strong><span>Tente ajustar a busca ou o filtro.</span></div>';
       window.lucide?.createIcons();
       scheduleTemporaryAccessExpiry();
       return;
     }
-    window.ChatDOM.render(refs.list, state.conversations.map((item) => {
+    const changed = window.ChatDOM.render(refs.list, state.conversations.map((item) => {
       const name = Core.contactName(item);
       const unread = Number(item.unreadCount || 0);
       const active = String(item.id) === String(state.conversationId);
@@ -878,7 +927,7 @@
       </button>`;
     }).join(''));
     refs.list.querySelectorAll('[data-conversation-id]').forEach(bindConversationItem);
-    window.lucide?.createIcons();
+    if (changed !== false) window.lucide?.createIcons();
     scheduleTemporaryAccessExpiry();
   }
 
@@ -999,25 +1048,23 @@
   }
 
   async function loadConversations({ append = false } = {}) {
+    ensureConversationListScope();
     if (append && state.loading) return;
+    clearTimeout(state.listRefreshTimer);
+    state.listRefreshTimer = null;
+    state.listController?.abort();
+    const controller = new AbortController();
+    state.listController = controller;
     state.loading = true;
     renderActiveFilters();
-    const requestedPage = state.page;
+    const requestedPage = append ? state.page : 1;
+    const loadedPage = state.page;
     const token = ++state.loadToken;
-    const listKey = JSON.stringify([state.profile?.id, state.selectedChannelId, state.search, state.status, state.assignment, state.agentId, state.unreadOnly, state.pipelineId, state.pipelineScope]);
-    if (!append && !state.conversations.length) {
-      const cachedList = conversationListCache.get(listKey);
-      if (cachedList) {
-        state.conversations = cachedList.items.filter((item) => !isConversationHidden(item));
-        state.totalConversations = cachedList.total;
-        state.totalPages = cachedList.pages;
-        renderConversations();
-      }
-    }
-    if (!append && !state.conversations.length) renderConversationSkeleton();
-    else refs.list.classList.add('is-refreshing');
+    const listKey = conversationListKey();
+    const isCurrent = () => token === state.loadToken && listKey === conversationListKey();
+    renderConversations();
     try {
-      const query = new URLSearchParams({ page: String(state.page), limit: '30' });
+      const query = new URLSearchParams({ page: String(requestedPage), limit: '30' });
       if (state.search) query.set('search', state.search);
       if (state.status) query.set('status', state.status);
       if (state.selectedChannelId) query.set('channelId', state.selectedChannelId);
@@ -1025,36 +1072,40 @@
       if (state.unreadOnly) query.set('unreadOnly', 'true');
       if (state.agentId) query.set('agentId', state.agentId);
       if (state.pipelineId !== '') { query.set('pipelineId', state.pipelineId); query.set('pipelineScope', state.pipelineScope); }
-      const payload = await api(`/conversations?${query}`);
-      if (token !== state.loadToken) return;
+      const payload = await api(`/conversations?${query}`, { signal: controller.signal });
+      if (!isCurrent()) return;
       const received = Array.isArray(payload?.data) ? payload.data : [];
       migrateHiddenConversationIds(received);
       received.forEach((item) => syncUnreadConversation(item, { render: false }));
-      const incoming = received.filter((item) => !isConversationHidden(item));
+      const incoming = received.filter(matchesListFilters);
+      const retained = loadedPage > 1 ? state.conversations.slice(30).filter(matchesListFilters) : [];
       state.conversations = append
         ? Core.mergeConversationPages(state.conversations, incoming)
-        : Core.mergeConversationList(state.conversations, incoming);
+        : Core.mergeConversationPages(Core.mergeConversationList(state.conversations, incoming), retained);
+      state.listReady = true;
       state.totalPages = Number(payload?.pagination?.totalPages || 1);
       state.totalConversations = Math.max(
         state.conversations.length,
-        Number(payload?.pagination?.total || state.conversations.length) - state.hiddenConversationIds.size
+        Number(payload?.pagination?.total ?? state.conversations.length) - state.hiddenConversationIds.size
       );
       renderConversations();
       if (!append && requestedPage === 1) {
         conversationListCache.delete(listKey);
-        conversationListCache.set(listKey, { items: state.conversations.slice(), total: state.totalConversations, pages: state.totalPages });
+        conversationListCache.set(listKey, { items: state.conversations.slice(), total: state.totalConversations, pages: state.totalPages, page: state.page, savedAt: Date.now() });
         while (conversationListCache.size > 8) conversationListCache.delete(conversationListCache.keys().next().value);
       }
       scheduleUiCachePersist();
-      requestAnimationFrame(loadMoreConversationsIfNeeded);
+      requestAnimationFrame(() => { if (isCurrent()) loadMoreConversationsIfNeeded(); });
     } catch (error) {
-      if (token !== state.loadToken) return;
+      if (!isCurrent() || error?.name === 'AbortError') return;
       if (append) state.page = Math.max(1, requestedPage - 1);
+      if (state.conversations.length) return;
       refs.list.innerHTML = `<div class="chat-list-error"><strong>Não foi possível carregar as conversas.</strong><span>${escapeHtml(error.message)}</span><button type="button">Tentar novamente</button></div>`;
       refs.list.querySelector('button')?.addEventListener('click', () => loadConversations());
     } finally {
-      if (token === state.loadToken) {
+      if (isCurrent()) {
         state.loading = false;
+        state.listController = null;
         refs.list.classList.remove('is-refreshing');
       }
     }
@@ -1218,10 +1269,31 @@
     </article>`;
   }
 
-  function renderMessages({ preserveScroll = false } = {}) {
-    const oldHeight = refs.messages.scrollHeight;
-    const oldTop = refs.messages.scrollTop;
+  function captureMessageViewport() {
+    const top = refs.messages.getBoundingClientRect().top;
+    const anchor = Array.from(refs.messages.querySelectorAll('[data-message-id]'))
+      .find((element) => element.getBoundingClientRect().bottom > top);
+    return { top: refs.messages.scrollTop, height: refs.messages.scrollHeight, bottom: nearBottom(),
+      anchorId: anchor?.getAttribute('data-message-id'), offset: anchor ? anchor.getBoundingClientRect().top - top : 0 };
+  }
+
+  function restoreMessageViewport(snapshot, { prepend = false } = {}) {
+    if (!prepend && snapshot.bottom) { scrollBottom(); return; }
+    const anchor = snapshot.anchorId && Array.from(refs.messages.querySelectorAll('[data-message-id]'))
+      .find((element) => element.getAttribute('data-message-id') === snapshot.anchorId);
+    if (anchor) {
+      refs.messages.scrollTop += anchor.getBoundingClientRect().top - refs.messages.getBoundingClientRect().top - snapshot.offset;
+    } else {
+      refs.messages.scrollTop = snapshot.top + (prepend ? refs.messages.scrollHeight - snapshot.height : 0);
+    }
+  }
+
+  function renderMessages({ preserveScroll = false, prepend = false } = {}) {
+    if (state.messagesScrollFrame) cancelAnimationFrame(state.messagesScrollFrame);
+    state.messagesScrollFrame = null;
+    const viewport = preserveScroll ? captureMessageViewport() : null;
     if (!state.messages.length && !state.calls.length) {
+      if (state.openingConversation) return;
       refs.messages.innerHTML = `${renderMetaSessionNotice()}<div class="chat-message-empty">Nenhuma mensagem nesta conversa.</div>`;
       window.lucide?.createIcons();
       return;
@@ -1241,7 +1313,7 @@
       return !reaction || !messageKeys.has(reaction.messageId);
     });
     const timeline = Core.mergeTimeline(messages, state.calls);
-    window.ChatDOM.render(refs.messages, `${state.messagePage < state.messageTotalPages ? '<div class="chat-history-loader" aria-hidden="true"><span></span><span></span><span></span></div>' : ''}${renderMetaSessionNotice()}${timeline.map((entry) => {
+    const changed = window.ChatDOM.render(refs.messages, `${state.messagePage < state.messageTotalPages ? '<div class="chat-history-loader" aria-hidden="true"><span></span><span></span><span></span></div>' : ''}${renderMetaSessionNotice()}${timeline.map((entry) => {
       if (entry.kind === 'call') return renderCallTimelineItem(entry.value);
       const message = entry.value;
       if (message.internal === true || String(message.type).toLowerCase() === 'internal') return renderInternalTimelineItem(message);
@@ -1261,6 +1333,10 @@
         <div class="chat-bubble${reactions.length ? ' has-reaction' : ''}">${renderReplyContext(message)}${renderMessageContent(message)}<footer><time>${escapeHtml(messageTime(message))}</time>${outbound && status.symbol ? `<span class="chat-message-status${statusClass}" title="${escapeHtml(status.label)}" aria-label="${escapeHtml(status.label)}">${status.symbol}</span>` : ''}</footer>${failureAlert}${reactionBadge}${renderReactionActions(message)}</div>
       </article>`;
     }).join('')}`);
+    if (changed === false) {
+      if (!preserveScroll) scrollBottom();
+      return;
+    }
     unboundMessageElements('[data-chat-media]').forEach((element) => {
       element.addEventListener('click', () => activateMedia(element));
       const mediaKind = element.dataset.chatMedia;
@@ -1376,11 +1452,17 @@
       button.addEventListener('click', () => navigateToReplyTarget(button.dataset.chatReplyTarget));
     });
     window.lucide?.createIcons();
-    if (preserveScroll) refs.messages.scrollTop = refs.messages.scrollHeight - oldHeight + oldTop;
-    else requestAnimationFrame(() => {
-      scrollBottom();
-      fillMessageViewport();
-    });
+    if (preserveScroll) restoreMessageViewport(viewport, { prepend });
+    else {
+      const id = state.conversationId;
+      const token = state.activeLoadToken;
+      state.messagesScrollFrame = requestAnimationFrame(() => {
+        state.messagesScrollFrame = null;
+        if (id !== state.conversationId || token !== state.activeLoadToken) return;
+        scrollBottom();
+        fillMessageViewport();
+      });
+    }
   }
 
   function formatMetaDuration(seconds) {
@@ -1572,6 +1654,7 @@
     state.callsRefreshTimer = null;
     refs.workspace.classList.remove('has-conversation');
     state.conversationId = null;
+    state.openingConversation = false;
     state.conversation = null;
     state.messages = [];
     state.calls = [];
@@ -1594,6 +1677,8 @@
       return;
     }
     const token = ++state.activeLoadToken;
+    state.openingConversation = true;
+    refs.messages.classList.remove('is-loading-history');
     state.activeRefreshToken += 1;
     state.callsRefreshToken += 1;
     state.sendToken += 1;
@@ -1637,12 +1722,17 @@
       updateConversationHistory(requestedId, historyMode);
     } catch (error) {
       if (token !== state.activeLoadToken || requestedId !== String(state.conversationId)) return;
-      refs.messages.innerHTML = `<div class="chat-message-empty is-error">${escapeHtml(error.message)}</div>`;
+      if (!state.messages.length && !state.calls.length) refs.messages.innerHTML = `<div class="chat-message-empty is-error">${escapeHtml(error.message)}</div>`;
+    } finally {
+      if (token === state.activeLoadToken && requestedId === String(state.conversationId)) {
+        state.openingConversation = false;
+        requestAnimationFrame(() => { if (token === state.activeLoadToken) fillMessageViewport(); });
+      }
     }
   }
 
   function fillMessageViewport() {
-    if (!state.conversationId || state.loadingOlder || state.messagePage >= state.messageTotalPages) return;
+    if (!state.conversationId || state.openingConversation || state.loadingOlder || state.messagePage >= state.messageTotalPages) return;
     if (Core.shouldLoadOlderMessages(refs.messages, {
       fillViewport: true,
       threshold: MESSAGE_SCROLL_THRESHOLD,
@@ -1651,7 +1741,7 @@
   }
 
   async function loadOlderMessages() {
-    if (state.loadingOlder || state.messagePage >= state.messageTotalPages) return false;
+    if (state.openingConversation || state.loadingOlder || state.messagePage >= state.messageTotalPages) return false;
     const conversationId = String(state.conversationId || '');
     if (!conversationId) return false;
     const selectionToken = state.activeLoadToken;
@@ -1664,10 +1754,10 @@
       state.messagePage = page;
       state.messageTotalPages = Number(payload?.pagination?.totalPages || state.messageTotalPages || 1);
       state.messages = Core.mergeById(payload?.data || [], state.messages);
-      renderMessages({ preserveScroll: true });
+      renderMessages({ preserveScroll: true, prepend: true });
       return true;
     } catch (error) {
-      setFeedback(error.message, true);
+      if (conversationId === String(state.conversationId) && selectionToken === state.activeLoadToken) setFeedback(error.message, true);
       return false;
     }
     finally {
@@ -2019,23 +2109,20 @@
     const id = String(incoming.id ?? payload.conversationId ?? '');
     if (!id) return;
     if (isConversationHidden(incoming)) return;
+    for (const cached of conversationListCache.values()) {
+      cached.items = cached.items.map((item) => String(item.id) === id ? Core.mergeConversationList([item], [incoming])[0] : item);
+    }
+    ensureConversationListScope();
     const index = state.conversations.findIndex((item) => String(item.id) === id);
-    const merged = Core.mergeConversationSnapshot(index >= 0 ? state.conversations[index] : {}, incoming);
-    if (!conversationMatchesChannel(merged)) {
+    const merged = Core.mergeConversationList(index >= 0 ? [state.conversations[index]] : [], [incoming])[0];
+    if (!matchesListFilters(merged)) {
       if (index >= 0) state.conversations.splice(index, 1);
       scheduleConversationsRender();
       return;
     }
-    if (state.unreadOnly && Number(merged.unreadCount || 0) <= 0) {
-      if (index >= 0) state.conversations.splice(index, 1);
-      scheduleConversationsRender();
-      return;
-    }
-    if (!matchesAssignment(merged)) {
-      if (index >= 0) state.conversations.splice(index, 1);
-      scheduleConversationsRender();
-      return;
-    }
+    // Busca textual é decidida pelo servidor (inclui parceiro e telefone).
+    // Não inserir enriquecimentos antigos no resultado de outra busca.
+    if (index < 0 && (state.search || !state.listReady)) return;
     if (index >= 0) state.conversations[index] = merged;
     else if (merged.id) state.conversations.unshift(merged);
     state.conversations.sort((a, b) => new Date(conversationTimestamp(b) || 0) - new Date(conversationTimestamp(a) || 0));
@@ -2125,7 +2212,7 @@
       if (id === String(state.conversationId)) {
         const shouldScroll = nearBottom();
         state.messages = Core.mergeOptimisticMessage(state.messages, payload.message); scheduleMessagesRender({ preserveScroll: !shouldScroll });
-        if (shouldScroll) requestAnimationFrame(() => scrollBottom('smooth')); else refs.newMessage.hidden = false;
+        if (!shouldScroll) refs.newMessage.hidden = false;
         if (ownsConversation() && inbound) {
           markRead(id);
           refreshActiveConversation(id);
@@ -2142,7 +2229,7 @@
             renderUnreadAlert();
           }
         }
-        else loadConversations();
+        else scheduleConversationListRefresh();
         scheduleConversationsRender();
       }
     } else if (event === 'message:status') {
@@ -2172,7 +2259,6 @@
           const shouldScroll = nearBottom();
           state.messages = Core.mergeById(state.messages, [payload.internalMessage]);
           scheduleMessagesRender({ preserveScroll: !shouldScroll });
-          if (shouldScroll) requestAnimationFrame(() => scrollBottom('smooth'));
         } else {
           updateCachedConversationMessages(id, (messages) => Core.mergeById(messages, [payload.internalMessage]));
         }
@@ -2180,6 +2266,7 @@
       applyConversationUpdate(payload);
     }
     else if (event === 'conversation:deleted') {
+      conversationListCache.clear();
       const ids = new Set([payload.conversationId, ...(payload.relatedConversationIds || [])].map(String));
       state.conversations = state.conversations.filter((item) => !ids.has(String(item.id)));
       ids.forEach((id) => state.unreadConversations.delete(id));
@@ -3355,8 +3442,6 @@
       localStorage.setItem(CHANNEL_FILTER_KEY, state.selectedChannelId);
       fillChannelSelects();
       showConversationList({ replaceHistory: true });
-      state.page = 1;
-      state.conversations = [];
       loadConversations();
     });
     refs.agentFilterToggle?.addEventListener('click', (event) => { event.stopPropagation(); toggleAgentFilter(); });
@@ -3506,12 +3591,12 @@
     mountWorkspaceActions();
     if (!state.initialized) { bindEvents(); connectRealtime(); state.initialized = true; }
     else if (!state.eventSource) connectRealtime();
-    restoreUiCache();
     await loadChannels().catch(() => {
       state.channels = [];
       refs.channelTabs.innerHTML = '<span class="chat-channel-tabs-empty">Números indisponíveis</span>';
       refs.newChannel.innerHTML = '<option value="">Números indisponíveis</option>';
     });
+    restoreUiCache();
     loadUnreadSummary();
     const refresh = state.conversations.length ? loadConversations() : null;
     if (!refresh) await loadConversations();
@@ -3522,6 +3607,17 @@
   }
 
   function encerrar() {
+    state.listController?.abort();
+    state.listController = null;
+    state.loadToken += 1;
+    state.activeLoadToken += 1;
+    state.activeRefreshToken += 1;
+    state.callsRefreshToken += 1;
+    state.listKey = null;
+    state.listReady = false;
+    state.openingConversation = false;
+    clearTimeout(state.listRefreshTimer);
+    state.listRefreshTimer = null;
     window.whatsappCallController?.stop();
     state.eventSource?.close(); state.eventSource = null; clearMediaUrls();
     if (state.recorder?.state === 'recording') stopRecording(true);
