@@ -50,12 +50,40 @@ async function aplicarCortesNotaSaidaTeste({ nunota, itensPedido, conferidosPorS
     const quantidade = conferidosPorSequencia.get(sequencia) ?? 0;
     const qtdCortada = cortadosPorSequencia.get(sequencia);
     const original = Number(item.QTDNEG);
+    // QTDCONFERIDA só é considerado para recuperar a versão que gravou o corte
+    // nos dois lugares. Após salvar, apenas AD_CORTE conserva esse histórico.
+    const corteAnterior = Number(item.AD_CORTE || item.QTDCONFERIDA || 0);
     if (!Number.isFinite(original) || original <= 0 || !Number.isFinite(Number(item.VLRUNIT)) || Number(item.VLRUNIT) < 0
+      || !Number.isFinite(corteAnterior) || corteAnterior < 0
       || !Number.isFinite(quantidade) || quantidade < 0 || !Number.isFinite(qtdCortada) || qtdCortada <= 0
       || (Math.abs(original - quantidade - qtdCortada) > 0.0001 && Math.abs(original - quantidade) > 0.0001)) {
       throw new Error(`Corte inválido no item ${sequencia}. Revise a quantidade conferida.`);
     }
-    return { item, sequencia, qtdOriginal: original, qtdConferida: quantidade, qtdCortada, novaQuantidade: quantidade };
+    // QTDNEG já reduzida identifica uma repetição após falha parcial. Nesse caso,
+    // não acumule o mesmo corte de novo; preencha também cortes do fluxo antigo.
+    const corteAcumulado = Math.abs(original - quantidade) <= 0.0001
+      ? Math.max(corteAnterior, qtdCortada)
+      : corteAnterior + qtdCortada;
+    let icms = null;
+    // Calcula e digita / Não calcula e digita preservam o imposto já informado.
+    // Proporcione os valores existentes, sem mudar alíquotas ou regras da TOP.
+    if (['B', 'D'].includes(String(item.CALCICMS || '')) && quantidade > 0) {
+      const base = Number(item.BASEICMS || 0);
+      const valor = Number(item.VLRICMS || 0);
+      if (!Number.isFinite(base) || base < 0 || !Number.isFinite(valor) || valor < 0) throw new Error(`ICMS inválido no item ${sequencia}.`);
+      let quantidadeBase = original;
+      // Recupera a falha do fluxo antigo: quantidade já reduzida, corte zerado
+      // e base ainda igual ao valor original integral (ex.: 100 -> 50 unidades).
+      const totalOriginal = (quantidade + qtdCortada) * Number(item.VLRUNIT);
+      if (Math.abs(original - quantidade) <= 0.0001 && Number(item.QTDCONFERIDA || 0) === 0
+        && Number(item.VLRDESC || 0) === 0 && Math.abs(base - totalOriginal) <= 0.01) {
+        quantidadeBase = quantidade + qtdCortada;
+      }
+      const fator = quantidade / quantidadeBase;
+      icms = { base: Math.round((base * fator + Number.EPSILON) * 100) / 100,
+        valor: Math.round((valor * fator + Number.EPSILON) * 100) / 100 };
+    }
+    return { item, sequencia, qtdOriginal: original, qtdConferida: quantidade, qtdCortada, corteAcumulado, novaQuantidade: quantidade, icms };
   });
   if (!cortes.length) return [];
   if (!itensPedido.some((item) => (conferidosPorSequencia.get(Number(item.SEQUENCIA)) || 0) > 0)) throw new Error('Não é possível confirmar uma nota com todos os produtos cortados.');
@@ -68,17 +96,21 @@ async function aplicarCortesNotaSaidaTeste({ nunota, itensPedido, conferidosPorS
       quantidade: corte.novaQuantidade, controle: corte.item.CONTROLE,
       vlrTot: corte.novaQuantidade * Number(corte.item.VLRUNIT),
       vlrDesc: Number(corte.item.VLRDESC || 0) * corte.novaQuantidade / corte.qtdOriginal,
-      zerarCorte: true
+      qtdCortada: corte.corteAcumulado, zerarCorte: true,
+      ...(corte.icms ? { baseIcms: corte.icms.base, valorIcms: corte.icms.valor } : {})
     });
   }
-  const gravados = await executeQuery(`SELECT SEQUENCIA, QTDNEG, VLRTOT, QTDCONFERIDA FROM TGFITE WHERE NUNOTA = ${nunota}`);
+  const gravados = await executeQuery(`SELECT SEQUENCIA, QTDNEG, VLRTOT, QTDCONFERIDA, AD_CORTE, BASEICMS, VLRICMS FROM TGFITE WHERE NUNOTA = ${nunota}`);
   for (const corte of cortes) {
     const item = gravados.find((registro) => Number(registro.SEQUENCIA) === corte.sequencia);
     if (corte.novaQuantidade === 0 ? Boolean(item) : !item
       || !(Math.abs(Number(item.QTDNEG) - corte.novaQuantidade) <= 0.0001)
       || !(Math.abs(Number(item.VLRTOT) - corte.novaQuantidade * Number(corte.item.VLRUNIT)) <= 0.01)
-      || Number(item.QTDCONFERIDA || 0) !== 0) {
-      throw new Error(`O corte do item ${corte.sequencia} não foi aplicado à nota. A confirmação foi interrompida.`);
+      || Number(item.QTDCONFERIDA || 0) !== 0
+      || !(Math.abs(Number(item.AD_CORTE) - corte.corteAcumulado) <= 0.0001)
+      || (corte.icms && (!(Math.abs(Number(item.BASEICMS) - corte.icms.base) <= 0.01)
+        || !(Math.abs(Number(item.VLRICMS) - corte.icms.valor) <= 0.01)))) {
+      throw new Error(`O corte do item ${corte.sequencia} não foi aplicado integralmente à nota (quantidade, histórico de corte ou ICMS). A confirmação foi interrompida.`);
     }
   }
   return cortes.map(({ item, ...corte }) => corte);

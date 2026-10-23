@@ -1449,6 +1449,11 @@ async function salvarQuantidadeLoteItemNotaApi(nunota, item, dados, incluir = fa
             CONTROLE: campoApi(dados.controle || ''),
             VLRDESC: campoApi(numeroApiPreciso(dados.vlrDesc)),
             PERCDESC: campoApi(numeroApiPreciso(item.PERCDESC || 0)),
+            ...(dados.baseIcms !== undefined ? { BASEICMS: campoApi(numeroApiPreciso(dados.baseIcms)) } : {}),
+            ...(dados.valorIcms !== undefined ? { VLRICMS: campoApi(numeroApiPreciso(dados.valorIcms)) } : {}),
+            // QTDNEG já contém o saldo restante. O corte nativo não pode ser
+            // descontado novamente na validação dos detalhes da conferência.
+            ...(dados.qtdCortada !== undefined ? { AD_CORTE: campoApi(numeroApiPreciso(dados.qtdCortada)) } : {}),
             ...(dados.zerarCorte ? { QTDCONFERIDA: campoApi('0') } : {})
           }
         }
@@ -7185,7 +7190,9 @@ router.post('/fila-conferencia/confirmar', async (req, res) => {
     let itensPedido = await executeQuery(`
       SELECT
         CAB.CODEMP,
-        ITE.*
+        ITE.*,
+        (SELECT TOP.CALCICMS FROM TGFTOP TOP
+         WHERE TOP.CODTIPOPER = CAB.CODTIPOPER AND TOP.DHALTER = CAB.DHTIPOPER) AS CALCICMS
       FROM TGFITE ITE
       JOIN TGFCAB CAB
         ON CAB.NUNOTA = ITE.NUNOTA
