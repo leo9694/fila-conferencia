@@ -42,12 +42,40 @@ test('card do chat usa ID Bitrix do atendente iniciador e preserva essa identida
   assert.equal(eventos[1][1].contactId, 10);
 });
 
-test('não cria card com responsável padrão se identificação do atendente falhar ou retornar ID inválido', async () => {
+test('não cria card se a consulta de usuário falhar ou retornar ID inválido', async () => {
   for (const options of [{ falha: true }, { usuario: {} }, { usuario: { ID: '0' } }]) {
     const { ctx, eventos } = criarContexto(options);
     await assert.rejects(vm.runInContext("vincularPipelineBitrix({ id: 123 }, 1, 'EVELLIM')", ctx));
     assert.equal(eventos.some(([tipo]) => tipo === 'criar'), false);
     assert.equal(ctx.vinculandoPipelines.size, 0);
+  }
+});
+
+test('Compras 01 sem correspondência cria card com Leonardo sem trocar o atendente do chat', async () => {
+  let consultas = 0;
+  const service = criarBitrixService({
+    webhookUrl: 'https://example.com/rest/test',
+    httpClient: { post: async () => {
+      consultas += 1;
+      return { data: { result: [{ ID: '44', NAME: 'Leonardo' }, { ID: '55', NAME: 'Raquel' }] } };
+    } }
+  });
+  const { ctx, eventos } = criarContexto();
+  ctx.bitrixService.buscarUsuarioPorNome = service.buscarUsuarioPorNome;
+  await vm.runInContext("vincularPipelineBitrix({ id: 123 }, 1, 'COMPRAS 01')", ctx);
+  assert.equal(consultas, 1);
+  assert.equal(eventos[0][1].fields.ASSIGNED_BY_ID, 44);
+  assert.equal((await service.buscarUsuarioPorNome('RAQUEL', { nomePadrao: 'LEONARDO' })).ID, '55');
+});
+
+test('responsável padrão ausente ou ambíguo não cria card com usuário arbitrário', async () => {
+  for (const usuarios of [[], [{ ID: '44', NAME: 'Leonardo', LAST_NAME: 'Silva' }, { ID: '45', NAME: 'Leonardo', LAST_NAME: 'Souza' }]]) {
+    const service = criarBitrixService({ webhookUrl: 'https://example.com/rest/test',
+      httpClient: { post: async () => ({ data: { result: usuarios } }) } });
+    const { ctx, eventos } = criarContexto();
+    ctx.bitrixService.buscarUsuarioPorNome = service.buscarUsuarioPorNome;
+    await assert.rejects(vm.runInContext("vincularPipelineBitrix({ id: 123 }, 1, 'COMPRAS 01')", ctx), /nao encontrado|Mais de um funcionario/);
+    assert.equal(eventos.some(([tipo]) => tipo === 'criar'), false);
   }
 });
 

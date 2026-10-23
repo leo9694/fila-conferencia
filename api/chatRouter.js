@@ -1210,7 +1210,7 @@ async function criarOuReutilizarPipelineBitrix(conversa, categoryId, nomeUsuario
   let dealId = existentes[0]?.ID || null;
   const dealTitle = `WhatsApp - ${contato.nome}`.slice(0, 255);
   if (!dealId) {
-    const usuarioBitrix = await bitrixService.buscarUsuarioPorNome(nomeUsuario);
+    const usuarioBitrix = await bitrixService.buscarUsuarioPorNome(nomeUsuario, { nomePadrao: 'LEONARDO' });
     const responsavelId = Number(usuarioBitrix?.ID);
     if (!Number.isSafeInteger(responsavelId) || responsavelId <= 0) {
       throw new Error('O Bitrix não retornou um responsável válido para o atendente.');

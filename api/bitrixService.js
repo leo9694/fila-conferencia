@@ -291,25 +291,29 @@ function criarBitrixService(options = {}) {
     }
   }
 
-  async function buscarUsuarioPorNome(nomeSankhya) {
-    const procurado = normalizarNomePessoa(nomeSankhya);
-    if (!procurado) throw new Error('O Sankhya nao retornou o nome do usuario logado.');
+  async function buscarUsuarioPorNome(nomeSankhya, { nomePadrao } = {}) {
+    const nomes = [nomeSankhya, nomePadrao].filter((nome) => normalizarNomePessoa(nome));
+    if (!nomes.length) throw new Error('O Sankhya nao retornou o nome do usuario logado.');
     const usuarios = await consultarUsuariosAtivos();
-    const candidatos = usuarios.map((usuario) => {
-      const completo = normalizarNomePessoa(nomeCompletoUsuario(usuario));
-      const primeiroNome = normalizarNomePessoa(usuario.NAME);
-      let pontos = 0;
-      if (completo === procurado) pontos = 100;
-      else if (primeiroNome === procurado) pontos = 90;
-      else if (completo.startsWith(`${procurado} `)) pontos = 80;
-      else if (procurado.split(' ').every((parte) => completo.split(' ').includes(parte))) pontos = 60;
-      return { usuario, pontos };
-    }).filter((item) => item.pontos > 0).sort((a, b) => b.pontos - a.pontos);
-    if (!candidatos.length) throw new Error(`Usuario "${nomeSankhya}" nao encontrado entre os funcionarios ativos do Bitrix.`);
-    if (candidatos.length > 1 && candidatos[0].pontos === candidatos[1].pontos) {
-      throw new Error(`Mais de um funcionario do Bitrix corresponde ao usuario "${nomeSankhya}".`);
+    for (const nome of nomes) {
+      const procurado = normalizarNomePessoa(nome);
+      const candidatos = usuarios.map((usuario) => {
+        const completo = normalizarNomePessoa(nomeCompletoUsuario(usuario));
+        const primeiroNome = normalizarNomePessoa(usuario.NAME);
+        let pontos = 0;
+        if (completo === procurado) pontos = 100;
+        else if (primeiroNome === procurado) pontos = 90;
+        else if (completo.startsWith(`${procurado} `)) pontos = 80;
+        else if (procurado.split(' ').every((parte) => completo.split(' ').includes(parte))) pontos = 60;
+        return { usuario, pontos };
+      }).filter((item) => item.pontos > 0).sort((a, b) => b.pontos - a.pontos);
+      if (!candidatos.length) continue;
+      if (candidatos.length > 1 && candidatos[0].pontos === candidatos[1].pontos) {
+        throw new Error(`Mais de um funcionario do Bitrix corresponde ao usuario "${nome}".`);
+      }
+      return candidatos[0].usuario;
     }
-    return candidatos[0].usuario;
+    throw new Error(`Usuario "${nomes[nomes.length - 1]}" nao encontrado entre os funcionarios ativos do Bitrix.`);
   }
 
   async function consultarFunisEtapas() {
