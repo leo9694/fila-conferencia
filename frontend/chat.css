@@ -331,6 +331,8 @@
 
 /* Template aprovado e resposta de botão, no padrão visual de uma mensagem marcada. */
 .chat-template-message { display:block; min-width:260px; max-width:min(520px,100%); overflow:hidden; border:1px solid #c8ddd7; border-radius:9px; background:#fff; }
+.chat-template-header-media { display:block; width:100%; max-height:280px; object-fit:contain; border-radius:8px; }
+.chat-template-media-label { display:block; padding:10px; font-size:.72rem; }
 .chat-template-body-content { padding:9px 10px 7px; }
 .chat-template-body-content strong { display:block; margin-bottom:5px; color:#173a47; font-size:.73rem; }
 .chat-template-body-content p { margin:0; color:#294753; font-size:.75rem; }

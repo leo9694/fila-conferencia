@@ -1206,6 +1206,7 @@
     const footer = template.footer || '';
     const buttons = Array.isArray(template.buttons) ? template.buttons : [];
     return `<section class="chat-template-message">
+      ${renderTemplateHeaderMedia(template.headerMedia)}
       <div class="chat-template-body-content">
         ${header ? `<strong>${escapeHtml(header)}</strong>` : ''}
         <p>${escapeHtml(body).replace(/\n/g, '<br>')}</p>
@@ -2840,6 +2841,46 @@
     return template?.body?.text || template?.components?.find((item) => item.type === 'BODY')?.text || '';
   }
 
+  function safeTemplateMediaLink(value) {
+    try {
+      const url = new URL(value);
+      return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password ? url.href : '';
+    } catch { return ''; }
+  }
+
+  function templateMedia(template) {
+    const type = String(template?.header?.format || '').toLowerCase();
+    if (!['image', 'video', 'document'].includes(type)) return null;
+    const examples = Array.isArray(template.header.examples) ? template.header.examples : [];
+    const link = safeTemplateMediaLink(template.header.media?.link) || examples.map(safeTemplateMediaLink).find(Boolean) || '';
+    return { type, link };
+  }
+
+  function renderTemplateHeaderMedia(media) {
+    if (!media) return '';
+    const link = safeTemplateMediaLink(media.link);
+    const label = { image: 'Imagem do template', video: 'Vídeo do template', document: 'Documento do template' }[media.type];
+    if (!label) return '';
+    if (!link) return `<small class="chat-template-media-label">${escapeHtml(label)} anexado</small>`;
+    const url = escapeHtml(link);
+    if (media.type === 'image') return `<img class="chat-template-header-media" src="${url}" alt="Imagem do template" loading="lazy" referrerpolicy="no-referrer">`;
+    if (media.type === 'video') return `<video class="chat-template-header-media" src="${url}" controls preload="none"></video>`;
+    return `<a class="chat-template-media-label" href="${url}" target="_blank" rel="noopener noreferrer">Abrir documento do template</a>`;
+  }
+
+  function selectedTemplateMediaComponent() {
+    const media = templateMedia(state.selectedTemplate);
+    const format = String(state.selectedTemplate?.header?.format || '').toUpperCase();
+    if (!media) {
+      if (format && format !== 'TEXT') throw new Error(`O cabeçalho ${format} ainda não é suportado neste envio.`);
+      return null;
+    }
+    const informed = refs.templateConfig.querySelector('[data-template-media-link]')?.value.trim();
+    const link = safeTemplateMediaLink(informed || media.link);
+    if (!link) throw new Error('Este template exige mídia. Informe um link HTTP/HTTPS acessível para o arquivo.');
+    return { type: 'header', parameters: [{ type: media.type, [media.type]: { link } }] };
+  }
+
   function templatePlaceholders(template) {
     const matches = templateBody(template).match(/\{\{\d+\}\}/g) || [];
     return [...new Set(matches)].sort((a, b) => Number(a.replace(/\D/g, '')) - Number(b.replace(/\D/g, '')));
@@ -2864,31 +2905,43 @@
   }
 
   async function selectTemplate(name, language) {
+    const token = state.templateSelectionToken = (state.templateSelectionToken || 0) + 1;
+    state.selectedTemplate = null;
+    refs.templateSend.disabled = true;
+    refs.templateFeedback.textContent = '';
     try {
       const payload = await api(`/templates/${encodeURIComponent(name)}?language=${encodeURIComponent(language || '')}`);
+      if (token !== state.templateSelectionToken) return;
       state.selectedTemplate = payload.template || payload;
       const placeholders = templatePlaceholders(state.selectedTemplate);
-      refs.templateConfig.innerHTML = `<strong>${escapeHtml(state.selectedTemplate.displayName || state.selectedTemplate.name)}</strong><div class="chat-template-preview">${escapeHtml(templateBody(state.selectedTemplate)).replace(/\n/g, '<br>')}</div>${placeholders.map((placeholder, index) => `<label>Variável ${placeholder}<input data-template-param="${index}" type="text" required></label>`).join('')}`;
+      const media = templateMedia(state.selectedTemplate);
+      refs.templateConfig.innerHTML = `<strong>${escapeHtml(state.selectedTemplate.displayName || state.selectedTemplate.name)}</strong>${renderTemplateHeaderMedia(media)}<div class="chat-template-preview">${escapeHtml(templateBody(state.selectedTemplate)).replace(/\n/g, '<br>')}</div>${media ? `<small>${media.link ? 'A mídia cadastrada no modelo será enviada automaticamente.' : 'O modelo exige mídia, mas o link da aprovação não está disponível.'}</small><label>Link da mídia${media.link ? ' (opcional, para substituir)' : ''}<input data-template-media-link type="url" placeholder="https://..." ${media.link ? '' : 'required'}></label>` : ''}${placeholders.map((placeholder, index) => `<label>Variável ${placeholder}<input data-template-param="${index}" type="text" required></label>`).join('')}`;
       refs.templateSend.disabled = placeholders.length > 0;
       refs.templateConfig.querySelectorAll('[data-template-param]').forEach((input) => input.addEventListener('input', Core.debounce(previewSelectedTemplate, 250)));
+      refs.templateConfig.querySelector('[data-template-media-link]')?.addEventListener('input', Core.debounce(previewSelectedTemplate, 250));
       if (!placeholders.length) await previewSelectedTemplate();
-    } catch { refs.templateConfig.innerHTML = '<p>Template indisponível.</p>'; refs.templateSend.disabled = true; }
+    } catch { if (token === state.templateSelectionToken) { refs.templateConfig.innerHTML = '<p>Template indisponível.</p>'; refs.templateSend.disabled = true; } }
   }
 
   async function previewSelectedTemplate() {
     if (!state.selectedTemplate) return;
+    const selected = state.selectedTemplate;
+    const token = state.templatePreviewToken = (state.templatePreviewToken || 0) + 1;
     const values = [...refs.templateConfig.querySelectorAll('[data-template-param]')].map((input) => input.value.trim());
     if (values.some((value) => !value)) { refs.templateSend.disabled = true; return; }
     try {
+      selectedTemplateMediaComponent();
       const preview = await api('/templates/preview', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: state.selectedTemplate.name, language: state.selectedTemplate.language, parameters: { body: values } })
       });
+      if (selected !== state.selectedTemplate || token !== state.templatePreviewToken) return;
       const previewElement = refs.templateConfig.querySelector('.chat-template-preview');
       if (previewElement) previewElement.innerHTML = escapeHtml(preview.body || templateBody(state.selectedTemplate)).replace(/\n/g, '<br>');
       refs.templateSend.disabled = preview.valid === false;
       refs.templateFeedback.textContent = preview.valid === false ? 'Preencha todos os parâmetros obrigatórios.' : '';
     } catch (error) {
+      if (selected !== state.selectedTemplate || token !== state.templatePreviewToken) return;
       refs.templateSend.disabled = true;
       refs.templateFeedback.textContent = error.message || 'Template indisponível.';
     }
@@ -2903,6 +2956,10 @@
     const values = [...refs.templateConfig.querySelectorAll('[data-template-param]')].map((input) => input.value.trim());
     if (values.some((value) => !value)) { refs.templateFeedback.textContent = 'Preencha todas as variáveis.'; return; }
     const components = values.length ? [{ type: 'body', parameters: values.map((text) => ({ type: 'text', text })) }] : [];
+    try {
+      const header = selectedTemplateMediaComponent();
+      if (header) components.unshift(header);
+    } catch (error) { refs.templateFeedback.textContent = error.message; return; }
     refs.templateSend.disabled = true; refs.templateFeedback.textContent = 'Enviando...';
     try {
       const payload = await api(`/conversations/${encodeURIComponent(conversationId)}/messages/template`, {
