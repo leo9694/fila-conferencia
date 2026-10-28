@@ -6930,11 +6930,9 @@ router.post('/fila-conferencia/progresso', async (req, res) => {
 
   try {
     if (req.body?.conferenciaRapida === true) {
-      if (codUsu !== 100 && !await autorizacaoGrupos.pertenceAoGrupo(codUsu, 'Diretoria')) {
-        return res.status(403).json({ erro: 'Conferência rápida restrita à Diretoria e à usuária 100 - Michele.' });
-      }
-      if (modo !== 'saida') {
-        return res.status(400).json({ erro: 'Conferência rápida disponível somente na saída.' });
+      const comprasEntrada = modo === 'entrada' && codUsu === 152;
+      if (codUsu !== 100 && !comprasEntrada && !await autorizacaoGrupos.pertenceAoGrupo(codUsu, 'Diretoria')) {
+        return res.status(403).json({ erro: 'Conferência rápida restrita à Diretoria, à usuária 100 - Michele e, somente na entrada, ao usuário 152 - Compras 01.' });
       }
     }
     const [pedido] = await executeQuery(`

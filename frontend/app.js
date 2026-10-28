@@ -6721,6 +6721,7 @@ function aplicarProgressoRemotoCaixa(progresso, resumoCaixas = null) {
 
 async function sincronizarCaixaEntrada(forcar = false) {
   if (filaModoConferencia !== 'entrada' || !pedidoSelecionado || !temUsuarioLogado()
+    || conferenciaRapidaEmAndamento
     || sincronizacaoCaixaEntradaEmAndamento || (!forcar && (salvamentoProgressoEmAndamento || salvamentosProgressoPendentes > 0))) {
     return null;
   }
@@ -6730,7 +6731,7 @@ async function sincronizarCaixaEntrada(forcar = false) {
     const res = await fetch(`/api/fila-conferencia/progresso?nunota=${encodeURIComponent(pedidoSelecionado.NUNOTA)}`);
     const payload = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(payload.erro || 'Erro ao sincronizar a caixa');
-    aplicarProgressoRemotoCaixa(payload.progresso, payload.resumoCaixas);
+    if (!conferenciaRapidaEmAndamento) aplicarProgressoRemotoCaixa(payload.progresso, payload.resumoCaixas);
     return payload;
   } catch (error) {
     console.warn('Erro ao sincronizar caixa de entrada:', error);
@@ -10115,13 +10116,16 @@ async function selecionarPedidoConferencia(pedido) {
 }
 
 function podeConferirRapidamente() {
-  return filaModoConferencia === 'saida' && Boolean(pedidoSelecionado)
+  return ['saida', 'entrada'].includes(filaModoConferencia) && Boolean(pedidoSelecionado)
     && (Number(usuarioLogado?.codUsu) === 100
+      || (filaModoConferencia === 'entrada' && Number(usuarioLogado?.codUsu) === 152)
       || usuarioLogado?.grupos?.some((grupo) => String(grupo).trim().toLocaleUpperCase('pt-BR') === 'DIRETORIA') === true);
 }
 
 function preencherItensConferenciaRapida(itens) {
-  return itens.map((item) => ({
+  const entrada = filaModoConferencia === 'entrada';
+  const caixa = entrada ? obterCaixaEntradaAtual() : null;
+  return itens.map((item) => entrada && item.extra === true ? item : ({
     ...item,
     qtdConferida: normalizarQuantidade(item.qtdNeg),
     qtdCortada: 0,
@@ -10129,6 +10133,11 @@ function preencherItensConferenciaRapida(itens) {
       codigo: String(item.codProd), tipo: 'PRODUTO',
       codVol: item.codVolPadrao || item.codVol || 'UN',
       controle: item.controle || '', multiplicador: 1,
+      ...(entrada ? {
+        dtFabricacao: formatarDataInput(item.dtFabricacao),
+        dtValidade: formatarDataInput(item.dtValidade),
+        caixaId: caixa.caixaId, caixaFechada: false
+      } : {}),
       quantidade: normalizarQuantidade(item.qtdNeg),
       quantidadeConvertida: normalizarQuantidade(item.qtdNeg)
     }]
@@ -10143,7 +10152,9 @@ async function concluirConferenciaRapida() {
   try {
     const confirmado = await confirmarAcaoApp({
       titulo: 'Conferência rápida',
-      mensagem: 'Marcar todos os itens como conferidos, nas quantidades e lotes do documento? Os cortes e leituras atuais serão substituídos. Depois, confirme a conferência informando os volumes.',
+      mensagem: filaModoConferencia === 'entrada'
+        ? 'Marcar todos os itens da nota de entrada como conferidos, nas quantidades, lotes e datas do documento? As leituras desses itens serão substituídas e reunidas na caixa atual. Produtos extras serão preservados. Depois, confirme a conferência normalmente.'
+        : 'Marcar todos os itens como conferidos, nas quantidades e lotes do documento? Os cortes e leituras atuais serão substituídos. Depois, confirme a conferência informando os volumes.',
       textoConfirmar: 'Conferir todos os itens'
     });
     if (!confirmado || pedidoSelecionado !== pedido) return;
@@ -10152,6 +10163,9 @@ async function concluirConferenciaRapida() {
     itensPendentesLista.inert = true;
     itensConferidosLista.inert = true;
     scanCodigo.disabled = true;
+    scanControle.disabled = true;
+    if (scanFabricacao) scanFabricacao.disabled = true;
+    if (scanValidade) scanValidade.disabled = true;
     scanQtd.disabled = true;
     botaoScanAdicionar.disabled = true;
     botaoConfirmarConferencia.disabled = true;
