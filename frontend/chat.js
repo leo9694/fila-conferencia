@@ -2858,7 +2858,8 @@
 
   function renderTemplateHeaderMedia(media) {
     if (!media) return '';
-    const link = safeTemplateMediaLink(media.link);
+    const link = media.id && /^[A-Za-z0-9_-]{1,512}$/.test(String(media.id))
+      ? `/api/chat/media/${encodeURIComponent(media.id)}` : safeTemplateMediaLink(media.link);
     const label = { image: 'Imagem do template', video: 'Vídeo do template', document: 'Documento do template' }[media.type];
     if (!label) return '';
     if (!link) return `<small class="chat-template-media-label">${escapeHtml(label)} anexado</small>`;

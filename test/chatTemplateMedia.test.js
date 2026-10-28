@@ -50,3 +50,9 @@ test('texto continua sem cabeçalho de mídia e envio usa componentes com imagem
   assert.match(source, /if \(header\) components.unshift\(header\)/);
   assert.match(source, /renderTemplateHeaderMedia\(template.headerMedia\)/);
 });
+
+test('mídia enviada por ID usa o proxy autenticado no histórico sem depender do link da aprovação', () => {
+  const { ctx } = contexto();
+  const html = ctx.renderTemplateHeaderMedia({ type: 'image', id: '123456789' });
+  assert.match(html, /src="\/api\/chat\/media\/123456789"/);
+});
