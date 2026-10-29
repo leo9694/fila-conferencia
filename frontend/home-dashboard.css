@@ -979,7 +979,7 @@ body.has-global-sidebar.home-sidebar-collapsed.home-sidebar-auto-expanded .scree
   }
 
   body.has-global-sidebar .pedido-list-header,
-  body.has-global-sidebar .pedido-operacao-card {
+  body.has-global-sidebar .pedido-operacao-card:not(.pedido-side-card) {
     grid-template-columns:
       80px
       minmax(178px, 1.2fr)
@@ -992,7 +992,7 @@ body.has-global-sidebar.home-sidebar-collapsed.home-sidebar-auto-expanded .scree
   }
 
   body.has-global-sidebar .fila-screen.fila-modo-entrada .pedido-list-header,
-  body.has-global-sidebar .fila-screen.fila-modo-entrada .pedido-operacao-card {
+  body.has-global-sidebar .fila-screen.fila-modo-entrada .pedido-operacao-card:not(.pedido-side-card) {
     grid-template-columns:
       80px
       minmax(178px, 1.15fr)

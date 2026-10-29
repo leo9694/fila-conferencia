@@ -508,6 +508,8 @@ let produtoFotoAtual = null;
 let ordenacaoItens = { coluna: '', direcao: '' };
 const itensGridMinimos = [68, 78, 210, 122, 148, 118];
 const itensGridLarguras = [68, 92, 240, 142, 170, 132];
+const itensGridEntradaMinimos = [34, 78, 210, 122, 148, 100, 100, 118];
+const itensGridEntradaLarguras = [34, 84, 220, 132, 148, 112, 112, 126];
 const STORAGE_NAVEGACAO_FILA = 'filaConferencia:navegacaoAtual';
 const STORAGE_SEPARACAO_PREFIX = 'filaConferencia:separacao:';
 const TEMPO_TOQUE_LONGO_SEPARACAO_MS = 550;
@@ -680,6 +682,10 @@ function aplicarLargurasGridItens() {
     '--itens-grid-columns',
     itensGridLarguras.map((largura) => `${largura}px`).join(' ')
   );
+  document.documentElement.style.setProperty(
+    '--itens-grid-entrada-columns',
+    itensGridEntradaLarguras.map((largura) => `${largura}px`).join(' ')
+  );
 }
 
 function escaparAtributo(valor) {
@@ -697,13 +703,16 @@ function configurarRedimensionamentoColunas(header) {
       event.stopPropagation();
 
       const coluna = Number(resizer.dataset.colIndex);
+      const entrada = header.classList.contains('entrada-datas');
+      const larguras = entrada ? itensGridEntradaLarguras : itensGridLarguras;
+      const minimos = entrada ? itensGridEntradaMinimos : itensGridMinimos;
       const inicioX = event.clientX;
-      const larguraInicial = itensGridLarguras[coluna];
+      const larguraInicial = larguras[coluna];
       document.body.classList.add('resizing-columns');
 
       const mover = (moveEvent) => {
         const delta = moveEvent.clientX - inicioX;
-        itensGridLarguras[coluna] = Math.max(itensGridMinimos[coluna], larguraInicial + delta);
+        larguras[coluna] = Math.max(minimos[coluna], larguraInicial + delta);
         aplicarLargurasGridItens();
       };
 
@@ -4058,8 +4067,14 @@ function ehMobileConferencia() {
     && filaScreen.classList.contains('conferencia-mode');
 }
 
+function posicionarCardProdutoConferencia() {
+  if (!produtoFotoPanel || !pedidoSidebar) return;
+  if (produtoFotoPanel.parentElement !== pedidoSidebar) pedidoSidebar.appendChild(produtoFotoPanel);
+}
+
 function alternarSidebarMobileConferencia(aberto) {
   if (!mobileSidebarToggle || !mobileSidebarBackdrop || !pedidoSidebar) return;
+  if (pedidoSidebar.classList.contains('conferencia-resumo-topo')) aberto = false;
 
   filaScreen.classList.toggle('mobile-sidebar-open', aberto);
   mobileSidebarBackdrop.hidden = !aberto;
@@ -7144,7 +7159,7 @@ function criarCabecalhoItens() {
           <button type="button" data-sort-direcao="desc"><span aria-hidden="true">Z-A</span> Ordenar Descendente</button>
         </div>
       ` : ''}
-      <button class="column-resizer" type="button" data-col-index="${index}" aria-label="Redimensionar coluna ${coluna || 'acao'}"></button>
+      <button class="column-resizer" type="button" data-col-index="${index}" aria-label="Redimensionar coluna ${coluna || 'acao'}" title="Arraste para ajustar a largura"></button>
     </div>
   `).join('');
   configurarRedimensionamentoColunas(header);
@@ -8649,12 +8664,12 @@ function renderizarPedidoEmConferencia() {
 
   pedidoEmConferenciaCard.innerHTML = `
     <div class="pedido-operacao-card pedido-side-card active ${pedidoSelecionado.STATUS_CONFERENCIA === 'EM ANDAMENTO' ? 'andamento' : ''}">
-      <strong class="pedido-side-title"><i data-lucide="clipboard-list"></i>${formatarTituloPedidoConferencia(pedidoSelecionado)}</strong>
+      <strong class="pedido-side-title" title="${escaparAtributo(formatarTituloPedidoConferencia(pedidoSelecionado))}"><i data-lucide="clipboard-list"></i>${formatarTituloPedidoConferencia(pedidoSelecionado)}</strong>
       <div class="pedido-side-meta">
         <span><i data-lucide="calendar-days"></i>${formatarData(pedidoSelecionado.DTNEG)}</span>
         <span><i data-lucide="tag"></i>${formatarMoeda(pedidoSelecionado.VLRNOTA)}</span>
       </div>
-      <div class="pedido-side-cliente">${escaparHtml(pedidoSelecionado.CODIGO_PARCEIRO || '-')} - ${escaparHtml(pedidoSelecionado.EMPRESA || '-')}</div>
+      <div class="pedido-side-cliente" title="${escaparAtributo(`${pedidoSelecionado.CODIGO_PARCEIRO || '-'} - ${pedidoSelecionado.EMPRESA || '-'}`)}">${escaparHtml(pedidoSelecionado.CODIGO_PARCEIRO || '-')} - ${escaparHtml(pedidoSelecionado.EMPRESA || '-')}</div>
       <div class="pedido-side-meta">
         <span><i data-lucide="package"></i>${pedidoSelecionado.QTD_ITENS} itens</span>
         <span><i data-lucide="boxes"></i>${formatarQuantidade(pedidoSelecionado.QTD_TOTAL)} un.</span>
@@ -12086,7 +12101,9 @@ document.addEventListener('keydown', (event) => {
     fecharPainelGuiasFase();
   }
 });
+posicionarCardProdutoConferencia();
 window.addEventListener('resize', () => {
+  posicionarCardProdutoConferencia();
   if (!ehMobileConferencia() && filaScreen.classList.contains('mobile-sidebar-open')) {
     alternarSidebarMobileConferencia(false);
   }
