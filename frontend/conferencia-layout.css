@@ -205,4 +205,13 @@
   .fila-screen.conferencia-mode .conferencia-consulta-actions { grid-column: 1 / -1; justify-content: stretch; }
   .conferencia-consulta-actions .btn-consulta-produtos { flex: 1; min-width: 0; padding-inline: 6px; }
   .fila-screen.conferencia-mode .itens-pools { height: auto; }
+  .fila-screen.conferencia-mode .itens-pool {
+    min-height: 0;
+    grid-template-rows: auto auto;
+  }
+  .fila-screen.conferencia-mode .itens-scroll {
+    height: auto;
+    max-height: none;
+    overflow-y: hidden;
+  }
 }
