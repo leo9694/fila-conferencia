@@ -4,6 +4,17 @@ const caches = new WeakMap();
 const TAMANHO_PAGINA = 30;
 const normalizar = (v) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
+function sqlEscopoNotas(f) {
+  if (!f.cliente) {
+    return `AND CAB.DTNEG >= TO_DATE('${f.inicio}','YYYY-MM-DD')
+      AND CAB.DTNEG < TO_DATE('${f.fim}','YYYY-MM-DD')+1`;
+  }
+  if (/^\d+$/.test(f.cliente)) return `AND CAB.CODPARC = ${Number(f.cliente)}`;
+  const termo = f.cliente.replace(/[\\%_]/g, '\\$&').replace(/'/g, "''");
+  return `AND (UPPER(PAR.NOMEPARC) LIKE UPPER('%${termo}%') ESCAPE '\\'
+      OR UPPER(PAR.RAZAOSOCIAL) LIKE UPPER('%${termo}%') ESCAPE '\\')`;
+}
+
 function sqlBase(f, offset) {
   return `WITH NOTAS AS (
     SELECT CAB.NUNOTA,CAB.NUMNOTA,CAB.CODTIPOPER,CAB.CODEMP,CAB.ORDEMCARGA,
@@ -19,8 +30,7 @@ function sqlBase(f, offset) {
     LEFT JOIN TSIEMP EMP ON EMP.CODEMP=CAB.CODEMP
     LEFT JOIN TGFNFE NFE ON NFE.NUNOTA=CAB.NUNOTA
     WHERE CAB.CODTIPOPER IN (35,10) AND CAB.TIPMOV='V' AND CAB.STATUSNOTA='L'
-      AND CAB.DTNEG>=TO_DATE('${f.inicio}','YYYY-MM-DD')
-      AND CAB.DTNEG<TO_DATE('${f.fim}','YYYY-MM-DD')+1
+      ${sqlEscopoNotas(f)}
   ), ARQUIVOS AS (
     SELECT IX.CHAVEACESSO,IX.NUMNOTA NUM_CTE,IX.XNOMEEMIT TRANSPORTADORA_CTE,
       IX.VLRNOTA FRETE_CTE_TOTAL,IX.STATUS STATUS_IMPORTACAO,IX.DOCSREF,
@@ -124,7 +134,7 @@ async function consultar(f, query, executeQuery, sqlSimulacoes, simularTabelas) 
   const { filtros, ordem, opcoes } = lerColunas(query);
   if (!caches.has(executeQuery)) caches.set(executeQuery, new Map());
   const cache = caches.get(executeQuery);
-  const chave = `${f.inicio}:${f.fim}`;
+  const chave = f.cliente ? `cliente:${f.cliente}` : `periodo:${f.inicio}:${f.fim}`;
   const agora = Date.now();
   for (const [k,v] of cache) if (agora-v.criado > 600000) cache.delete(k);
   let entrada = cache.get(chave);
@@ -188,4 +198,4 @@ async function consultar(f, query, executeQuery, sqlSimulacoes, simularTabelas) 
     total:selecionados.length,pagina,tamanhoPagina:TAMANHO_PAGINA,consultaId:entrada.id };
 }
 
-module.exports = { consultar, sqlBase, agrupar, filtrar, consolidar };
+module.exports = { consultar, sqlBase, sqlEscopoNotas, agrupar, filtrar, consolidar };

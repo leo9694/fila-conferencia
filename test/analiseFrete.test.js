@@ -78,6 +78,21 @@ test('filtra empresa antes de paginar e não mistura notas e totais de outra emp
   assert.equal(bases, 1);
 });
 
+test('busca histórico por cliente sem datas e separa o cache por cliente', async () => {
+  const consultas = [];
+  const executar = async (sql) => {
+    consultas.push(sql);
+    return [];
+  };
+  const primeiro = await carregarAnaliseFrete({ cliente: '1977' }, executar);
+  assert.match(consultas[0], /AND CAB\.CODPARC = 1977/);
+  assert.doesNotMatch(consultas[0], /CAB\.DTNEG\s*(?:>=|<)\s*TO_DATE/);
+  await assert.rejects(carregarAnaliseFrete({ cliente: '1978', consultaId: primeiro.consultaId }, executar), /expirada/);
+  await carregarAnaliseFrete({ cliente: "D'Ávila_%" }, executar);
+  assert.match(consultas[1], /PAR\.NOMEPARC.*D''Ávila\\_\\%/);
+  assert.match(consultas[1], /PAR\.RAZAOSOCIAL/);
+});
+
 test('restringe sugestão pela transportadora, região da tabela e cidades da rota', () => {
   const sql = sqlSimulacoes([10]);
   assert.match(sql, /P.CODPARC=CAB.CODPARCTRANSP/);

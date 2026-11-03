@@ -407,11 +407,20 @@
     ordemColuna = null;
     $('transportadora-opcoes').hidden = true;
     $('transportadora-trigger').setAttribute('aria-expanded', 'false');
-    filtros = { dataInicial: $('inicio').value, dataFinal: $('fim').value, empresa: $('empresa').value,
+    const cliente = $('cliente').value.trim();
+    filtros = { cliente, dataInicial: cliente ? '' : $('inicio').value, dataFinal: cliente ? '' : $('fim').value, empresa: $('empresa').value,
       transportadora: [...transportadorasSelecionadas].join(','),
       cteEmitido: $('cte-emitido').value, statusCte: $('status-cte').value, busca: $('busca').value.trim() };
     return carregar();
   }
+  function atualizarDatas() {
+    const semPeriodo = Boolean($('cliente').value.trim());
+    for (const campo of [$('inicio'), $('fim')]) {
+      campo.required = !semPeriodo;
+      campo.disabled = semPeriodo;
+    }
+  }
+
   function atualizarStatusCte() {
     const semCte = $('cte-emitido').value === 'sem';
     $('status-cte').disabled = semCte;
@@ -458,6 +467,7 @@
     $('transportadora-trigger').setAttribute('aria-expanded', 'false');
   });
   $('cte-emitido').addEventListener('change', atualizarStatusCte);
+  $('cliente').addEventListener('input', atualizarDatas);
   $('anterior').addEventListener('click', () => { if (pagina > 1) { pagina--; carregar(); } });
   $('proxima').addEventListener('click', () => { if (pagina * tamanhoPagina < total) { pagina++; carregar(); } });
   window.analiseFreteController = {
@@ -470,6 +480,7 @@
         $('inicio').value = iso(data);
       }
       atualizarStatusCte();
+      atualizarDatas();
       if (!filtros) {
         $('status').textContent = 'Defina os filtros e clique em Consultar.';
         $('anterior').disabled = true;
@@ -485,6 +496,7 @@
       opcoesColunas.clear();
       ordemColuna = null;
       $('linhas').replaceChildren(); $('form').reset(); $('status').textContent = '';
+      atualizarDatas();
       prepararFiltrosColunas();
       $('status').classList.remove('is-loading');
       transportadorasSelecionadas.clear();

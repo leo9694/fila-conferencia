@@ -1,9 +1,14 @@
 const { validarPeriodoTransporte } = require('./transporteDashboard');
 const { calcularFormulaFrete } = require('./formulaFrete');
+const { consultar, sqlEscopoNotas } = require('./analiseFreteConsulta');
 const TOPS_FATURAMENTO = Object.freeze([35, 10]);
 
 function filtrosAnalise(query) {
-  const periodo = validarPeriodoTransporte(query.dataInicial, query.dataFinal);
+  const cliente = String(query.cliente ?? '').trim();
+  if (cliente.length > 120 || (/^\d+$/.test(cliente) && (!Number.isSafeInteger(Number(cliente)) || Number(cliente) <= 0))) {
+    throw new Error('Cliente inválido.');
+  }
+  const periodo = cliente ? {} : validarPeriodoTransporte(query.dataInicial, query.dataFinal);
   const pagina = Number(query.pagina || 1);
   const empresa = Number(query.empresa || 0);
   if (!Number.isSafeInteger(empresa) || empresa < 0) throw new Error('Empresa inválida.');
@@ -19,7 +24,7 @@ function filtrosAnalise(query) {
   }
   const busca = String(query.busca || '').trim();
   if (busca.length > 120) throw new Error('Busca inválida: máximo de 120 caracteres.');
-  return { ...periodo, pagina, empresa, transportadoras: [...new Set(transportadoras)], busca, cteEmitido,
+  return { ...periodo, cliente, pagina, empresa, transportadoras: [...new Set(transportadoras)], busca, cteEmitido,
     statusCte: cteEmitido === 'sem' ? 'todos' : statusCte };
 }
 
@@ -53,8 +58,7 @@ function sqlPedidos(f) {
     LEFT JOIN CTES_REFERENCIADOS CTE ON CTE.CHAVE_NFE=NFE.CHAVENFE
     WHERE CAB.STATUSNOTA='L'
       AND CAB.TIPMOV='V' AND CAB.CODTIPOPER IN (${TOPS_FATURAMENTO.join(',')})
-      AND CAB.DTNEG >= TO_DATE('${f.inicio}','YYYY-MM-DD')
-      AND CAB.DTNEG < TO_DATE('${f.fim}','YYYY-MM-DD')+1
+      ${sqlEscopoNotas(f)}
       ${f.transportadoras.length ? `AND CAB.CODPARCTRANSP IN (${f.transportadoras.join(',')})` : ''}
       ${filtrosCte}
     ORDER BY NVL(TRA.NOMEPARC,'Sem transportadora'), CAB.DTNEG DESC, CAB.NUNOTA DESC
@@ -162,7 +166,7 @@ function simularTabelas(registros) {
 
 async function carregarAnaliseFrete(query, executeQuery) {
   const filtros = filtrosAnalise(query);
-  return require('./analiseFreteConsulta').consultar(filtros, query, executeQuery, sqlSimulacoes, simularTabelas);
+  return consultar(filtros, query, executeQuery, sqlSimulacoes, simularTabelas);
 }
 
 module.exports = { TOPS_FATURAMENTO, carregarAnaliseFrete, compararFrete, filtrosAnalise, sqlPedidos, sqlFretesReais, sqlSimulacoes, simularTabelas };
