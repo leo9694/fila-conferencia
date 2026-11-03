@@ -25,6 +25,34 @@
       td.appendChild(div);
     }
     tr.appendChild(td);
+    return td;
+  }
+
+  function urlRomaneio(nota) {
+    const ordem = Number(nota.ORDEMCARGA);
+    const empresa = Number(nota.CODEMP);
+    if (!Number.isSafeInteger(ordem) || ordem <= 0 || !Number.isSafeInteger(empresa) || empresa <= 0) return null;
+    return `/api/fila-conferencia/romaneio/${ordem}/pdf?empresa=${empresa}`;
+  }
+
+  function celulaNota(tr, nota) {
+    const td = celula(tr, [nota.NUMNOTA || '—']);
+    const url = urlRomaneio(nota);
+    if (!url) return;
+    const ordem = Number(nota.ORDEMCARGA);
+    const botao = document.createElement('button');
+    botao.type = 'button';
+    botao.className = 'consulta-coluna-filtro analise-frete-ordem-botao';
+    botao.title = `Ver ordem de carga ${ordem}`;
+    botao.setAttribute('aria-label', botao.title);
+    botao.setAttribute('aria-haspopup', 'dialog');
+    botao.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 4h14v13H1zM15 8h4l4 4v5h-8"/><circle cx="5.5" cy="18" r="2.5" fill="white"/><circle cx="18.5" cy="18" r="2.5" fill="white"/></svg>';
+    botao.addEventListener('click', () => {
+      $('ordem-titulo').textContent = `Ordem de carga ${ordem}`;
+      $('ordem-link').href = url;
+      $('ordem-dialogo').showModal();
+    });
+    td.firstElementChild.appendChild(botao);
   }
 
   function celulaCtes(tr, pedido, linhas) {
@@ -38,25 +66,16 @@
     } else {
       for (const cte of pedido.ctes) {
         const div = document.createElement('div');
-        const numeroCte = String(cte.NUM_CTE || '—');
-        if (/^\d{44}$/.test(String(cte.CHAVEACESSO || ''))) {
-          const link = document.createElement('a');
-          link.href = `/api/transporte/analise-frete/ctes/${encodeURIComponent(cte.CHAVEACESSO)}/visualizar`;
-          link.target = '_blank';
-          link.rel = 'noopener';
-          link.textContent = numeroCte;
-          link.title = `Abrir DACTE do CT-e ${numeroCte}`;
-          div.append(link);
-        } else {
-          div.append(document.createTextNode(numeroCte));
-        }
+        div.textContent = cte.NUM_CTE || '—';
         td.appendChild(div);
       }
     }
     tr.appendChild(td);
     const opcoes = { linhas };
-    celula(tr, pedido.ctes.length ? pedido.ctes.map((cte) => cte.TRANSPORTADORA_CTE || '—') : ['—'], opcoes);
-    celula(tr, pedido.ctes.length ? [moeda(pedido.real), pedido.agrupadoCte ? 'Total do CT-e' : pedido.compartilhado ? 'Rateado por peso' : 'Total real'] : ['—'], { ...opcoes, classe: 'analise-frete-numero analise-frete-real' });
+    const frete = [pedido.ctes.length ? moeda(pedido.real) : '—'];
+    if (pedido.ctes.length && pedido.agrupadoCte) frete.push('Total do CT-e');
+    else if (pedido.ctes.length && pedido.compartilhado) frete.push('Rateado por peso');
+    celula(tr, frete, { ...opcoes, classe: 'analise-frete-numero analise-frete-real' });
   }
 
   function render(linhas) {
@@ -65,8 +84,18 @@
       const notas = p.notasDetalhes?.length ? p.notasDetalhes : [p];
       notas.forEach((nota, indice) => {
         const tr = document.createElement('tr');
+        tr.tabIndex = 0;
+        tr.classList.add('analise-frete-nota-detalhavel');
+        tr.addEventListener('click', (event) => {
+          if (!event.target.closest('button, a')) abrirDetalhesNota(nota, p);
+        });
+        tr.addEventListener('keydown', (event) => {
+          if (event.target !== tr || !['Enter', ' '].includes(event.key)) return;
+          event.preventDefault();
+          abrirDetalhesNota(nota, p);
+        });
         if (indice > 0) tr.classList.add('analise-frete-cte-continuacao');
-        celula(tr, [nota.NUMNOTA || '—']);
+        celulaNota(tr, nota);
         celula(tr, [dataBr(nota.DATA_PEDIDO)]);
         celula(tr, [`${nota.CODPARC || '—'} - ${nota.CLIENTE || 'Cliente sem nome'}`]);
         celula(tr, [nota.CIDADE || '—']);
@@ -84,6 +113,90 @@
         $('linhas').appendChild(tr);
       });
     }
+  }
+
+  function secaoDetalhes(titulo, campos) {
+    const secao = document.createElement('section');
+    const nome = document.createElement('h3');
+    nome.textContent = titulo;
+    const lista = document.createElement('dl');
+    for (const [rotulo, valor] of campos) {
+      const campo = document.createElement('div');
+      const termo = document.createElement('dt');
+      const descricao = document.createElement('dd');
+      termo.textContent = rotulo;
+      descricao.textContent = valor ?? '—';
+      campo.append(termo, descricao);
+      lista.appendChild(campo);
+    }
+    secao.append(nome, lista);
+    return secao;
+  }
+
+  function linkDocumento(rotulo, url) {
+    const link = document.createElement('a');
+    link.className = 'analise-frete-download';
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.setAttribute('aria-label', `${rotulo} em nova aba`);
+    link.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h6v6m0-6-9 9m9 0v5H5V5h5"/></svg>';
+    link.append(document.createTextNode(rotulo));
+    return link;
+  }
+
+  function abrirDetalhesNota(nota, grupo) {
+    const tipo = Number(nota.CODTIPOPER) === 10 ? 'Nota de bonificação' : 'Nota de venda';
+    $('detalhes-titulo').textContent = nota.NUMNOTA ? `${tipo} ${nota.NUMNOTA}` : tipo;
+    const corpo = $('detalhes-corpo');
+    corpo.replaceChildren(
+      secaoDetalhes('Dados da nota', [
+        ['Número único', nota.NUNOTA], ['Data', dataBr(nota.DATA_PEDIDO)],
+        ['Empresa', `${nota.CODEMP ?? '—'} - ${nota.NOMEEMP || 'Empresa sem nome'}`],
+        ['Cliente', `${nota.CODPARC || '—'} - ${nota.CLIENTE || 'Cliente sem nome'}`],
+        ['Valor da nota', moeda(nota.VLRNOTA)]
+      ]),
+      secaoDetalhes('Transporte', [
+        ['Destino', nota.CIDADE], ['Transportadora', nota.TRANSPORTADORA],
+        ['Ordem de carga', nota.ORDEMCARGA || '—'], ['Frete no pedido', moeda(nota.VLRFRETE)],
+        ['CIF/FOB', nota.CIF_FOB], ['Peso (kg)', numero(nota.PESO)], ['Volumes', numero(nota.QTDVOL)],
+        [grupo.compartilhado ? 'Frete rateado por peso' : grupo.agrupadoCte ? 'Frete real do grupo' : 'Frete real', moeda(grupo.real)]
+      ])
+    );
+    for (const sugestao of grupo.simulacoes) {
+      corpo.appendChild(secaoDetalhes('Simulação de frete', [
+        ['Tabela', sugestao.codigo ? `${sugestao.codigo} - ${sugestao.tabela}` : sugestao.tabela],
+        ['Região', sugestao.regiao || 'Rota direta'],
+        ['Frete sugerido', sugestao.erro ? 'Cálculo indisponível — revisar fórmula/rotas' : moeda(sugestao.valor)],
+        ['Diferença', grupo.grupoIncompleto ? 'CT-e com notas fora do período' : moeda(sugestao.diferenca)]
+      ]));
+    }
+    if (!grupo.simulacoes.length) {
+      corpo.appendChild(secaoDetalhes('Simulação de frete', [['Tabela', 'Sem tabela/região aplicável à transportadora']]));
+    }
+    const romaneio = urlRomaneio(nota);
+    for (const [indice, cte] of grupo.ctes.entries()) {
+      const secao = secaoDetalhes(`CT-e ${cte.NUM_CTE || '—'}`, [
+        ['Transportadora do CT-e', cte.TRANSPORTADORA_CTE],
+        ['Valor do CT-e', moeda(cte.FRETE_CTE_TOTAL ?? cte.FRETE_REAL)],
+        ['Situação do CT-e', Number(cte.STATUS_IMPORTACAO) === 2 ? 'Importado no Sankhya' : 'Pendente de importação']
+      ]);
+      const chave = String(cte.CHAVEACESSO || '');
+      const acoes = document.createElement('div');
+      acoes.className = 'analise-frete-acoes-documentos';
+      if (/^\d{44}$/.test(chave)) {
+        acoes.appendChild(linkDocumento('Abrir CT-e', `/api/transporte/analise-frete/ctes/${chave}/visualizar`));
+      }
+      if (romaneio && indice === 0) acoes.appendChild(linkDocumento('Abrir ordem de carga', romaneio));
+      if (acoes.childElementCount) secao.appendChild(acoes);
+      corpo.appendChild(secao);
+    }
+    if (!grupo.ctes.length) {
+      const secao = secaoDetalhes('CT-e', [['Vínculo', 'Sem CT-e emitido vinculado']]);
+      if (romaneio) secao.appendChild(linkDocumento('Abrir ordem de carga', romaneio));
+      corpo.appendChild(secao);
+    }
+    $('detalhes-dialogo').showModal();
   }
 
   function atualizarTextoTransportadoras() {
@@ -255,19 +368,29 @@
   }
   const tabela = $('tabela');
   const barraHorizontal = $('scroll-horizontal');
+  let posicaoAplicada = tabela.scrollLeft;
+  let larguraBarra = 0;
   const observarLarguras = new ResizeObserver(() => {
     const alcance = tabela.scrollWidth - tabela.clientWidth;
     barraHorizontal.hidden = alcance <= 0;
     if (barraHorizontal.hidden) return;
-    barraHorizontal.firstElementChild.style.width = `${barraHorizontal.clientWidth + alcance}px`;
+    const largura = barraHorizontal.clientWidth + alcance;
+    if (largura === larguraBarra) return;
+    larguraBarra = largura;
+    barraHorizontal.firstElementChild.style.width = `${largura}px`;
+    posicaoAplicada = tabela.scrollLeft;
     barraHorizontal.scrollLeft = tabela.scrollLeft;
   });
   observarLarguras.observe(tabela);
   observarLarguras.observe(tabela.firstElementChild);
   barraHorizontal.addEventListener('scroll', () => {
     if (tabela.scrollLeft !== barraHorizontal.scrollLeft) tabela.scrollLeft = barraHorizontal.scrollLeft;
+    // O navegador pode arredondar ou limitar a posição aplicada à tabela.
+    posicaoAplicada = tabela.scrollLeft;
   });
   tabela.addEventListener('scroll', () => {
+    if (tabela.scrollLeft === posicaoAplicada) return;
+    posicaoAplicada = tabela.scrollLeft;
     if (barraHorizontal.scrollLeft !== tabela.scrollLeft) barraHorizontal.scrollLeft = tabela.scrollLeft;
   });
 

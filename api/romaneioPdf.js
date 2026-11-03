@@ -70,10 +70,6 @@ function criarBufferPdf(construir) {
 }
 
 function desenharCabecalho(doc, romaneio) {
-  const emissao = new Date();
-  const dataEmissao = emissao.toLocaleDateString('pt-BR');
-  const horaEmissao = emissao.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-
   try {
     doc.image(LOGO_PATH, PAGE.margin + 18, 25, { fit: [36, 36] });
   } catch (_) {
@@ -93,7 +89,7 @@ function desenharCabecalho(doc, romaneio) {
       lineBreak: false
     });
   doc.font('Helvetica').fontSize(6.5)
-    .text(`Emissao: ${dataEmissao}    ${horaEmissao}`, 463, 25, {
+    .text(`Início da carga: ${texto(romaneio.dataInicioCarga, '-')}`, 463, 25, {
       width: 104,
       align: 'right',
       lineBreak: false
@@ -189,7 +185,7 @@ function agruparNotasPorTransportadora(notas) {
   return [...grupos.values()];
 }
 
-async function gerarRomaneioCargaPdf({ ordemCarga, transportadora, empresa, notas }) {
+async function gerarRomaneioCargaPdf({ ordemCarga, transportadora, empresa, notas, dataInicioCarga }) {
   const lista = Array.isArray(notas) ? notas : [];
   const grupos = agruparNotasPorTransportadora(lista);
   const totalVolumes = lista.reduce((total, nota) => total + Number(nota.QTDVOL || 0), 0);
@@ -201,15 +197,16 @@ async function gerarRomaneioCargaPdf({ ordemCarga, transportadora, empresa, nota
       .filter(Boolean)
   )];
   const assinaturaTransportadora = identificacoesTransportadoras.join(' / ') || transportadora;
+  const cabecalho = { ordemCarga, empresa, dataInicioCarga };
 
   return criarBufferPdf((doc) => {
-    desenharCabecalho(doc, { ordemCarga, empresa });
+    desenharCabecalho(doc, cabecalho);
 
     grupos.forEach((grupo, indiceGrupo) => {
       if (indiceGrupo > 0) doc.y += 8;
       if (doc.y + 53 > PAGE.height - 200) {
         doc.addPage();
-        desenharCabecalho(doc, { ordemCarga, empresa });
+        desenharCabecalho(doc, cabecalho);
       }
 
       const identificacao = `${grupo.codigo} - ${grupo.nome}`;
@@ -219,7 +216,7 @@ async function gerarRomaneioCargaPdf({ ordemCarga, transportadora, empresa, nota
       grupo.notas.forEach((nota) => {
         if (doc.y + 18 > PAGE.height - 200) {
           doc.addPage();
-          desenharCabecalho(doc, { ordemCarga, empresa });
+          desenharCabecalho(doc, cabecalho);
           desenharTituloTransportadora(doc, identificacao);
           desenharCabecalhoTabela(doc);
         }
@@ -233,7 +230,7 @@ async function gerarRomaneioCargaPdf({ ordemCarga, transportadora, empresa, nota
     const yTotais = Math.max(doc.y + 12, 270);
     if (yTotais + 155 > PAGE.height - 30) {
       doc.addPage();
-      desenharCabecalho(doc, { ordemCarga, empresa });
+      desenharCabecalho(doc, cabecalho);
     }
     const y = Math.max(doc.y + 12, 270);
     doc.fillColor('#000000').font('Helvetica-Bold').fontSize(12)

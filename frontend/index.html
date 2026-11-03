@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/home-dashboard.css?v=20261029-resumo-conferencia-1">
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261103-frete-linhas-compactas">
+  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261103-frete-acoes-documentos">
   <link rel="stylesheet" href="/chat.css?v=20261028-template-midia-1">
   <link rel="stylesheet" href="/chat-theme.css?v=20261002-3">
   <link rel="stylesheet" href="/rastreio-produto.css?v=20261005-5">
@@ -12983,12 +12983,26 @@
       <div class="analise-frete-summary"><p id="analise-frete-status" role="status" aria-live="polite"></p></div>
       <section class="analise-frete-results" aria-label="Resultados da análise de frete">
       <div class="transporte-table-wrap" id="analise-frete-tabela"><table class="transporte-table analise-frete-table">
-        <thead><tr><th scope="col">Nota</th><th scope="col">Data</th><th scope="col">Cliente</th><th scope="col">Destino</th><th scope="col">Transportadora</th><th scope="col" class="analise-frete-numero">Valor da venda</th><th scope="col" class="analise-frete-numero">Peso (kg)</th><th scope="col" class="analise-frete-numero">Volumes</th><th scope="col">Região</th><th scope="col" class="analise-frete-numero">Frete sugerido</th><th scope="col">CT-e</th><th scope="col">Transportadora do CT-e</th><th scope="col" class="analise-frete-numero">Frete real / rateio</th><th scope="col" class="analise-frete-numero">Diferença</th></tr></thead>
+        <thead><tr><th scope="col">Nota</th><th scope="col">Data</th><th scope="col">Cliente</th><th scope="col">Destino</th><th scope="col">Transportadora</th><th scope="col" class="analise-frete-numero">Valor da venda</th><th scope="col" class="analise-frete-numero">Peso (kg)</th><th scope="col" class="analise-frete-numero">Volumes</th><th scope="col">Região</th><th scope="col" class="analise-frete-numero">Frete sugerido</th><th scope="col">CT-e</th><th scope="col" class="analise-frete-numero">Frete real / rateio</th><th scope="col" class="analise-frete-numero">Diferença</th></tr></thead>
         <tbody id="analise-frete-linhas"></tbody>
       </table></div>
       <div class="analise-frete-scroll-horizontal" id="analise-frete-scroll-horizontal" role="region" tabindex="0" aria-label="Rolagem horizontal da tabela de frete" aria-controls="analise-frete-tabela" hidden><div></div></div>
       <div class="analise-frete-pagination"><button type="button" id="analise-frete-anterior">Anterior</button><span id="analise-frete-pagina"></span><button type="button" id="analise-frete-proxima">Próxima</button></div>
       </section>
+      <dialog class="analise-frete-ordem-dialogo analise-frete-detalhes-dialogo" id="analise-frete-detalhes-dialogo" aria-labelledby="analise-frete-detalhes-titulo">
+        <header>
+          <h2 id="analise-frete-detalhes-titulo">Detalhes da nota</h2>
+          <form method="dialog"><button class="btn-back" type="submit">Fechar</button></form>
+        </header>
+        <div id="analise-frete-detalhes-corpo"></div>
+      </dialog>
+      <dialog class="analise-frete-ordem-dialogo" id="analise-frete-ordem-dialogo" aria-labelledby="analise-frete-ordem-titulo">
+        <h2 id="analise-frete-ordem-titulo">Ordem de carga</h2>
+        <form method="dialog">
+          <a class="analise-frete-download" id="analise-frete-ordem-link" target="_blank" rel="noopener" aria-label="Abrir romaneio em nova aba"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 5h6v6m0-6-9 9m9 0v5H5V5h5"/></svg> Abrir romaneio</a>
+          <button class="btn-back" type="submit">Fechar</button>
+        </form>
+      </dialog>
     </main>
     <main class="transporte-page" id="transporte-painel">
       <header class="transporte-heading">
@@ -13651,7 +13665,7 @@
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="transporte-dashboard.js?v=20260916-1"></script>
   <script src="consulta-tabela.js?v=20261103-menu-compartilhado"></script>
-  <script src="analise-frete.js?v=20261103-colunas-frete"></script>
+  <script src="analise-frete.js?v=20261103-frete-rolagem-fluida"></script>
   <script src="chat-core.js?v=20261022-navegacao-1"></script>
   <script src="whatsapp-call-core.js?v=20260909-1"></script>
   <script src="whatsapp-call.js?v=20261008-rollback-1"></script>

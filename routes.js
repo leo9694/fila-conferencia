@@ -3541,14 +3541,15 @@ router.get('/fila-conferencia/romaneio/:ordemCarga/pdf', async (req, res) => {
         CAB.DTNEG,
         CAB.QTDVOL,
         CAB.VLRNOTA,
-        NVL(CAB.PESO, 0) AS PESO,
+        NVL(CAB.PESOBRUTO, 0) AS PESO,
         CASE WHEN CAB.CODTIPOPER = 10 THEN 'BONIFICACAO' ELSE 'VENDA' END AS TIPO_DOCUMENTO,
         PAR.RAZAOSOCIAL AS CLIENTE,
         CID.NOMECID AS CIDADE,
         UFS.UF AS UF,
         CAB.CODPARCTRANSP,
         TRP.NOMEPARC AS TRANSPORTADORA,
-        EMP.RAZAOSOCIAL AS EMPRESA
+        EMP.RAZAOSOCIAL AS EMPRESA,
+        TO_CHAR(ORD.DTINIC, 'DD/MM/YYYY') AS DATA_INICIO_CARGA
       FROM TGFCAB CAB
       LEFT JOIN TGFPAR PAR
         ON PAR.CODPARC = CAB.CODPARC
@@ -3560,6 +3561,8 @@ router.get('/fila-conferencia/romaneio/:ordemCarga/pdf', async (req, res) => {
         ON UFS.CODUF = CID.UF
       LEFT JOIN TSIEMP EMP
         ON EMP.CODEMP = CAB.CODEMP
+      LEFT JOIN TGFORD ORD
+        ON ORD.CODEMP = CAB.CODEMP AND ORD.ORDEMCARGA = CAB.ORDEMCARGA
       WHERE CAB.CODEMP = ${empresa}
         AND CAB.ORDEMCARGA = ${ordemCarga}
         AND CAB.TIPMOV = 'V'
@@ -3575,6 +3578,7 @@ router.get('/fila-conferencia/romaneio/:ordemCarga/pdf', async (req, res) => {
       ordemCarga,
       transportadora: `${notas[0].CODPARCTRANSP || '-'} - ${notas[0].TRANSPORTADORA || '-'}`,
       empresa: notas[0].EMPRESA,
+      dataInicioCarga: notas[0].DATA_INICIO_CARGA,
       notas
     });
     res.setHeader('Content-Type', 'application/pdf');

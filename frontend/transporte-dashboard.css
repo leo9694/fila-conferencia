@@ -68,6 +68,32 @@
 .analise-frete-results .analise-frete-table thead tr > :first-child:not([rowspan]) { z-index: 3; }
 .analise-frete-results .analise-frete-table .analise-frete-numero { text-align: right; font-variant-numeric: tabular-nums; }
 .analise-frete-table .analise-frete-real > div { display: inline-block; }
+.analise-frete-ordem-botao { margin-left: 6px; vertical-align: middle; }
+.analise-frete-ordem-dialogo { width: min(360px, calc(100% - 32px)); margin: auto; padding: 20px; border: 1px solid #dce9e6; border-radius: 12px; color: #17384c; }
+.analise-frete-ordem-dialogo::backdrop { background: #102d4666; }
+.analise-frete-ordem-dialogo h2 { margin: 0 0 16px; font-size: 1.1rem; }
+.analise-frete-ordem-dialogo form { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+#analise-frete-ordem-dialogo { width: min(300px, calc(100% - 24px)); padding: 12px; }
+#analise-frete-ordem-dialogo h2 { margin-bottom: 10px; font-size: 1rem; }
+#analise-frete-ordem-dialogo form { justify-content: flex-end; }
+#analise-frete-ordem-dialogo .btn-back { min-height: 30px; padding: 4px 10px; border-radius: 6px; font-size: .75rem; }
+.analise-frete-nota-detalhavel { cursor: pointer; }
+.analise-frete-nota-detalhavel:focus-visible { outline: 2px solid #087f6d; outline-offset: -2px; }
+.analise-frete-detalhes-dialogo { width: min(740px, calc(100% - 24px)); max-height: calc(100dvh - 24px); padding: 12px; overflow: auto; }
+.analise-frete-detalhes-dialogo > header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.analise-frete-detalhes-dialogo > header h2 { margin: 0; }
+.analise-frete-detalhes-dialogo > header button { min-height: 30px; padding: 4px 10px; font-size: .78rem; }
+.analise-frete-detalhes-dialogo section { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 5px 10px; margin-top: 8px; padding: 8px 10px; border: 1px solid #dce9e6; border-radius: 8px; }
+.analise-frete-detalhes-dialogo h3 { margin: 0; font-size: .87rem; }
+.analise-frete-detalhes-dialogo dl { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 136px), 1fr)); gap: 5px 10px; margin: 0; }
+.analise-frete-detalhes-dialogo dt { font-size: .72rem; color: #527086; }
+.analise-frete-detalhes-dialogo dd { margin: 0; font-size: .82rem; line-height: 1.25; overflow-wrap: anywhere; }
+.analise-frete-download { grid-column: 2; grid-row: 1; display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border: 1px solid #c7dcd7; border-radius: 6px; background: #edf7f3; color: #076b5d; font-size: .75rem; font-weight: 650; text-decoration: none; white-space: nowrap; }
+.analise-frete-download:hover, .analise-frete-download:focus-visible { background: #d9efe6; color: #055f52; }
+.analise-frete-acoes-documentos { grid-column: 2; grid-row: 1; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+@media (max-width: 420px) {
+  .analise-frete-acoes-documentos { max-width: 200px; }
+}
 .analise-frete-table .analise-frete-real > div + div { margin: 0 0 0 6px; font-size: .65rem; }
 .analise-frete-table .analise-frete-sugestao div:first-child, .analise-frete-table .analise-frete-cte div:last-child, .analise-frete-table .analise-frete-diferenca div { color: #087f6d; }
 .analise-frete-table .analise-frete-cte a { color: #087f6d; font-weight: 800; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
