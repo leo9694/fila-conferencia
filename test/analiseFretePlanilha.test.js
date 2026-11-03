@@ -38,15 +38,14 @@ const nota = {
 
 test('planilha separa os dados da nota e conserva valores zero e ausência de CT-e', () => {
   const [row] = renderizar([{ ...nota, ctes: [], simulacoes: [] }]);
-  assert.equal(row.children.length, 18);
+  assert.equal(row.children.length, 16);
   const texto = row.children.map((cell) => cell.textContent);
-  assert.deepEqual(texto.slice(0, 5), ['Nota de venda 83369', '30/10/2026', '10283 - AGROVETERINARIA JAVALI', 'NOVA MUTUM', 'CARVALIMA']);
+  assert.deepEqual(texto.slice(0, 5), ['83369', '30/10/2026', '10283 - AGROVETERINARIA JAVALI', 'NOVA MUTUM', 'CARVALIMA']);
   assert.match(texto[6], /0,00/);
   assert.equal(texto[7], '16,415');
   assert.equal(texto[8], '3');
-  assert.match(texto[9], /Sem tabela/);
-  assert.equal(texto[12], 'Sem CT-e emitido vinculado');
-  assert.equal(texto[16], '—');
+  assert.equal(texto[11], 'Sem CT-e emitido vinculado');
+  assert.equal(texto[14], '—');
 });
 
 test('notas agrupadas compartilham tabela e CT-es sem repetir frete ou diferença', () => {
@@ -58,23 +57,22 @@ test('notas agrupadas compartilham tabela e CT-es sem repetir frete ou diferenç
     ], simulacoes: [{ codigo: 5, tabela: 'CARVALIMA MT', regiao: 'R6 POLO', valor: 99.91, diferenca: 100.09 },
       { codigo: 6, tabela: 'ALTERNATIVA', regiao: '', erro: true, diferenca: null }] }]);
   assert.equal(rows.length, 2);
-  assert.equal(rows[0].children.length, 18);
+  assert.equal(rows[0].children.length, 16);
   assert.equal(rows[1].children.length, 9);
-  assert.equal(rows[1].children[0].textContent, 'Nota de bonificação 83370');
+  assert.equal(rows[1].children[0].textContent, '83370');
   for (const cell of rows[0].children.slice(9)) assert.equal(cell.rowSpan, 2);
-  assert.match(rows[0].children[11].textContent, /99,91.*Cálculo indisponível/);
-  const link = rows[0].children[12].children[0].children[0];
+  assert.match(rows[0].children[10].textContent, /99,91.*Cálculo indisponível/);
+  const link = rows[0].children[11].children[0].children[0];
   assert.equal(link.href, `/api/transporte/analise-frete/ctes/${chave}/visualizar`);
   assert.equal(link.rel, 'noopener');
-  assert.equal(rows[0].children[12].children[1].textContent, '124');
-  assert.match(rows[0].children[15].textContent, /Importado no SankhyaPendente de importação/);
-  assert.match(rows[0].children[16].textContent, /200,00Total do CT-e/);
-  assert.equal(rows[0].children[17].children.length, 2);
+  assert.equal(rows[0].children[11].children[1].textContent, '124');
+  assert.match(rows[0].children[14].textContent, /200,00Total do CT-e/);
+  assert.equal(rows[0].children[15].children.length, 2);
 });
 
 test('planilha conserva o aviso de grupo incompleto e a indicação de rateio por peso', () => {
   const [row] = renderizar([{ ...nota, grupoIncompleto: true, compartilhado: true, real: 10,
     ctes: [{ NUM_CTE: 2, FRETE_REAL: 10 }], simulacoes: [] }]);
-  assert.match(row.children[16].textContent, /Rateado por peso/);
-  assert.equal(row.children[17].textContent, 'CT-e com notas fora do período');
+  assert.match(row.children[14].textContent, /Rateado por peso/);
+  assert.equal(row.children[15].textContent, 'CT-e com notas fora do período');
 });

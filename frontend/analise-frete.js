@@ -57,7 +57,6 @@
     const opcoes = { linhas };
     celula(tr, pedido.ctes.length ? pedido.ctes.map((cte) => cte.TRANSPORTADORA_CTE || '—') : ['—'], opcoes);
     celula(tr, pedido.ctes.length ? pedido.ctes.map((cte) => moeda(cte.FRETE_CTE_TOTAL ?? cte.FRETE_REAL)) : ['—'], { ...opcoes, classe: 'analise-frete-numero' });
-    celula(tr, pedido.ctes.length ? pedido.ctes.map((cte) => Number(cte.STATUS_IMPORTACAO) === 2 ? 'Importado no Sankhya' : 'Pendente de importação') : ['—'], opcoes);
     celula(tr, pedido.ctes.length ? [moeda(pedido.real), pedido.agrupadoCte ? 'Total do CT-e' : pedido.compartilhado ? 'Rateado por peso' : 'Total real'] : ['—'], { ...opcoes, classe: 'analise-frete-numero analise-frete-real' });
   }
 
@@ -68,8 +67,7 @@
       notas.forEach((nota, indice) => {
         const tr = document.createElement('tr');
         if (indice > 0) tr.classList.add('analise-frete-cte-continuacao');
-        const tipoNota = Number(nota.CODTIPOPER) === 10 ? 'Nota de bonificação' : 'Nota de venda';
-        celula(tr, [`${tipoNota} ${nota.NUMNOTA || '—'}`]);
+        celula(tr, [nota.NUMNOTA || '—']);
         celula(tr, [dataBr(nota.DATA_PEDIDO)]);
         celula(tr, [`${nota.CODPARC || '—'} - ${nota.CLIENTE || 'Cliente sem nome'}`]);
         celula(tr, [nota.CIDADE || '—']);
@@ -80,7 +78,6 @@
         celula(tr, [numero(nota.QTDVOL)], { classe: 'analise-frete-numero' });
         if (indice === 0) {
           const opcoes = { linhas: notas.length };
-          celula(tr, p.simulacoes.length ? p.simulacoes.map((s) => `${s.codigo ? `${s.codigo} - ` : ''}${s.tabela}`) : ['Sem tabela/região aplicável à transportadora'], opcoes);
           celula(tr, p.simulacoes.length ? p.simulacoes.map((s) => s.regiao || 'Rota direta') : ['—'], opcoes);
           celula(tr, p.simulacoes.length ? p.simulacoes.map((s) => s.erro ? 'Cálculo indisponível — revisar fórmula/rotas' : moeda(s.valor)) : ['—'], { ...opcoes, classe: 'analise-frete-numero analise-frete-sugestao' });
         }
