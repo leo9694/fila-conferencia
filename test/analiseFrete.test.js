@@ -37,6 +37,45 @@ test('rejeita filtros e identificadores inválidos antes do SQL', () => {
   assert.throws(() => filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-02', cteEmitido: 'emitido' }));
   assert.throws(() => sqlSimulacoes(['1 OR 1=1']));
   assert.throws(() => sqlFretesReais([NaN]));
+  for (const empresa of ['1 OR 1=1', '-1', '1.5', 'Infinity']) {
+    assert.throws(() => filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-02', empresa }), /Empresa inválida/);
+  }
+  assert.equal(filtrosAnalise({ dataInicial: '2026-01-01', dataFinal: '2026-01-02', empresa: '6' }).empresa, 6);
+});
+
+test('filtra empresa antes de paginar e não mistura notas e totais de outra empresa no CT-e', async () => {
+  const q = { dataInicial: '2026-01-01', dataFinal: '2026-01-31' };
+  const notas = Array.from({ length: 65 }, (_, i) => ({ NUNOTA: i + 1, NUMNOTA: 100 + i,
+    CODEMP: i < 35 ? 1 : 6, NOMEEMP: i < 35 ? 'MATRIZ' : 'FILIAL', VLRNOTA: 10, PESO: 1,
+    ...(i === 0 || i === 64 ? { CHAVEACESSO: 'cte', CHAVENFE: String(i), NUM_CTE: 999,
+      STATUS_IMPORTACAO: 2, REFERENCIAS_TOTAL: 2, FRETE_CTE_TOTAL: 50 } : {}) }));
+  let bases = 0;
+  const executar = async (sql) => {
+    if (sql.startsWith('WITH NOTAS')) { bases++; return notas; }
+    return [];
+  };
+  const todas = await carregarAnaliseFrete(q, executar);
+  const filtro = { ...q, consultaId: todas.consultaId, empresa: '1' };
+  const matriz = await carregarAnaliseFrete(filtro, executar);
+  assert.deepEqual(matriz.empresas, [{ codEmp: 1, nome: 'MATRIZ' }, { codEmp: 6, nome: 'FILIAL' }]);
+  assert.equal(matriz.total, 35);
+  assert.equal(matriz.linhas.length, 30);
+  assert.ok(matriz.linhas.every((n) => n.notasDetalhes.every((d) => d.CODEMP === 1)));
+  const compartilhado = matriz.linhas.find((n) => n.ctes.length);
+  assert.equal(compartilhado.VLRNOTA, 10);
+  assert.equal(compartilhado.grupoIncompleto, true);
+  const segunda = await carregarAnaliseFrete({ ...filtro, pagina: 2 }, executar);
+  assert.equal(segunda.linhas.length, 5);
+  const filial = await carregarAnaliseFrete({ ...filtro, empresa: '6' }, executar);
+  assert.equal(filial.total, 30);
+  assert.ok(filial.linhas.every((n) => n.notasDetalhes.every((d) => d.CODEMP === 6)));
+  const novamente = await carregarAnaliseFrete({ ...filtro, empresa: '' }, executar);
+  assert.equal(novamente.total, 64);
+  const vazio = await carregarAnaliseFrete({ ...filtro, empresa: '99' }, executar);
+  assert.equal(vazio.total, 0);
+  assert.equal(vazio.pagina, 1);
+  assert.equal(vazio.linhas.length, 0);
+  assert.equal(bases, 1);
 });
 
 test('restringe sugestão pela transportadora, região da tabela e cidades da rota', () => {
@@ -83,9 +122,9 @@ test('carrega página com consultas em lote e sem acessar estimativa histórica'
 
 test('agrupa antes de paginar, pesquisa todo o conjunto e reutiliza páginas', async () => {
   const q = { dataInicial: '2026-01-01', dataFinal: '2026-01-31' };
-  const notas = Array.from({ length: 25 }, (_, i) => ({ NUNOTA: i + 1, NUMNOTA: i + 100,
+  const notas = Array.from({ length: 65 }, (_, i) => ({ NUNOTA: i + 1, NUMNOTA: i + 100,
     CODPARC: 654, CLIENTE: 'João', CIDADE: 'Cuiabá', VLRNOTA: 10, PESO: .123,
-    ...(i === 0 || i === 24 ? { CHAVEACESSO: 'cte', NUM_CTE: 999, STATUS_IMPORTACAO: 0,
+    ...(i === 0 || i === 64 ? { CHAVEACESSO: 'cte', NUM_CTE: 999, STATUS_IMPORTACAO: 0,
       REFERENCIAS_TOTAL: 2, CHAVENFE: String(i), FRETE_CTE_TOTAL: 50 } : {}) }));
   let bases = 0;
   let consultas = 0;
@@ -95,20 +134,26 @@ test('agrupa antes de paginar, pesquisa todo o conjunto e reutiliza páginas', a
     return [];
   };
   const primeira = await carregarAnaliseFrete(q, executar);
-  assert.equal(primeira.total, 24);
-  assert.equal(primeira.linhas[0].NUNOTA, '1 · 25');
+  assert.equal(primeira.total, 64);
+  assert.equal(primeira.tamanhoPagina, 30);
+  assert.equal(primeira.linhas.length, 30);
+  assert.equal(primeira.linhas[0].NUNOTA, '1 · 65');
   assert.equal(primeira.linhas[0].VLRNOTA, 20);
   assert.equal(primeira.linhas[0].PESO, .246);
-  assert.deepEqual(primeira.linhas[0].notasDetalhes.map((n) => n.NUNOTA), [25, 1]);
+  assert.deepEqual(primeira.linhas[0].notasDetalhes.map((n) => n.NUNOTA), [65, 1]);
   const segunda = await carregarAnaliseFrete({ ...q, pagina: 2, consultaId: primeira.consultaId }, executar);
-  assert.equal(segunda.linhas.length, 10);
+  assert.equal(segunda.linhas.length, 30);
+  const ultima = await carregarAnaliseFrete({ ...q, pagina: 999, consultaId: primeira.consultaId }, executar);
+  assert.equal(ultima.pagina, 3);
+  assert.equal(ultima.linhas.length, 4);
+  assert.equal(new Set([...primeira.linhas, ...segunda.linhas, ...ultima.linhas].map((n) => n.NUNOTA)).size, 64);
   const antes = consultas;
   await carregarAnaliseFrete({ ...q, consultaId: primeira.consultaId }, executar);
   assert.equal(consultas, antes);
-  for (const busca of ['999', '124', 'joao', 'cuiaba', '654']) {
+  for (const busca of ['999', '164', 'joao', 'cuiaba', '654']) {
     const r = await carregarAnaliseFrete({ ...q, busca, consultaId: primeira.consultaId }, executar);
     assert.ok(r.total > 0);
-    if (busca === '124') assert.equal(r.linhas[0].NUNOTA, '1 · 25');
+    if (busca === '164') assert.equal(r.linhas[0].NUNOTA, '1 · 65');
   }
   assert.equal(bases, 1);
   await assert.rejects(carregarAnaliseFrete({ ...q, consultaId: 'expirada' }, executar), /expirada/);

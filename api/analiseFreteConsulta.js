@@ -1,5 +1,6 @@
 const { randomUUID } = require('node:crypto');
 const caches = new WeakMap();
+const TAMANHO_PAGINA = 30;
 const normalizar = (v) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 
 function sqlBase(f, offset) {
@@ -132,9 +133,14 @@ async function consultar(f, query, executeQuery, sqlSimulacoes, simularTabelas) 
   }
   let grupos;
   try { grupos = await entrada.promise; } catch (e) { if (cache.get(chave) === entrada) cache.delete(chave); throw e; }
-  const selecionados = filtrar(grupos,f);
-  const pagina = Math.min(f.pagina,Math.max(1,Math.ceil(selecionados.length/10)));
-  const lote = selecionados.slice((pagina-1)*10,pagina*10);
+  const empresas = [...new Map(grupos.flatMap((g) => g.notas).filter((n) => n.CODEMP != null)
+    .map((n) => [Number(n.CODEMP), { codEmp: Number(n.CODEMP), nome: n.NOMEEMP || `Empresa ${n.CODEMP}` }])).values()]
+    .sort((a,b) => a.codEmp-b.codEmp);
+  const gruposEmpresa = f.empresa ? grupos.map((g) => ({ ...g, notas: g.notas.filter((n) => Number(n.CODEMP) === f.empresa) }))
+    .filter((g) => g.notas.length) : grupos;
+  const selecionados = filtrar(gruposEmpresa,f);
+  const pagina = Math.min(f.pagina,Math.max(1,Math.ceil(selecionados.length/TAMANHO_PAGINA)));
+  const lote = selecionados.slice((pagina-1)*TAMANHO_PAGINA,pagina*TAMANHO_PAGINA);
   const ids = [...new Set(lote.flatMap((g) => g.notas.map((n) => Number(n.NUNOTA))))];
   const faltam = ids.filter((id) => !entrada.simulacoes.has(id));
   for (let i=0; i<faltam.length; i+=500) {
@@ -145,8 +151,8 @@ async function consultar(f, query, executeQuery, sqlSimulacoes, simularTabelas) 
   const transportadoras = [...new Map(grupos.flatMap((g) => g.notas).filter((n) => n.CODPARCTRANSP)
     .map((n) => [n.CODPARCTRANSP,{ CODPARC:n.CODPARCTRANSP,NOMEPARC:n.TRANSPORTADORA }])).values()]
     .sort((a,b) => String(a.NOMEPARC).localeCompare(String(b.NOMEPARC)));
-  return { linhas:lote.map((g) => consolidar(g,entrada.simulacoes,simularTabelas)), transportadoras,
-    total:selecionados.length,pagina,tamanhoPagina:10,consultaId:entrada.id };
+  return { linhas:lote.map((g) => consolidar(g,entrada.simulacoes,simularTabelas)), transportadoras, empresas,
+    total:selecionados.length,pagina,tamanhoPagina:TAMANHO_PAGINA,consultaId:entrada.id };
 }
 
 module.exports = { consultar, sqlBase, agrupar, filtrar, consolidar };

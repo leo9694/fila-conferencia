@@ -2,6 +2,7 @@
   const $ = (id) => document.getElementById(`analise-frete-${id}`);
   let pagina = 1;
   let total = 0;
+  let tamanhoPagina = 30;
   let consulta = null;
   let filtros = null;
   let transportadorasDisponiveis = [];
@@ -43,26 +44,21 @@
           link.href = `/api/transporte/analise-frete/ctes/${encodeURIComponent(cte.CHAVEACESSO)}/visualizar`;
           link.target = '_blank';
           link.rel = 'noopener';
-          link.textContent = `CT-e ${numeroCte}`;
+          link.textContent = numeroCte;
           link.title = `Abrir DACTE do CT-e ${numeroCte}`;
           div.append(link);
         } else {
-          div.append(document.createTextNode(`CT-e ${numeroCte}`));
+          div.append(document.createTextNode(numeroCte));
         }
-        div.append(document.createTextNode(` · ${cte.TRANSPORTADORA_CTE}: ${moeda(cte.FRETE_CTE_TOTAL ?? cte.FRETE_REAL)}`));
         td.appendChild(div);
-      }
-      const total = document.createElement('div');
-      total.textContent = pedido.agrupadoCte ? `Total do CT-e: ${moeda(pedido.real)}`
-        : pedido.compartilhado ? `Frete rateado por peso: ${moeda(pedido.real)}` : `Total real: ${moeda(pedido.real)}`;
-      td.appendChild(total);
-      for (const cte of pedido.ctes) {
-        const status = document.createElement('div');
-        status.textContent = Number(cte.STATUS_IMPORTACAO) === 2 ? 'CT-e importado no Sankhya' : 'CT-e pendente de importação';
-        td.appendChild(status);
       }
     }
     tr.appendChild(td);
+    const opcoes = { linhas };
+    celula(tr, pedido.ctes.length ? pedido.ctes.map((cte) => cte.TRANSPORTADORA_CTE || '—') : ['—'], opcoes);
+    celula(tr, pedido.ctes.length ? pedido.ctes.map((cte) => moeda(cte.FRETE_CTE_TOTAL ?? cte.FRETE_REAL)) : ['—'], { ...opcoes, classe: 'analise-frete-numero' });
+    celula(tr, pedido.ctes.length ? pedido.ctes.map((cte) => Number(cte.STATUS_IMPORTACAO) === 2 ? 'Importado no Sankhya' : 'Pendente de importação') : ['—'], opcoes);
+    celula(tr, pedido.ctes.length ? [moeda(pedido.real), pedido.agrupadoCte ? 'Total do CT-e' : pedido.compartilhado ? 'Rateado por peso' : 'Total real'] : ['—'], { ...opcoes, classe: 'analise-frete-numero analise-frete-real' });
   }
 
   function render(linhas) {
@@ -73,13 +69,23 @@
         const tr = document.createElement('tr');
         if (indice > 0) tr.classList.add('analise-frete-cte-continuacao');
         const tipoNota = Number(nota.CODTIPOPER) === 10 ? 'Nota de bonificação' : 'Nota de venda';
-        celula(tr, [`${tipoNota} ${nota.NUMNOTA || '—'}`, `Nº único: ${nota.NUNOTA} · ${nota.CODEMP} - ${nota.NOMEEMP || 'Empresa sem nome'}`, dataBr(nota.DATA_PEDIDO)]);
-        celula(tr, [`${nota.CODPARC || '—'} - ${nota.CLIENTE || 'Cliente sem nome'}`, nota.CIDADE || '—']);
-        celula(tr, [nota.TRANSPORTADORA]);
-        celula(tr, [`Venda: ${moeda(nota.VLRNOTA)}`, `Frete no pedido: ${moeda(nota.VLRFRETE)}`, `${numero(nota.PESO)} kg · ${numero(nota.QTDVOL)} volumes`, `CIF/FOB: ${nota.CIF_FOB || '—'}`]);
-        if (indice === 0) celula(tr, p.simulacoes.length ? p.simulacoes.map((s) => `${s.codigo ? `${s.codigo} · ` : ''}${s.tabela} · ${s.regiao || 'Rota direta'}: ${s.erro ? 'Cálculo indisponível — revisar fórmula/rotas' : moeda(s.valor)}`) : ['Sem tabela/região aplicável à transportadora'], { classe: 'analise-frete-sugestao', linhas: notas.length });
+        celula(tr, [`${tipoNota} ${nota.NUMNOTA || '—'}`]);
+        celula(tr, [dataBr(nota.DATA_PEDIDO)]);
+        celula(tr, [`${nota.CODPARC || '—'} - ${nota.CLIENTE || 'Cliente sem nome'}`]);
+        celula(tr, [nota.CIDADE || '—']);
+        celula(tr, [nota.TRANSPORTADORA || '—']);
+        celula(tr, [moeda(nota.VLRNOTA)], { classe: 'analise-frete-numero' });
+        celula(tr, [moeda(nota.VLRFRETE)], { classe: 'analise-frete-numero' });
+        celula(tr, [numero(nota.PESO)], { classe: 'analise-frete-numero' });
+        celula(tr, [numero(nota.QTDVOL)], { classe: 'analise-frete-numero' });
+        if (indice === 0) {
+          const opcoes = { linhas: notas.length };
+          celula(tr, p.simulacoes.length ? p.simulacoes.map((s) => `${s.codigo ? `${s.codigo} - ` : ''}${s.tabela}`) : ['Sem tabela/região aplicável à transportadora'], opcoes);
+          celula(tr, p.simulacoes.length ? p.simulacoes.map((s) => s.regiao || 'Rota direta') : ['—'], opcoes);
+          celula(tr, p.simulacoes.length ? p.simulacoes.map((s) => s.erro ? 'Cálculo indisponível — revisar fórmula/rotas' : moeda(s.valor)) : ['—'], { ...opcoes, classe: 'analise-frete-numero analise-frete-sugestao' });
+        }
         if (indice === 0) celulaCtes(tr, p, notas.length);
-        if (indice === 0) celula(tr, p.grupoIncompleto ? ['CT-e com notas fora do período'] : p.simulacoes.length ? p.simulacoes.map((s) => s.diferenca == null ? '—' : moeda(s.diferenca)) : ['—'], { classe: 'analise-frete-diferenca', linhas: notas.length });
+        if (indice === 0) celula(tr, p.grupoIncompleto ? ['CT-e com notas fora do período'] : p.simulacoes.length ? p.simulacoes.map((s) => s.diferenca == null ? '—' : moeda(s.diferenca)) : ['—'], { classe: 'analise-frete-numero analise-frete-diferenca', linhas: notas.length });
         $('linhas').appendChild(tr);
       });
     }
@@ -135,13 +141,14 @@
       if (consulta !== atual) return;
       total = dados.total;
       pagina = dados.pagina;
+      tamanhoPagina = Number.isSafeInteger(dados.tamanhoPagina) && dados.tamanhoPagina > 0 ? dados.tamanhoPagina : 30;
       consultaId = dados.consultaId;
       render(dados.linhas);
       renderizarTransportadoras(dados.transportadoras);
       $('status').textContent = total ? `${numero(total)} registros · CT-es agrupados e notas sem CT-e.` : 'Nenhum registro encontrado para os filtros.';
-      $('pagina').textContent = `Página ${pagina} de ${Math.max(1, Math.ceil(total / 10))}`;
+      $('pagina').textContent = `Página ${pagina} de ${Math.max(1, Math.ceil(total / tamanhoPagina))}`;
       $('anterior').disabled = pagina <= 1;
-      $('proxima').disabled = pagina * 10 >= total;
+      $('proxima').disabled = pagina * tamanhoPagina >= total;
     } catch (erro) {
       if (erro.name !== 'AbortError' && consulta === atual) $('status').textContent = erro.message;
     } finally {
@@ -157,7 +164,7 @@
     consultaId = null;
     $('transportadora-opcoes').hidden = true;
     $('transportadora-trigger').setAttribute('aria-expanded', 'false');
-    filtros = { dataInicial: $('inicio').value, dataFinal: $('fim').value,
+    filtros = { dataInicial: $('inicio').value, dataFinal: $('fim').value, empresa: $('empresa').value,
       transportadora: [...transportadorasSelecionadas].join(','),
       cteEmitido: $('cte-emitido').value, statusCte: $('status-cte').value, busca: $('busca').value.trim() };
     return carregar();
@@ -180,7 +187,7 @@
   });
   $('cte-emitido').addEventListener('change', atualizarStatusCte);
   $('anterior').addEventListener('click', () => { if (pagina > 1) { pagina--; carregar(); } });
-  $('proxima').addEventListener('click', () => { if (pagina * 10 < total) { pagina++; carregar(); } });
+  $('proxima').addEventListener('click', () => { if (pagina * tamanhoPagina < total) { pagina++; carregar(); } });
   window.analiseFreteController = {
     preparar() {
       if (!$('inicio').value) {

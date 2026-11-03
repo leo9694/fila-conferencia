@@ -12,12 +12,13 @@
 
 #transporte-painel[hidden], #analise-frete-painel[hidden] { display: none; }
 
-.analise-frete-page { display: grid; gap: 16px; }
+.transporte-page.analise-frete-page { display: grid; gap: 8px; padding: 8px 0 24px; }
 .analise-frete-filters .analise-frete-busca { grid-column: 1 / -1; }
 #analise-frete-linhas[aria-busy="true"] { opacity: .55; }
-.analise-frete-heading { min-height: 104px; padding: 28px 30px; }
-.analise-frete-heading h1 { margin: 0; font-size: clamp(1.85rem, 2.7vw, 2.45rem); letter-spacing: -.035em; }
-.analise-frete-filters { grid-template-columns: 180px 180px minmax(230px, 1fr) 165px 165px auto; margin: 0; padding: 18px; gap: 16px; }
+.analise-frete-page .analise-frete-heading { min-height: 0; padding: 10px 16px; }
+.analise-frete-page .analise-frete-heading h1 { margin: 0; font-size: 1.5rem; line-height: 1.2; letter-spacing: -.035em; }
+.analise-frete-page .analise-frete-filters { margin: 0; padding: 12px; gap: 10px; }
+.analise-frete-filters { grid-template-columns: 150px 150px minmax(190px, 1fr) minmax(190px, 1fr) 145px 145px auto; margin: 0; padding: 18px; gap: 16px; }
 .analise-frete-filters label { color: #46647b; font-size: .68rem; }
 .analise-frete-filter-field { display: grid; gap: 5px; color: #46647b; font-size: .68rem; font-weight: 800; text-transform: uppercase; }
 .analise-frete-filters input, .analise-frete-filters select { height: 42px; border-radius: 11px; }
@@ -34,27 +35,32 @@
 .analise-frete-submit { display: inline-flex; align-items: center; justify-content: center; gap: 8px; color: #fff; background: #087f6d; box-shadow: 0 6px 14px rgba(8, 127, 109, .18); }
 .analise-frete-submit:hover { background: #076b5d; transform: translateY(-1px); }
 .analise-frete-submit svg { width: 16px; }
-.analise-frete-summary { min-height: 40px; display: flex; align-items: center; padding: 0 4px; }
+.analise-frete-summary { min-height: 24px; display: flex; align-items: center; padding: 0 4px; }
 .analise-frete-summary p { margin: 0; color: #557086; font-size: .82rem; font-weight: 700; }
 .analise-frete-summary p.is-loading { display: inline-flex; align-items: center; gap: 9px; }
 .analise-frete-summary p.is-loading::before { content: ''; width: 14px; height: 14px; flex: 0 0 14px; border: 2px solid #b8d9d2; border-top-color: #087f6d; border-radius: 50%; animation: analise-frete-spin .7s linear infinite; }
 @keyframes analise-frete-spin { to { transform: rotate(360deg); } }
 .analise-frete-results { overflow: hidden; background: #fff; border: 1px solid #dce9e6; border-radius: 18px; box-shadow: 0 8px 25px rgba(15, 51, 70, .06); }
 .analise-frete-results .transporte-table-wrap { max-height: 820px; }
-.analise-frete-table { min-width: 1380px; table-layout: fixed; font-size: .76rem; }
-.analise-frete-table th:nth-child(1) { width: 12%; }.analise-frete-table th:nth-child(2) { width: 17%; }.analise-frete-table th:nth-child(3) { width: 15%; }.analise-frete-table th:nth-child(4) { width: 15%; }.analise-frete-table th:nth-child(5) { width: 19%; }.analise-frete-table th:nth-child(6) { width: 16%; }.analise-frete-table th:nth-child(7) { width: 6%; }
-.analise-frete-table th { padding: 14px 16px; background: #f7fbfa; color: #527086; font-size: .66rem; letter-spacing: .04em; }
-.analise-frete-table th, .analise-frete-table td { padding: 13px 16px; }
-.analise-frete-table td { min-width: 155px; color: #28475d; line-height: 1.45; vertical-align: top; white-space: normal; }
-.analise-frete-table td div { max-width: none; overflow-wrap: anywhere; }
-.analise-frete-table td div:first-child { color: #17384c; font-weight: 800; }
+.analise-frete-results .analise-frete-table { width: max-content; min-width: 100%; table-layout: auto; border-collapse: separate; border-spacing: 0; font-size: .75rem; }
+.analise-frete-results .analise-frete-table th { position: sticky; top: 0; z-index: 2; background: #edf5f3; color: #36576a; font-size: .66rem; letter-spacing: .02em; }
+.analise-frete-results .analise-frete-table th, .analise-frete-results .analise-frete-table td { padding: 7px 10px; border-right: 1px solid #dce7e4; border-bottom: 1px solid #dce7e4; white-space: nowrap; }
+.analise-frete-results .analise-frete-table td { min-width: 80px; color: #28475d; line-height: 1.35; vertical-align: top; background: #fff; }
+.analise-frete-table td div { max-width: none; overflow-wrap: normal; }
+.analise-frete-table td div:first-child { color: #17384c; font-weight: 600; }
 .analise-frete-table td div + div { margin-top: 4px; color: #587084; }
+.analise-frete-results .analise-frete-table tbody tr:nth-child(even) td { background: #f5f9f8; }
+.analise-frete-results .analise-frete-table tbody tr:hover td { background: #e6f5ef; }
+.analise-frete-results .analise-frete-table tr > :first-child:not([rowspan]) { position: sticky; left: 0; z-index: 1; border-right: 2px solid #bbd4cb; }
+.analise-frete-results .analise-frete-table thead tr > :first-child { z-index: 3; }
+.analise-frete-results .analise-frete-table .analise-frete-numero { text-align: right; font-variant-numeric: tabular-nums; }
+.analise-frete-table .analise-frete-real div + div { font-size: .65rem; }
 .analise-frete-table .analise-frete-sugestao div:first-child, .analise-frete-table .analise-frete-cte div:last-child, .analise-frete-table .analise-frete-diferenca div { color: #087f6d; }
 .analise-frete-table .analise-frete-cte a { color: #087f6d; font-weight: 800; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .analise-frete-table .analise-frete-cte a:hover { color: #055f52; }
 .analise-frete-table .analise-frete-diferenca div { font-weight: 800; }
-.analise-frete-table td[rowspan] { vertical-align: middle; background: #f5fbf9; }
-.analise-frete-table .analise-frete-cte-continuacao td:not([rowspan]) { border-top-style: dashed; }
+.analise-frete-results .analise-frete-table td[rowspan] { vertical-align: middle; background: #f0f7f4; }
+.analise-frete-table .analise-frete-cte-continuacao td:not([rowspan]) { border-top: 1px dashed #c9dbd4; }
 .analise-frete-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid #e1eeeb; }
 .analise-frete-pagination button { height: 35px; color: #087f6d; background: #eef8f5; border: 1px solid #b9e0d5; padding: 0 14px; }
 .analise-frete-pagination button:hover:not(:disabled) { background: #dff3ed; }

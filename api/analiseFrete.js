@@ -5,6 +5,8 @@ const TOPS_FATURAMENTO = Object.freeze([35, 10]);
 function filtrosAnalise(query) {
   const periodo = validarPeriodoTransporte(query.dataInicial, query.dataFinal);
   const pagina = Number(query.pagina || 1);
+  const empresa = Number(query.empresa || 0);
+  if (!Number.isSafeInteger(empresa) || empresa < 0) throw new Error('Empresa inválida.');
   const transportadoras = String(query.transportadora || '').split(',').filter((id) => id && id !== '0').map(Number);
   const cteEmitido = String(query.cteEmitido || 'todos').toLowerCase();
   const statusCte = String(query.statusCte || 'todos').toLowerCase();
@@ -17,7 +19,7 @@ function filtrosAnalise(query) {
   }
   const busca = String(query.busca || '').trim();
   if (busca.length > 120) throw new Error('Busca inválida: máximo de 120 caracteres.');
-  return { ...periodo, pagina, transportadoras: [...new Set(transportadoras)], busca, cteEmitido,
+  return { ...periodo, pagina, empresa, transportadoras: [...new Set(transportadoras)], busca, cteEmitido,
     statusCte: cteEmitido === 'sem' ? 'todos' : statusCte };
 }
 

@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/home-dashboard.css?v=20261029-resumo-conferencia-1">
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/transporte-dashboard.css?v=20260917-9">
+  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261030-analise-empresa-3">
   <link rel="stylesheet" href="/chat.css?v=20261028-template-midia-1">
   <link rel="stylesheet" href="/chat-theme.css?v=20261002-3">
   <link rel="stylesheet" href="/rastreio-produto.css?v=20261005-5">
@@ -12966,6 +12966,12 @@
         <label class="analise-frete-busca">Buscar cliente, destino, CT-e ou nota<input type="search" id="analise-frete-busca" maxlength="120" placeholder="Código ou nome do cliente, cidade, número do CT-e ou nota"></label>
         <label>Data inicial<input type="date" id="analise-frete-inicio" required></label>
         <label>Data final<input type="date" id="analise-frete-fim" required></label>
+        <label>Empresa<select id="analise-frete-empresa">
+          <option value="">Todas as empresas</option>
+          <option value="1">1 - NORTE SUL SEMENTES</option>
+          <option value="6">6 - TURRA COMERCIAL</option>
+          <option value="8">8 - NORTE SUL SEMENTES MS</option>
+        </select></label>
         <div class="analise-frete-filter-field"><span>Transportadora</span><div class="analise-frete-multiselect" id="analise-frete-transportadora">
           <button type="button" id="analise-frete-transportadora-trigger" aria-haspopup="listbox" aria-expanded="false"><span id="analise-frete-transportadora-texto">Todas</span><span aria-hidden="true">⌄</span></button>
           <div class="analise-frete-multiselect-menu" id="analise-frete-transportadora-opcoes" role="listbox" aria-multiselectable="true" hidden></div>
@@ -12977,7 +12983,7 @@
       <div class="analise-frete-summary"><p id="analise-frete-status" role="status" aria-live="polite"></p></div>
       <section class="analise-frete-results" aria-label="Resultados da análise de frete">
       <div class="transporte-table-wrap"><table class="transporte-table analise-frete-table">
-        <thead><tr><th>Nota de venda</th><th>Cliente / destino</th><th>Transportadora</th><th>Dados do frete</th><th>Tabela / região / sugestão</th><th>CT-e / frete real</th><th>Diferença</th></tr></thead>
+        <thead><tr><th scope="col">Nota</th><th scope="col">Data</th><th scope="col">Cliente</th><th scope="col">Destino</th><th scope="col">Transportadora</th><th scope="col" class="analise-frete-numero">Valor da venda</th><th scope="col" class="analise-frete-numero">Frete no pedido</th><th scope="col" class="analise-frete-numero">Peso (kg)</th><th scope="col" class="analise-frete-numero">Volumes</th><th scope="col">Tabela</th><th scope="col">Região</th><th scope="col" class="analise-frete-numero">Frete sugerido</th><th scope="col">CT-e</th><th scope="col">Transportadora do CT-e</th><th scope="col" class="analise-frete-numero">Valor do CT-e</th><th scope="col">Situação do CT-e</th><th scope="col" class="analise-frete-numero">Frete real / rateio</th><th scope="col" class="analise-frete-numero">Diferença</th></tr></thead>
         <tbody id="analise-frete-linhas"></tbody>
       </table></div>
       <div class="analise-frete-pagination"><button type="button" id="analise-frete-anterior">Anterior</button><span id="analise-frete-pagina"></span><button type="button" id="analise-frete-proxima">Próxima</button></div>
@@ -13643,7 +13649,7 @@
   <script src="vendas-dashboard.js?v=20260820-1"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="transporte-dashboard.js?v=20260916-1"></script>
-  <script src="analise-frete.js?v=20260917-20"></script>
+  <script src="analise-frete.js?v=20261103-empresas-fixas"></script>
   <script src="chat-core.js?v=20261022-navegacao-1"></script>
   <script src="whatsapp-call-core.js?v=20260909-1"></script>
   <script src="whatsapp-call.js?v=20261008-rollback-1"></script>
