@@ -64,13 +64,13 @@ test('notas agrupadas compartilham tabela e CT-es sem repetir frete ou diferenç
   assert.match(rows[0].children[9].textContent, /99,91.*Cálculo indisponível/);
   assert.deepEqual(rows[0].children[10].children[0].children, ['123']);
   assert.equal(rows[0].children[10].children[1].textContent, '124');
-  assert.match(rows[0].children[11].textContent, /200,00Total do CT-e/);
+  assert.equal(rows[0].children[11].textContent, (200).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
   assert.equal(rows[0].children[12].children.length, 2);
 });
 
-test('planilha conserva o aviso de grupo incompleto e a indicação de rateio por peso', () => {
+test('planilha conserva o aviso de grupo incompleto e mostra apenas o valor rateado', () => {
   const [row] = renderizar([{ ...nota, grupoIncompleto: true, compartilhado: true, real: 10,
     ctes: [{ NUM_CTE: 2, FRETE_REAL: 10 }], simulacoes: [] }]);
-  assert.match(row.children[11].textContent, /Rateado por peso/);
+  assert.equal(row.children[11].textContent, (10).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
   assert.equal(row.children[12].textContent, 'CT-e com notas fora do período');
 });

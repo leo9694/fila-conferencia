@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/home-dashboard.css?v=20261029-resumo-conferencia-1">
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261103-frete-acoes-documentos">
+  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261103-frete-painel-visual">
   <link rel="stylesheet" href="/chat.css?v=20261028-template-midia-1">
   <link rel="stylesheet" href="/chat-theme.css?v=20261002-3">
   <link rel="stylesheet" href="/rastreio-produto.css?v=20261005-5">
@@ -12991,7 +12991,12 @@
       </section>
       <dialog class="analise-frete-ordem-dialogo analise-frete-detalhes-dialogo" id="analise-frete-detalhes-dialogo" aria-labelledby="analise-frete-detalhes-titulo">
         <header>
-          <h2 id="analise-frete-detalhes-titulo">Detalhes da nota</h2>
+          <span class="analise-frete-detalhes-icone" aria-hidden="true"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6m-6 4h6"/></svg></span>
+          <div class="analise-frete-detalhes-identificacao">
+            <h2 id="analise-frete-detalhes-titulo">Detalhes da nota</h2>
+            <p id="analise-frete-detalhes-meta"></p>
+          </div>
+          <span class="analise-frete-detalhes-status" id="analise-frete-detalhes-situacao"></span>
           <form method="dialog"><button class="btn-back" type="submit">Fechar</button></form>
         </header>
         <div id="analise-frete-detalhes-corpo"></div>
@@ -13665,7 +13670,7 @@
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="transporte-dashboard.js?v=20260916-1"></script>
   <script src="consulta-tabela.js?v=20261103-menu-compartilhado"></script>
-  <script src="analise-frete.js?v=20261103-frete-rolagem-fluida"></script>
+  <script src="analise-frete.js?v=20261103-frete-painel-visual"></script>
   <script src="chat-core.js?v=20261022-navegacao-1"></script>
   <script src="whatsapp-call-core.js?v=20260909-1"></script>
   <script src="whatsapp-call.js?v=20261008-rollback-1"></script>

@@ -72,10 +72,7 @@
     }
     tr.appendChild(td);
     const opcoes = { linhas };
-    const frete = [pedido.ctes.length ? moeda(pedido.real) : '—'];
-    if (pedido.ctes.length && pedido.agrupadoCte) frete.push('Total do CT-e');
-    else if (pedido.ctes.length && pedido.compartilhado) frete.push('Rateado por peso');
-    celula(tr, frete, { ...opcoes, classe: 'analise-frete-numero analise-frete-real' });
+    celula(tr, [pedido.ctes.length ? moeda(pedido.real) : '—'], { ...opcoes, classe: 'analise-frete-numero' });
   }
 
   function render(linhas) {
@@ -117,8 +114,13 @@
 
   function secaoDetalhes(titulo, campos) {
     const secao = document.createElement('section');
-    const nome = document.createElement('h3');
-    nome.textContent = titulo;
+    if (titulo) {
+      const topo = document.createElement('header');
+      const nome = document.createElement('h3');
+      nome.textContent = titulo;
+      topo.appendChild(nome);
+      secao.appendChild(topo);
+    }
     const lista = document.createElement('dl');
     for (const [rotulo, valor] of campos) {
       const campo = document.createElement('div');
@@ -129,7 +131,7 @@
       campo.append(termo, descricao);
       lista.appendChild(campo);
     }
-    secao.append(nome, lista);
+    secao.appendChild(lista);
     return secao;
   }
 
@@ -148,19 +150,27 @@
   function abrirDetalhesNota(nota, grupo) {
     const tipo = Number(nota.CODTIPOPER) === 10 ? 'Nota de bonificação' : 'Nota de venda';
     $('detalhes-titulo').textContent = nota.NUMNOTA ? `${tipo} ${nota.NUMNOTA}` : tipo;
+    $('detalhes-meta').textContent = `Nº único ${nota.NUNOTA ?? '—'} · ${dataBr(nota.DATA_PEDIDO)}`;
+    const situacao = $('detalhes-situacao');
+    const pendente = grupo.ctes.some((cte) => Number(cte.STATUS_IMPORTACAO) !== 2);
+    situacao.textContent = !grupo.ctes.length ? 'Sem CT-e' : pendente ? 'CT-e pendente' : 'CT-e importado';
+    situacao.classList.toggle('is-pendente', pendente);
+    situacao.classList.toggle('is-importado', grupo.ctes.length > 0 && !pendente);
+    const rotuloFrete = grupo.compartilhado ? 'Frete rateado por peso' : grupo.agrupadoCte ? 'Frete real do grupo' : 'Frete real';
+    const resumo = secaoDetalhes(null, [
+      ['Valor da nota', moeda(nota.VLRNOTA)], [rotuloFrete, moeda(grupo.real)],
+      ['Empresa', `${nota.CODEMP ?? '—'} - ${nota.NOMEEMP || 'Empresa sem nome'}`],
+      ['Cliente', `${nota.CODPARC || '—'} - ${nota.CLIENTE || 'Cliente sem nome'}`]
+    ]);
+    resumo.className = 'analise-frete-detalhes-resumo';
     const corpo = $('detalhes-corpo');
     corpo.replaceChildren(
-      secaoDetalhes('Dados da nota', [
-        ['Número único', nota.NUNOTA], ['Data', dataBr(nota.DATA_PEDIDO)],
-        ['Empresa', `${nota.CODEMP ?? '—'} - ${nota.NOMEEMP || 'Empresa sem nome'}`],
-        ['Cliente', `${nota.CODPARC || '—'} - ${nota.CLIENTE || 'Cliente sem nome'}`],
-        ['Valor da nota', moeda(nota.VLRNOTA)]
-      ]),
+      resumo,
       secaoDetalhes('Transporte', [
         ['Destino', nota.CIDADE], ['Transportadora', nota.TRANSPORTADORA],
-        ['Ordem de carga', nota.ORDEMCARGA || '—'], ['Frete no pedido', moeda(nota.VLRFRETE)],
-        ['CIF/FOB', nota.CIF_FOB], ['Peso (kg)', numero(nota.PESO)], ['Volumes', numero(nota.QTDVOL)],
-        [grupo.compartilhado ? 'Frete rateado por peso' : grupo.agrupadoCte ? 'Frete real do grupo' : 'Frete real', moeda(grupo.real)]
+        ['Ordem de carga', nota.ORDEMCARGA || '—'], ['CIF/FOB', nota.CIF_FOB],
+        ['Peso (kg)', numero(nota.PESO)], ['Volumes', numero(nota.QTDVOL)],
+        ['Frete no pedido', moeda(nota.VLRFRETE)], [rotuloFrete, moeda(grupo.real)]
       ])
     );
     for (const sugestao of grupo.simulacoes) {
@@ -181,6 +191,9 @@
         ['Valor do CT-e', moeda(cte.FRETE_CTE_TOTAL ?? cte.FRETE_REAL)],
         ['Situação do CT-e', Number(cte.STATUS_IMPORTACAO) === 2 ? 'Importado no Sankhya' : 'Pendente de importação']
       ]);
+      secao.className = 'analise-frete-detalhes-cte';
+      const statusCte = secao.querySelector('dl > div:last-child dd');
+      statusCte.className = `analise-frete-detalhes-status ${Number(cte.STATUS_IMPORTACAO) === 2 ? 'is-importado' : 'is-pendente'}`;
       const chave = String(cte.CHAVEACESSO || '');
       const acoes = document.createElement('div');
       acoes.className = 'analise-frete-acoes-documentos';
@@ -188,12 +201,12 @@
         acoes.appendChild(linkDocumento('Abrir CT-e', `/api/transporte/analise-frete/ctes/${chave}/visualizar`));
       }
       if (romaneio && indice === 0) acoes.appendChild(linkDocumento('Abrir ordem de carga', romaneio));
-      if (acoes.childElementCount) secao.appendChild(acoes);
+      if (acoes.childElementCount) secao.firstElementChild.appendChild(acoes);
       corpo.appendChild(secao);
     }
     if (!grupo.ctes.length) {
       const secao = secaoDetalhes('CT-e', [['Vínculo', 'Sem CT-e emitido vinculado']]);
-      if (romaneio) secao.appendChild(linkDocumento('Abrir ordem de carga', romaneio));
+      if (romaneio) secao.firstElementChild.appendChild(linkDocumento('Abrir ordem de carga', romaneio));
       corpo.appendChild(secao);
     }
     $('detalhes-dialogo').showModal();
