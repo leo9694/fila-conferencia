@@ -40,8 +40,21 @@
 .analise-frete-summary p.is-loading { display: inline-flex; align-items: center; gap: 9px; }
 .analise-frete-summary p.is-loading::before { content: ''; width: 14px; height: 14px; flex: 0 0 14px; border: 2px solid #b8d9d2; border-top-color: #087f6d; border-radius: 50%; animation: analise-frete-spin .7s linear infinite; }
 @keyframes analise-frete-spin { to { transform: rotate(360deg); } }
-.analise-frete-results { overflow: hidden; background: #fff; border: 1px solid #dce9e6; border-radius: 18px; box-shadow: 0 8px 25px rgba(15, 51, 70, .06); }
-.analise-frete-results .transporte-table-wrap { max-height: 820px; }
+.transporte-dashboard-screen:has(.analise-frete-page:not([hidden])) { overflow: clip; }
+.analise-frete-results { min-width: 0; overflow: clip; background: #fff; border: 1px solid #dce9e6; border-radius: 18px; box-shadow: 0 8px 25px rgba(15, 51, 70, .06); }
+.analise-frete-scroll-horizontal {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
+  overflow-x: scroll;
+  overflow-y: hidden;
+  background: #edf5f3;
+}
+.analise-frete-scroll-horizontal > div { height: 1px; }
+.analise-frete-scroll-horizontal::-webkit-scrollbar { height: 14px; }
+.analise-frete-scroll-horizontal::-webkit-scrollbar-track { background: #edf5f3; }
+.analise-frete-scroll-horizontal::-webkit-scrollbar-thumb { background: #688e85; border: 2px solid #edf5f3; border-radius: 8px; }
+.analise-frete-results .transporte-table-wrap { max-height: 820px; overflow-x: hidden; }
 .analise-frete-results .analise-frete-table { width: max-content; min-width: 100%; table-layout: auto; border-collapse: separate; border-spacing: 0; font-size: .75rem; }
 .analise-frete-results .analise-frete-table th { position: sticky; top: 0; z-index: 2; background: #edf5f3; color: #36576a; font-size: .66rem; letter-spacing: .02em; }
 .analise-frete-results .analise-frete-table th, .analise-frete-results .analise-frete-table td { padding: 7px 10px; border-right: 1px solid #dce7e4; border-bottom: 1px solid #dce7e4; white-space: nowrap; }
@@ -52,7 +65,7 @@
 .analise-frete-results .analise-frete-table tbody tr:nth-child(even) td { background: #f5f9f8; }
 .analise-frete-results .analise-frete-table tbody tr:hover td { background: #e6f5ef; }
 .analise-frete-results .analise-frete-table tr > :first-child:not([rowspan]) { position: sticky; left: 0; z-index: 1; border-right: 2px solid #bbd4cb; }
-.analise-frete-results .analise-frete-table thead tr > :first-child { z-index: 3; }
+.analise-frete-results .analise-frete-table thead tr > :first-child:not([rowspan]) { z-index: 3; }
 .analise-frete-results .analise-frete-table .analise-frete-numero { text-align: right; font-variant-numeric: tabular-nums; }
 .analise-frete-table .analise-frete-real div + div { font-size: .65rem; }
 .analise-frete-table .analise-frete-sugestao div:first-child, .analise-frete-table .analise-frete-cte div:last-child, .analise-frete-table .analise-frete-diferenca div { color: #087f6d; }

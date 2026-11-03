@@ -56,7 +56,6 @@
     tr.appendChild(td);
     const opcoes = { linhas };
     celula(tr, pedido.ctes.length ? pedido.ctes.map((cte) => cte.TRANSPORTADORA_CTE || '—') : ['—'], opcoes);
-    celula(tr, pedido.ctes.length ? pedido.ctes.map((cte) => moeda(cte.FRETE_CTE_TOTAL ?? cte.FRETE_REAL)) : ['—'], { ...opcoes, classe: 'analise-frete-numero' });
     celula(tr, pedido.ctes.length ? [moeda(pedido.real), pedido.agrupadoCte ? 'Total do CT-e' : pedido.compartilhado ? 'Rateado por peso' : 'Total real'] : ['—'], { ...opcoes, classe: 'analise-frete-numero analise-frete-real' });
   }
 
@@ -73,7 +72,6 @@
         celula(tr, [nota.CIDADE || '—']);
         celula(tr, [nota.TRANSPORTADORA || '—']);
         celula(tr, [moeda(nota.VLRNOTA)], { classe: 'analise-frete-numero' });
-        celula(tr, [moeda(nota.VLRFRETE)], { classe: 'analise-frete-numero' });
         celula(tr, [numero(nota.PESO)], { classe: 'analise-frete-numero' });
         celula(tr, [numero(nota.QTDVOL)], { classe: 'analise-frete-numero' });
         if (indice === 0) {
@@ -93,6 +91,89 @@
       .map((t) => t.NOMEPARC);
     $('transportadora-texto').textContent = nomes.length === 0 ? 'Todas'
       : nomes.length === 1 ? nomes[0] : `${nomes.length} transportadoras selecionadas`;
+  }
+
+  function prepararFiltrosColunas() {
+    ConsultaTabela.fecharMenu();
+    const corpo = $('linhas');
+    const cabecalhos = [...$('tabela').querySelectorAll('thead th')];
+    const grupos = [];
+    for (const linha of corpo.rows) {
+      if (linha.classList.contains('analise-frete-cte-continuacao') && grupos.length) {
+        grupos.at(-1).push(linha);
+      } else {
+        grupos.push([linha]);
+      }
+    }
+    const filtros = new Map();
+    let ordem = null;
+    const valoresDaColuna = (grupo, indice) => grupo.flatMap((linha) =>
+      [...(linha.cells[indice]?.children || [])].map((celula) => celula.textContent.trim()));
+    const titulos = cabecalhos.map((th) => th.dataset.titulo || th.textContent.trim());
+    const botoes = [];
+
+    function atualizar() {
+      ConsultaTabela.fecharMenu();
+      const visiveis = grupos.filter((grupo) => [...filtros].every(([indice, valores]) =>
+        valoresDaColuna(grupo, indice).some((valor) => valores.has(valor))));
+      if (ordem) {
+        const { indice, direcao } = ordem;
+        const numerica = cabecalhos[indice].classList.contains('analise-frete-numero');
+        const valor = (grupo) => valoresDaColuna(grupo, indice)[0] || '—';
+        const coluna = numerica
+          ? { numero: true, valor: (grupo) => valor(grupo).replace(/[^\d,.-]/g, '') }
+          : { render: valor };
+        visiveis.sort((a, b) => ConsultaTabela.comparar(coluna, a, b) * (direcao === 'asc' ? 1 : -1));
+      }
+      corpo.replaceChildren(...visiveis.flat());
+      if (!visiveis.length && grupos.length) {
+        const linha = corpo.insertRow();
+        const celula = linha.insertCell();
+        celula.colSpan = cabecalhos.length;
+        celula.textContent = 'Nenhum resultado para os filtros desta página.';
+      }
+      botoes.forEach(({ nome, menu }, indice) => {
+        const direcao = ordem?.indice === indice ? ordem.direcao : null;
+        nome.textContent = titulos[indice] + (direcao ? (direcao === 'asc' ? ' ↑' : ' ↓') : '');
+        menu.classList.toggle('ativo', filtros.has(indice));
+        cabecalhos[indice].setAttribute('aria-sort', direcao ? (direcao === 'asc' ? 'ascending' : 'descending') : 'none');
+      });
+    }
+
+    cabecalhos.forEach((th, indice) => {
+      const titulo = titulos[indice];
+      th.dataset.titulo = titulo;
+      const conteudo = document.createElement('div');
+      conteudo.className = 'consulta-coluna-cabecalho';
+      const nome = document.createElement('button');
+      nome.type = 'button';
+      nome.className = 'consulta-coluna-nome';
+      const menu = document.createElement('button');
+      menu.type = 'button';
+      menu.className = 'consulta-coluna-filtro';
+      menu.textContent = '☷';
+      menu.setAttribute('aria-label', `Filtrar ou ordenar ${titulo}`);
+      menu.setAttribute('aria-expanded', 'false');
+      const ordenar = (direcao) => { ordem = { indice, direcao }; atualizar(); };
+      nome.addEventListener('click', () => ordenar(ordem?.indice === indice && ordem.direcao === 'asc' ? 'desc' : 'asc'));
+      menu.addEventListener('click', () => ConsultaTabela.abrirMenuColuna(menu, {
+        titulo,
+        valores: [...new Set(grupos.flatMap((grupo) => valoresDaColuna(grupo, indice)))]
+          .sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true })),
+        filtro: filtros.get(indice),
+        ordenar,
+        filtrar: (valores) => {
+          if (valores === null) filtros.delete(indice);
+          else filtros.set(indice, new Set(valores));
+          atualizar();
+        },
+        restaurarFoco: () => menu.focus()
+      }));
+      conteudo.append(nome, menu);
+      th.replaceChildren(conteudo);
+      botoes.push({ nome, menu });
+    });
+    atualizar();
   }
 
   function renderizarTransportadoras(lista) {
@@ -141,8 +222,9 @@
       tamanhoPagina = Number.isSafeInteger(dados.tamanhoPagina) && dados.tamanhoPagina > 0 ? dados.tamanhoPagina : 30;
       consultaId = dados.consultaId;
       render(dados.linhas);
+      prepararFiltrosColunas();
       renderizarTransportadoras(dados.transportadoras);
-      $('status').textContent = total ? `${numero(total)} registros · CT-es agrupados e notas sem CT-e.` : 'Nenhum registro encontrado para os filtros.';
+      $('status').textContent = total ? `${numero(total)} registros · CT-es agrupados e notas sem CT-e. Filtros de coluna nesta página.` : 'Nenhum registro encontrado para os filtros.';
       $('pagina').textContent = `Página ${pagina} de ${Math.max(1, Math.ceil(total / tamanhoPagina))}`;
       $('anterior').disabled = pagina <= 1;
       $('proxima').disabled = pagina * tamanhoPagina >= total;
@@ -171,6 +253,24 @@
     $('status-cte').disabled = semCte;
     if (semCte) $('status-cte').value = 'todos';
   }
+  const tabela = $('tabela');
+  const barraHorizontal = $('scroll-horizontal');
+  const observarLarguras = new ResizeObserver(() => {
+    const alcance = tabela.scrollWidth - tabela.clientWidth;
+    barraHorizontal.hidden = alcance <= 0;
+    if (barraHorizontal.hidden) return;
+    barraHorizontal.firstElementChild.style.width = `${barraHorizontal.clientWidth + alcance}px`;
+    barraHorizontal.scrollLeft = tabela.scrollLeft;
+  });
+  observarLarguras.observe(tabela);
+  observarLarguras.observe(tabela.firstElementChild);
+  barraHorizontal.addEventListener('scroll', () => {
+    if (tabela.scrollLeft !== barraHorizontal.scrollLeft) tabela.scrollLeft = barraHorizontal.scrollLeft;
+  });
+  tabela.addEventListener('scroll', () => {
+    if (barraHorizontal.scrollLeft !== tabela.scrollLeft) barraHorizontal.scrollLeft = tabela.scrollLeft;
+  });
+
   $('form').addEventListener('submit', (e) => { e.preventDefault(); consultar(); });
   $('transportadora-trigger').addEventListener('click', () => {
     const abrir = $('transportadora-opcoes').hidden;
@@ -206,6 +306,7 @@
       consulta?.abort(); consulta = null; filtros = null; pagina = 1; total = 0;
       consultaId = null;
       $('linhas').replaceChildren(); $('form').reset(); $('status').textContent = '';
+      prepararFiltrosColunas();
       $('status').classList.remove('is-loading');
       transportadorasSelecionadas.clear();
       renderizarTransportadoras([]);
