@@ -67,7 +67,8 @@
 .analise-frete-results .analise-frete-table tr > :first-child:not([rowspan]) { position: sticky; left: 0; z-index: 1; border-right: 2px solid #bbd4cb; }
 .analise-frete-results .analise-frete-table thead tr > :first-child:not([rowspan]) { z-index: 3; }
 .analise-frete-results .analise-frete-table .analise-frete-numero { text-align: right; font-variant-numeric: tabular-nums; }
-.analise-frete-table .analise-frete-real div + div { font-size: .65rem; }
+.analise-frete-table .analise-frete-real > div { display: inline-block; }
+.analise-frete-table .analise-frete-real > div + div { margin: 0 0 0 6px; font-size: .65rem; }
 .analise-frete-table .analise-frete-sugestao div:first-child, .analise-frete-table .analise-frete-cte div:last-child, .analise-frete-table .analise-frete-diferenca div { color: #087f6d; }
 .analise-frete-table .analise-frete-cte a { color: #087f6d; font-weight: 800; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .analise-frete-table .analise-frete-cte a:hover { color: #055f52; }
