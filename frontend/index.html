@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/home-dashboard.css?v=20261029-resumo-conferencia-1">
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261103-frete-painel-visual">
+  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261103-exportar-excel">
   <link rel="stylesheet" href="/chat.css?v=20261028-template-midia-1">
   <link rel="stylesheet" href="/chat-theme.css?v=20261002-3">
   <link rel="stylesheet" href="/rastreio-produto.css?v=20261005-5">
@@ -12983,7 +12983,7 @@
         <label>Situação do CT-e<select id="analise-frete-status-cte"><option value="todos">Todas</option><option value="importado">Importado</option><option value="pendente">Pendente</option></select></label>
         <button class="analise-frete-submit" type="submit"><i data-lucide="search" aria-hidden="true"></i>Consultar</button>
       </form>
-      <div class="analise-frete-summary"><p id="analise-frete-status" role="status" aria-live="polite"></p></div>
+      <div class="analise-frete-summary"><p id="analise-frete-status" role="status" aria-live="polite"></p><button class="analise-frete-download" id="analise-frete-exportar" type="button" disabled>Exportar Excel</button></div>
       <section class="analise-frete-results" aria-label="Resultados da análise de frete">
       <div class="transporte-table-wrap" id="analise-frete-tabela"><table class="transporte-table analise-frete-table">
         <thead><tr><th scope="col" data-coluna="nota">Nota</th><th scope="col" data-coluna="data">Data</th><th scope="col" data-coluna="cliente">Cliente</th><th scope="col" data-coluna="destino">Destino</th><th scope="col" data-coluna="transportadora">Transportadora</th><th scope="col" data-coluna="venda" class="analise-frete-numero">Valor da venda</th><th scope="col" data-coluna="peso" class="analise-frete-numero">Peso (kg)</th><th scope="col" data-coluna="volumes" class="analise-frete-numero">Volumes</th><th scope="col" data-coluna="regiao">Região</th><th scope="col" data-coluna="sugerido" class="analise-frete-numero">Frete sugerido</th><th scope="col" data-coluna="cte">CT-e</th><th scope="col" data-coluna="real" class="analise-frete-numero">Frete real / rateio</th><th scope="col" data-coluna="diferenca" class="analise-frete-numero">Diferença</th></tr></thead>
@@ -13673,7 +13673,7 @@
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="transporte-dashboard.js?v=20260916-1"></script>
   <script src="consulta-tabela.js?v=20261103-filtro-numerico"></script>
-  <script src="analise-frete.js?v=20261103-filtro-numerico"></script>
+  <script src="analise-frete.js?v=20261103-exportar-excel"></script>
   <script src="chat-core.js?v=20261022-navegacao-1"></script>
   <script src="whatsapp-call-core.js?v=20260909-1"></script>
   <script src="whatsapp-call.js?v=20261008-rollback-1"></script>

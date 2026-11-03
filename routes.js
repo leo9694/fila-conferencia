@@ -79,6 +79,7 @@ const {
 } = require('./api/relatorioCtes');
 const { montarSqlEstimativaFrete, normalizarEstimativaFrete } = require('./api/estimativaFrete');
 const { carregarAnaliseFrete } = require('./api/analiseFrete');
+const { gerarAnaliseFreteExcel } = require('./api/analiseFreteExcel');
 const { consultarRastreioProduto, consultarFiltrosRastreio, consultarValoresColuna } = require('./api/rastreioProduto');
 const {
   TOP_FATURAMENTO_VENDAS,
@@ -2826,7 +2827,16 @@ router.get('/transporte/malhas/estados/:uf/municipios', exigirGerenciaOuDiretori
 
 async function responderAnaliseFrete(req, res) {
   try {
-    const resultado = await carregarAnaliseFrete(req.method === 'POST' ? (req.body || {}) : req.query, executeQuery);
+    const query = req.method === 'POST' ? (req.body || {}) : req.query;
+    const exportar = req.path === '/transporte/analise-frete/excel';
+    if (exportar && !query.consultaId) return res.status(400).json({ erro: 'Consulte os dados antes de exportar.' });
+    const resultado = await carregarAnaliseFrete({ ...query, exportar, opcoesColuna: exportar ? undefined : query.opcoesColuna }, executeQuery);
+    if (exportar) {
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', 'attachment; filename="analise-de-frete.xlsx"');
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.send(gerarAnaliseFreteExcel(resultado.linhas));
+    }
     res.json(resultado);
   } catch (err) {
     console.error('Erro na análise de frete:', err.message);
@@ -2837,6 +2847,7 @@ async function responderAnaliseFrete(req, res) {
 
 router.get('/transporte/analise-frete', exigirGerenciaOuDiretoria, responderAnaliseFrete);
 router.post('/transporte/analise-frete', exigirGerenciaOuDiretoria, responderAnaliseFrete);
+router.post('/transporte/analise-frete/excel', exigirGerenciaOuDiretoria, responderAnaliseFrete);
 
 router.get('/transporte/analise-frete/ctes/:chaveAcesso/pdf', exigirGerenciaOuDiretoria, async (req, res) => {
   try {

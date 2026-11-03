@@ -174,6 +174,10 @@ async function consultar(f, query, executeQuery, sqlSimulacoes, simularTabelas) 
     selecionados.sort((a, b) => compararColuna(ordem.coluna, chaves.get(a), chaves.get(b))
       * (ordem.direcao === 'asc' ? 1 : -1));
   }
+  if (query.exportar === true) {
+    await carregarSimulacoes(selecionados, entrada.simulacoes, executeQuery, sqlSimulacoes);
+    return { linhas: selecionados.map(obterConsolidado) };
+  }
   const pagina = Math.min(f.pagina,Math.max(1,Math.ceil(selecionados.length/TAMANHO_PAGINA)));
   const lote = selecionados.slice((pagina-1)*TAMANHO_PAGINA,pagina*TAMANHO_PAGINA);
   await carregarSimulacoes(lote, entrada.simulacoes, executeQuery, sqlSimulacoes);

@@ -37,6 +37,9 @@
 .analise-frete-submit svg { width: 16px; }
 .analise-frete-summary { min-height: 24px; display: flex; align-items: center; padding: 0 4px; }
 .analise-frete-summary p { margin: 0; color: #557086; font-size: .82rem; font-weight: 700; }
+.analise-frete-summary { justify-content: space-between; gap: 8px; }
+.analise-frete-summary button { margin-left: auto; cursor: pointer; }
+.analise-frete-summary button:disabled { opacity: .55; cursor: default; }
 .analise-frete-summary p.is-loading { display: inline-flex; align-items: center; gap: 9px; }
 .analise-frete-summary p.is-loading::before { content: ''; width: 14px; height: 14px; flex: 0 0 14px; border: 2px solid #b8d9d2; border-top-color: #087f6d; border-radius: 50%; animation: analise-frete-spin .7s linear infinite; }
 @keyframes analise-frete-spin { to { transform: rotate(360deg); } }

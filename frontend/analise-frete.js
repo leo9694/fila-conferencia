@@ -224,6 +224,43 @@
   let ordemColuna = null;
   let consultandoOpcoes = false;
 
+  function filtrosDaGrade() {
+    return {
+      ordemColuna,
+      filtrosColunas: Object.fromEntries([...filtrosColunas].map(([coluna, valores]) => [coluna, [...valores]]))
+    };
+  }
+
+  async function exportarExcel() {
+    const atual = consulta;
+    const botao = $('exportar');
+    if (!consultaId || !total || botao.disabled) return;
+    botao.disabled = true;
+    botao.textContent = 'Exportando…';
+    try {
+      const resposta = await fetch('/api/transporte/analise-frete/excel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...filtros, consultaId, ...filtrosDaGrade() }),
+        signal: atual.signal
+      });
+      if (!resposta.ok) throw new Error('Não foi possível exportar. Clique em Consultar e tente novamente.');
+      const arquivo = await resposta.blob();
+      if (consulta !== atual) return;
+      const url = URL.createObjectURL(arquivo);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'analise-de-frete.xlsx';
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (erro) {
+      if (erro.name !== 'AbortError' && consulta === atual) $('status').textContent = erro.message;
+    } finally {
+      botao.textContent = 'Exportar Excel';
+      if (consulta === atual) botao.disabled = !total;
+    }
+  }
+
   async function solicitarAnalise(parametros, signal) {
     const resposta = await fetch('/api/transporte/analise-frete', {
       method: 'POST',
@@ -335,13 +372,10 @@
     $('status').classList.add('is-loading');
     $('linhas').setAttribute('aria-busy', 'true');
     $('anterior').disabled = $('proxima').disabled = true;
+    $('exportar').disabled = true;
     $('pagina').textContent = '';
     try {
-      const dados = await solicitarAnalise({
-        pagina,
-        ordemColuna,
-        filtrosColunas: Object.fromEntries([...filtrosColunas].map(([coluna, valores]) => [coluna, [...valores]]))
-      }, atual.signal);
+      const dados = await solicitarAnalise({ pagina, ...filtrosDaGrade() }, atual.signal);
       if (consulta !== atual) return;
       total = dados.total;
       pagina = dados.pagina;
@@ -354,6 +388,7 @@
       $('pagina').textContent = `Página ${pagina} de ${Math.max(1, Math.ceil(total / tamanhoPagina))}`;
       $('anterior').disabled = pagina <= 1;
       $('proxima').disabled = pagina * tamanhoPagina >= total;
+      $('exportar').disabled = !total;
     } catch (erro) {
       if (erro.name !== 'AbortError' && consulta === atual) $('status').textContent = erro.message;
     } finally {
@@ -411,6 +446,7 @@
   });
 
   $('form').addEventListener('submit', (e) => { e.preventDefault(); consultar(); });
+  $('exportar').addEventListener('click', exportarExcel);
   $('transportadora-trigger').addEventListener('click', () => {
     const abrir = $('transportadora-opcoes').hidden;
     $('transportadora-opcoes').hidden = !abrir;
@@ -444,6 +480,7 @@
     limparSessao() {
       consulta?.abort(); consulta = null; filtros = null; pagina = 1; total = 0;
       consultaId = null;
+      $('exportar').disabled = true;
       filtrosColunas.clear();
       opcoesColunas.clear();
       ordemColuna = null;

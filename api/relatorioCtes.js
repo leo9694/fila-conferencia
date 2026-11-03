@@ -403,7 +403,26 @@ function gerarPlanilhaCtes(rows) {
     linhas.push(`<row r="${numeroLinha}" ht="${Math.max(18, linhasTexto * 15)}" customHeight="1">${celulas.join('')}</row>`);
   });
 
-  const ultimaLinha = Math.max(1, rows.length + 1);
+  return montarPlanilha(linhas, larguras, 'CT-es Importados', 'CT-es Importados por Período');
+}
+
+function gerarPlanilhaGrade({ cabecalhos, larguras, linhas, titulo }) {
+  const xmlLinhas = [`<row r="1" ht="24" customHeight="1">${cabecalhos.map((nome, i) => celulaTexto(`${letraColuna(i + 1)}1`, nome, 5)).join('')}</row>`];
+  linhas.forEach((linha, indice) => {
+    const r = indice + 2;
+    const altura = Math.max(18, ...linha.map(([tipo, valor], i) => tipo === 'texto'
+      ? String(valor ?? '').split('\n').reduce((total, parte) => total + Math.max(1, Math.ceil(parte.length / larguras[i])), 0) * 15 : 18));
+    const celulas = linha.map(([tipo, valor, estilo], i) => {
+      const ref = `${letraColuna(i + 1)}${r}`;
+      return tipo === 'numero' ? celulaNumero(ref, valor, estilo) : celulaTexto(ref, valor, estilo ?? 6);
+    }).join('');
+    xmlLinhas.push(`<row r="${r}" ht="${Math.min(409, altura)}" customHeight="1">${celulas}</row>`);
+  });
+  return montarPlanilha(xmlLinhas, larguras, titulo, titulo);
+}
+
+function montarPlanilha(linhas, larguras, aba, titulo) {
+  const ultimaLinha = linhas.length;
   const colunas = larguras.map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`).join('');
   const planilha = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
@@ -411,7 +430,7 @@ function gerarPlanilhaCtes(rows) {
   <sheetFormatPr defaultRowHeight="18"/>
   <cols>${colunas}</cols>
   <sheetData>${linhas.join('')}</sheetData>
-  <autoFilter ref="A1:L${ultimaLinha}"/>
+  <autoFilter ref="A1:${letraColuna(larguras.length)}${ultimaLinha}"/>
 </worksheet>`;
 
   const estilos = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -428,9 +447,9 @@ function gerarPlanilhaCtes(rows) {
   return criarZip([
     { nome: '[Content_Types].xml', conteudo: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>` },
     { nome: '_rels/.rels', conteudo: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>` },
-    { nome: 'docProps/core.xml', conteudo: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>CT-es Importados por Período</dc:title><dc:creator>Norte Sul Sementes</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created></cp:coreProperties>` },
+    { nome: 'docProps/core.xml', conteudo: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>${escaparXml(titulo)}</dc:title><dc:creator>Norte Sul Sementes</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString()}</dcterms:created></cp:coreProperties>` },
     { nome: 'docProps/app.xml', conteudo: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Central de Conferência</Application></Properties>` },
-    { nome: 'xl/workbook.xml', conteudo: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="CT-es Importados" sheetId="1" r:id="rId1"/></sheets></workbook>` },
+    { nome: 'xl/workbook.xml', conteudo: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="${escaparXml(aba)}" sheetId="1" r:id="rId1"/></sheets></workbook>` },
     { nome: 'xl/_rels/workbook.xml.rels', conteudo: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>` },
     { nome: 'xl/styles.xml', conteudo: estilos },
     { nome: 'xl/worksheets/sheet1.xml', conteudo: planilha }
@@ -450,6 +469,7 @@ module.exports = {
   consolidarLinhasCtes,
   dividirPeriodoMensal,
   gerarPlanilhaCtes,
+  gerarPlanilhaGrade,
   montarSqlRelatorioCtes,
   nomeArquivoRelatorio,
   normalizarData,

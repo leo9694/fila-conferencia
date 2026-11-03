@@ -198,5 +198,17 @@ test('opções, filtros e ordenação de coluna incluem notas além da primeira 
   const ordenada = await carregarAnaliseFrete({ ...contexto, ordemColuna: { coluna: 'nota', direcao: 'desc' } }, executar);
   assert.equal(ordenada.linhas[0].NUMNOTA, '65');
   assert.equal(ordenada.linhas.length, 30);
+  const exportada = await carregarAnaliseFrete({
+    ...contexto, exportar: true, filtrosColunas: { destino: ['Outro destino'] },
+    ordemColuna: { coluna: 'nota', direcao: 'desc' }
+  }, executar);
+  assert.equal(exportada.linhas.length, 64);
+  assert.equal(exportada.linhas[0].NUMNOTA, '64');
+  assert.equal(exportada.linhas.at(-1).NUMNOTA, '1');
+  const { gerarAnaliseFreteExcel } = require('../api/analiseFreteExcel');
+  const xlsx = gerarAnaliseFreteExcel(exportada.linhas);
+  assert.equal(xlsx.subarray(0, 2).toString(), 'PK');
+  assert.match(xlsx.toString('utf8'), /<autoFilter ref="A1:M65"/);
+  assert.doesNotMatch(xlsx.toString('utf8'), /Destino da última página/);
   assert.equal(bases, 1);
 });
