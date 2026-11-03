@@ -219,52 +219,26 @@
       : nomes.length === 1 ? nomes[0] : `${nomes.length} transportadoras selecionadas`;
   }
 
+  const filtrosColunas = new Map();
+  const opcoesColunas = new Map();
+  let ordemColuna = null;
+  let consultandoOpcoes = false;
+
+  async function solicitarAnalise(parametros, signal) {
+    const resposta = await fetch('/api/transporte/analise-frete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...filtros, consultaId, ...parametros }),
+      signal
+    });
+    if (!resposta.ok) throw new Error('Não foi possível consultar. Clique em Consultar para atualizar os dados.');
+    return resposta.json();
+  }
+
   function prepararFiltrosColunas() {
     ConsultaTabela.fecharMenu();
-    const corpo = $('linhas');
     const cabecalhos = [...$('tabela').querySelectorAll('thead th')];
-    const grupos = [];
-    for (const linha of corpo.rows) {
-      if (linha.classList.contains('analise-frete-cte-continuacao') && grupos.length) {
-        grupos.at(-1).push(linha);
-      } else {
-        grupos.push([linha]);
-      }
-    }
-    const filtros = new Map();
-    let ordem = null;
-    const valoresDaColuna = (grupo, indice) => grupo.flatMap((linha) =>
-      [...(linha.cells[indice]?.children || [])].map((celula) => celula.textContent.trim()));
     const titulos = cabecalhos.map((th) => th.dataset.titulo || th.textContent.trim());
-    const botoes = [];
-
-    function atualizar() {
-      ConsultaTabela.fecharMenu();
-      const visiveis = grupos.filter((grupo) => [...filtros].every(([indice, valores]) =>
-        valoresDaColuna(grupo, indice).some((valor) => valores.has(valor))));
-      if (ordem) {
-        const { indice, direcao } = ordem;
-        const numerica = cabecalhos[indice].classList.contains('analise-frete-numero');
-        const valor = (grupo) => valoresDaColuna(grupo, indice)[0] || '—';
-        const coluna = numerica
-          ? { numero: true, valor: (grupo) => valor(grupo).replace(/[^\d,.-]/g, '') }
-          : { render: valor };
-        visiveis.sort((a, b) => ConsultaTabela.comparar(coluna, a, b) * (direcao === 'asc' ? 1 : -1));
-      }
-      corpo.replaceChildren(...visiveis.flat());
-      if (!visiveis.length && grupos.length) {
-        const linha = corpo.insertRow();
-        const celula = linha.insertCell();
-        celula.colSpan = cabecalhos.length;
-        celula.textContent = 'Nenhum resultado para os filtros desta página.';
-      }
-      botoes.forEach(({ nome, menu }, indice) => {
-        const direcao = ordem?.indice === indice ? ordem.direcao : null;
-        nome.textContent = titulos[indice] + (direcao ? (direcao === 'asc' ? ' ↑' : ' ↓') : '');
-        menu.classList.toggle('ativo', filtros.has(indice));
-        cabecalhos[indice].setAttribute('aria-sort', direcao ? (direcao === 'asc' ? 'ascending' : 'descending') : 'none');
-      });
-    }
 
     cabecalhos.forEach((th, indice) => {
       const titulo = titulos[indice];
@@ -280,26 +254,50 @@
       menu.textContent = '☷';
       menu.setAttribute('aria-label', `Filtrar ou ordenar ${titulo}`);
       menu.setAttribute('aria-expanded', 'false');
-      const ordenar = (direcao) => { ordem = { indice, direcao }; atualizar(); };
-      nome.addEventListener('click', () => ordenar(ordem?.indice === indice && ordem.direcao === 'asc' ? 'desc' : 'asc'));
-      menu.addEventListener('click', () => ConsultaTabela.abrirMenuColuna(menu, {
-        titulo,
-        valores: [...new Set(grupos.flatMap((grupo) => valoresDaColuna(grupo, indice)))]
-          .sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true })),
-        filtro: filtros.get(indice),
-        ordenar,
-        filtrar: (valores) => {
-          if (valores === null) filtros.delete(indice);
-          else filtros.set(indice, new Set(valores));
-          atualizar();
-        },
-        restaurarFoco: () => menu.focus()
-      }));
+      const coluna = th.dataset.coluna;
+      const direcao = ordemColuna?.coluna === coluna ? ordemColuna.direcao : null;
+      nome.textContent = titulo + (direcao ? (direcao === 'asc' ? ' ↑' : ' ↓') : '');
+      menu.classList.toggle('ativo', filtrosColunas.has(coluna));
+      th.setAttribute('aria-sort', direcao ? (direcao === 'asc' ? 'ascending' : 'descending') : 'none');
+      const aplicar = () => { pagina = 1; carregar(); };
+      const ordenar = (sentido) => { ordemColuna = { coluna, direcao: sentido }; aplicar(); };
+      const indisponivel = () => !consultaId || $('linhas').getAttribute('aria-busy') === 'true';
+      nome.addEventListener('click', () => {
+        if (!indisponivel()) ordenar(direcao === 'asc' ? 'desc' : 'asc');
+      });
+      menu.addEventListener('click', async () => {
+        if (indisponivel() || consultandoOpcoes) return;
+        const atual = consulta;
+        try {
+          if (!opcoesColunas.has(coluna)) {
+            consultandoOpcoes = true;
+            menu.setAttribute('aria-busy', 'true');
+            const dados = await solicitarAnalise({ opcoesColuna: coluna }, atual.signal);
+            if (consulta !== atual) return;
+            opcoesColunas.set(coluna, dados.valores);
+          }
+          ConsultaTabela.abrirMenuColuna(menu, {
+            titulo,
+            valores: opcoesColunas.get(coluna),
+            filtro: filtrosColunas.get(coluna),
+            ordenar,
+            filtrar: (valores) => {
+              if (valores === null) filtrosColunas.delete(coluna);
+              else filtrosColunas.set(coluna, new Set(valores));
+              aplicar();
+            },
+            restaurarFoco: () => menu.focus()
+          });
+        } catch (erro) {
+          if (erro.name !== 'AbortError' && consulta === atual) $('status').textContent = erro.message;
+        } finally {
+          consultandoOpcoes = false;
+          menu.removeAttribute('aria-busy');
+        }
+      });
       conteudo.append(nome, menu);
       th.replaceChildren(conteudo);
-      botoes.push({ nome, menu });
     });
-    atualizar();
   }
 
   function renderizarTransportadoras(lista) {
@@ -328,6 +326,7 @@
   }
 
   async function carregar() {
+    ConsultaTabela.fecharMenu();
     consulta?.abort();
     const atual = new AbortController();
     consulta = atual;
@@ -337,11 +336,11 @@
     $('anterior').disabled = $('proxima').disabled = true;
     $('pagina').textContent = '';
     try {
-      const params = new URLSearchParams({ ...filtros, pagina });
-      if (consultaId) params.set('consultaId', consultaId);
-      const response = await fetch(`/api/transporte/analise-frete?${params}`, { signal: atual.signal });
-      if (!response.ok) throw new Error('Não foi possível consultar. Clique em Consultar para atualizar; confira o período e sua sessão.');
-      const dados = await response.json();
+      const dados = await solicitarAnalise({
+        pagina,
+        ordemColuna,
+        filtrosColunas: Object.fromEntries([...filtrosColunas].map(([coluna, valores]) => [coluna, [...valores]]))
+      }, atual.signal);
       if (consulta !== atual) return;
       total = dados.total;
       pagina = dados.pagina;
@@ -350,7 +349,7 @@
       render(dados.linhas);
       prepararFiltrosColunas();
       renderizarTransportadoras(dados.transportadoras);
-      $('status').textContent = total ? `${numero(total)} registros · CT-es agrupados e notas sem CT-e. Filtros de coluna nesta página.` : 'Nenhum registro encontrado para os filtros.';
+      $('status').textContent = total ? `${numero(total)} registros · CT-es agrupados e notas sem CT-e. Filtros de coluna em todos os resultados.` : 'Nenhum registro encontrado para os filtros.';
       $('pagina').textContent = `Página ${pagina} de ${Math.max(1, Math.ceil(total / tamanhoPagina))}`;
       $('anterior').disabled = pagina <= 1;
       $('proxima').disabled = pagina * tamanhoPagina >= total;
@@ -367,6 +366,9 @@
   function consultar() {
     pagina = 1;
     consultaId = null;
+    filtrosColunas.clear();
+    opcoesColunas.clear();
+    ordemColuna = null;
     $('transportadora-opcoes').hidden = true;
     $('transportadora-trigger').setAttribute('aria-expanded', 'false');
     filtros = { dataInicial: $('inicio').value, dataFinal: $('fim').value, empresa: $('empresa').value,
@@ -441,6 +443,9 @@
     limparSessao() {
       consulta?.abort(); consulta = null; filtros = null; pagina = 1; total = 0;
       consultaId = null;
+      filtrosColunas.clear();
+      opcoesColunas.clear();
+      ordemColuna = null;
       $('linhas').replaceChildren(); $('form').reset(); $('status').textContent = '';
       prepararFiltrosColunas();
       $('status').classList.remove('is-loading');

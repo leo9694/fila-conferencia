@@ -2824,16 +2824,19 @@ router.get('/transporte/malhas/estados/:uf/municipios', exigirGerenciaOuDiretori
   }
 });
 
-router.get('/transporte/analise-frete', exigirGerenciaOuDiretoria, async (req, res) => {
+async function responderAnaliseFrete(req, res) {
   try {
-    const resultado = await carregarAnaliseFrete(req.query, executeQuery);
+    const resultado = await carregarAnaliseFrete(req.method === 'POST' ? (req.body || {}) : req.query, executeQuery);
     res.json(resultado);
   } catch (err) {
     console.error('Erro na análise de frete:', err.message);
     res.status(/inválid|valid|data|período|Página/i.test(err.message) ? 400 : 502)
       .json({ erro: 'Não foi possível carregar a análise de frete. Confira o período e tente novamente.' });
   }
-});
+}
+
+router.get('/transporte/analise-frete', exigirGerenciaOuDiretoria, responderAnaliseFrete);
+router.post('/transporte/analise-frete', exigirGerenciaOuDiretoria, responderAnaliseFrete);
 
 router.get('/transporte/analise-frete/ctes/:chaveAcesso/pdf', exigirGerenciaOuDiretoria, async (req, res) => {
   try {

@@ -1,4 +1,5 @@
 const { randomUUID } = require('node:crypto');
+const { lerColunas, valoresColuna, compararColuna, simuladas } = require('./analiseFreteColunas');
 const caches = new WeakMap();
 const TAMANHO_PAGINA = 30;
 const normalizar = (v) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -107,7 +108,20 @@ function consolidar(g, simulacoes, simularTabelas) {
     ctes: c ? [{ ...c, FRETE_REAL: real }] : [], simulacoes: sugestoes };
 }
 
+async function carregarSimulacoes(grupos, cache, executeQuery, sqlSimulacoes) {
+  const ids = new Set(grupos.flatMap((g) => g.notas.map((n) => Number(n.NUNOTA))));
+  const faltam = [...ids].filter((id) => !cache.has(id));
+  for (let i = 0; i < faltam.length; i += 500) {
+    const bloco = faltam.slice(i, i + 500);
+    const dados = await executeQuery(sqlSimulacoes(bloco));
+    const porNota = new Map(bloco.map((id) => [id, []]));
+    for (const registro of dados) porNota.get(Number(registro.NUNOTA))?.push(registro);
+    for (const [id, registros] of porNota) cache.set(id, registros);
+  }
+}
+
 async function consultar(f, query, executeQuery, sqlSimulacoes, simularTabelas) {
+  const { filtros, ordem, opcoes } = lerColunas(query);
   if (!caches.has(executeQuery)) caches.set(executeQuery, new Map());
   const cache = caches.get(executeQuery);
   const chave = `${f.inicio}:${f.fim}`;
@@ -138,20 +152,35 @@ async function consultar(f, query, executeQuery, sqlSimulacoes, simularTabelas) 
     .sort((a,b) => a.codEmp-b.codEmp);
   const gruposEmpresa = f.empresa ? grupos.map((g) => ({ ...g, notas: g.notas.filter((n) => Number(n.CODEMP) === f.empresa) }))
     .filter((g) => g.notas.length) : grupos;
-  const selecionados = filtrar(gruposEmpresa,f);
+  const base = filtrar(gruposEmpresa, f);
+  const usados = opcoes ? [opcoes] : [...filtros.map(([coluna]) => coluna), ordem?.coluna];
+  if (usados.some((coluna) => simuladas.has(coluna))) {
+    await carregarSimulacoes(base, entrada.simulacoes, executeQuery, sqlSimulacoes);
+  }
+  const consolidados = new Map();
+  const obterConsolidado = (grupo) => {
+    if (!consolidados.has(grupo)) consolidados.set(grupo, consolidar(grupo, entrada.simulacoes, simularTabelas));
+    return consolidados.get(grupo);
+  };
+  const valores = (grupo, coluna) => valoresColuna(grupo, coluna, obterConsolidado);
+  if (opcoes) {
+    return { valores: [...new Set(base.flatMap((grupo) => valores(grupo, opcoes)))]
+      .sort((a, b) => compararColuna(opcoes, a, b)) };
+  }
+  const selecionados = base.filter((grupo) => filtros.every(([coluna, marcados]) =>
+    valores(grupo, coluna).some((valor) => marcados.has(valor))));
+  if (ordem) {
+    const chaves = new Map(selecionados.map((grupo) => [grupo, valores(grupo, ordem.coluna)[0] || '—']));
+    selecionados.sort((a, b) => compararColuna(ordem.coluna, chaves.get(a), chaves.get(b))
+      * (ordem.direcao === 'asc' ? 1 : -1));
+  }
   const pagina = Math.min(f.pagina,Math.max(1,Math.ceil(selecionados.length/TAMANHO_PAGINA)));
   const lote = selecionados.slice((pagina-1)*TAMANHO_PAGINA,pagina*TAMANHO_PAGINA);
-  const ids = [...new Set(lote.flatMap((g) => g.notas.map((n) => Number(n.NUNOTA))))];
-  const faltam = ids.filter((id) => !entrada.simulacoes.has(id));
-  for (let i=0; i<faltam.length; i+=500) {
-    const bloco = faltam.slice(i,i+500);
-    const dados = await executeQuery(sqlSimulacoes(bloco));
-    for (const id of bloco) entrada.simulacoes.set(id,dados.filter((r) => Number(r.NUNOTA) === id));
-  }
+  await carregarSimulacoes(lote, entrada.simulacoes, executeQuery, sqlSimulacoes);
   const transportadoras = [...new Map(grupos.flatMap((g) => g.notas).filter((n) => n.CODPARCTRANSP)
     .map((n) => [n.CODPARCTRANSP,{ CODPARC:n.CODPARCTRANSP,NOMEPARC:n.TRANSPORTADORA }])).values()]
     .sort((a,b) => String(a.NOMEPARC).localeCompare(String(b.NOMEPARC)));
-  return { linhas:lote.map((g) => consolidar(g,entrada.simulacoes,simularTabelas)), transportadoras, empresas,
+  return { linhas:lote.map(obterConsolidado), transportadoras, empresas,
     total:selecionados.length,pagina,tamanhoPagina:TAMANHO_PAGINA,consultaId:entrada.id };
 }
 

@@ -170,3 +170,33 @@ test('simula uma única carga com os dados somados das notas e não soma sugest�
   assert.equal(r.simulacoes[0].valor, 70.62);
   assert.equal(r.simulacoes[0].diferenca, null);
 });
+
+test('opções, filtros e ordenação de coluna incluem notas além da primeira página', async () => {
+  const q = { dataInicial: '2026-01-01', dataFinal: '2026-01-31' };
+  const notas = Array.from({ length: 65 }, (_, i) => ({
+    NUNOTA: i + 1, NUMNOTA: i + 1, CIDADE: i === 64 ? 'Destino da última página' : 'Outro destino'
+  }));
+  let bases = 0;
+  let simulacoes = 0;
+  const executar = async (sql) => {
+    if (sql.startsWith('WITH NOTAS')) { bases++; return notas; }
+    simulacoes++;
+    return [];
+  };
+  const primeira = await carregarAnaliseFrete(q, executar);
+  const contexto = { ...q, consultaId: primeira.consultaId };
+  const antes = simulacoes;
+  const opcoes = await carregarAnaliseFrete({ ...contexto, opcoesColuna: 'destino' }, executar);
+  assert.deepEqual(opcoes.valores, ['Destino da última página', 'Outro destino']);
+  assert.equal(simulacoes, antes);
+  const filtrada = await carregarAnaliseFrete({
+    ...contexto, filtrosColunas: { destino: ['Destino da última página'] }, pagina: 2
+  }, executar);
+  assert.equal(filtrada.total, 1);
+  assert.equal(filtrada.pagina, 1);
+  assert.equal(filtrada.linhas[0].NUMNOTA, '65');
+  const ordenada = await carregarAnaliseFrete({ ...contexto, ordemColuna: { coluna: 'nota', direcao: 'desc' } }, executar);
+  assert.equal(ordenada.linhas[0].NUMNOTA, '65');
+  assert.equal(ordenada.linhas.length, 30);
+  assert.equal(bases, 1);
+});
