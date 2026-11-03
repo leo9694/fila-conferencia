@@ -3456,6 +3456,9 @@
     .consulta-coluna-opcoes { display: grid; gap: 8px; padding-top: 8px; border-top: 1px solid #d0e5e0; }
     .consulta-coluna-opcoes[hidden], .consulta-coluna-valores label[hidden] { display: none; }
     .consulta-coluna-opcoes input[type="search"] { width: 100%; padding: 8px; border: 1px solid #bcd5cf; border-radius: 6px; }
+    .consulta-coluna-intervalo label { display: grid; gap: 4px; padding: 0; }
+    .consulta-coluna-intervalo input { width: 100%; padding: 8px; border: 1px solid #bcd5cf; border-radius: 6px; }
+    .consulta-coluna-intervalo [role="status"]:empty { display: none; }
     .consulta-coluna-valores { max-height: 160px; overflow: auto; }
     .consulta-coluna-opcoes label { display: flex; gap: 8px; align-items: center; padding: 6px 2px; overflow-wrap: anywhere; }
     .consulta-coluna-opcoes input[type="checkbox"] { width: 16px; height: 16px; flex: 0 0 16px; }
@@ -13669,8 +13672,8 @@
   <script src="vendas-dashboard.js?v=20260820-1"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="transporte-dashboard.js?v=20260916-1"></script>
-  <script src="consulta-tabela.js?v=20261103-menu-compartilhado"></script>
-  <script src="analise-frete.js?v=20261103-filtros-todas-paginas"></script>
+  <script src="consulta-tabela.js?v=20261103-filtro-numerico"></script>
+  <script src="analise-frete.js?v=20261103-filtro-numerico"></script>
   <script src="chat-core.js?v=20261022-navegacao-1"></script>
   <script src="whatsapp-call-core.js?v=20260909-1"></script>
   <script src="whatsapp-call.js?v=20261008-rollback-1"></script>

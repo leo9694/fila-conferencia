@@ -1,6 +1,12 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { criar, obterLinhas, comparar } = require('../frontend/consulta-tabela');
+const { criar, obterLinhas, comparar, valoresNoIntervalo } = require('../frontend/consulta-tabela');
+
+test('filtro numérico compara valores brasileiros e exclui limites e ausências', () => {
+  const valores = ['-R$ 280,25', '-R$ 82,09', 'R$ 0,00', 'R$ 1.234,50', '—'];
+  assert.deepEqual(valoresNoIntervalo(valores, -100, 0), ['-R$ 82,09']);
+  assert.deepEqual(valoresNoIntervalo(valores, 0, Infinity), ['R$ 1.234,50']);
+});
 
 test('posiciona aplicar filtro logo após a pesquisa antes dos checkboxes', () => {
   const fonte = require('node:fs').readFileSync(require('node:path').join(__dirname, '../frontend/consulta-tabela.js'), 'utf8');

@@ -278,6 +278,7 @@
           }
           ConsultaTabela.abrirMenuColuna(menu, {
             titulo,
+            numerica: th.classList.contains('analise-frete-numero') || ['nota', 'cte'].includes(coluna),
             valores: opcoesColunas.get(coluna),
             filtro: filtrosColunas.get(coluna),
             ordenar,

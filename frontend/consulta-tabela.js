@@ -30,7 +30,23 @@ const ConsultaTabela = (() => {
     return visiveis;
   }
 
-  function abrirMenuColuna(botao, { titulo, valores, filtro, ordenar, filtrar, restaurarFoco }) {
+  function numeroDoFiltro(valor) {
+    const texto = String(valor).trim().replace(/R\$\s*/, '');
+    if (/^[+-]?(?:\d+|\d{1,3}(?:\.\d{3})+)(?:,\d+)?$/.test(texto)) {
+      return Number(texto.replace(/\./g, '').replace(',', '.'));
+    }
+    if (/^[+-]?\d+\.\d+$/.test(texto)) return Number(texto);
+    return NaN;
+  }
+
+  function valoresNoIntervalo(valores, minimo, maximo) {
+    return valores.filter((valor) => {
+      const numero = numeroDoFiltro(valor);
+      return Number.isFinite(numero) && numero > minimo && numero < maximo;
+    });
+  }
+
+  function abrirMenuColuna(botao, { titulo, valores, filtro, ordenar, filtrar, restaurarFoco, numerica = false }) {
     const estavaAberto = botao.getAttribute('aria-expanded') === 'true';
     fecharMenu();
     if (estavaAberto) return;
@@ -41,8 +57,15 @@ const ConsultaTabela = (() => {
     menu.innerHTML = `<button type="button" data-ordem="asc">↑ Ordenar Ascendente</button>
       <button type="button" data-ordem="desc">↓ Ordenar Descendente</button>
       <button type="button" data-abrir-filtro aria-expanded="false">☷ Filtrar</button>
+      ${numerica ? '<button type="button" data-abrir-intervalo aria-expanded="false">Filtro numérico</button>' : ''}
       <button type="button" data-limpar-filtro>Limpar filtro desta coluna</button>
-      <div class="consulta-coluna-opcoes" hidden></div>`;
+      <div class="consulta-coluna-opcoes" hidden></div>
+      ${numerica ? `<form class="consulta-coluna-opcoes consulta-coluna-intervalo" hidden>
+        <label>Maior que <input type="text" inputmode="decimal" name="minimo" placeholder="Ex.: 100,00"></label>
+        <label>Menor que <input type="text" inputmode="decimal" name="maximo" placeholder="Ex.: 500,00"></label>
+        <button type="submit">Aplicar filtro numérico</button>
+        <span role="status"></span>
+      </form>` : ''}`;
     document.body.appendChild(menu);
     botao.setAttribute('aria-expanded', 'true');
     const rect = botao.getBoundingClientRect();
@@ -71,6 +94,28 @@ const ConsultaTabela = (() => {
       restaurarFoco();
     }));
     menu.querySelector('[data-limpar-filtro]').addEventListener('click', () => filtrar(null));
+    const intervalo = menu.querySelector('.consulta-coluna-intervalo');
+    if (intervalo) {
+      menu.querySelector('[data-abrir-intervalo]').addEventListener('click', (event) => {
+        intervalo.hidden = !intervalo.hidden;
+        event.currentTarget.setAttribute('aria-expanded', String(!intervalo.hidden));
+        if (!intervalo.hidden) intervalo.elements.minimo.focus();
+      });
+      intervalo.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const entradaMin = intervalo.elements.minimo.value.trim();
+        const entradaMax = intervalo.elements.maximo.value.trim();
+        const minimo = entradaMin ? numeroDoFiltro(entradaMin) : -Infinity;
+        const maximo = entradaMax ? numeroDoFiltro(entradaMax) : Infinity;
+        if ((entradaMin && !Number.isFinite(minimo)) || (entradaMax && !Number.isFinite(maximo)) ||
+          minimo >= maximo || (!entradaMin && !entradaMax)) {
+          intervalo.querySelector('[role="status"]').textContent = 'Informe um limite válido. Se usar os dois, o primeiro deve ser menor que o segundo.';
+          return;
+        }
+        filtrar(valoresNoIntervalo(valores, minimo, maximo));
+        restaurarFoco();
+      });
+    }
     menu.querySelector('[data-abrir-filtro]').addEventListener('click', (event) => {
       const painel = menu.querySelector('.consulta-coluna-opcoes');
       painel.hidden = !painel.hidden;
@@ -158,6 +203,7 @@ const ConsultaTabela = (() => {
       const coluna = colunas[indice];
       abrirMenuColuna(botao, {
         titulo: coluna.titulo,
+        numerica: coluna.numero === true,
         valores: [...new Set(linhas.map((linha) => texto(coluna, linha)))].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true })),
         filtro: filtros[indice],
         ordenar: (direcao) => ordenar(indice, direcao),
@@ -170,7 +216,7 @@ const ConsultaTabela = (() => {
     return { ordenar, filtrar, obterVisiveis: () => [...visiveis] };
   }
 
-  return { criar, obterLinhas, comparar, fecharMenu, abrirMenuColuna };
+  return { criar, obterLinhas, comparar, fecharMenu, abrirMenuColuna, valoresNoIntervalo };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = ConsultaTabela;
