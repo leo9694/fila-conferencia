@@ -104,9 +104,14 @@
           const opcoes = { linhas: notas.length };
           celula(tr, p.simulacoes.length ? p.simulacoes.map((s) => s.regiao || 'Rota direta') : ['—'], opcoes);
           celula(tr, p.simulacoes.length ? p.simulacoes.map((s) => s.erro ? 'Cálculo indisponível — revisar fórmula/rotas' : moeda(s.valor)) : ['—'], { ...opcoes, classe: 'analise-frete-numero analise-frete-sugestao' });
+          celulaCtes(tr, p, notas.length);
+          const diferencas = p.grupoIncompleto ? [] : p.simulacoes.map((s) => s.diferenca);
+          const textos = p.grupoIncompleto ? ['CT-e com notas fora do período'] : diferencas.map(moeda);
+          const td = celula(tr, textos.length ? textos : ['—'], { ...opcoes, classe: 'analise-frete-numero analise-frete-diferenca' });
+          diferencas.forEach((valor, posicao) => {
+            if (valor > 50) td.children[posicao].className = 'analise-frete-diferenca-alta';
+          });
         }
-        if (indice === 0) celulaCtes(tr, p, notas.length);
-        if (indice === 0) celula(tr, p.grupoIncompleto ? ['CT-e com notas fora do período'] : p.simulacoes.length ? p.simulacoes.map((s) => s.diferenca == null ? '—' : moeda(s.diferenca)) : ['—'], { classe: 'analise-frete-numero analise-frete-diferenca', linhas: notas.length });
         $('linhas').appendChild(tr);
       });
     }

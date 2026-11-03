@@ -74,3 +74,9 @@ test('planilha conserva o aviso de grupo incompleto e mostra apenas o valor rate
   assert.equal(row.children[11].textContent, (10).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }));
   assert.equal(row.children[12].textContent, 'CT-e com notas fora do período');
 });
+
+test('planilha destaca apenas as diferenças positivas acima de 50 reais', () => {
+  const [row] = renderizar([{ ...nota, ctes: [], simulacoes: [-75, 50, 50.01, null].map((diferenca) => ({ diferenca })) }]);
+  const valores = row.children[12].children;
+  assert.deepEqual(valores.map((valor) => valor.className === 'analise-frete-diferenca-alta'), [false, false, true, false]);
+});

@@ -125,6 +125,7 @@
 .analise-frete-table .analise-frete-cte a { color: #087f6d; font-weight: 800; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; }
 .analise-frete-table .analise-frete-cte a:hover { color: #055f52; }
 .analise-frete-table .analise-frete-diferenca div { font-weight: 800; }
+.analise-frete-table .analise-frete-diferenca .analise-frete-diferenca-alta { color: #b91c1c; }
 .analise-frete-results .analise-frete-table td[rowspan] { vertical-align: middle; background: #f0f7f4; }
 .analise-frete-table .analise-frete-cte-continuacao td:not([rowspan]) { border-top: 1px dashed #c9dbd4; }
 .analise-frete-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 18px; border-top: 1px solid #e1eeeb; }
