@@ -5,6 +5,7 @@ const routes = require('./routes');
 const chatRouter = require('./api/chatRouter');
 const { criarChatContingencyStore } = require('./api/chatContingencyStore');
 const { autenticarContingenciaRemota } = require('./api/chatContingencyRemote');
+const { automacaoEmailFrete } = routes;
 const {
   cookieContingencia,
   cookieLogout,
@@ -191,6 +192,7 @@ const port = process.env.PORT || 3000;
 
 const server = app.listen(port, () => {
   console.log(`API rodando em http://localhost:${port}`);
+  automacaoEmailFrete.iniciar();
 });
 
 // Mantém o processo ligado ao terminal durante o desenvolvimento. No Windows,
@@ -201,6 +203,7 @@ let encerrando = false;
 function encerrar(signal) {
   if (encerrando) return;
   encerrando = true;
+  automacaoEmailFrete.parar();
   console.log(`\n${signal} recebido. Encerrando a API...`);
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(1), 5000).unref();

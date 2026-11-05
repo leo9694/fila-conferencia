@@ -10,4 +10,5 @@ data/diario-bordo.json.tmp
 data/diario-bordo-cadastros.json.tmp
 data/chat-setores.json.tmp
 data/guia-fase-*/
+data/email-frete-automacao-*/
 *.local

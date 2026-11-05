@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/home-dashboard.css?v=20261029-resumo-conferencia-1">
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261103-diferenca-frete">
+  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261105-email-frete-danfe">
   <link rel="stylesheet" href="/chat.css?v=20261028-template-midia-1">
   <link rel="stylesheet" href="/chat-theme.css?v=20261002-3">
   <link rel="stylesheet" href="/rastreio-produto.css?v=20261005-5">
@@ -11374,6 +11374,9 @@
               <button class="home-dashboard-nav-item" id="home-nav-analise-frete" type="button" data-home-target="abrir-analise-frete" title="Análise de frete" hidden>
                 <i data-lucide="calculator" aria-hidden="true"></i><span>Análise de frete</span>
               </button>
+              <button class="home-dashboard-nav-item" id="home-nav-email-frete" type="button" data-home-target="abrir-email-frete" title="Email frete" hidden>
+                <i data-lucide="mail" aria-hidden="true"></i><span>Email frete</span>
+              </button>
             </div>
           </details>
           <details class="home-dashboard-nav-group">
@@ -13015,6 +13018,129 @@
         </form>
       </dialog>
     </main>
+    <main class="transporte-page" id="email-frete-painel" hidden>
+      <header class="transporte-heading email-frete-topo">
+        <div>
+          <h1>Email frete</h1>
+          <p>Avisos de saída para entrega e acompanhamento dos envios.</p>
+        </div>
+        <button class="analise-frete-download email-frete-icone-config" id="email-frete-abrir-config" type="button" aria-haspopup="dialog" aria-controls="email-frete-dialogo" aria-label="Configurações de e-mail" title="Configurações de e-mail"><i data-lucide="settings" aria-hidden="true"></i></button>
+      </header>
+      <dialog class="analise-frete-ordem-dialogo email-frete-dialogo email-frete-configuracoes" id="email-frete-dialogo" aria-labelledby="email-frete-config-titulo">
+        <div class="email-frete-cabecalho">
+          <h2 id="email-frete-config-titulo">Configurações de e-mail</h2>
+          <button class="analise-frete-download" id="email-frete-fechar" type="button">Fechar</button>
+        </div>
+        <section class="email-frete-conexao" aria-labelledby="email-frete-titulo">
+          <h3 id="email-frete-titulo">Conexão SMTP</h3>
+          <div class="email-frete-acoes">
+            <button type="button" class="transporte-refresh" id="email-frete-configurar" aria-expanded="false" aria-controls="email-frete-config-form"><i data-lucide="settings" aria-hidden="true"></i>Configurar e-mail</button>
+            <button type="button" class="analise-frete-download" id="email-frete-verificar"><i data-lucide="shield-check" aria-hidden="true"></i>Verificar conexão</button>
+          </div>
+          <p class="transporte-status" id="email-frete-status" role="status"></p>
+          <form class="email-frete-formulario" id="email-frete-config-form" method="dialog" autocomplete="off" hidden>
+          <label for="email-frete-host">Servidor SMTP<select id="email-frete-host" required>
+            <option value="smtp.hostinger.com">Hostinger Email · smtp.hostinger.com</option>
+            <option value="smtp.titan.email">Titan Email · smtp.titan.email</option>
+          </select></label>
+          <label for="email-frete-port">Porta e segurança<select id="email-frete-port" required>
+            <option value="465">465 · SSL/TLS</option>
+            <option value="587">587 · STARTTLS</option>
+          </select></label>
+          <label for="email-frete-user">E-mail do remetente<input id="email-frete-user" type="email" maxlength="254" required></label>
+          <label for="email-frete-password">Senha da caixa<input id="email-frete-password" type="password" maxlength="512" required></label>
+          <p class="transporte-status" id="email-frete-config-status" role="status"></p>
+          <div class="email-frete-acoes">
+            <button class="transporte-refresh" id="email-frete-salvar" type="submit">Salvar e verificar</button>
+          </div>
+          </form>
+        </section>
+        <section class="email-frete-conexao" aria-labelledby="email-frete-teste-titulo">
+          <h3 id="email-frete-teste-titulo">E-mail de teste</h3>
+          <form class="email-frete-acoes email-frete-formulario" id="email-frete-teste-form" method="post">
+            <label for="email-frete-destinatario">Destinatário<input id="email-frete-destinatario" type="email" maxlength="254" placeholder="nome@empresa.com.br" required></label>
+            <button class="transporte-refresh" id="email-frete-enviar-teste" type="submit"><i data-lucide="send" aria-hidden="true"></i>Enviar teste</button>
+          </form>
+          <p class="transporte-status" id="email-frete-teste-status" role="status"></p>
+        </section>
+      </dialog>
+      <section class="transporte-panel email-frete-automacao" aria-labelledby="email-frete-automacao-titulo">
+        <div class="email-frete-cabecalho">
+          <div>
+            <h2 id="email-frete-automacao-titulo">Aviso automático de entrega</h2>
+            <p class="transporte-status" id="email-frete-automacao-status" role="status"></p>
+          </div>
+          <button class="transporte-refresh" type="button" id="email-frete-automacao-alternar" disabled>Ativar automação</button>
+        </div>
+        <details class="email-frete-editor" id="email-frete-editor">
+          <summary>Editar modelo de e-mail</summary>
+        <form class="email-frete-formulario email-frete-modelo" id="email-frete-modelo-form" method="post">
+          <label for="email-frete-modelo-assunto">Assunto<input id="email-frete-modelo-assunto" maxlength="180" required></label>
+          <label for="email-frete-modelo-mensagem">Mensagem</label>
+          <div class="email-frete-acoes" role="group" aria-label="Formatação da mensagem">
+            <button class="analise-frete-download" type="button" id="email-frete-modelo-negrito"><strong aria-hidden="true">B</strong> Negrito</button>
+            <button class="analise-frete-download" type="button" id="email-frete-modelo-link" aria-haspopup="dialog"><i data-lucide="link" aria-hidden="true"></i>Inserir link</button>
+          </div>
+          <textarea id="email-frete-modelo-mensagem" rows="6" maxlength="8000" required aria-describedby="email-frete-formato-dica"></textarea>
+          <small id="email-frete-formato-dica">Selecione um trecho para aplicar negrito ou inserir um link. Endereços HTTP e HTTPS colados na mensagem também ficam clicáveis.</small>
+          <div class="email-frete-acoes" aria-label="Inserir variável na mensagem">
+            <button class="analise-frete-download" type="button" data-email-frete-variavel="nome_cliente">Nome do cliente</button>
+            <button class="analise-frete-download" type="button" data-email-frete-variavel="chave_nfe">Chave da NF-e</button>
+            <button class="analise-frete-download" type="button" data-email-frete-variavel="nome_transportadora">Nome da transportadora</button>
+            <button class="analise-frete-download" type="button" data-email-frete-variavel="email_transportadora">E-mail da transportadora</button>
+            <button class="analise-frete-download" type="button" data-email-frete-variavel="numero_pedido">Número do pedido</button>
+          </div>
+          <label class="email-frete-modelo-opcao" for="email-frete-modelo-danfe">
+            <input id="email-frete-modelo-danfe" type="checkbox"> Anexar DANFE da nota (PDF)
+          </label>
+          <button class="transporte-refresh" id="email-frete-modelo-salvar" type="submit" disabled>Salvar modelo</button>
+          <p class="transporte-status" id="email-frete-modelo-status" role="status"></p>
+        </form>
+        </details>
+        <dialog class="analise-frete-ordem-dialogo email-frete-dialogo" id="email-frete-link-dialogo" aria-labelledby="email-frete-link-titulo">
+          <h2 id="email-frete-link-titulo">Inserir link</h2>
+          <form class="email-frete-formulario" id="email-frete-link-form" method="dialog">
+            <label for="email-frete-link-texto">Texto do link<input id="email-frete-link-texto" maxlength="8000"></label>
+            <label for="email-frete-link-url">Endereço do link<input id="email-frete-link-url" type="text" inputmode="url" maxlength="8000" placeholder="https://..." required></label>
+            <div class="email-frete-acoes">
+              <button class="transporte-refresh" type="submit">Inserir link</button>
+              <button class="analise-frete-download" id="email-frete-link-cancelar" type="button">Cancelar</button>
+            </div>
+          </form>
+        </dialog>
+      </section>
+      <section class="transporte-panel email-frete-automacao email-frete-grade" aria-labelledby="email-frete-fila-titulo">
+        <div class="email-frete-cabecalho">
+          <h2 id="email-frete-fila-titulo">Notas e envios</h2>
+          <button class="analise-frete-download" type="button" id="email-frete-fila-atualizar">Atualizar</button>
+        </div>
+        <div class="email-frete-cabecalho email-frete-grade-controles">
+          <div class="email-frete-acoes email-frete-visoes" role="group" aria-label="Exibição de notas">
+            <button class="analise-frete-download" type="button" id="email-frete-fila-aguardando" aria-pressed="true">Aguardando ordem de carga</button>
+            <button class="analise-frete-download" type="button" id="email-frete-fila-historico" aria-pressed="false">Histórico</button>
+          </div>
+          <form class="email-frete-acoes email-frete-formulario" id="email-frete-fila-periodo" aria-label="Filtrar histórico pela data de detecção da carga" method="post" hidden>
+            <label for="email-frete-fila-inicio">Detectada de<input type="date" id="email-frete-fila-inicio" required></label>
+            <label for="email-frete-fila-fim">Até<input type="date" id="email-frete-fila-fim" required></label>
+            <button class="analise-frete-download" type="submit">Consultar</button>
+          </form>
+        </div>
+        <div class="transporte-table-wrap email-frete-grade-rolagem" tabindex="0" role="region" aria-label="Planilha de notas e envios">
+          <table class="transporte-table email-frete-tabela">
+            <thead><tr><th scope="col">Nota</th><th scope="col">Empresa</th><th scope="col">Cliente</th><th scope="col">Transportadora</th><th scope="col">E-mail</th><th scope="col">Status</th><th scope="col" data-email-frete-historico hidden>Ordem de carga</th><th scope="col" data-email-frete-historico hidden>Carga detectada em</th><th scope="col" data-email-frete-historico hidden>Enviado em</th></tr></thead>
+            <tbody id="email-frete-fila-linhas"></tbody>
+          </table>
+        </div>
+        <div class="email-frete-cabecalho email-frete-grade-rodape">
+          <p class="transporte-status" id="email-frete-fila-status" role="status"></p>
+          <div class="analise-frete-pagination">
+            <button type="button" id="email-frete-fila-anterior" disabled>Anterior</button>
+            <span id="email-frete-fila-pagina">Página 1</span>
+            <button type="button" id="email-frete-fila-proxima" disabled>Próxima</button>
+          </div>
+        </div>
+      </section>
+    </main>
     <main class="transporte-page" id="transporte-painel">
       <header class="transporte-heading">
         <div>
@@ -13674,7 +13800,8 @@
   <script src="asyncRefresh.js?v=20260601-2"></script>
   <script src="vendas-dashboard.js?v=20260820-1"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="transporte-dashboard.js?v=20260916-1"></script>
+  <script src="email-frete-automacao.js?v=20261105-4"></script>
+  <script src="transporte-dashboard.js?v=20261105-email-frete-grade"></script>
   <script src="consulta-tabela.js?v=20261103-filtro-numerico"></script>
   <script src="analise-frete.js?v=20261103-diferenca-frete"></script>
   <script src="chat-core.js?v=20261022-navegacao-1"></script>
@@ -13704,6 +13831,6 @@
     <div class="estoque-operacoes-posicoes" id="estoque-operacoes-posicoes"></div>
   </dialog>
   <script src="estoque-operacoes.js?v=20261019-1"></script>
-  <script src="app.js?v=20261029-conferencia-entrada-layout-6"></script>
+  <script src="app.js?v=20261105-email-frete"></script>
 </body>
 </html>

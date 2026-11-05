@@ -6,6 +6,7 @@ const router = express.Router();
 const { semControleAdicional, validarRastreabilidadeNovoItem } = require('./api/estoqueContagemControle');
 const { montarFiltrosAjusteIndividual, criarOperacoesDatasEstoque } = require('./api/estoqueOperacoes');
 const {
+  ambienteSankhyaTeste,
   downloadDirectFile,
   downloadGatewayFile,
   executeDirectService,
@@ -80,6 +81,8 @@ const {
 const { montarSqlEstimativaFrete, normalizarEstimativaFrete } = require('./api/estimativaFrete');
 const { carregarAnaliseFrete } = require('./api/analiseFrete');
 const { gerarAnaliseFreteExcel } = require('./api/analiseFreteExcel');
+const { obterConfiguracaoEmailFrete, salvarConfiguracaoEmailFrete, verificarConexaoEmailFrete, enviarTesteEmailFrete } = require('./api/emailFrete');
+const { criarAutomacaoEmailFrete } = require('./api/emailFreteAutomacao');
 const { consultarRastreioProduto, consultarFiltrosRastreio, consultarValoresColuna } = require('./api/rastreioProduto');
 const {
   TOP_FATURAMENTO_VENDAS,
@@ -194,11 +197,6 @@ const uploadGuiasFase = multer({
     callback(null, true);
   }
 });
-
-function ambienteSankhyaTeste() {
-  const baseUrl = String(process.env.SANKHYA_API_BASE_URL || '').toLowerCase();
-  return /sandbox|treinamento|teste/.test(baseUrl);
-}
 
 function obterModoConferencia(valor) {
   return String(valor || '').trim().toLowerCase() === 'entrada' ? 'entrada' : 'saida';
@@ -2801,6 +2799,55 @@ router.get('/vendas-gerais/acesso', exigirGerenciaOuDiretoria, (req, res) => {
 router.get('/transporte/acesso', exigirGerenciaOuDiretoria, (req, res) => {
   res.json({ permitido: true });
 });
+
+const automacaoEmailFrete = criarAutomacaoEmailFrete({
+  obterDanfe: (nunota) => gerarDocumentoFiscalSankhya(nunota, 'danfe')
+});
+const errosEmailFrete = new Map([
+  ['FRETE_MODELO_INVALIDO', [400, 'Preencha um assunto de até 180 caracteres e uma mensagem de até 8.000 caracteres.']],
+  ['FRETE_MODELO_VARIAVEL', [400, 'Confira as variáveis do modelo. Use apenas as opções indicadas na tela.']],
+  ['FRETE_AUTOMACAO_INVALIDA', [400, 'Parâmetros da automação inválidos.']],
+  ['FRETE_HISTORICO_PERIODO_INVALIDO', [400, 'Informe datas válidas. A data inicial deve ser anterior ou igual à data final.']],
+  ['FRETE_AUTOMACAO_OCUPADA', [409, 'Já existe uma alteração de status em andamento.']],
+  ['FRETE_SMTP_NAO_CONFIGURADO', [409, 'Configure a caixa de e-mail antes de continuar.']],
+  ['FRETE_SMTP_CONFIG_INVALIDA', [400, 'Confira o endereço, a senha, o servidor SMTP e a porta da caixa.']],
+  ['FRETE_SMTP_CHAVE_AUSENTE', [503, 'O servidor precisa de uma chave de sessão segura para guardar a senha.']],
+  ['FRETE_SMTP_CONFIG_ILEGIVEL', [409, 'A configuração salva não pôde ser lida. Configure a caixa de e-mail novamente.']],
+  ['FRETE_SMTP_DESTINATARIO_INVALIDO', [400, 'Informe um único endereço de e-mail válido.']],
+  ['FRETE_SMTP_DESTINATARIO_RECUSADO', [502, 'O servidor SMTP não aceitou o destinatário.']],
+  ['EENVELOPE', [502, 'O servidor SMTP recusou o remetente ou o destinatário.']],
+  ['FRETE_SMTP_LIMITE_TESTE', [429, 'Aguarde alguns segundos antes de enviar outro teste.']],
+  ['EAUTH', [502, 'O servidor SMTP recusou a autenticação. Confira o endereço e a senha da caixa.']],
+  ['ENOAUTH', [502, 'O servidor SMTP recusou a autenticação. Confira o endereço e a senha da caixa.']]
+]);
+
+function responderEmailFrete(operacao) {
+  return async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    try {
+      return res.json(await operacao(req.body ?? {}, req));
+    } catch (erro) {
+      const [status, mensagem] = errosEmailFrete.get(erro.code) ||
+        [502, 'Não foi possível concluir a operação. Confira a configuração SMTP e a conexão da VPS.'];
+      return res.status(status).json({ erro: mensagem });
+    }
+  };
+}
+
+router.get('/transporte/email-frete/configuracao', exigirGerenciaOuDiretoria, responderEmailFrete(obterConfiguracaoEmailFrete));
+router.put('/transporte/email-frete/configuracao', exigirGerenciaOuDiretoria, responderEmailFrete(salvarConfiguracaoEmailFrete));
+router.post('/transporte/email-frete/verificar', exigirGerenciaOuDiretoria, responderEmailFrete(async () => {
+  await verificarConexaoEmailFrete();
+  return { conectado: true };
+}));
+router.post('/transporte/email-frete/teste', exigirGerenciaOuDiretoria, responderEmailFrete(async ({ destinatario }) => {
+  await enviarTesteEmailFrete(destinatario);
+  return { enviado: true };
+}));
+router.get('/transporte/email-frete/automacao', exigirGerenciaOuDiretoria, responderEmailFrete(automacaoEmailFrete.configuracao));
+router.put('/transporte/email-frete/automacao/modelo', exigirGerenciaOuDiretoria, responderEmailFrete(automacaoEmailFrete.salvarModelo));
+router.put('/transporte/email-frete/automacao/estado', exigirGerenciaOuDiretoria, responderEmailFrete(({ ativa }) => automacaoEmailFrete.ativar(ativa)));
+router.get('/transporte/email-frete/fila', exigirGerenciaOuDiretoria, responderEmailFrete((_, req) => automacaoEmailFrete.listar(req.query)));
 
 router.get('/transporte/malhas/estados', exigirGerenciaOuDiretoria, async (req, res) => {
   try {
@@ -8025,4 +8072,5 @@ router._internals = {
   validarPeriodo
 };
 
+router.automacaoEmailFrete = automacaoEmailFrete;
 module.exports = router;

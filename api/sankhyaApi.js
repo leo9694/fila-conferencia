@@ -48,6 +48,11 @@ function getConfig() {
   };
 }
 
+function ambienteSankhyaTeste() {
+  const baseUrl = String(process.env.SANKHYA_API_BASE_URL || '').toLowerCase();
+  return /sandbox|treinamento|teste/.test(baseUrl);
+}
+
 function getDirectBaseUrl(config = getConfig()) {
   const value = String(config.omBaseUrl || '').trim().replace(/\/+$/, '');
   if (!value) return null;
@@ -741,6 +746,7 @@ async function downloadGatewayFile(modulePath, resourcePath, params = {}) {
 }
 
 module.exports = {
+  ambienteSankhyaTeste,
   clearAuthCache,
   downloadDirectFile,
   downloadGatewayFile,

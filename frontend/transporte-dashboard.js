@@ -21,6 +21,7 @@
   let camadaRotulos = null;
   let malhaEstados = null;
   let sequenciaMapa = 0;
+  let operacaoEmail = null;
 
   function escapeHtml(valor) { return String(valor ?? '').replace(/[&<>'"]/g, (caractere) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[caractere])); }
   function moeda(valor) { return Number(valor || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
@@ -47,7 +48,7 @@
   function chaveUsuario(codigo) { return codigo === null ? null : `${CHAVE_SESSAO}:${codigo}`; }
   function permissaoConfirmada(usuario) { return Boolean(usuario?.gruposConfirmados && usuario?.permissoes?.transporte); }
   function atualizarMenu() {
-    ['home-nav-transporte', 'home-nav-analise-frete'].forEach((id) => {
+    ['home-nav-transporte', 'home-nav-analise-frete', 'home-nav-email-frete'].forEach((id) => {
       const menu = $(id); if (menu) menu.hidden = !permitido;
     });
   }
@@ -333,14 +334,113 @@
   async function preparar() {
     if (!permitido) return;
     const analise = window.location.hash === '#transporte/analise';
-    $('transporte-painel').hidden = analise;
+    const emailFrete = window.location.hash === '#transporte/email-frete';
+    $('transporte-painel').hidden = analise || emailFrete;
     $('analise-frete-painel').hidden = !analise;
+    $('email-frete-painel').hidden = !emailFrete;
+    if (emailFrete) return window.emailFreteAutomacaoController?.preparar();
     if (analise) return window.analiseFreteController?.preparar();
     if (!elementos.dataInicial.value) elementos.dataInicial.value = inicioPadrao();
     if (!elementos.dataFinal.value) elementos.dataFinal.value = hoje();
     await carregar();
   }
 
+  const dialogoEmail = $('email-frete-dialogo');
+  const formEmail = $('email-frete-config-form');
+  const formTesteEmail = $('email-frete-teste-form');
+  const botaoConfigurarEmail = $('email-frete-configurar');
+  const botoesEmail = ['configurar', 'verificar', 'salvar', 'enviar-teste']
+    .map((id) => $(`email-frete-${id}`));
+
+  function statusEmail(painel, mensagem, erro = false) {
+    const status = $(`email-frete-${painel}status`);
+    status.textContent = mensagem;
+    status.classList.toggle('is-error', erro);
+  }
+
+  async function executarEmail({ rota, method, body, painel = '', progresso, concluir }) {
+    if (!permitido || operacaoEmail) return;
+    const operacao = new AbortController();
+    operacaoEmail = operacao;
+    const mensagemPadrao = 'Não foi possível concluir a operação. Tente novamente.';
+    botoesEmail.forEach((botao) => { botao.disabled = true; });
+    statusEmail(painel, progresso);
+    try {
+      const resposta = await fetch(`/api/transporte/email-frete/${rota}`, {
+        method,
+        ...(body && { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+        credentials: 'same-origin',
+        signal: operacao.signal
+      });
+      const dados = await resposta.json();
+      if (operacao.signal.aborted) return;
+      if (resposta.ok) concluir(dados);
+      else statusEmail(painel, dados.erro || mensagemPadrao, true);
+    } catch {
+      if (!operacao.signal.aborted) statusEmail(painel, mensagemPadrao, true);
+    } finally {
+      if (operacaoEmail === operacao) {
+        operacaoEmail = null;
+        botoesEmail.forEach((botao) => { botao.disabled = false; });
+      }
+    }
+  }
+
+  function mostrarFormularioEmail(visivel) {
+    formEmail.hidden = !visivel;
+    botaoConfigurarEmail.setAttribute('aria-expanded', String(visivel));
+    formEmail.reset();
+    statusEmail('config-', '');
+  }
+
+  $('email-frete-abrir-config').addEventListener('click', () => dialogoEmail.showModal());
+  botaoConfigurarEmail.addEventListener('click', () => {
+    const abrir = formEmail.hidden;
+    mostrarFormularioEmail(abrir);
+    if (!abrir) return;
+    executarEmail({
+      rota: 'configuracao', method: 'GET', painel: 'config-', progresso: 'Carregando configuração…',
+      concluir(config) {
+        if (!dialogoEmail.open || formEmail.hidden) return;
+        $('email-frete-host').value = config.host === 'smtp.titan.email' ? config.host : 'smtp.hostinger.com';
+        $('email-frete-port').value = config.port === 587 ? '587' : '465';
+        $('email-frete-user').value = config.user || '';
+        statusEmail('config-', config.configurado ? 'Informe a senha da caixa para salvar alterações.' : '');
+      }
+    });
+  });
+  $('email-frete-fechar').addEventListener('click', () => dialogoEmail.close());
+  dialogoEmail.addEventListener('close', () => mostrarFormularioEmail(false));
+  formEmail.addEventListener('submit', (event) => {
+    event.preventDefault();
+    if (operacaoEmail) return;
+    const body = {
+      host: $('email-frete-host').value,
+      port: Number($('email-frete-port').value),
+      user: $('email-frete-user').value.trim(),
+      pass: $('email-frete-password').value
+    };
+    $('email-frete-password').value = '';
+    executarEmail({
+      rota: 'configuracao', method: 'PUT', body, painel: 'config-', progresso: 'Verificando e salvando a caixa…',
+      concluir() {
+        mostrarFormularioEmail(false);
+        statusEmail('', 'Configuração salva. Conexão SMTP autenticada.');
+      }
+    });
+  });
+  $('email-frete-verificar').addEventListener('click', () => executarEmail({
+    rota: 'verificar', method: 'POST', progresso: 'Verificando a conexão SMTP…',
+    concluir: () => statusEmail('', 'Conexão SMTP autenticada. Nenhum e-mail foi enviado.')
+  }));
+  formTesteEmail.addEventListener('submit', (event) => {
+    event.preventDefault();
+    const destinatario = $('email-frete-destinatario').value.trim();
+    executarEmail({
+      rota: 'teste', method: 'POST', body: { destinatario }, painel: 'teste-', progresso: 'Enviando e-mail de teste…',
+      concluir: () => statusEmail('teste-', `E-mail de teste aceito pelo servidor SMTP para ${destinatario}.`)
+    });
+  });
   elementos.form?.addEventListener('submit', (event) => { event.preventDefault(); estadoDetalhado = ''; cidadeDetalhada = ''; carregar(); });
   [elementos.transportadora, elementos.empresa, elementos.estado, elementos.cidade, elementos.ordenacao].forEach((elemento) => elemento?.addEventListener('change', () => { estadoDetalhado = ''; cidadeDetalhada = ''; carregar(); }));
   elementos.metrica?.addEventListener('change', renderMapa);
@@ -348,6 +448,22 @@
 
   window.transporteDashboardController = {
     get permitido() { return permitido; }, verificarAcesso, preparar,
-    limparSessao() { window.analiseFreteController?.limparSessao(); permitido = false; dados = null; estadoDetalhado = ''; cidadeDetalhada = ''; codigoUsuarioAtual = null; atualizarMenu(); }
+    limparSessao() {
+      window.analiseFreteController?.limparSessao();
+      window.emailFreteAutomacaoController?.limparSessao();
+      operacaoEmail?.abort();
+      operacaoEmail = null;
+      botoesEmail.forEach((botao) => { botao.disabled = false; });
+      dialogoEmail.close();
+      mostrarFormularioEmail(false);
+      formTesteEmail.reset();
+      ['', 'config-', 'teste-'].forEach((painel) => statusEmail(painel, ''));
+      permitido = false;
+      dados = null;
+      estadoDetalhado = '';
+      cidadeDetalhada = '';
+      codigoUsuarioAtual = null;
+      atualizarMenu();
+    }
   };
 }());
