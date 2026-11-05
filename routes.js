@@ -3609,6 +3609,8 @@ router.get('/fila-conferencia/romaneio/:ordemCarga/pdf', async (req, res) => {
         UFS.UF AS UF,
         CAB.CODPARCTRANSP,
         TRP.NOMEPARC AS TRANSPORTADORA,
+        ORD.CODPARCTRANSP AS CODPARCTRANSP_CARGA,
+        TRC.NOMEPARC AS TRANSPORTADORA_CARGA,
         EMP.RAZAOSOCIAL AS EMPRESA,
         TO_CHAR(ORD.DTINIC, 'DD/MM/YYYY') AS DATA_INICIO_CARGA
       FROM TGFCAB CAB
@@ -3624,6 +3626,8 @@ router.get('/fila-conferencia/romaneio/:ordemCarga/pdf', async (req, res) => {
         ON EMP.CODEMP = CAB.CODEMP
       LEFT JOIN TGFORD ORD
         ON ORD.CODEMP = CAB.CODEMP AND ORD.ORDEMCARGA = CAB.ORDEMCARGA
+      LEFT JOIN TGFPAR TRC
+        ON TRC.CODPARC = ORD.CODPARCTRANSP
       WHERE CAB.CODEMP = ${empresa}
         AND CAB.ORDEMCARGA = ${ordemCarga}
         AND CAB.TIPMOV = 'V'
@@ -3637,7 +3641,7 @@ router.get('/fila-conferencia/romaneio/:ordemCarga/pdf', async (req, res) => {
 
     const pdf = await gerarRomaneioCargaPdf({
       ordemCarga,
-      transportadora: `${notas[0].CODPARCTRANSP || '-'} - ${notas[0].TRANSPORTADORA || '-'}`,
+      transportadora: [notas[0].CODPARCTRANSP_CARGA, notas[0].TRANSPORTADORA_CARGA].filter(Boolean).join(' - '),
       empresa: notas[0].EMPRESA,
       dataInicioCarga: notas[0].DATA_INICIO_CARGA,
       notas

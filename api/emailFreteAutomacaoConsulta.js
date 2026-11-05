@@ -8,24 +8,49 @@ const dataSql = (valor) => {
   return `TO_DATE('${valor}', '${formatoData}')`;
 };
 
-const camposNota = `CAB.NUNOTA, CAB.NUMNOTA, CAB.CODEMP, CAB.ORDEMCARGA, CAB.CODPARC, CAB.CODPARCTRANSP,
+const camposNota = `CAB.NUNOTA, CAB.NUMNOTA, CAB.CODEMP, CAB.ORDEMCARGA, CAB.CODPARC,
   TO_CHAR(CAB.DTNEG, 'YYYY-MM-DD') DATA_NOTA,
+  TO_CHAR(CAB.DTFATUR, 'YYYY-MM-DD') DATA_FATURAMENTO,
   COALESCE(PAR.RAZAOSOCIAL, PAR.NOMEPARC) CLIENTE,
   PAR.EMAILNFE, PAR.EMAIL, PAR.EMAILNOTIFENTREGA, PAR.EMAILDANFE, PAR.EMAILCTE, PAR.EMAILNFSE,
   TRA.NOMEPARC TRANSPORTADORA`;
 const notasElegiveis = `FROM TGFCAB CAB
   JOIN TGFCON2 CONF ON CONF.NUCONF = CAB.NUCONFATUAL AND CONF.STATUS = 'F'
-  LEFT JOIN TGFPAR PAR ON PAR.CODPARC = CAB.CODPARC
-  LEFT JOIN TGFPAR TRA ON TRA.CODPARC = CAB.CODPARCTRANSP`;
+  LEFT JOIN TGFPAR PAR ON PAR.CODPARC = CAB.CODPARC`;
+const ordemComTransportadora = `JOIN TGFORD ORD ON ORD.CODEMP = CAB.CODEMP AND ORD.ORDEMCARGA = CAB.ORDEMCARGA
+  LEFT JOIN TGFPAR TRA ON TRA.CODPARC = ORD.CODPARCTRANSP`;
 const filtroNota = `CAB.CODTIPOPER IN (35, 10) AND CAB.TIPMOV = 'V' AND CAB.STATUSNOTA = 'L'`;
 
-async function listarNotasSemCarga(query, pagina) {
+async function listarNotasSemCarga(query, pagina, { inicio, fim }) {
   const offset = (pagina - 1) * TAMANHO_PAGINA;
-  return query(`SELECT ${camposNota}
+  const dataFaturamento = (data) => dataSql(`${data.replaceAll('-', '')}000000`);
+  return query(`SELECT ${camposNota}, CAB.CODPARCTRANSP
     ${notasElegiveis}
+    LEFT JOIN TGFPAR TRA ON TRA.CODPARC = CAB.CODPARCTRANSP
     WHERE ${filtroNota} AND NVL(CAB.ORDEMCARGA, 0) = 0
-    ORDER BY CAB.DTNEG DESC, CAB.NUNOTA DESC
+      AND CAB.DTFATUR >= ${dataFaturamento(inicio)} AND CAB.DTFATUR < ${dataFaturamento(fim)} + 1
+    ORDER BY CAB.DTFATUR DESC, CAB.NUNOTA DESC
     OFFSET ${offset} ROWS FETCH NEXT ${TAMANHO_PAGINA + 1} ROWS ONLY`);
+}
+
+async function consultarTransportadorasCargas(query, notas) {
+  const cargas = new Set();
+  for (const nota of notas) {
+    const empresa = inteiro(nota.empresa);
+    const ordem = inteiro(nota.ordem);
+    if (empresa && ordem) cargas.add(`(${empresa}, ${ordem})`);
+  }
+  if (!cargas.size) return [];
+  return query(`SELECT ORD.CODEMP, ORD.ORDEMCARGA, TRA.NOMEPARC TRANSPORTADORA
+    FROM TGFORD ORD LEFT JOIN TGFPAR TRA ON TRA.CODPARC = ORD.CODPARCTRANSP
+    WHERE (ORD.CODEMP, ORD.ORDEMCARGA) IN (${[...cargas].join(', ')})`);
+}
+
+async function consultarDatasFaturamento(query, ids) {
+  const notas = [...new Set(ids.map(inteiro).filter(Boolean))];
+  if (!notas.length) return [];
+  return query(`SELECT CAB.NUNOTA, TO_CHAR(CAB.DTFATUR, 'YYYY-MM-DD') DATA_FATURAMENTO
+    FROM TGFCAB CAB WHERE CAB.NUNOTA IN (${notas.join(', ')})`);
 }
 
 async function obterMarcoCargas(query) {
@@ -61,9 +86,9 @@ async function descobrirNotasComCarga(query, { cargas, desde, cursor, ate }) {
   const filtroInicial = cursor
     ? `(${evento} > ${dataInicial} OR (${evento} = ${dataInicial} AND CAB.NUNOTA > ${inteiro(cursor.nunota)}))`
     : `${evento} >= ${dataInicial}`;
-  return query(`SELECT ${camposNota}, TO_CHAR(${evento}, '${formatoData}') EVENTO
+  return query(`SELECT ${camposNota}, ORD.CODPARCTRANSP, TO_CHAR(${evento}, '${formatoData}') EVENTO
     ${notasElegiveis}
-    JOIN TGFORD ORD ON ORD.CODEMP = CAB.CODEMP AND ORD.ORDEMCARGA = CAB.ORDEMCARGA
+    ${ordemComTransportadora}
     WHERE ${filtroNota} AND ${filtroCargasNovas(cargas)}
       AND (CAB.DTALTER >= ${dataInicial} OR ORD.DTALTER >= ${dataInicial} OR CONF.DHFINCONF >= ${dataInicial})
       AND ${filtroInicial} AND ${evento} <= ${dataSql(ate)}
@@ -77,12 +102,12 @@ async function consultarNotasParaEnvio(query, cargas, ids, ambienteTeste = false
   const chave = `(SELECT MAX(NFE.CHAVENFE) FROM TGFNFE NFE
     WHERE NFE.NUNOTA = CAB.NUNOTA ${ambienteTeste ? '' : 'AND NFE.XMLPROTAUTNOT IS NOT NULL'})`;
   const chaveNota = ambienteTeste ? chave : `CASE WHEN CAB.STATUSNFE = 'A' THEN ${chave} END`;
-  return query(`SELECT ${camposNota}, CAB.STATUSNFE, TRA.EMAIL EMAIL_TRANSPORTADORA,
+  return query(`SELECT ${camposNota}, ORD.CODPARCTRANSP, CAB.STATUSNFE, TRA.EMAIL EMAIL_TRANSPORTADORA,
     TRA.EMAILNOTIFENTREGA EMAILNOTIFENTREGA_TRANSPORTADORA, TRA.EMAILCTE EMAILCTE_TRANSPORTADORA,
     TRA.EMAILNFE EMAILNFE_TRANSPORTADORA, TRA.EMAILDANFE EMAILDANFE_TRANSPORTADORA,
     TRA.EMAILNFSE EMAILNFSE_TRANSPORTADORA, ${chaveNota} CHAVENFE
     ${notasElegiveis}
-    JOIN TGFORD ORD ON ORD.CODEMP = CAB.CODEMP AND ORD.ORDEMCARGA = CAB.ORDEMCARGA
+    ${ordemComTransportadora}
     WHERE ${filtroNota} AND ${filtroCargasNovas(cargas)} AND CAB.NUNOTA IN (${notas.join(', ')})`);
 }
 
@@ -107,6 +132,6 @@ async function consultarEmailsContatos(query, codigos) {
 }
 
 module.exports = {
-  TAMANHO_PAGINA, LOTE_DESCOBERTA, listarNotasSemCarga, obterMarcoCargas,
+  TAMANHO_PAGINA, LOTE_DESCOBERTA, listarNotasSemCarga, consultarDatasFaturamento, consultarTransportadorasCargas, obterMarcoCargas,
   obterJanelaCargas, descobrirNotasComCarga, consultarNotasParaEnvio, consultarEmailsContatos, consultarPedidosOrigemNotas
 };

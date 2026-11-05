@@ -13119,15 +13119,15 @@
             <button class="analise-frete-download" type="button" id="email-frete-fila-aguardando" aria-pressed="true">Aguardando ordem de carga</button>
             <button class="analise-frete-download" type="button" id="email-frete-fila-historico" aria-pressed="false">Histórico</button>
           </div>
-          <form class="email-frete-acoes email-frete-formulario" id="email-frete-fila-periodo" aria-label="Filtrar histórico pela data de detecção da carga" method="post" hidden>
-            <label for="email-frete-fila-inicio">Detectada de<input type="date" id="email-frete-fila-inicio" required></label>
+          <form class="email-frete-acoes email-frete-formulario" id="email-frete-fila-periodo" aria-label="Filtrar pela data de faturamento" method="post">
+            <label for="email-frete-fila-inicio"><span id="email-frete-fila-rotulo-inicio">Faturamento de</span><input type="date" id="email-frete-fila-inicio" required></label>
             <label for="email-frete-fila-fim">Até<input type="date" id="email-frete-fila-fim" required></label>
             <button class="analise-frete-download" type="submit">Consultar</button>
           </form>
         </div>
         <div class="transporte-table-wrap email-frete-grade-rolagem" tabindex="0" role="region" aria-label="Planilha de notas e envios">
           <table class="transporte-table email-frete-tabela">
-            <thead><tr><th scope="col">Nota</th><th scope="col">Empresa</th><th scope="col">Cliente</th><th scope="col">Transportadora</th><th scope="col">E-mail</th><th scope="col">Status</th><th scope="col" data-email-frete-historico hidden>Ordem de carga</th><th scope="col" data-email-frete-historico hidden>Carga detectada em</th><th scope="col" data-email-frete-historico hidden>Enviado em</th></tr></thead>
+            <thead><tr><th scope="col">Nota</th><th scope="col">Data de faturamento</th><th scope="col">Empresa</th><th scope="col">Cliente</th><th scope="col" id="email-frete-fila-coluna-transportadora">Transportadora prevista</th><th scope="col">E-mail</th><th scope="col">Status</th><th scope="col" data-email-frete-historico hidden>Ordem de carga</th><th scope="col" data-email-frete-historico hidden>Carga detectada em</th><th scope="col" data-email-frete-historico hidden>Enviado em</th></tr></thead>
             <tbody id="email-frete-fila-linhas"></tbody>
           </table>
         </div>
@@ -13800,7 +13800,7 @@
   <script src="asyncRefresh.js?v=20260601-2"></script>
   <script src="vendas-dashboard.js?v=20260820-1"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="email-frete-automacao.js?v=20261105-4"></script>
+  <script src="email-frete-automacao.js?v=20261105-6"></script>
   <script src="transporte-dashboard.js?v=20261105-email-frete-grade"></script>
   <script src="consulta-tabela.js?v=20261103-filtro-numerico"></script>
   <script src="analise-frete.js?v=20261103-diferenca-frete"></script>

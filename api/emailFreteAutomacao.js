@@ -5,7 +5,7 @@ const { ambienteSankhyaTeste, executeQuery } = require('./sankhyaApi');
 const { formatarMensagem } = require('./emailFreteFormato');
 const { enderecoValido, namespaceEmailFrete, obterConfiguracaoEmailFrete, enviarEmailFrete, verificarConexaoEmailFrete } = require('./emailFrete');
 const {
-  TAMANHO_PAGINA, LOTE_DESCOBERTA, listarNotasSemCarga, obterMarcoCargas,
+  TAMANHO_PAGINA, LOTE_DESCOBERTA, listarNotasSemCarga, consultarDatasFaturamento, consultarTransportadorasCargas, obterMarcoCargas,
   obterJanelaCargas, descobrirNotasComCarga, consultarNotasParaEnvio, consultarEmailsContatos, consultarPedidosOrigemNotas
 } = require('./emailFreteAutomacaoConsulta');
 
@@ -36,7 +36,7 @@ function dataIsoValida(valor) {
   return Number.isFinite(data.getTime()) && data.toISOString().slice(0, 10) === valor;
 }
 
-function intervaloHistorico({ inicio, fim }, agora) {
+function intervaloConsulta({ inicio, fim }, agora) {
   if (inicio === undefined && fim === undefined) {
     fim = dataLocal.format(agora());
     inicio = new Date(Date.parse(fim) - 86_400_000).toISOString().slice(0, 10);
@@ -78,9 +78,11 @@ function primeiroEmail(...enderecos) {
 
 function resumirNota(row) {
   const email = primeiroEmail(row.EMAILNFE, row.EMAIL, row.EMAILNOTIFENTREGA, row.EMAILDANFE, row.EMAILCTE, row.EMAILNFSE) || '';
+  const ordem = Number(row.ORDEMCARGA) || null;
   return {
     nunota: Number(row.NUNOTA), nota: Number(row.NUMNOTA) || null, empresa: Number(row.CODEMP),
-    data: row.DATA_NOTA, ordem: Number(row.ORDEMCARGA) || null,
+    data: row.DATA_NOTA, dataFaturamento: row.DATA_FATURAMENTO || null, ordem,
+    ...(ordem && { codigoTransportadoraCarga: Number(row.CODPARCTRANSP) || null }),
     cliente: row.CLIENTE?.trim() || '', transportadora: row.TRANSPORTADORA?.trim() || '', email
   };
 }
@@ -196,20 +198,37 @@ function criarAutomacaoEmailFrete({
     const pagina = Number(paginaRaw || 1);
     if (!Number.isSafeInteger(pagina) || pagina < 1 || pagina > 100000 ||
         !['aguardando', 'historico'].includes(visao)) throw falha('FRETE_AUTOMACAO_INVALIDA');
+    const intervalo = intervaloConsulta({ inicio: dataInicial, fim: dataFinal }, agora);
     const inicio = (pagina - 1) * TAMANHO_PAGINA;
     if (visao === 'aguardando') {
-      const itens = (await resolverEmailsNotas(query, await listarNotasSemCarga(query, pagina))).map(({ nota }) => nota);
-      return { itens: itens.slice(0, TAMANHO_PAGINA), pagina, temMais: itens.length > TAMANHO_PAGINA };
+      const rows = await listarNotasSemCarga(query, pagina, intervalo);
+      const itens = (await resolverEmailsNotas(query, rows.slice(0, TAMANHO_PAGINA))).map(({ nota }) => nota);
+      return { itens, pagina, temMais: rows.length > TAMANHO_PAGINA, intervalo };
     }
-    const intervalo = intervaloHistorico({ inicio: dataInicial, fim: dataFinal }, agora);
     const itens = Object.values(ler().notas).filter(({ detectadaEm }) => {
       const data = dataLocal.format(new Date(detectadaEm));
       return data >= intervalo.inicio && data <= intervalo.fim;
-    }).sort((a, b) => b.detectadaEm.localeCompare(a.detectadaEm) || b.nunota - a.nunota)
-        .slice(inicio, inicio + TAMANHO_PAGINA + 1).map(({ messageId, reverEm, ...nota }) => nota.status === 'enviando' && nota.nunota !== emEnvio
-          ? { ...nota, status: 'revisar', motivo: 'O resultado do envio não pôde ser confirmado.' }
-          : nota);
-    return { itens: itens.slice(0, TAMANHO_PAGINA), pagina, temMais: itens.length > TAMANHO_PAGINA, intervalo, fusoHorario };
+    }).sort((a, b) => b.detectadaEm.localeCompare(a.detectadaEm) || b.nunota - a.nunota);
+    const notasPagina = itens.slice(inicio, inicio + TAMANHO_PAGINA);
+    const idsSemData = notasPagina.filter((nota) => !Object.hasOwn(nota, 'dataFaturamento')).map((nota) => nota.nunota);
+    const notasLegadas = notasPagina.filter((nota) => nota.ordem && !Object.hasOwn(nota, 'codigoTransportadoraCarga'));
+    const [datas, cargas] = await Promise.all([
+      consultarDatasFaturamento(query, idsSemData).catch(() => []),
+      consultarTransportadorasCargas(query, notasLegadas).catch(() => [])
+    ]);
+    const datasPorNota = new Map(datas.map((row) => [Number(row.NUNOTA), row.DATA_FATURAMENTO]));
+    const transportadorasPorCarga = new Map(cargas.map((row) => [`${row.CODEMP}:${row.ORDEMCARGA}`, row.TRANSPORTADORA]));
+    const linhas = notasPagina.map(({ messageId, reverEm, ...nota }) => {
+      if (!Object.hasOwn(nota, 'dataFaturamento')) nota.dataFaturamento = datasPorNota.get(nota.nunota) || null;
+      if (nota.ordem && !Object.hasOwn(nota, 'codigoTransportadoraCarga')) {
+        nota.transportadora = transportadorasPorCarga.get(`${nota.empresa}:${nota.ordem}`)?.trim() || '';
+      }
+      if (nota.status === 'enviando' && nota.nunota !== emEnvio) {
+        return { ...nota, status: 'revisar', motivo: 'O resultado do envio não pôde ser confirmado.' };
+      }
+      return nota;
+    });
+    return { itens: linhas, pagina, temMais: itens.length > inicio + TAMANHO_PAGINA, intervalo, fusoHorario };
   }
 
   async function descobrir(estado) {

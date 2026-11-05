@@ -8,13 +8,13 @@ const { criarAutomacaoEmailFrete } = require('../api/emailFreteAutomacao');
 const chave = '1'.repeat(44);
 const nota = {
   NUNOTA: 3890001, NUMNOTA: 83001, CODEMP: 1, ORDEMCARGA: 5953, CODPARC: 41, CODPARCTRANSP: 52,
-  DATA_NOTA: '2026-11-05', CLIENTE: 'Cliente Teste', TRANSPORTADORA: 'Transportadora Teste',
+  DATA_NOTA: '2026-11-03', DATA_FATURAMENTO: '2026-11-05', CLIENTE: 'Cliente Teste', TRANSPORTADORA: 'Transportadora Teste',
   EMAILNFE: 'fiscal@example.com', EMAIL: 'geral@example.com', CHAVENFE: chave, EVENTO: '20261105120500'
 };
 
 function montarAutomacao(t, {
   notasCarga = [nota], notasSemCarga = notasCarga, revalidar = () => notasCarga,
-  contatos = [], origens = [], obterDanfe, enviar, ambienteTeste = false
+  contatos = [], origens = [], datasFaturamento = [], transportadorasCargas = [], obterDanfe, enviar, ambienteTeste = false
 } = {}) {
   const baseAnterior = process.env.SANKHYA_API_BASE_URL;
   process.env.SANKHYA_API_BASE_URL = ambienteTeste
@@ -32,6 +32,11 @@ function montarAutomacao(t, {
       return [{ CODEMP: 1, ULTIMA_CARGA: 5952 }, { CODEMP: 0, AGORA: '20261105120000' }];
     }
     if (sql.includes('SOBREPOSICAO')) return [{ ATE: '20261105120900', SOBREPOSICAO: '20261105120400' }];
+    if (sql.includes('FROM TGFCAB CAB WHERE CAB.NUNOTA IN')) return datasFaturamento;
+    if (sql.includes('WHERE (ORD.CODEMP, ORD.ORDEMCARGA) IN')) {
+      assert.match(sql, /TRA\.CODPARC = ORD\.CODPARCTRANSP/);
+      return transportadorasCargas;
+    }
     if (sql.includes('FROM TGFVAR VAR')) {
       assert.match(sql, /ORIG\.NUNOTA = VAR\.NUNOTAORIG AND ORIG\.TIPMOV = 'P'/);
       assert.match(sql, /WHERE VAR\.NUNOTA IN/);
@@ -45,8 +50,20 @@ function montarAutomacao(t, {
     }
     assert.match(sql, /CONF\.STATUS = 'F'/);
     assert.match(sql, /CAB\.STATUSNOTA = 'L'/);
-    if (sql.includes('NVL(CAB.ORDEMCARGA, 0) = 0')) return notasSemCarga.map((item) => ({ ...item, ORDEMCARGA: 0 }));
+    if (sql.includes('NVL(CAB.ORDEMCARGA, 0) = 0')) {
+      assert.match(sql, /TRA\.CODPARC = CAB\.CODPARCTRANSP/);
+      assert.match(sql, /CAB\.CODTIPOPER IN \(35, 10\)/);
+      assert.match(sql, /ORDER BY CAB\.DTFATUR DESC/);
+      const [, inicio, fim] = sql.match(/CAB\.DTFATUR >= TO_DATE\('(\d{8})000000'[^)]+\) AND CAB\.DTFATUR < TO_DATE\('(\d{8})000000'[^)]+\) \+ 1/);
+      return notasSemCarga.filter((item) => {
+        const data = item.DATA_FATURAMENTO?.replaceAll('-', '');
+        return data >= inicio && data <= fim;
+      }).map((item) => ({ ...item, ORDEMCARGA: 0 }));
+    }
     assert.match(sql, /ORD\.ORDEMCARGA > CASE ORD\.CODEMP WHEN 1 THEN 5952 ELSE 0 END/);
+    assert.match(sql, /ORD\.CODEMP = CAB\.CODEMP AND ORD\.ORDEMCARGA = CAB\.ORDEMCARGA/);
+    assert.match(sql, /TRA\.CODPARC = ORD\.CODPARCTRANSP/);
+    assert.doesNotMatch(sql, /CAB\.CODPARCTRANSP/);
     if (sql.includes('TGFNFE')) {
       if (ambienteTeste) assert.doesNotMatch(sql, /CAB\.STATUSNFE = 'A'|XMLPROTAUTNOT/);
       else assert.match(sql, /CAB\.STATUSNFE = 'A'.*XMLPROTAUTNOT/s);
@@ -128,6 +145,37 @@ test('envia o modelo quando a transportadora está sem e-mail cadastrado', async
   await automacao.ativar(true);
   await automacao.executar();
   assert.equal(enviarMock.mock.calls[0].arguments[0].text, 'Contato: não disponível');
+});
+
+test('usa a transportadora da ordem de carga no aviso e o contato do cadastro dessa transportadora', async (t) => {
+  const { automacao, enviarMock } = montarAutomacao(t, {
+    notasSemCarga: [{ ...nota, TRANSPORTADORA: 'Transportadora prevista' }],
+    notasCarga: [{ ...nota, CODPARCTRANSP: 78, TRANSPORTADORA: 'Transportadora da ordem' }],
+    contatos: [{ CODPARC: 52, EMAIL: 'prevista@example.com' }, { CODPARC: 78, EMAIL: 'ordem@example.com' }]
+  });
+  assert.equal((await automacao.listar({ visao: 'aguardando' })).itens[0].transportadora, 'Transportadora prevista');
+  automacao.salvarModelo({ assunto: 'Entrega', mensagem: '{{nome_transportadora}} | {{email_transportadora}}' });
+  await automacao.ativar(true);
+  await automacao.executar();
+  assert.equal(enviarMock.mock.calls[0].arguments[0].text, 'Transportadora da ordem | ordem@example.com');
+  const [historico] = (await automacao.listar({ visao: 'historico' })).itens;
+  assert.equal(historico.transportadora, 'Transportadora da ordem');
+});
+
+test('corrige a transportadora das cargas antigas no histórico pelo par empresa e ordem', async (t) => {
+  const { automacao, diretorio, query } = montarAutomacao(t, {
+    transportadorasCargas: [
+      { CODEMP: 1, ORDEMCARGA: 5953, TRANSPORTADORA: 'Transportadora empresa 1' },
+      { CODEMP: 6, ORDEMCARGA: 5953, TRANSPORTADORA: 'Transportadora empresa 6' }
+    ]
+  });
+  const antiga = { detectadaEm: '2026-11-05T15:00:00Z', ordem: 5953, status: 'enviado', transportadora: 'Transportadora da nota', dataFaturamento: '2026-11-05' };
+  fs.writeFileSync(path.join(diretorio, 'estado.json'), JSON.stringify({
+    notas: { 1: { ...antiga, nunota: 1, empresa: 1 }, 2: { ...antiga, nunota: 2, empresa: 6 } }
+  }));
+  const historico = await automacao.listar({ visao: 'historico' });
+  assert.deepEqual(historico.itens.map((item) => item.transportadora), ['Transportadora empresa 6', 'Transportadora empresa 1']);
+  assert.match(query.mock.calls[0].arguments[0], /IN \(\(6, 5953\), \(1, 5953\)\)/);
 });
 
 test('anexa o PDF da nota e inclui os números dos pedidos de origem no modelo', async (t) => {
@@ -280,6 +328,34 @@ test('filtra o histórico pela data local da detecção antes de paginar e usa h
   assert.deepEqual(antigo.itens.map((n) => n.nunota), [1]);
   await assert.rejects(automacao.listar({ visao: 'historico', inicio: '2026-02-30', fim: '2026-11-05' }), { code: 'FRETE_HISTORICO_PERIODO_INVALIDO' });
   await assert.rejects(automacao.listar({ visao: 'historico', inicio: '2026-11-06', fim: '2026-11-05' }), { code: 'FRETE_HISTORICO_PERIODO_INVALIDO' });
+});
+
+test('filtra a fila de TOPs 10 e 35 pela data de faturamento e usa hoje e ontem por padrão', async (t) => {
+  const { automacao } = montarAutomacao(t, {
+    notasSemCarga: [nota, { ...nota, NUNOTA: 3890002, DATA_NOTA: '2026-11-05', DATA_FATURAMENTO: '2026-11-03' }]
+  });
+  const padrao = await automacao.listar({ visao: 'aguardando' });
+  assert.deepEqual(padrao.intervalo, { inicio: '2026-11-04', fim: '2026-11-05' });
+  assert.deepEqual(padrao.itens.map((item) => item.dataFaturamento), ['2026-11-05']);
+  const personalizado = await automacao.listar({ visao: 'aguardando', inicio: '2026-11-03', fim: '2026-11-03' });
+  assert.deepEqual(personalizado.itens.map((item) => [item.nunota, item.dataFaturamento]), [[3890002, '2026-11-03']]);
+  await assert.rejects(automacao.listar({ visao: 'aguardando', inicio: '2026-11-03' }), { code: 'FRETE_HISTORICO_PERIODO_INVALIDO' });
+});
+
+test('recupera a data de faturamento dos registros antigos visíveis no histórico', async (t) => {
+  const { automacao, diretorio, query } = montarAutomacao(t, {
+    datasFaturamento: [{ NUNOTA: 1, DATA_FATURAMENTO: '2026-11-03' }]
+  });
+  fs.writeFileSync(path.join(diretorio, 'estado.json'), JSON.stringify({
+    notas: {
+      1: { nunota: 1, detectadaEm: '2026-11-05T15:00:00Z', status: 'enviado' },
+      2: { nunota: 2, detectadaEm: '2026-11-05T14:00:00Z', status: 'enviado', dataFaturamento: '2026-11-04' },
+      3: { nunota: 3, detectadaEm: '2026-11-03T15:00:00Z', status: 'enviado' }
+    }
+  }));
+  const historico = await automacao.listar({ visao: 'historico' });
+  assert.deepEqual(historico.itens.map((item) => item.dataFaturamento), ['2026-11-03', '2026-11-04']);
+  assert.match(query.mock.calls[0].arguments[0], /WHERE CAB\.NUNOTA IN \(1\)/);
 });
 
 test('expõe envio ambíguo para revisão e não reenvia automaticamente após reiniciar', async (t) => {

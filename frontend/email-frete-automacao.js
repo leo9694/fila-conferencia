@@ -15,6 +15,7 @@
   const dataInicial = $('fila-inicio');
   const dataFinal = $('fila-fim');
   const colunasHistorico = document.querySelectorAll('[data-email-frete-historico]');
+  const intervalos = { aguardando: {}, historico: {} };
   const rotulos = {
     pendente: 'Aguardando envio', enviando: 'Enviando', enviado: 'Enviado',
     falha: 'Falha no envio', revisar: 'Revisar envio'
@@ -26,8 +27,6 @@
   let modeloSalvo = null;
   let visao = 'aguardando';
   let pagina = 1;
-  let intervaloHistorico = null;
-  let intervaloExibido = null;
   let selecaoLink;
 
   function status(id, texto, erro = false) {
@@ -53,25 +52,24 @@
   }
 
   function renderizarFila(dados) {
-    if (visao === 'historico') {
-      if (!intervaloExibido || (dataInicial.value === intervaloExibido.inicio && dataFinal.value === intervaloExibido.fim)) {
-        dataInicial.value = dados.intervalo.inicio;
-        dataFinal.value = dados.intervalo.fim;
-      }
-      intervaloExibido = dados.intervalo;
+    const filtro = intervalos[visao];
+    if (!filtro.exibido || (dataInicial.value === filtro.exibido.inicio && dataFinal.value === filtro.exibido.fim)) {
+      dataInicial.value = dados.intervalo.inicio;
+      dataFinal.value = dados.intervalo.fim;
     }
+    filtro.exibido = dados.intervalo;
     const dataHora = (valor) => valor && new Date(valor).toLocaleString('pt-BR', { timeZone: dados.fusoHorario });
     linhas.replaceChildren();
     for (const nota of dados.itens) {
       const linha = linhas.insertRow();
       const valores = [
-        nota.nota || `Nº único ${nota.nunota}`, nota.empresa, nota.cliente,
+        nota.nota || `Nº único ${nota.nunota}`, nota.dataFaturamento?.split('-').reverse().join('/'), nota.empresa, nota.cliente,
         nota.transportadora, nota.destinatario || nota.email,
         rotulos[nota.status] || 'Aguardando ordem de carga'
       ];
       if (visao === 'historico') valores.push(nota.ordem, dataHora(nota.detectadaEm), dataHora(nota.enviadoEm));
       for (const valor of valores) linha.insertCell().textContent = valor || '—';
-      const celulaStatus = linha.cells[5];
+      const celulaStatus = linha.cells[6];
       if (nota.status) celulaStatus.classList.add(`is-${nota.status}`);
       if (nota.motivo || nota.danfeAnexado) {
         const detalhe = document.createElement('small');
@@ -91,9 +89,10 @@
     const pedido = new AbortController();
     filaAtual = pedido;
     const consulta = new URLSearchParams({ visao, pagina: String(paginaSolicitada) });
-    if (visao === 'historico' && intervaloHistorico) {
-      consulta.set('inicio', intervaloHistorico.inicio);
-      consulta.set('fim', intervaloHistorico.fim);
+    const intervalo = intervalos[visao].aplicado;
+    if (intervalo) {
+      consulta.set('inicio', intervalo.inicio);
+      consulta.set('fim', intervalo.fim);
     }
     if (!silencioso) status('fila', 'Consultando notas…');
     try {
@@ -117,7 +116,12 @@
   function mostrarVisao(valor) {
     visao = valor;
     const historico = valor === 'historico';
-    periodo.hidden = !historico;
+    $('fila-rotulo-inicio').textContent = historico ? 'Detectada de' : 'Faturamento de';
+    $('fila-coluna-transportadora').textContent = historico ? 'Transportadora da carga' : 'Transportadora prevista';
+    periodo.setAttribute('aria-label', historico ? 'Filtrar pela data de detecção da carga' : 'Filtrar pela data de faturamento');
+    const filtro = intervalos[visao].exibido;
+    dataInicial.value = filtro?.inicio || '';
+    dataFinal.value = filtro?.fim || '';
     linhas.closest('table').classList.toggle('is-historico', historico);
     colunasHistorico.forEach((coluna) => { coluna.hidden = !historico; });
     for (const opcao of ['aguardando', 'historico']) {
@@ -128,10 +132,6 @@
 
   function selecionarVisao(valor) {
     mostrarVisao(valor);
-    if (valor === 'historico' && intervaloExibido) {
-      dataInicial.value = intervaloExibido.inicio;
-      dataFinal.value = intervaloExibido.fim;
-    }
     return carregarFila();
   }
 
@@ -265,7 +265,7 @@
       status('fila', 'A data inicial deve ser anterior ou igual à data final.', true);
       return;
     }
-    intervaloHistorico = { inicio: dataInicial.value, fim: dataFinal.value };
+    intervalos[visao].aplicado = { inicio: dataInicial.value, fim: dataFinal.value };
     limparGrade();
     carregarFila();
   });
@@ -284,9 +284,8 @@
     carregada = false;
     modeloSalvo = null;
     mostrarEstado(false);
-    intervaloHistorico = null;
-    intervaloExibido = null;
-    periodo.reset();
+    intervalos.aguardando = {};
+    intervalos.historico = {};
     mostrarVisao('aguardando');
     assunto.value = '';
     mensagem.value = '';

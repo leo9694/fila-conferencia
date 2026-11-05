@@ -94,8 +94,12 @@ function desenharCabecalho(doc, romaneio) {
       align: 'right',
       lineBreak: false
     });
-  doc.moveTo(PAGE.margin, 82).lineTo(PAGE.width - PAGE.margin, 82).lineWidth(0.65).strokeColor('#a0a0a0').stroke();
-  doc.y = 94;
+  const linha = romaneio.transportadora ? 96 : 82;
+  if (romaneio.transportadora) {
+    textoAjustado(doc, `Transportadora da ordem: ${romaneio.transportadora}`, 105, 76, 385, 8.5, { align: 'center' });
+  }
+  doc.moveTo(PAGE.margin, linha).lineTo(PAGE.width - PAGE.margin, linha).lineWidth(0.65).strokeColor('#a0a0a0').stroke();
+  doc.y = linha + 12;
 }
 
 function desenharTituloTransportadora(doc, transportadora) {
@@ -103,7 +107,7 @@ function desenharTituloTransportadora(doc, transportadora) {
   doc.fillColor('#000000').font('Helvetica-Bold');
   textoAjustado(
     doc,
-    `Transportadora : ${texto(transportadora)}`,
+    `Transportadora da nota: ${texto(transportadora)}`,
     PAGE.margin + 2,
     y,
     CONTENT_WIDTH - 4,
@@ -197,7 +201,7 @@ async function gerarRomaneioCargaPdf({ ordemCarga, transportadora, empresa, nota
       .filter(Boolean)
   )];
   const assinaturaTransportadora = identificacoesTransportadoras.join(' / ') || transportadora;
-  const cabecalho = { ordemCarga, empresa, dataInicioCarga };
+  const cabecalho = { ordemCarga, empresa, dataInicioCarga, transportadora };
 
   return criarBufferPdf((doc) => {
     desenharCabecalho(doc, cabecalho);
