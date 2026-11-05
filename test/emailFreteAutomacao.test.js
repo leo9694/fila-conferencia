@@ -112,6 +112,49 @@ test('lista notas aguardando carga e envia uma vez após o vínculo, com modelo 
   assert.ok(historico.enviadoEm);
 });
 
+test('registra a carga gerada no app antes da consulta periódica e só mostra enviando durante o SMTP', async (t) => {
+  let iniciarEnvio;
+  let concluirEnvio;
+  const envioIniciado = new Promise((resolve) => { iniciarEnvio = resolve; });
+  const resultadoEnvio = new Promise((resolve) => { concluirEnvio = resolve; });
+  const { automacao, query, enviarMock } = montarAutomacao(t, {
+    enviar: async () => {
+      iniciarEnvio();
+      return resultadoEnvio;
+    }
+  });
+  await automacao.ativar(true);
+  await automacao.registrarCargaConfirmada({ empresa: nota.CODEMP, ordem: nota.ORDEMCARGA, notas: [nota.NUNOTA] });
+  const fila = () => automacao.listar({ visao: 'historico' });
+  const [pendente] = (await fila()).itens;
+  assert.equal(pendente.status, 'pendente');
+  assert.equal(pendente.ordem, nota.ORDEMCARGA);
+  assert.equal(enviarMock.mock.callCount(), 0);
+  assert.ok(query.mock.calls.every(({ arguments: [sql] }) => !sql.includes('SOBREPOSICAO')));
+
+  const execucao = automacao.executar();
+  try {
+    await envioIniciado;
+    assert.equal((await fila()).itens[0].status, 'enviando');
+  } finally {
+    concluirEnvio({ accepted: [nota.EMAILNFE] });
+    await execucao;
+  }
+  assert.equal((await fila()).itens[0].status, 'enviado');
+  await automacao.registrarCargaConfirmada({ empresa: nota.CODEMP, ordem: nota.ORDEMCARGA, notas: [nota.NUNOTA] });
+  assert.equal((await fila()).itens.length, 1);
+  assert.equal(enviarMock.mock.callCount(), 1);
+});
+
+test('ignora vínculo de outra carga no registro imediato e mantém a automação desligada antes da primeira ativação', async (t) => {
+  const { automacao, query } = montarAutomacao(t);
+  await automacao.registrarCargaConfirmada({ empresa: nota.CODEMP, ordem: nota.ORDEMCARGA, notas: [nota.NUNOTA] });
+  assert.equal(query.mock.callCount(), 0);
+  await automacao.ativar(true);
+  await automacao.registrarCargaConfirmada({ empresa: nota.CODEMP, ordem: nota.ORDEMCARGA + 1, notas: [nota.NUNOTA] });
+  assert.equal((await automacao.listar({ visao: 'historico' })).itens.length, 0);
+});
+
 test('envia negrito, links clicáveis e o e-mail da transportadora com versão em texto simples', async (t) => {
   const { automacao, enviarMock } = montarAutomacao(t, {
     notasCarga: [{ ...nota, CLIENTE: 'Cliente <b>Teste</b>', EMAIL_TRANSPORTADORA: 'inválido; rastreio@example.com' }]

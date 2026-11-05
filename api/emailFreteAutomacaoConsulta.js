@@ -66,8 +66,8 @@ async function obterMarcoCargas(query) {
 }
 
 async function obterJanelaCargas(query) {
-  const [janela] = await query(`SELECT TO_CHAR(SYSDATE - 1/1440, '${formatoData}') ATE,
-    TO_CHAR(SYSDATE - 6/1440, '${formatoData}') SOBREPOSICAO FROM DUAL`);
+  const [janela] = await query(`SELECT TO_CHAR(SYSDATE - 10/86400, '${formatoData}') ATE,
+    TO_CHAR(SYSDATE - 310/86400, '${formatoData}') SOBREPOSICAO FROM DUAL`);
   dataSql(janela?.ATE);
   dataSql(janela?.SOBREPOSICAO);
   return janela;

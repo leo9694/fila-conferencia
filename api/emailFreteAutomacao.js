@@ -238,18 +238,32 @@ function criarAutomacaoEmailFrete({
     const ultima = rows.at(-1);
     const novos = await resolverEmailsNotas(query, rows.filter((row) => !estado.notas[row.NUNOTA]));
     atualizar((atual) => {
-      for (const { nota } of novos) {
-        if (atual.notas[nota.nunota]) continue;
-        atual.notas[nota.nunota] = {
-          ...nota, detectadaEm: new Date(agora()).toISOString(), status: 'pendente', reverEm: 0
-        };
-      }
+      incluirNotasPendentes(atual, novos);
       if (rows.length === LOTE_DESCOBERTA) atual.cursor = { data: ultima.EVENTO, nunota: ultima.NUNOTA };
       else {
         atual.desde = janela.SOBREPOSICAO > atual.marco ? janela.SOBREPOSICAO : atual.marco;
         atual.cursor = null;
       }
     });
+  }
+
+  function incluirNotasPendentes(estado, registros) {
+    const detectadaEm = new Date(agora()).toISOString();
+    for (const { nota } of registros) {
+      if (estado.notas[nota.nunota]) continue;
+      estado.notas[nota.nunota] = { ...nota, detectadaEm, status: 'pendente', reverEm: 0 };
+    }
+  }
+
+  async function registrarCargaConfirmada({ empresa, ordem, notas }) {
+    const estado = ler();
+    if (!estado.marco) return;
+    const ids = notas.filter((nunota) => !estado.notas[nunota]);
+    if (!ids.length) return;
+    const rows = await consultarNotasParaEnvio(query, estado.cargas, ids, ambienteSankhyaTeste());
+    const vinculadas = rows.filter((row) => Number(row.CODEMP) === empresa && Number(row.ORDEMCARGA) === ordem);
+    const novas = await resolverEmailsNotas(query, vinculadas);
+    if (novas.length) atualizar((atual) => incluirNotasPendentes(atual, novas));
   }
 
   function reservar(nunota, messageId) {
@@ -391,7 +405,7 @@ function criarAutomacaoEmailFrete({
     timer = null;
   }
 
-  return { configuracao, salvarModelo, ativar, listar, executar, iniciar, parar };
+  return { configuracao, salvarModelo, ativar, listar, registrarCargaConfirmada, executar, iniciar, parar };
 }
 
 module.exports = { criarAutomacaoEmailFrete };

@@ -3577,6 +3577,9 @@ router.post('/fila-conferencia/romaneio', async (req, res) => {
       return;
     }
 
+    await automacaoEmailFrete.registrarCargaConfirmada({
+      empresa: Number(empresa), ordem: codigoOrdemCarga, notas: vinculados
+    }).catch((erro) => console.error('Falha ao registrar a carga no Email frete:', erro.code || erro.name));
     res.status(falhas.length > 0 ? 207 : 201).json(resultado);
   } catch (err) {
     console.error(err);

@@ -271,10 +271,13 @@
   });
   anterior.addEventListener('click', () => carregarFila(pagina - 1));
   proxima.addEventListener('click', () => carregarFila(pagina + 1));
-  setInterval(() => {
+  function atualizarVisaoAtiva(alvo) {
+    if (visao !== alvo) return;
     if (!document.hidden && !filaAtual && window.location.hash === '#transporte/email-frete' &&
         document.getElementById('transporte-screen').classList.contains('active')) carregarFila(pagina, true);
-  }, 60_000);
+  }
+  setInterval(() => atualizarVisaoAtiva('aguardando'), 60_000);
+  setInterval(() => atualizarVisaoAtiva('historico'), 15_000);
 
   function limparSessao() {
     sessao.abort();
