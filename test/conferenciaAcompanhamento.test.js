@@ -58,6 +58,13 @@ test('consulta ignora saldo encerrado e mantém conferências antigas ao excluir
   assert.match(sql, /AND \(CONF\.STATUS = 'F' OR NVL\(CAB\.PENDENTE, 'S'\) = 'S'\s+OR NOT EXISTS \(SELECT 1 FROM FAT_ITEM FAT_HIST WHERE FAT_HIST\.NUNOTAORIG = CAB\.NUNOTA\)\)/);
 });
 
+test('nota TOP 35 confirmada e conferida tira o pedido de origem dos pendentes mesmo com saldo aberto', () => {
+  const sql = contextoApi().montarSqlConferencias({ inicio: '2026-11-05', fim: '2026-11-05' }, 8);
+  assert.match(sql, /MAX\(CASE WHEN CONF_NOTA\.NUCONF IS NOT NULL THEN 1 ELSE 0 END\) AS VENDA_CONFERIDA/);
+  assert.match(sql, /CONF_NOTA\.NUCONF = NOTA\.NUCONFATUAL\s+AND NOTA\.CODTIPOPER = 35 AND NOTA\.STATUSNOTA = 'L' AND CONF_NOTA\.STATUS = 'F'/);
+  assert.match(sql, /AND \(CAB\.TIPMOV <> 'P' OR CONF\.STATUS = 'F' OR NOT EXISTS \(\s+SELECT 1 FROM FAT_ITEM FAT_CONF WHERE FAT_CONF\.NUNOTAORIG = CAB\.NUNOTA AND FAT_CONF\.VENDA_CONFERIDA = 1/);
+});
+
 test('origens vinculadas a múltiplas notas não duplicam cartões nem quantidades', async () => {
   const ctx = contextoApi(async (sql) => {
     assert.match(sql, /SELECT DISTINCT VAR.NUNOTA, ORIG.NUNOTA AS NUNOTAORIG/);
