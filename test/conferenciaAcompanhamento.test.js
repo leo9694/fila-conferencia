@@ -50,6 +50,14 @@ test('consulta mostra pedidos aprovados com saldo a faturar, notas sem liberaç�
   assert.doesNotMatch(sql, /WHERE[\s\S]*CAB.LIBCONF = 'S'/);
 });
 
+test('consulta ignora saldo encerrado e mantém conferências antigas ao excluir o pedido já faturado', () => {
+  const sql = contextoApi().montarSqlConferencias({ inicio: '2026-11-04', fim: '2026-11-05' }, 6);
+  assert.match(sql, /WHEN CAB\.TIPMOV = 'P' AND \(CAB\.PENDENTE = 'N' OR ITE\.PENDENTE = 'N'\) THEN 0/);
+  assert.match(sql, /CAB\.TIPMOV = 'P' AND CAB\.CODTIPOPER IN \(5, 6, 237\) AND CAB\.STATUSNOTA = 'L'\s+AND NVL\(CAB\.PENDENTE, 'S'\) = 'S'/);
+  assert.match(sql, /AND NVL\(PEND\.PENDENTE, 'S'\) = 'S'\s+AND NVL\(PEND\.QTDNEG/);
+  assert.match(sql, /AND \(CONF\.STATUS = 'F' OR NVL\(CAB\.PENDENTE, 'S'\) = 'S'\s+OR NOT EXISTS \(SELECT 1 FROM FAT_ITEM FAT_HIST WHERE FAT_HIST\.NUNOTAORIG = CAB\.NUNOTA\)\)/);
+});
+
 test('origens vinculadas a múltiplas notas não duplicam cartões nem quantidades', async () => {
   const ctx = contextoApi(async (sql) => {
     assert.match(sql, /SELECT DISTINCT VAR.NUNOTA, ORIG.NUNOTA AS NUNOTAORIG/);
