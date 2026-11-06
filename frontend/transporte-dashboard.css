@@ -57,11 +57,12 @@
 .email-frete-grade .email-frete-tabela { width: 100%; min-width: 650px; border-collapse: separate; border-spacing: 0; }
 .email-frete-grade .email-frete-tabela.is-historico { min-width: 960px; }
 .email-frete-grade .email-frete-tabela th, .email-frete-grade .email-frete-tabela td { padding: 5px 8px; border-right: 1px solid #e0ebe8; white-space: nowrap; }
+.email-frete-grade .email-frete-tabela.is-historico td { padding-block: 3px; }
 .email-frete-grade .email-frete-tabela th { background: #e9f2f0; }
 .email-frete-grade .email-frete-tabela tr > :last-child { border-right: 0; }
 .email-frete-tabela tbody tr:nth-child(even) { background: #f4f8f7; }
 .email-frete-tabela tbody tr:last-child td { border-bottom: 0; }
-.email-frete-tabela small { display: block; max-width: 200px; margin-top: 2px; color: #46647b; white-space: normal; }
+.email-frete-tabela small { display: inline-block; max-width: 200px; margin-left: 3px; overflow: hidden; color: #46647b; text-overflow: ellipsis; vertical-align: bottom; white-space: nowrap; }
 .email-frete-tabela .is-enviado { color: #087f6d; }
 .email-frete-tabela .is-falha, .email-frete-tabela .is-revisar { color: #b42318; }
 .email-frete-grade-rodape { margin-top: 6px; }

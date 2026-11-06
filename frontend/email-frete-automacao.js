@@ -73,7 +73,8 @@
       if (nota.status) celulaStatus.classList.add(`is-${nota.status}`);
       if (nota.motivo || nota.danfeAnexado) {
         const detalhe = document.createElement('small');
-        detalhe.textContent = nota.motivo || 'DANFE anexado';
+        detalhe.textContent = ` · ${nota.motivo || 'DANFE anexado'}`;
+        celulaStatus.title = celulaStatus.textContent + detalhe.textContent;
         celulaStatus.appendChild(detalhe);
       }
     }
