@@ -80,6 +80,7 @@ const {
 } = require('./api/relatorioCtes');
 const { montarSqlEstimativaFrete, normalizarEstimativaFrete } = require('./api/estimativaFrete');
 const { carregarAnaliseFrete } = require('./api/analiseFrete');
+const { filtrosDefinicaoFrete, consultarDefinicaoFrete } = require('./api/definicaoFrete');
 const { gerarAnaliseFreteExcel } = require('./api/analiseFreteExcel');
 const { obterConfiguracaoEmailFrete, salvarConfiguracaoEmailFrete, verificarConexaoEmailFrete, enviarTesteEmailFrete } = require('./api/emailFrete');
 const { criarAutomacaoEmailFrete } = require('./api/emailFreteAutomacao');
@@ -2908,6 +2909,21 @@ async function responderAnaliseFrete(req, res) {
 router.get('/transporte/analise-frete', exigirGerenciaOuDiretoria, responderAnaliseFrete);
 router.post('/transporte/analise-frete', exigirGerenciaOuDiretoria, responderAnaliseFrete);
 router.post('/transporte/analise-frete/excel', exigirGerenciaOuDiretoria, responderAnaliseFrete);
+
+router.get('/transporte/definicao-frete', exigirGerenciaOuDiretoria, async (req, res) => {
+  let filtros;
+  try {
+    filtros = filtrosDefinicaoFrete(req.query);
+  } catch (err) {
+    return res.status(400).json({ erro: err.message });
+  }
+  try {
+    res.json(await consultarDefinicaoFrete(filtros, executeQuery));
+  } catch (err) {
+    console.error('Erro na definição de frete:', err.message);
+    res.status(502).json({ erro: 'Não foi possível consultar a definição de frete.' });
+  }
+});
 
 router.get('/transporte/analise-frete/ctes/:chaveAcesso/pdf', exigirGerenciaOuDiretoria, async (req, res) => {
   try {

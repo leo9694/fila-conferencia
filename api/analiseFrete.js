@@ -115,23 +115,20 @@ function compararFrete(pedido, registros, simulacoes) {
     simulacoes: simulacoes.map((s) => ({ ...s, diferenca: diferenca(s.valor) })) };
 }
 
-function sqlSimulacoes(ids) {
-  if (!ids.length || ids.some((id) => !Number.isSafeInteger(id) || id <= 0)) throw new Error('Pedidos inválidos.');
-  return `SELECT CAB.NUNOTA, T.NUCFR, T.DESCRCALCFRET, R.CODEVENTO, R.FORMULA,
-    R.VALOR, R.PERCENTUAL, R.VLRMIN, R.DISTANCIA, R.TEMPO,
-    CAB.VLRNOTA, CAB.PESOBRUTO PESO, CAB.M3,
-    RD.NOMEREG REGIAO
-    FROM TGFCAB CAB
+function sqlRotasFrete({ porTransportadora, porDestinos = false }) {
+  return `FROM ${porDestinos ? 'DESTINOS' : 'TGFCAB'} CAB
     JOIN TGFPAR PAR ON PAR.CODPARC=CAB.CODPARC
     JOIN TSIEMP EMP ON EMP.CODEMP=CAB.CODEMP
     JOIN TSICID ORI ON ORI.CODCID=EMP.CODCID
     JOIN TSICID DES ON DES.CODCID=PAR.CODCID
-    JOIN TGFCFP P ON P.CODPARC=CAB.CODPARCTRANSP
+    ${porTransportadora
+    ? `JOIN TGFCFP P ON P.CODPARC=CAB.CODPARCTRANSP
     JOIN TGFCFR T ON T.NUCFR=P.NUCFR
-    JOIN TGFRCF R ON R.NUCFR=T.NUCFR AND R.OBRIGATORIO='S'
+    JOIN TGFRCF R ON R.NUCFR=T.NUCFR AND R.OBRIGATORIO='S'`
+    : `JOIN TGFRCF R ON R.OBRIGATORIO='S'
+    JOIN TGFCFR T ON T.NUCFR=R.NUCFR`}
     LEFT JOIN TGFCFRC RD ON RD.NUCFR=R.NUCFR AND RD.CODREG=R.CODREGDEST
-    WHERE CAB.NUNOTA IN (${ids.join(',')}) AND CAB.CODTIPOPER IN (${TOPS_FATURAMENTO.join(',')})
-      AND NVL(T.SERVICOECT,0)=0
+    WHERE NVL(T.SERVICOECT,0)=0
       AND (NVL(R.CODCIDORIG,0)=0 OR R.CODCIDORIG=EMP.CODCID)
       AND (NVL(R.CODCIDDEST,0)=0 OR R.CODCIDDEST=PAR.CODCID)
       AND (NVL(R.CODPARCORIG,0)=0 OR R.CODPARCORIG=EMP.CODPARC)
@@ -142,6 +139,15 @@ function sqlSimulacoes(ids) {
         WHERE F.NUCFR=R.NUCFR AND F.CODREG=R.CODREGORIG AND F.CODCID=EMP.CODCID))
       AND (NVL(R.CODREGDEST,0)=0 OR EXISTS (SELECT 1 FROM TGFCFC F
         WHERE F.NUCFR=R.NUCFR AND F.CODREG=R.CODREGDEST AND F.CODCID=PAR.CODCID))`;
+}
+
+function sqlSimulacoes(ids, { porTransportadora = true } = {}) {
+  if (!ids.length || ids.some((id) => !Number.isSafeInteger(id) || id <= 0)) throw new Error('Pedidos inválidos.');
+  return `SELECT CAB.NUNOTA, T.NUCFR, T.DESCRCALCFRET, R.CODEVENTO, R.FORMULA,
+    R.VALOR, R.PERCENTUAL, R.VLRMIN, R.DISTANCIA, R.TEMPO,
+    CAB.VLRNOTA, CAB.PESOBRUTO PESO, CAB.M3, RD.NOMEREG REGIAO
+    ${sqlRotasFrete({ porTransportadora })}
+      AND CAB.NUNOTA IN (${ids.join(',')}) AND CAB.CODTIPOPER IN (${TOPS_FATURAMENTO.join(',')})`;
 }
 
 function simularTabelas(registros) {
@@ -169,4 +175,4 @@ async function carregarAnaliseFrete(query, executeQuery) {
   return consultar(filtros, query, executeQuery, sqlSimulacoes, simularTabelas);
 }
 
-module.exports = { TOPS_FATURAMENTO, carregarAnaliseFrete, compararFrete, filtrosAnalise, sqlPedidos, sqlFretesReais, sqlSimulacoes, simularTabelas };
+module.exports = { TOPS_FATURAMENTO, carregarAnaliseFrete, compararFrete, filtrosAnalise, sqlPedidos, sqlFretesReais, sqlRotasFrete, sqlSimulacoes, simularTabelas };

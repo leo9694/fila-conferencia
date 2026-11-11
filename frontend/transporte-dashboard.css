@@ -10,7 +10,7 @@
   color: #102d46;
 }
 
-#transporte-painel[hidden], #analise-frete-painel[hidden], #email-frete-painel[hidden] { display: none; }
+#transporte-painel[hidden], #analise-frete-painel[hidden], #definicao-frete-painel[hidden], #email-frete-painel[hidden] { display: none; }
 
 #email-frete-painel { padding: 8px 0 20px; }
 #email-frete-painel .email-frete-topo { flex-direction: row; align-items: center; padding: 10px 14px; gap: 8px; }
@@ -105,6 +105,7 @@
 .analise-frete-summary p.is-loading::before { content: ''; width: 14px; height: 14px; flex: 0 0 14px; border: 2px solid #b8d9d2; border-top-color: #087f6d; border-radius: 50%; animation: analise-frete-spin .7s linear infinite; }
 @keyframes analise-frete-spin { to { transform: rotate(360deg); } }
 .transporte-dashboard-screen:has(.analise-frete-page:not([hidden])) { overflow: clip; }
+.transporte-dashboard-screen:has(#definicao-frete-painel:not([hidden])) { overflow: auto; }
 .analise-frete-results { min-width: 0; overflow: clip; background: #fff; border: 1px solid #dce9e6; border-radius: 18px; box-shadow: 0 8px 25px rgba(15, 51, 70, .06); }
 .analise-frete-scroll-horizontal {
   position: sticky;
@@ -131,6 +132,15 @@
 .analise-frete-results .analise-frete-table tr > :first-child:not([rowspan]) { position: sticky; left: 0; z-index: 1; border-right: 2px solid #bbd4cb; }
 .analise-frete-results .analise-frete-table thead tr > :first-child:not([rowspan]) { z-index: 3; }
 .analise-frete-results .analise-frete-table .analise-frete-numero { text-align: right; font-variant-numeric: tabular-nums; }
+#definicao-frete-form { grid-template-columns: repeat(2, minmax(130px, .7fr)) repeat(2, minmax(170px, 1fr)) auto; }
+.definicao-frete-grade .transporte-table-wrap { overflow-x: auto; max-height: min(68vh, 820px); }
+.definicao-frete-grade .analise-frete-table td.definicao-frete-sugestao { color: #087f6d; font-weight: 600; }
+.definicao-frete-grade tbody[aria-busy="true"] { opacity: .55; }
+@media (max-width: 880px) {
+  #definicao-frete-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  #definicao-frete-form label:nth-child(3) { grid-column: auto; }
+  #definicao-frete-form button { grid-column: 1 / -1; }
+}
 .analise-frete-ordem-botao { margin-left: 6px; vertical-align: middle; }
 .analise-frete-ordem-dialogo { width: min(360px, calc(100% - 32px)); margin: auto; padding: 20px; border: 1px solid #dce9e6; border-radius: 12px; color: #17384c; }
 .analise-frete-ordem-dialogo::backdrop { background: #102d4666; }

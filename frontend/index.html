@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/home-dashboard.css?v=20261029-resumo-conferencia-1">
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261106-email-frete-status">
+  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261111-definicao-frete">
   <link rel="stylesheet" href="/chat.css?v=20261028-template-midia-1">
   <link rel="stylesheet" href="/chat-theme.css?v=20261002-3">
   <link rel="stylesheet" href="/rastreio-produto.css?v=20261005-5">
@@ -11374,6 +11374,9 @@
               <button class="home-dashboard-nav-item" id="home-nav-analise-frete" type="button" data-home-target="abrir-analise-frete" title="Análise de frete" hidden>
                 <i data-lucide="calculator" aria-hidden="true"></i><span>Análise de frete</span>
               </button>
+              <button class="home-dashboard-nav-item" id="home-nav-definicao-frete" type="button" data-home-target="abrir-definicao-frete" title="Definição de frete" hidden>
+                <i data-lucide="table" aria-hidden="true"></i><span>Definição de frete</span>
+              </button>
               <button class="home-dashboard-nav-item" id="home-nav-email-frete" type="button" data-home-target="abrir-email-frete" title="Email frete" hidden>
                 <i data-lucide="mail" aria-hidden="true"></i><span>Email frete</span>
               </button>
@@ -13018,6 +13021,40 @@
         </form>
       </dialog>
     </main>
+    <main class="transporte-page analise-frete-page" id="definicao-frete-painel" hidden>
+      <header class="transporte-heading analise-frete-heading"><h1>Definição de frete</h1></header>
+      <form class="transporte-filters analise-frete-filters definicao-frete-filtros" id="definicao-frete-form">
+        <label>Data inicial<input type="date" name="dataInicial" required></label>
+        <label>Data final<input type="date" name="dataFinal" required></label>
+        <label>Empresa<select name="empresa">
+          <option value="">Todas as empresas</option>
+          <option value="1">1 - NORTE SUL SEMENTES</option>
+          <option value="6">6 - TURRA COMERCIAL</option>
+          <option value="8">8 - NORTE SUL SEMENTES MS</option>
+        </select></label>
+        <label>Parceiro<input type="search" name="cliente" maxlength="120" placeholder="Código ou nome"></label>
+        <button class="analise-frete-submit" type="submit"><i data-lucide="search" aria-hidden="true"></i>Consultar</button>
+      </form>
+      <div class="analise-frete-summary"><p id="definicao-frete-status" role="status">Informe os filtros e clique em Consultar.</p></div>
+      <section class="analise-frete-results definicao-frete-grade" aria-label="Resultados da definição de frete">
+        <div class="transporte-table-wrap" tabindex="0" role="region" aria-label="Grade de sugestões de frete">
+          <table class="transporte-table analise-frete-table">
+            <thead><tr id="definicao-frete-colunas">
+              <th scope="col">Nota</th><th scope="col">Cliente</th><th scope="col">Destino</th>
+              <th scope="col" class="analise-frete-numero">Valor da venda</th>
+              <th scope="col" class="analise-frete-numero">Peso (kg)</th>
+              <th scope="col" class="analise-frete-numero">Volume</th>
+            </tr></thead>
+            <tbody id="definicao-frete-linhas"></tbody>
+          </table>
+        </div>
+        <div class="analise-frete-pagination">
+          <button type="button" id="definicao-frete-anterior" disabled>Anterior</button>
+          <span id="definicao-frete-pagina">Página 1</span>
+          <button type="button" id="definicao-frete-proxima" disabled>Próxima</button>
+        </div>
+      </section>
+    </main>
     <main class="transporte-page" id="email-frete-painel" hidden>
       <header class="transporte-heading email-frete-topo">
         <div>
@@ -13801,7 +13838,8 @@
   <script src="vendas-dashboard.js?v=20260820-1"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="email-frete-automacao.js?v=20261106-8"></script>
-  <script src="transporte-dashboard.js?v=20261105-email-frete-grade"></script>
+  <script src="definicao-frete.js?v=20261111-1"></script>
+  <script src="transporte-dashboard.js?v=20261111-definicao-frete"></script>
   <script src="consulta-tabela.js?v=20261103-filtro-numerico"></script>
   <script src="analise-frete.js?v=20261103-diferenca-frete"></script>
   <script src="chat-core.js?v=20261022-navegacao-1"></script>
@@ -13831,6 +13869,6 @@
     <div class="estoque-operacoes-posicoes" id="estoque-operacoes-posicoes"></div>
   </dialog>
   <script src="estoque-operacoes.js?v=20261019-1"></script>
-  <script src="app.js?v=20261105-email-frete"></script>
+  <script src="app.js?v=20261111-definicao-frete"></script>
 </body>
 </html>

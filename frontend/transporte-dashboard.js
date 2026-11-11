@@ -48,7 +48,7 @@
   function chaveUsuario(codigo) { return codigo === null ? null : `${CHAVE_SESSAO}:${codigo}`; }
   function permissaoConfirmada(usuario) { return Boolean(usuario?.gruposConfirmados && usuario?.permissoes?.transporte); }
   function atualizarMenu() {
-    ['home-nav-transporte', 'home-nav-analise-frete', 'home-nav-email-frete'].forEach((id) => {
+    ['home-nav-transporte', 'home-nav-analise-frete', 'home-nav-definicao-frete', 'home-nav-email-frete'].forEach((id) => {
       const menu = $(id); if (menu) menu.hidden = !permitido;
     });
   }
@@ -334,10 +334,13 @@
   async function preparar() {
     if (!permitido) return;
     const analise = window.location.hash === '#transporte/analise';
+    const definicao = window.location.hash === '#transporte/definicao';
     const emailFrete = window.location.hash === '#transporte/email-frete';
-    $('transporte-painel').hidden = analise || emailFrete;
+    $('transporte-painel').hidden = analise || definicao || emailFrete;
     $('analise-frete-painel').hidden = !analise;
+    $('definicao-frete-painel').hidden = !definicao;
     $('email-frete-painel').hidden = !emailFrete;
+    if (definicao) return window.definicaoFreteController?.preparar(inicioPadrao(), hoje());
     if (emailFrete) return window.emailFreteAutomacaoController?.preparar();
     if (analise) return window.analiseFreteController?.preparar();
     if (!elementos.dataInicial.value) elementos.dataInicial.value = inicioPadrao();
@@ -450,6 +453,7 @@
     get permitido() { return permitido; }, verificarAcesso, preparar,
     limparSessao() {
       window.analiseFreteController?.limparSessao();
+      window.definicaoFreteController?.limparSessao();
       window.emailFreteAutomacaoController?.limparSessao();
       operacaoEmail?.abort();
       operacaoEmail = null;

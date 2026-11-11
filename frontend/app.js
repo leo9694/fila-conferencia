@@ -33,6 +33,7 @@ let confirmacaoProdutoExtraEntradaEmAndamento = false;
 const atalhosTransporte = {
   '#transporte': 'abrir-transporte',
   '#transporte/analise': 'abrir-analise-frete',
+  '#transporte/definicao': 'abrir-definicao-frete',
   '#transporte/email-frete': 'abrir-email-frete'
 };
 
