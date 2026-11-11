@@ -68,8 +68,10 @@ async function consultarDefinicaoFrete(filtros, executarConsulta) {
 
 async function consultarHistoricoDefinicaoFrete(nunota, executarConsulta) {
   const pedidos = await executarConsulta(`SELECT CAB.NUNOTA, CAB.NUMNOTA, CAB.VLRNOTA,
+    COALESCE(TRA.NOMEPARC, TRA.RAZAOSOCIAL) TRANSPORTADORA,
     TO_CHAR(CAB.DTNEG,'DD/MM/YYYY') DATA_NOTA
     FROM TGFCAB ATUAL JOIN TGFCAB CAB ON CAB.CODPARC=ATUAL.CODPARC
+    LEFT JOIN TGFPAR TRA ON TRA.CODPARC=CAB.CODPARCTRANSP
     WHERE ATUAL.NUNOTA=${nunota} AND ATUAL.TIPMOV='V' AND ATUAL.STATUSNOTA='L'
       AND ATUAL.CODTIPOPER IN (${TOPS_FATURAMENTO.join(',')})
       AND CAB.TIPMOV='V' AND CAB.STATUSNOTA='L' AND CAB.CODTIPOPER=35
@@ -88,7 +90,10 @@ async function consultarHistoricoDefinicaoFrete(nunota, executarConsulta) {
     const registros = fretes.filter((frete) => Number(frete.PEDIDO) === id);
     const sugestoes = simularTabelas(rotas.filter((rota) => Number(rota.NUNOTA) === id))
       .map(({ codigo, tabela, valor }) => ({ codigo, nome: tabela, valor }));
-    return { ...pedido, freteReal: compararFrete(pedido, registros, []).real, sugestoes };
+    const { real, ctes } = compararFrete(pedido, registros, []);
+    const documentosCte = ctes.filter(({ CHAVEACESSO }) => /^\d{44}$/.test(CHAVEACESSO))
+      .map(({ CHAVEACESSO, NUM_CTE }) => ({ chave: CHAVEACESSO, numero: NUM_CTE }));
+    return { ...pedido, freteReal: real, documentosCte, sugestoes };
   });
 }
 

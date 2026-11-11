@@ -26,6 +26,33 @@
     linhas.replaceChildren();
   }
 
+  function linkCte(cte, texto) {
+    const link = document.createElement('a');
+    link.href = `/api/transporte/analise-frete/ctes/${cte.chave}/visualizar`;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = texto;
+    link.setAttribute('aria-label', `${texto} · Abrir CT-e em nova aba`);
+    return link;
+  }
+
+  function preencherFreteReal(celula, nota) {
+    const valor = nota.freteReal == null ? 'Indisponível' : moeda.format(nota.freteReal);
+    const documentos = nota.documentosCte || [];
+    celula.className = 'definicao-frete-historico-cte';
+    if (!documentos.length) {
+      celula.textContent = valor;
+    } else if (documentos.length === 1) {
+      celula.append(linkCte(documentos[0], valor));
+    } else {
+      const detalhes = document.createElement('details');
+      const resumo = document.createElement('summary');
+      resumo.textContent = `${valor} (${documentos.length} CT-es)`;
+      detalhes.append(resumo, ...documentos.map((cte, indice) => linkCte(cte, `CT-e ${cte.numero || indice + 1}`)));
+      celula.append(detalhes);
+    }
+  }
+
   async function abrirDetalhes(nota, campos, sugestoes, colunas) {
     requisicaoHistorico?.abort();
     const pedido = new AbortController();
@@ -85,10 +112,11 @@
       for (const anterior of dados.pedidos) {
         const linha = registros.insertRow();
         const valor = anterior.VLRNOTA == null ? '—' : moeda.format(anterior.VLRNOTA);
-        const frete = anterior.freteReal == null ? 'Indisponível' : moeda.format(anterior.freteReal);
-        for (const texto of [Number(anterior.NUMNOTA) > 0 ? anterior.NUMNOTA : anterior.NUNOTA, anterior.DATA_NOTA, valor, frete]) {
+        for (const texto of [Number(anterior.NUMNOTA) > 0 ? anterior.NUMNOTA : anterior.NUNOTA,
+          anterior.DATA_NOTA, anterior.TRANSPORTADORA, valor]) {
           linha.insertCell().textContent = texto || '—';
         }
+        preencherFreteReal(linha.insertCell(), anterior);
         const sugestoesAnteriores = new Map((anterior.sugestoes || []).map((sugestao) => [String(sugestao.codigo), sugestao]));
         for (const codigo of codigos) {
           const sugestao = sugestoesAnteriores.get(codigo);

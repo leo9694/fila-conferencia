@@ -47,9 +47,14 @@ test('consulta tabelas de toda a seleção e calcula apenas as rotas aplicáveis
 
 test('simula todas as tabelas aplicáveis a cada venda anterior e preserva o frete real', async () => {
   const chamadas = [];
+  const chavesCte = ['1'.repeat(44), '2'.repeat(44), '3'.repeat(44)];
   const pedidos = await consultarHistoricoDefinicaoFrete(104, async (sql) => {
     chamadas.push(sql);
-    if (chamadas.length === 1) return [{ NUNOTA: 103 }, { NUNOTA: 102 }, { NUNOTA: 101 }];
+    if (chamadas.length === 1) return [
+      { NUNOTA: 103, TRANSPORTADORA: 'ALT TRANSPORTES' },
+      { NUNOTA: 102, TRANSPORTADORA: 'CARVALIMA TRANSPORTES' },
+      { NUNOTA: 101, TRANSPORTADORA: null }
+    ];
     if (sql.startsWith('SELECT CAB.NUNOTA')) {
       return [['103', 6], [102, 8], [101, 10]].flatMap(([NUNOTA, PESO]) => [
         { NUNOTA, NUCFR: 3, DESCRCALCFRET: 'ALT', CODEVENTO: 1, FORMULA: 'VALOR * PESO', VALOR: 5, PESO },
@@ -58,12 +63,15 @@ test('simula todas as tabelas aplicáveis a cada venda anterior e preserva o fre
       ]);
     }
     return [
-      { PEDIDO: '103', CHAVEACESSO: 'a', FRETE_REAL: 25, FRETE_CTE_TOTAL: 100, COMPARTILHADO: 1 },
-      { PEDIDO: 103, CHAVEACESSO: 'b', FRETE_REAL: 5 },
-      { PEDIDO: 102, CHAVEACESSO: 'c', FRETE_REAL: 0 }
+      { PEDIDO: '103', CHAVEACESSO: chavesCte[0], NUM_CTE: 1010, FRETE_REAL: 25, FRETE_CTE_TOTAL: 100, COMPARTILHADO: 1 },
+      { PEDIDO: 103, CHAVEACESSO: chavesCte[1], NUM_CTE: 1011, FRETE_REAL: 5 },
+      { PEDIDO: 103, CHAVEACESSO: chavesCte[1], NUM_CTE: 1011, FRETE_REAL: 5 },
+      { PEDIDO: 102, CHAVEACESSO: chavesCte[2], NUM_CTE: 1012, FRETE_REAL: 0 }
     ];
   });
   assert.match(chamadas[0], /CAB\.CODPARC=ATUAL\.CODPARC/);
+  assert.match(chamadas[0], /LEFT JOIN TGFPAR TRA ON TRA\.CODPARC=CAB\.CODPARCTRANSP/);
+  assert.match(chamadas[0], /COALESCE\(TRA\.NOMEPARC, TRA\.RAZAOSOCIAL\) TRANSPORTADORA/);
   assert.match(chamadas[0], /ATUAL\.NUNOTA=104/);
   assert.match(chamadas[0], /CAB\.CODTIPOPER=35/);
   assert.match(chamadas[0], /CAB\.DTNEG < ATUAL\.DTNEG.*CAB\.NUNOTA < ATUAL\.NUNOTA/);
@@ -73,6 +81,12 @@ test('simula todas as tabelas aplicáveis a cada venda anterior e preserva o fre
   assert.match(chamadas[2], /F\.CODCID=PAR\.CODCID/);
   assert.match(chamadas[2], /CAB\.NUNOTA IN \(103,102,101\)/);
   assert.deepEqual(pedidos.map((pedido) => [pedido.NUNOTA, pedido.freteReal]), [[103, 30], [102, 0], [101, null]]);
+  assert.deepEqual(pedidos.map((pedido) => pedido.documentosCte), [
+    [{ chave: chavesCte[0], numero: 1010 }, { chave: chavesCte[1], numero: 1011 }],
+    [{ chave: chavesCte[2], numero: 1012 }],
+    []
+  ]);
+  assert.deepEqual(pedidos.map((pedido) => pedido.TRANSPORTADORA), ['ALT TRANSPORTES', 'CARVALIMA TRANSPORTES', null]);
   assert.deepEqual(pedidos.map((pedido) => pedido.sugestoes.map(({ codigo, nome, valor }) => [codigo, nome, valor])), [
     [[3, 'ALT', 30], [4, 'Gercadi', 42], [5, 'Carvalima', 54]],
     [[3, 'ALT', 40], [4, 'Gercadi', 56], [5, 'Carvalima', 72]],
