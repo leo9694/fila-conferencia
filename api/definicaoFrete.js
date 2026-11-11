@@ -81,7 +81,7 @@ async function consultarHistoricoDefinicaoFrete(nunota, executarConsulta) {
   const ids = pedidos.map((pedido) => Number(pedido.NUNOTA));
   const [fretes, rotas] = await Promise.all([
     executarConsulta(sqlFretesReais(ids)),
-    executarConsulta(sqlSimulacoes(ids))
+    executarConsulta(sqlSimulacoes(ids, { porTransportadora: false }))
   ]);
   return pedidos.map((pedido) => {
     const id = Number(pedido.NUNOTA);

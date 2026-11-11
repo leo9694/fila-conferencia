@@ -45,16 +45,18 @@ test('consulta tabelas de toda a seleção e calcula apenas as rotas aplicáveis
   assert.equal(dados.temMais, true);
 });
 
-test('consulta as três vendas anteriores do cliente com frete rateado e simulação por transportadora', async () => {
+test('simula todas as tabelas aplicáveis a cada venda anterior e preserva o frete real', async () => {
   const chamadas = [];
   const pedidos = await consultarHistoricoDefinicaoFrete(104, async (sql) => {
     chamadas.push(sql);
     if (chamadas.length === 1) return [{ NUNOTA: 103 }, { NUNOTA: 102 }, { NUNOTA: 101 }];
-    if (sql.startsWith('SELECT CAB.NUNOTA')) return [
-      { NUNOTA: '103', NUCFR: 3, DESCRCALCFRET: 'ALT', CODEVENTO: 1, FORMULA: 'VALOR * PESO', VALOR: 5, PESO: 6 },
-      { NUNOTA: 102, NUCFR: 3, DESCRCALCFRET: 'ALT', CODEVENTO: 1, FORMULA: 'VALOR * PESO', VALOR: 5, PESO: 8 },
-      { NUNOTA: 102, NUCFR: 5, DESCRCALCFRET: 'Carvalima', CODEVENTO: 1, FORMULA: 'DESCONHECIDA' }
-    ];
+    if (sql.startsWith('SELECT CAB.NUNOTA')) {
+      return [['103', 6], [102, 8], [101, 10]].flatMap(([NUNOTA, PESO]) => [
+        { NUNOTA, NUCFR: 3, DESCRCALCFRET: 'ALT', CODEVENTO: 1, FORMULA: 'VALOR * PESO', VALOR: 5, PESO },
+        { NUNOTA, NUCFR: 4, DESCRCALCFRET: 'Gercadi', CODEVENTO: 1, FORMULA: 'VALOR * PESO', VALOR: 7, PESO },
+        { NUNOTA, NUCFR: 5, DESCRCALCFRET: 'Carvalima', CODEVENTO: 1, FORMULA: 'VALOR * PESO', VALOR: 9, PESO }
+      ]);
+    }
     return [
       { PEDIDO: '103', CHAVEACESSO: 'a', FRETE_REAL: 25, FRETE_CTE_TOTAL: 100, COMPARTILHADO: 1 },
       { PEDIDO: 103, CHAVEACESSO: 'b', FRETE_REAL: 5 },
@@ -67,13 +69,14 @@ test('consulta as três vendas anteriores do cliente com frete rateado e simula�
   assert.match(chamadas[0], /CAB\.DTNEG < ATUAL\.DTNEG.*CAB\.NUNOTA < ATUAL\.NUNOTA/);
   assert.match(chamadas[0], /ORDER BY CAB\.DTNEG DESC, CAB\.NUNOTA DESC\s+FETCH FIRST 3 ROWS ONLY/);
   assert.match(chamadas[1], /C\.NUNOTA IN \(103,102,101\)/);
-  assert.match(chamadas[2], /P\.CODPARC=CAB\.CODPARCTRANSP/);
+  assert.doesNotMatch(chamadas[2], /TGFCFP|CAB\.CODPARCTRANSP/);
+  assert.match(chamadas[2], /F\.CODCID=PAR\.CODCID/);
   assert.match(chamadas[2], /CAB\.NUNOTA IN \(103,102,101\)/);
   assert.deepEqual(pedidos.map((pedido) => [pedido.NUNOTA, pedido.freteReal]), [[103, 30], [102, 0], [101, null]]);
-  assert.deepEqual(pedidos.map((pedido) => pedido.sugestoes), [
-    [{ codigo: 3, nome: 'ALT', valor: 30 }],
-    [{ codigo: 3, nome: 'ALT', valor: 40 }, { codigo: 5, nome: 'Carvalima', valor: null }],
-    []
+  assert.deepEqual(pedidos.map((pedido) => pedido.sugestoes.map(({ codigo, nome, valor }) => [codigo, nome, valor])), [
+    [[3, 'ALT', 30], [4, 'Gercadi', 42], [5, 'Carvalima', 54]],
+    [[3, 'ALT', 40], [4, 'Gercadi', 56], [5, 'Carvalima', 72]],
+    [[3, 'ALT', 50], [4, 'Gercadi', 70], [5, 'Carvalima', 90]]
   ]);
 });
 
