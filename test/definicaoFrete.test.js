@@ -62,6 +62,11 @@ test('simula todas as tabelas aplicáveis a cada venda anterior e preserva o fre
         { NUNOTA, NUCFR: 5, DESCRCALCFRET: 'Carvalima', CODEVENTO: 1, FORMULA: 'VALOR * PESO', VALOR: 9, PESO }
       ]);
     }
+    if (sql.startsWith('WITH XML_CTE')) return [
+      { CHAVEACESSO: chavesCte[0], VALOR_TDE: '14.75' },
+      { CHAVEACESSO: chavesCte[1], VALOR_TDE: 10.50 },
+      { CHAVEACESSO: chavesCte[2], VALOR_TDE: 0 }
+    ];
     return [
       { PEDIDO: '103', CHAVEACESSO: chavesCte[0], NUM_CTE: 1010, FRETE_REAL: 25, FRETE_CTE_TOTAL: 100, COMPARTILHADO: 1 },
       { PEDIDO: 103, CHAVEACESSO: chavesCte[1], NUM_CTE: 1011, FRETE_REAL: 5 },
@@ -80,12 +85,16 @@ test('simula todas as tabelas aplicáveis a cada venda anterior e preserva o fre
   assert.doesNotMatch(chamadas[2], /TGFCFP|CAB\.CODPARCTRANSP/);
   assert.match(chamadas[2], /F\.CODCID=PAR\.CODCID/);
   assert.match(chamadas[2], /CAB\.NUNOTA IN \(103,102,101\)/);
+  assert.match(chamadas[3], new RegExp(chavesCte.map((chave) => "'" + chave + "'").join(',')));
+  assert.match(chamadas[3], /\*:\bComp[\s\S]+\*:\bvComp/);
+  assert.match(chamadas[3], /NLS_NUMERIC_CHARACTERS=''\.,''/);
   assert.deepEqual(pedidos.map((pedido) => [pedido.NUNOTA, pedido.freteReal]), [[103, 30], [102, 0], [101, null]]);
   assert.deepEqual(pedidos.map((pedido) => pedido.documentosCte), [
     [{ chave: chavesCte[0], numero: 1010 }, { chave: chavesCte[1], numero: 1011 }],
     [{ chave: chavesCte[2], numero: 1012 }],
     []
   ]);
+  assert.deepEqual(pedidos.map(({ temTde, valorTde }) => [temTde, valorTde]), [[true, 25.25], [false, null], [null, null]]);
   assert.deepEqual(pedidos.map((pedido) => pedido.TRANSPORTADORA), ['ALT TRANSPORTES', 'CARVALIMA TRANSPORTES', null]);
   assert.deepEqual(pedidos.map((pedido) => pedido.sugestoes.map(({ codigo, nome, valor }) => [codigo, nome, valor])), [
     [[3, 'ALT', 30], [4, 'Gercadi', 42], [5, 'Carvalima', 54]],

@@ -117,6 +117,8 @@
           linha.insertCell().textContent = texto || '—';
         }
         preencherFreteReal(linha.insertCell(), anterior);
+        linha.insertCell().textContent = anterior.temTde == null ? 'Indisponível' : anterior.temTde ? 'Sim' : 'Não';
+        linha.insertCell().textContent = anterior.valorTde == null ? '—' : moeda.format(anterior.valorTde);
         const sugestoesAnteriores = new Map((anterior.sugestoes || []).map((sugestao) => [String(sugestao.codigo), sugestao]));
         for (const codigo of codigos) {
           const sugestao = sugestoesAnteriores.get(codigo);
