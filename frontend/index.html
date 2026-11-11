@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/home-dashboard.css?v=20261029-resumo-conferencia-1">
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261111-ordem-carga">
+  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261111-painel-adaptavel">
   <link rel="stylesheet" href="/chat.css?v=20261028-template-midia-1">
   <link rel="stylesheet" href="/chat-theme.css?v=20261002-3">
   <link rel="stylesheet" href="/rastreio-produto.css?v=20261005-5">
@@ -13054,6 +13054,40 @@
           <button type="button" id="definicao-frete-proxima" disabled>Próxima</button>
         </div>
       </section>
+      <dialog class="analise-frete-ordem-dialogo analise-frete-detalhes-dialogo definicao-frete-detalhes" id="definicao-frete-dialogo" aria-labelledby="definicao-frete-titulo">
+        <header>
+          <span class="analise-frete-detalhes-icone" aria-hidden="true"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6zM14 3v5h4M9 12h6m-6 4h6"/></svg></span>
+          <div class="analise-frete-detalhes-identificacao">
+            <h2 id="definicao-frete-titulo">Detalhes da nota</h2>
+            <p id="definicao-frete-cliente"></p>
+          </div>
+          <form method="dialog"><button type="submit">Fechar</button></form>
+        </header>
+        <section aria-labelledby="definicao-frete-sugestoes-titulo">
+          <header><h3 id="definicao-frete-sugestoes-titulo">Sugestões de frete</h3></header>
+          <p class="definicao-frete-detalhes-mensagem" id="definicao-frete-sugestoes-vazio" hidden>Nenhuma tabela de frete aplicável a esta nota.</p>
+          <div class="definicao-frete-detalhes-grade definicao-frete-sugestoes-grade" id="definicao-frete-sugestoes-grade" hidden>
+            <table class="transporte-table" aria-labelledby="definicao-frete-sugestoes-titulo">
+              <thead><tr><th scope="col">Tabela de frete</th><th scope="col">Região</th><th scope="col">Valor sugerido</th></tr></thead>
+              <tbody id="definicao-frete-sugestoes-linhas"></tbody>
+            </table>
+          </div>
+        </section>
+        <section aria-labelledby="definicao-frete-resumo-titulo">
+          <header><h3 id="definicao-frete-resumo-titulo">Dados da nota</h3></header>
+          <dl id="definicao-frete-resumo"></dl>
+        </section>
+        <section aria-labelledby="definicao-frete-historico-titulo">
+          <header><h3 id="definicao-frete-historico-titulo">Últimos 3 pedidos do cliente</h3></header>
+          <p class="definicao-frete-detalhes-mensagem" id="definicao-frete-historico-status" role="status"></p>
+          <div class="definicao-frete-detalhes-grade" id="definicao-frete-historico-grade" tabindex="0" role="region" aria-labelledby="definicao-frete-historico-titulo" hidden>
+            <table class="transporte-table" aria-labelledby="definicao-frete-historico-titulo">
+              <thead><tr id="definicao-frete-historico-colunas"><th scope="col">Nota</th><th scope="col">Data</th><th scope="col">Valor da venda</th><th scope="col">Frete real</th></tr></thead>
+              <tbody id="definicao-frete-historico-linhas"></tbody>
+            </table>
+          </div>
+        </section>
+      </dialog>
     </main>
     <main class="transporte-page" id="email-frete-painel" hidden>
       <header class="transporte-heading email-frete-topo">
@@ -13838,7 +13872,7 @@
   <script src="vendas-dashboard.js?v=20260820-1"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="email-frete-automacao.js?v=20261106-8"></script>
-  <script src="definicao-frete.js?v=20261111-2"></script>
+  <script src="definicao-frete.js?v=20261111-6"></script>
   <script src="transporte-dashboard.js?v=20261111-definicao-frete"></script>
   <script src="consulta-tabela.js?v=20261103-filtro-numerico"></script>
   <script src="analise-frete.js?v=20261103-diferenca-frete"></script>

@@ -80,7 +80,7 @@ const {
 } = require('./api/relatorioCtes');
 const { montarSqlEstimativaFrete, normalizarEstimativaFrete } = require('./api/estimativaFrete');
 const { carregarAnaliseFrete } = require('./api/analiseFrete');
-const { filtrosDefinicaoFrete, consultarDefinicaoFrete } = require('./api/definicaoFrete');
+const { filtrosDefinicaoFrete, consultarDefinicaoFrete, consultarHistoricoDefinicaoFrete } = require('./api/definicaoFrete');
 const { gerarAnaliseFreteExcel } = require('./api/analiseFreteExcel');
 const { obterConfiguracaoEmailFrete, salvarConfiguracaoEmailFrete, verificarConexaoEmailFrete, enviarTesteEmailFrete } = require('./api/emailFrete');
 const { criarAutomacaoEmailFrete } = require('./api/emailFreteAutomacao');
@@ -2922,6 +2922,17 @@ router.get('/transporte/definicao-frete', exigirGerenciaOuDiretoria, async (req,
   } catch (err) {
     console.error('Erro na definição de frete:', err.message);
     res.status(502).json({ erro: 'Não foi possível consultar a definição de frete.' });
+  }
+});
+
+router.get('/transporte/definicao-frete/:nunota/historico', exigirGerenciaOuDiretoria, async (req, res) => {
+  const nunota = Number(req.params.nunota);
+  if (!Number.isSafeInteger(nunota) || nunota <= 0) return res.status(400).json({ erro: 'Nota inválida.' });
+  try {
+    res.json({ pedidos: await consultarHistoricoDefinicaoFrete(nunota, executeQuery) });
+  } catch (err) {
+    console.error('Erro no histórico da definição de frete:', err.message);
+    res.status(502).json({ erro: 'Não foi possível consultar o histórico do cliente.' });
   }
 });
 

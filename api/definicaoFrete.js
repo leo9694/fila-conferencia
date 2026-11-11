@@ -1,4 +1,4 @@
-const { TOPS_FATURAMENTO, sqlRotasFrete, sqlSimulacoes, simularTabelas } = require('./analiseFrete');
+const { TOPS_FATURAMENTO, sqlRotasFrete, sqlSimulacoes, simularTabelas, sqlFretesReais, compararFrete } = require('./analiseFrete');
 const { sqlEscopoNotas } = require('./analiseFreteConsulta');
 const { validarPeriodoTransporte } = require('./transporteDashboard');
 
@@ -35,7 +35,7 @@ async function consultarDefinicaoFrete(filtros, executarConsulta) {
     OFFSET ${(pagina - 1) * tamanhoPagina} ROWS FETCH NEXT ${tamanhoPagina + 1} ROWS ONLY
   )
   SELECT N.NUNOTA, N.NUMNOTA, N.ORDEMCARGA, N.CODPARC, N.CLIENTE, CID.NOMECID CIDADE, UF.UF,
-    N.VLRNOTA, N.PESO, N.QTDVOL
+    N.VLRNOTA, N.PESO, N.QTDVOL, TO_CHAR(N.DTNEG,'DD/MM/YYYY') DATA_NOTA
   FROM NOTAS N LEFT JOIN TSICID CID ON CID.CODCID=N.CODCID
   LEFT JOIN TSIUFS UF ON UF.CODUF=CID.UF
   ORDER BY N.DTNEG DESC, N.NUNOTA DESC`);
@@ -58,12 +58,38 @@ async function consultarDefinicaoFrete(filtros, executarConsulta) {
     rotasPorNota.get(id).push(rota);
   }
   const colunas = tabelas.map((tabela) => ({ codigo: tabela.NUCFR, nome: tabela.DESCRCALCFRET }));
-  const linhas = notas.map(({ NUNOTA, ...nota }) => ({
+  const linhas = notas.map((nota) => ({
     ...nota,
-    sugestoes: simularTabelas(rotasPorNota.get(Number(NUNOTA)) || [])
+    sugestoes: simularTabelas(rotasPorNota.get(Number(nota.NUNOTA)) || [])
       .map(({ codigo, valor, regiao }) => ({ codigo, valor, regiao }))
   }));
   return { pagina, temMais: registros.length > tamanhoPagina, colunas, linhas };
 }
 
-module.exports = { filtrosDefinicaoFrete, consultarDefinicaoFrete };
+async function consultarHistoricoDefinicaoFrete(nunota, executarConsulta) {
+  const pedidos = await executarConsulta(`SELECT CAB.NUNOTA, CAB.NUMNOTA, CAB.VLRNOTA,
+    TO_CHAR(CAB.DTNEG,'DD/MM/YYYY') DATA_NOTA
+    FROM TGFCAB ATUAL JOIN TGFCAB CAB ON CAB.CODPARC=ATUAL.CODPARC
+    WHERE ATUAL.NUNOTA=${nunota} AND ATUAL.TIPMOV='V' AND ATUAL.STATUSNOTA='L'
+      AND ATUAL.CODTIPOPER IN (${TOPS_FATURAMENTO.join(',')})
+      AND CAB.TIPMOV='V' AND CAB.STATUSNOTA='L' AND CAB.CODTIPOPER=35
+      AND (CAB.DTNEG < ATUAL.DTNEG OR (CAB.DTNEG=ATUAL.DTNEG AND CAB.NUNOTA < ATUAL.NUNOTA))
+    ORDER BY CAB.DTNEG DESC, CAB.NUNOTA DESC
+    FETCH FIRST 3 ROWS ONLY`);
+  if (!pedidos.length) return [];
+
+  const ids = pedidos.map((pedido) => Number(pedido.NUNOTA));
+  const [fretes, rotas] = await Promise.all([
+    executarConsulta(sqlFretesReais(ids)),
+    executarConsulta(sqlSimulacoes(ids))
+  ]);
+  return pedidos.map((pedido) => {
+    const id = Number(pedido.NUNOTA);
+    const registros = fretes.filter((frete) => Number(frete.PEDIDO) === id);
+    const sugestoes = simularTabelas(rotas.filter((rota) => Number(rota.NUNOTA) === id))
+      .map(({ codigo, tabela, valor }) => ({ codigo, nome: tabela, valor }));
+    return { ...pedido, freteReal: compararFrete(pedido, registros, []).real, sugestoes };
+  });
+}
+
+module.exports = { filtrosDefinicaoFrete, consultarDefinicaoFrete, consultarHistoricoDefinicaoFrete };

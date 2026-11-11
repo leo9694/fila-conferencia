@@ -137,6 +137,8 @@
 .definicao-frete-grade .analise-frete-table td.definicao-frete-sugestao { color: #087f6d; font-weight: 600; }
 .definicao-frete-grade tbody[aria-busy="true"] { opacity: .55; }
 .definicao-frete-ordem { display: inline-flex; margin-inline-start: 6px; vertical-align: middle; color: #087f6d; }
+.definicao-frete-nota-botao { padding: 0; border: 0; background: transparent; color: #076b5d; font: inherit; font-weight: 700; cursor: pointer; }
+.definicao-frete-nota-botao:focus-visible { outline: 2px solid #087f6d; outline-offset: 2px; }
 @media (max-width: 880px) {
   #definicao-frete-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #definicao-frete-form label:nth-child(3) { grid-column: auto; }
@@ -180,6 +182,24 @@
 .analise-frete-detalhes-cte dl { grid-template-columns: 1.4fr 1fr 1.3fr; }
 .analise-frete-detalhes-dialogo dt { font-size: .72rem; color: #527086; }
 .analise-frete-detalhes-dialogo dd { margin: 2px 0 0; font-size: .82rem; line-height: 1.25; font-weight: 650; overflow-wrap: anywhere; }
+.analise-frete-detalhes-dialogo.definicao-frete-detalhes {
+  box-sizing: border-box;
+  width: max-content;
+  min-width: min(640px, calc(100% - 24px));
+  max-width: min(1120px, calc(100% - 24px));
+}
+.definicao-frete-detalhes .analise-frete-detalhes-identificacao { overflow-wrap: anywhere; }
+.definicao-frete-detalhes-mensagem { margin: 0; padding: 8px 11px; font-size: .8rem; }
+#definicao-frete-historico-status:empty { display: none; }
+.definicao-frete-detalhes-grade { overflow-x: auto; }
+.definicao-frete-detalhes-grade .transporte-table { min-width: 0; font-size: .76rem; }
+.definicao-frete-detalhes-grade th, .definicao-frete-detalhes-grade td { padding: 6px 10px; white-space: nowrap; }
+.definicao-frete-detalhes-grade :is(th, td):nth-child(n+3) { text-align: right; font-variant-numeric: tabular-nums; }
+.definicao-frete-sugestoes-grade :is(th, td):nth-child(-n+2) { white-space: normal; overflow-wrap: anywhere; }
+.definicao-frete-sugestoes-grade td:last-child { color: #076b5d; font-weight: 750; }
+#definicao-frete-historico-grade th[data-tabela] { min-width: 108px; max-width: 160px; white-space: normal; }
+#definicao-frete-historico-grade .transporte-table { width: max-content; min-width: 100%; }
+.definicao-frete-historico-sugestao { color: #076b5d; font-weight: 750; }
 .analise-frete-download { grid-column: 2; grid-row: 1; display: inline-flex; align-items: center; gap: 5px; padding: 5px 9px; border: 1px solid #c7dcd7; border-radius: 6px; background: #edf7f3; color: #076b5d; font-size: .75rem; font-weight: 650; text-decoration: none; white-space: nowrap; }
 .analise-frete-download:hover, .analise-frete-download:focus-visible { background: #d9efe6; color: #055f52; }
 .analise-frete-acoes-documentos { display: flex; flex-wrap: wrap; gap: 5px; }

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { filtrosDefinicaoFrete, consultarDefinicaoFrete } = require('../api/definicaoFrete');
+const { filtrosDefinicaoFrete, consultarDefinicaoFrete, consultarHistoricoDefinicaoFrete } = require('../api/definicaoFrete');
 
 const periodo = { dataInicial: '2026-11-04', dataFinal: '2026-11-05' };
 
@@ -36,10 +36,53 @@ test('consulta tabelas de toda a seleção e calcula apenas as rotas aplicáveis
   assert.match(chamadas[2], /CAB\.NUNOTA IN \(100,.*129\)/);
   assert.ok(chamadas.every((sql) => !/TGFIXN|TGFCFP|CAB\.CODPARCTRANSP/.test(sql)));
   assert.deepEqual(dados.colunas.map((tabela) => tabela.codigo), [3, 5]);
+  assert.equal(dados.linhas[0].NUNOTA, 100);
   assert.equal(dados.linhas[0].ORDEMCARGA, 5679);
   assert.equal(dados.linhas[1].ORDEMCARGA, null);
   assert.deepEqual(dados.linhas[0].sugestoes, [{ codigo: 3, valor: 27.5, regiao: 'MT' }]);
   assert.deepEqual(dados.linhas[1].sugestoes, []);
   assert.equal(dados.linhas.length, 30);
   assert.equal(dados.temMais, true);
+});
+
+test('consulta as três vendas anteriores do cliente com frete rateado e simulação por transportadora', async () => {
+  const chamadas = [];
+  const pedidos = await consultarHistoricoDefinicaoFrete(104, async (sql) => {
+    chamadas.push(sql);
+    if (chamadas.length === 1) return [{ NUNOTA: 103 }, { NUNOTA: 102 }, { NUNOTA: 101 }];
+    if (sql.startsWith('SELECT CAB.NUNOTA')) return [
+      { NUNOTA: '103', NUCFR: 3, DESCRCALCFRET: 'ALT', CODEVENTO: 1, FORMULA: 'VALOR * PESO', VALOR: 5, PESO: 6 },
+      { NUNOTA: 102, NUCFR: 3, DESCRCALCFRET: 'ALT', CODEVENTO: 1, FORMULA: 'VALOR * PESO', VALOR: 5, PESO: 8 },
+      { NUNOTA: 102, NUCFR: 5, DESCRCALCFRET: 'Carvalima', CODEVENTO: 1, FORMULA: 'DESCONHECIDA' }
+    ];
+    return [
+      { PEDIDO: '103', CHAVEACESSO: 'a', FRETE_REAL: 25, FRETE_CTE_TOTAL: 100, COMPARTILHADO: 1 },
+      { PEDIDO: 103, CHAVEACESSO: 'b', FRETE_REAL: 5 },
+      { PEDIDO: 102, CHAVEACESSO: 'c', FRETE_REAL: 0 }
+    ];
+  });
+  assert.match(chamadas[0], /CAB\.CODPARC=ATUAL\.CODPARC/);
+  assert.match(chamadas[0], /ATUAL\.NUNOTA=104/);
+  assert.match(chamadas[0], /CAB\.CODTIPOPER=35/);
+  assert.match(chamadas[0], /CAB\.DTNEG < ATUAL\.DTNEG.*CAB\.NUNOTA < ATUAL\.NUNOTA/);
+  assert.match(chamadas[0], /ORDER BY CAB\.DTNEG DESC, CAB\.NUNOTA DESC\s+FETCH FIRST 3 ROWS ONLY/);
+  assert.match(chamadas[1], /C\.NUNOTA IN \(103,102,101\)/);
+  assert.match(chamadas[2], /P\.CODPARC=CAB\.CODPARCTRANSP/);
+  assert.match(chamadas[2], /CAB\.NUNOTA IN \(103,102,101\)/);
+  assert.deepEqual(pedidos.map((pedido) => [pedido.NUNOTA, pedido.freteReal]), [[103, 30], [102, 0], [101, null]]);
+  assert.deepEqual(pedidos.map((pedido) => pedido.sugestoes), [
+    [{ codigo: 3, nome: 'ALT', valor: 30 }],
+    [{ codigo: 3, nome: 'ALT', valor: 40 }, { codigo: 5, nome: 'Carvalima', valor: null }],
+    []
+  ]);
+});
+
+test('dispensa consulta de CT-e quando o cliente não tem vendas anteriores', async () => {
+  let chamadas = 0;
+  const pedidos = await consultarHistoricoDefinicaoFrete(104, async () => {
+    chamadas += 1;
+    return [];
+  });
+  assert.deepEqual(pedidos, []);
+  assert.equal(chamadas, 1);
 });

@@ -4,10 +4,14 @@
   const cabecalho = $('colunas');
   const linhas = $('linhas');
   const consultar = form.querySelector('button[type="submit"]');
+  const dialogo = $('dialogo');
   const moeda = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
   const numero = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 3 });
+  const nomeTabela = (tabela) => `${tabela.codigo} - ${tabela.nome || 'Tabela de frete'}`;
+  const valorSugestao = (sugestao) => sugestao.valor == null ? 'Indisponível' : moeda.format(sugestao.valor);
   let filtros;
   let requisicao;
+  let requisicaoHistorico;
   let pagina = 1;
   let temMais = false;
 
@@ -22,13 +26,91 @@
     linhas.replaceChildren();
   }
 
+  async function abrirDetalhes(nota, campos, sugestoes, colunas) {
+    requisicaoHistorico?.abort();
+    const pedido = new AbortController();
+    requisicaoHistorico = pedido;
+    $('titulo').textContent = `Nota ${campos[0] === '—' ? nota.NUNOTA : campos[0]}`;
+    $('cliente').textContent = campos[1];
+    const listaSugestoes = $('sugestoes-linhas');
+    listaSugestoes.replaceChildren();
+    for (const tabela of colunas) {
+      const sugestao = sugestoes.get(String(tabela.codigo));
+      if (!sugestao) continue;
+      const linha = listaSugestoes.insertRow();
+      for (const texto of [nomeTabela(tabela), sugestao.regiao || '—', valorSugestao(sugestao)]) {
+        linha.insertCell().textContent = texto;
+      }
+    }
+    $('sugestoes-grade').hidden = !listaSugestoes.rows.length;
+    $('sugestoes-vazio').hidden = Boolean(listaSugestoes.rows.length);
+    $('resumo').replaceChildren(...[
+      ['Data', nota.DATA_NOTA], ['Destino', campos[2]], ['Valor da venda', campos[3]],
+      ['Peso (kg)', campos[4]], ['Volumes', campos[5]],
+      ['Ordem de carga', Number(nota.ORDEMCARGA) > 0 ? nota.ORDEMCARGA : '—']
+    ].map(([rotulo, valor]) => {
+      const campo = document.createElement('div');
+      const termo = document.createElement('dt');
+      const descricao = document.createElement('dd');
+      termo.textContent = rotulo;
+      descricao.textContent = valor || '—';
+      campo.append(termo, descricao);
+      return campo;
+    }));
+    const status = $('historico-status');
+    const grade = $('historico-grade');
+    const colunasHistorico = $('historico-colunas');
+    const registros = $('historico-linhas');
+    colunasHistorico.querySelectorAll('[data-tabela]').forEach((coluna) => coluna.remove());
+    registros.replaceChildren();
+    grade.hidden = true;
+    status.textContent = 'Consultando histórico…';
+    dialogo.showModal();
+
+    try {
+      const resposta = await fetch(`/api/transporte/definicao-frete/${nota.NUNOTA}/historico`, { signal: pedido.signal });
+      const dados = await resposta.json();
+      if (!resposta.ok) throw new Error(dados.erro || 'Não foi possível consultar o histórico do cliente.');
+      if (requisicaoHistorico !== pedido || !dialogo.open) return;
+      const tabelas = new Map(dados.pedidos.flatMap((anterior) =>
+        (anterior.sugestoes || []).map((sugestao) => [String(sugestao.codigo), sugestao])));
+      const codigos = [...tabelas.keys()].sort((a, b) => Number(a) - Number(b));
+      for (const codigo of codigos) {
+        const th = document.createElement('th');
+        th.scope = 'col';
+        th.dataset.tabela = codigo;
+        th.textContent = nomeTabela(tabelas.get(codigo));
+        colunasHistorico.append(th);
+      }
+      for (const anterior of dados.pedidos) {
+        const linha = registros.insertRow();
+        const valor = anterior.VLRNOTA == null ? '—' : moeda.format(anterior.VLRNOTA);
+        const frete = anterior.freteReal == null ? 'Indisponível' : moeda.format(anterior.freteReal);
+        for (const texto of [Number(anterior.NUMNOTA) > 0 ? anterior.NUMNOTA : anterior.NUNOTA, anterior.DATA_NOTA, valor, frete]) {
+          linha.insertCell().textContent = texto || '—';
+        }
+        const sugestoesAnteriores = new Map((anterior.sugestoes || []).map((sugestao) => [String(sugestao.codigo), sugestao]));
+        for (const codigo of codigos) {
+          const sugestao = sugestoesAnteriores.get(codigo);
+          const celula = linha.insertCell();
+          celula.className = 'definicao-frete-historico-sugestao';
+          celula.textContent = sugestao ? valorSugestao(sugestao) : '—';
+        }
+      }
+      grade.hidden = !dados.pedidos.length;
+      status.textContent = grade.hidden ? 'Nenhum pedido anterior encontrado.' : '';
+    } catch (erro) {
+      if (requisicaoHistorico === pedido && dialogo.open) status.textContent = erro.message;
+    }
+  }
+
   function renderizar(dados) {
     limparGrade();
     for (const tabela of dados.colunas) {
       const th = document.createElement('th');
       th.scope = 'col';
       th.dataset.tabela = tabela.codigo;
-      th.textContent = `${tabela.codigo} - ${tabela.nome || 'Tabela de frete'}`;
+      th.textContent = nomeTabela(tabela);
       th.className = 'analise-frete-numero';
       cabecalho.append(th);
     }
@@ -43,9 +125,21 @@
         nota.PESO == null ? '—' : numero.format(nota.PESO),
         nota.QTDVOL == null ? '—' : numero.format(nota.QTDVOL)
       ];
+      tr.className = 'analise-frete-nota-detalhavel';
+      const sugestoes = new Map(nota.sugestoes.map((sugestao) => [String(sugestao.codigo), sugestao]));
+      tr.addEventListener('click', () => abrirDetalhes(nota, campos, sugestoes, dados.colunas));
       campos.forEach((valor, indice) => {
         const td = tr.insertCell();
         td.textContent = valor || '—';
+        if (indice === 0) {
+          const botao = document.createElement('button');
+          botao.type = 'button';
+          botao.className = 'definicao-frete-nota-botao';
+          botao.textContent = valor;
+          botao.setAttribute('aria-label', `Ver detalhes da nota ${valor === '—' ? nota.NUNOTA : valor}`);
+          botao.setAttribute('aria-haspopup', 'dialog');
+          td.replaceChildren(botao);
+        }
         if (indice === 0 && Number(nota.ORDEMCARGA) > 0) {
           const icone = document.createElement('span');
           icone.className = 'definicao-frete-ordem';
@@ -57,12 +151,11 @@
         }
         if (indice >= 3) td.className = 'analise-frete-numero';
       });
-      const sugestoes = new Map(nota.sugestoes.map((sugestao) => [String(sugestao.codigo), sugestao]));
       for (const tabela of dados.colunas) {
         const sugestao = sugestoes.get(String(tabela.codigo));
         const td = tr.insertCell();
         td.className = 'analise-frete-numero definicao-frete-sugestao';
-        td.textContent = sugestao ? (sugestao.valor == null ? 'Indisponível' : moeda.format(sugestao.valor)) : '—';
+        td.textContent = sugestao ? valorSugestao(sugestao) : '—';
         if (sugestao?.regiao) td.title = sugestao.regiao;
       }
     }
@@ -109,6 +202,12 @@
   });
   $('anterior').addEventListener('click', () => carregar(pagina - 1));
   $('proxima').addEventListener('click', () => carregar(pagina + 1));
+  dialogo.addEventListener('close', () => {
+    if (!dialogo.open) {
+      requisicaoHistorico?.abort();
+      requisicaoHistorico = null;
+    }
+  });
 
   window.definicaoFreteController = {
     preparar(inicio, fim) {
@@ -117,6 +216,9 @@
     },
     limparSessao() {
       requisicao?.abort();
+      requisicaoHistorico?.abort();
+      requisicaoHistorico = null;
+      if (dialogo.open) dialogo.close();
       requisicao = null;
       filtros = null;
       pagina = 1;
