@@ -136,6 +136,7 @@
 .definicao-frete-grade .transporte-table-wrap { overflow-x: auto; max-height: min(68vh, 820px); }
 .definicao-frete-grade .analise-frete-table td.definicao-frete-sugestao { color: #087f6d; font-weight: 600; }
 .definicao-frete-grade tbody[aria-busy="true"] { opacity: .55; }
+.definicao-frete-ordem { display: inline-flex; margin-inline-start: 6px; vertical-align: middle; color: #087f6d; }
 @media (max-width: 880px) {
   #definicao-frete-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #definicao-frete-form label:nth-child(3) { grid-column: auto; }

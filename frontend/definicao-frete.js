@@ -46,6 +46,15 @@
       campos.forEach((valor, indice) => {
         const td = tr.insertCell();
         td.textContent = valor || '—';
+        if (indice === 0 && Number(nota.ORDEMCARGA) > 0) {
+          const icone = document.createElement('span');
+          icone.className = 'definicao-frete-ordem';
+          icone.title = `Ordem de carga ${nota.ORDEMCARGA}`;
+          icone.setAttribute('role', 'img');
+          icone.setAttribute('aria-label', icone.title);
+          icone.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 4h14v13H1zM15 8h4l4 4v5h-8"/><circle cx="5.5" cy="18" r="2.5" fill="white"/><circle cx="18.5" cy="18" r="2.5" fill="white"/></svg>';
+          td.append(icone);
+        }
         if (indice >= 3) td.className = 'analise-frete-numero';
       });
       const sugestoes = new Map(nota.sugestoes.map((sugestao) => [String(sugestao.codigo), sugestao]));

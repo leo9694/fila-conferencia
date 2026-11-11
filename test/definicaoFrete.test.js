@@ -14,6 +14,8 @@ test('valida empresa, parceiro e período em conjunto', () => {
 test('consulta tabelas de toda a seleção e calcula apenas as rotas aplicáveis às notas da página', async () => {
   const filtros = filtrosDefinicaoFrete({ ...periodo, empresa: '1', cliente: "D'Ávila_10%", pagina: '2' });
   const notas = Array.from({ length: 31 }, (_, i) => ({ NUNOTA: 100 + i, NUMNOTA: 10 + i }));
+  notas[0].ORDEMCARGA = 5679;
+  notas[1].ORDEMCARGA = null;
   const chamadas = [];
   const dados = await consultarDefinicaoFrete(filtros, async (sql) => {
     chamadas.push(sql);
@@ -26,12 +28,16 @@ test('consulta tabelas de toda a seleção e calcula apenas as rotas aplicáveis
   });
   assert.match(chamadas[0], /CAB\.DTNEG >= TO_DATE\('2026-11-04'/);
   assert.match(chamadas[0], /CAB\.CODEMP=1/);
+  assert.match(chamadas[0], /CAB\.ORDEMCARGA/);
+  assert.match(chamadas[0], /N\.ORDEMCARGA/);
   assert.match(chamadas[0], /D''Ávila\\_10\\%/);
   assert.match(chamadas[0], /OFFSET 30 ROWS FETCH NEXT 31 ROWS ONLY/);
   assert.match(chamadas[1], /SELECT DISTINCT CAB\.CODEMP, CAB\.CODPARC/);
   assert.match(chamadas[2], /CAB\.NUNOTA IN \(100,.*129\)/);
   assert.ok(chamadas.every((sql) => !/TGFIXN|TGFCFP|CAB\.CODPARCTRANSP/.test(sql)));
   assert.deepEqual(dados.colunas.map((tabela) => tabela.codigo), [3, 5]);
+  assert.equal(dados.linhas[0].ORDEMCARGA, 5679);
+  assert.equal(dados.linhas[1].ORDEMCARGA, null);
   assert.deepEqual(dados.linhas[0].sugestoes, [{ codigo: 3, valor: 27.5, regiao: 'MT' }]);
   assert.deepEqual(dados.linhas[1].sugestoes, []);
   assert.equal(dados.linhas.length, 30);
