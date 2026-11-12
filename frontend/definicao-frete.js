@@ -59,6 +59,9 @@
     requisicaoHistorico = pedido;
     $('titulo').textContent = `Nota ${campos[0] === '—' ? nota.NUNOTA : campos[0]}`;
     $('cliente').textContent = campos[1];
+    const transportadora = $('transportadora-carga');
+    transportadora.hidden = !(Number(nota.ORDEMCARGA) > 0);
+    transportadora.textContent = transportadora.hidden ? '' : `Transportadora da carga · ${nota.TRANSPORTADORA_CARGA || 'Indisponível'}`;
     const listaSugestoes = $('sugestoes-linhas');
     listaSugestoes.replaceChildren();
     for (const tabela of colunas) {
@@ -71,9 +74,10 @@
     }
     $('sugestoes-grade').hidden = !listaSugestoes.rows.length;
     $('sugestoes-vazio').hidden = Boolean(listaSugestoes.rows.length);
+    const [, , faturamento, destino, venda, peso, volumes] = campos;
     $('resumo').replaceChildren(...[
-      ['Data', nota.DATA_NOTA], ['Destino', campos[2]], ['Valor da venda', campos[3]],
-      ['Peso (kg)', campos[4]], ['Volumes', campos[5]],
+      ['Data', nota.DATA_NOTA], ['Faturamento', faturamento], ['Destino', destino], ['Valor da venda', venda],
+      ['Peso (kg)', peso], ['Volumes', volumes],
       ['Ordem de carga', Number(nota.ORDEMCARGA) > 0 ? nota.ORDEMCARGA : '—']
     ].map(([rotulo, valor]) => {
       const campo = document.createElement('div');
@@ -149,6 +153,7 @@
       const campos = [
         Number(nota.NUMNOTA) > 0 ? nota.NUMNOTA : '—',
         [nota.CODPARC, nota.CLIENTE].filter(Boolean).join(' - '),
+        nota.DATA_FATURAMENTO || '—',
         [nota.CIDADE, nota.UF].filter(Boolean).join(' / '),
         nota.VLRNOTA == null ? '—' : moeda.format(nota.VLRNOTA),
         nota.PESO == null ? '—' : numero.format(nota.PESO),
@@ -178,7 +183,7 @@
           icone.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 4h14v13H1zM15 8h4l4 4v5h-8"/><circle cx="5.5" cy="18" r="2.5" fill="white"/><circle cx="18.5" cy="18" r="2.5" fill="white"/></svg>';
           td.append(icone);
         }
-        if (indice >= 3) td.className = 'analise-frete-numero';
+        if (indice >= 4) td.className = 'analise-frete-numero';
       });
       for (const tabela of dados.colunas) {
         const sugestao = sugestoes.get(String(tabela.codigo));
