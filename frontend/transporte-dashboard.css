@@ -199,9 +199,26 @@
 .definicao-frete-detalhes-grade :is(th, td):nth-child(n+3) { text-align: right; font-variant-numeric: tabular-nums; }
 .definicao-frete-sugestoes-grade :is(th, td):nth-child(-n+2) { white-space: normal; overflow-wrap: anywhere; }
 .definicao-frete-sugestoes-grade td:nth-child(3) { color: #076b5d; font-weight: 750; }
-.definicao-frete-sugestoes-grade .definicao-frete-selecao-transportadora { text-align: left; }
-.definicao-frete-selecao-transportadora select, .definicao-frete-selecao-transportadora button { display: block; max-width: 215px; font: inherit; }
-.definicao-frete-selecao-transportadora button { margin-top: 4px; }
+.definicao-frete-sugestoes-grade :is(#definicao-frete-acao-transportadora, .definicao-frete-selecao-transportadora) { text-align: left; }
+.definicao-frete-selecao-transportadora select,
+.definicao-frete-selecao-transportadora button {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 172px;
+  max-width: 260px;
+  min-height: 32px;
+  padding: 5px 9px;
+  border: 1px solid #c9dbd7;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 700;
+}
+.definicao-frete-selecao-transportadora select { background: #fff; color: #16374c; text-overflow: ellipsis; }
+.definicao-frete-selecao-transportadora button { margin-top: 5px; border-color: #087f6d; background: #087f6d; color: #fff; white-space: normal; cursor: pointer; }
+.definicao-frete-selecao-transportadora button:hover:not(:disabled) { border-color: #076b5d; background: #076b5d; }
+.definicao-frete-selecao-transportadora :is(select, button):focus-visible { outline: 2px solid #087f6d; outline-offset: 2px; }
+.definicao-frete-selecao-transportadora :is(select, button):disabled { border-color: #dce9e6; background: #edf5f3; color: #597084; cursor: default; }
 #definicao-frete-historico-grade th[data-tabela] { min-width: 108px; max-width: 160px; white-space: normal; }
 #definicao-frete-historico-grade .transporte-table { width: max-content; min-width: 100%; }
 #definicao-frete-historico-grade :is(th, td):nth-child(3) { max-width: 180px; text-align: left; white-space: normal; overflow-wrap: anywhere; }
