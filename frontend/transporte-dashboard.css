@@ -136,10 +136,11 @@
 .definicao-frete-grade .transporte-table-wrap { overflow-x: auto; max-height: min(68vh, 820px); }
 .definicao-frete-grade .analise-frete-table td.definicao-frete-sugestao { color: #087f6d; font-weight: 600; }
 .definicao-frete-grade tbody[aria-busy="true"] { opacity: .55; }
-.definicao-frete-ordem { display: inline-flex; margin-inline-start: 6px; vertical-align: middle; color: #087f6d; }
-.definicao-frete-confirmacao { display: inline-flex; margin-inline-start: 6px; vertical-align: middle; color: #93600e; }
+.definicao-frete-nota-identificacao { display: grid; grid-template-columns: minmax(0, 1fr) 14px 14px; align-items: center; gap: 6px; }
+.definicao-frete-ordem { display: flex; grid-column: 2; grid-row: 1; color: #087f6d; }
+.definicao-frete-confirmacao { display: flex; grid-column: 3; grid-row: 1; color: #93600e; }
 .definicao-frete-confirmacao.is-confirmada { color: #087f6d; }
-.definicao-frete-nota-botao { padding: 0; border: 0; background: transparent; color: #076b5d; font: inherit; font-weight: 700; cursor: pointer; }
+.definicao-frete-nota-botao { justify-self: start; padding: 0; border: 0; background: transparent; color: #076b5d; font: inherit; font-weight: 700; cursor: pointer; }
 .definicao-frete-nota-botao:focus-visible { outline: 2px solid #087f6d; outline-offset: 2px; }
 @media (max-width: 880px) {
   #definicao-frete-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -200,13 +201,11 @@
 .definicao-frete-sugestoes-grade :is(th, td):nth-child(-n+2) { white-space: normal; overflow-wrap: anywhere; }
 .definicao-frete-sugestoes-grade td:nth-child(3) { color: #076b5d; font-weight: 750; }
 .definicao-frete-sugestoes-grade :is(#definicao-frete-acao-transportadora, .definicao-frete-selecao-transportadora) { text-align: left; }
+.definicao-frete-controles-transportadora { display: flex; align-items: stretch; gap: 6px; max-width: 328px; }
 .definicao-frete-selecao-transportadora select,
 .definicao-frete-selecao-transportadora button {
   display: block;
   box-sizing: border-box;
-  width: 100%;
-  min-width: 172px;
-  max-width: 260px;
   min-height: 32px;
   padding: 5px 9px;
   border: 1px solid #c9dbd7;
@@ -214,8 +213,8 @@
   font: inherit;
   font-weight: 700;
 }
-.definicao-frete-selecao-transportadora select { background: #fff; color: #16374c; text-overflow: ellipsis; }
-.definicao-frete-selecao-transportadora button { margin-top: 5px; border-color: #087f6d; background: #087f6d; color: #fff; white-space: normal; cursor: pointer; }
+.definicao-frete-selecao-transportadora select { flex: 1; min-width: 148px; background: #fff; color: #16374c; text-overflow: ellipsis; }
+.definicao-frete-selecao-transportadora button { flex: none; border-color: #087f6d; background: #087f6d; color: #fff; cursor: pointer; }
 .definicao-frete-selecao-transportadora button:hover:not(:disabled) { border-color: #076b5d; background: #076b5d; }
 .definicao-frete-selecao-transportadora :is(select, button):focus-visible { outline: 2px solid #087f6d; outline-offset: 2px; }
 .definicao-frete-selecao-transportadora :is(select, button):disabled { border-color: #dce9e6; background: #edf5f3; color: #597084; cursor: default; }

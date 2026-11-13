@@ -33,10 +33,10 @@
     return `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, '0')}-${String(data.getDate()).padStart(2, '0')}`;
   }
   function hoje() { return formatarDataLocal(new Date()); }
-  function inicioPadrao() {
+  function inicioPadrao(dias = 30) {
     const data = new Date();
     data.setHours(0, 0, 0, 0);
-    data.setDate(data.getDate() - 29);
+    data.setDate(data.getDate() - (dias - 1));
     return formatarDataLocal(data);
   }
   function selecionarTexto(elemento, valor) { return Array.from(elemento.selectedOptions || []).map((opcao) => opcao.value).includes(valor); }
@@ -340,7 +340,7 @@
     $('analise-frete-painel').hidden = !analise;
     $('definicao-frete-painel').hidden = !definicao;
     $('email-frete-painel').hidden = !emailFrete;
-    if (definicao) return window.definicaoFreteController?.preparar(inicioPadrao(), hoje());
+    if (definicao) return window.definicaoFreteController?.preparar(inicioPadrao(4), hoje());
     if (emailFrete) return window.emailFreteAutomacaoController?.preparar();
     if (analise) return window.analiseFreteController?.preparar();
     if (!elementos.dataInicial.value) elementos.dataInicial.value = inicioPadrao();

@@ -71,7 +71,8 @@
     }
     const botao = document.createElement('button');
     botao.type = 'button';
-    botao.textContent = 'Aplicar na nota e no parceiro';
+    botao.textContent = 'Aplicar';
+    botao.title = 'Aplicar na nota e no cadastro do parceiro';
     botao.disabled = true;
     seletor.addEventListener('change', () => { botao.disabled = !seletor.value; });
     botao.addEventListener('click', async () => {
@@ -102,7 +103,10 @@
         });
       }
     });
-    celula.append(seletor, botao);
+    const controles = document.createElement('div');
+    controles.className = 'definicao-frete-controles-transportadora';
+    controles.append(seletor, botao);
+    celula.append(controles);
   }
 
   async function abrirDetalhes(nota, campos, sugestoes, colunas, transportadoras) {
@@ -225,25 +229,27 @@
       campos.forEach((valor, indice) => {
         const td = tr.insertCell();
         td.textContent = valor || '—';
+        if (indice >= 4) td.className = 'analise-frete-numero';
         if (indice === 0) {
+          const identificacao = document.createElement('span');
+          identificacao.className = 'definicao-frete-nota-identificacao';
           const botao = document.createElement('button');
           botao.type = 'button';
           botao.className = 'definicao-frete-nota-botao';
           botao.textContent = valor;
           botao.setAttribute('aria-label', `Ver detalhes da nota ${valor === '—' ? nota.NUNOTA : valor}`);
           botao.setAttribute('aria-haspopup', 'dialog');
-          td.replaceChildren(botao);
-        }
-        if (indice === 0 && Number(nota.ORDEMCARGA) > 0) {
-          const icone = document.createElement('span');
-          icone.className = 'definicao-frete-ordem';
-          icone.title = `Ordem de carga ${nota.ORDEMCARGA}`;
-          icone.setAttribute('role', 'img');
-          icone.setAttribute('aria-label', icone.title);
-          icone.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 4h14v13H1zM15 8h4l4 4v5h-8"/><circle cx="5.5" cy="18" r="2.5" fill="white"/><circle cx="18.5" cy="18" r="2.5" fill="white"/></svg>';
-          td.append(icone);
-        }
-        if (indice === 0) {
+          identificacao.append(botao);
+          td.replaceChildren(identificacao);
+          if (Number(nota.ORDEMCARGA) > 0) {
+            const icone = document.createElement('span');
+            icone.className = 'definicao-frete-ordem';
+            icone.title = `Ordem de carga ${nota.ORDEMCARGA}`;
+            icone.setAttribute('role', 'img');
+            icone.setAttribute('aria-label', icone.title);
+            icone.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 4h14v13H1zM15 8h4l4 4v5h-8"/><circle cx="5.5" cy="18" r="2.5" fill="white"/><circle cx="18.5" cy="18" r="2.5" fill="white"/></svg>';
+            identificacao.append(icone);
+          }
           const confirmada = nota.STATUSNOTA === 'L';
           const status = document.createElement('span');
           status.className = `definicao-frete-confirmacao ${confirmada ? 'is-confirmada' : ''}`;
@@ -251,9 +257,8 @@
           status.setAttribute('role', 'img');
           status.setAttribute('aria-label', status.title);
           status.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="${confirmada ? 'm8 12 3 3 5-6' : 'M12 7v5l3 2'}"/></svg>`;
-          td.append(status);
+          identificacao.append(status);
         }
-        if (indice >= 4) td.className = 'analise-frete-numero';
       });
       for (const tabela of dados.colunas) {
         const sugestao = sugestoes.get(String(tabela.codigo));
