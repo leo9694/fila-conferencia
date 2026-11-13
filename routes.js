@@ -80,7 +80,8 @@ const {
 } = require('./api/relatorioCtes');
 const { montarSqlEstimativaFrete, normalizarEstimativaFrete } = require('./api/estimativaFrete');
 const { carregarAnaliseFrete } = require('./api/analiseFrete');
-const { filtrosDefinicaoFrete, consultarDefinicaoFrete, consultarHistoricoDefinicaoFrete } = require('./api/definicaoFrete');
+const { filtrosDefinicaoFrete, consultarDefinicaoFrete, consultarHistoricoDefinicaoFrete,
+  alterarTransportadoraDefinicaoFrete } = require('./api/definicaoFrete');
 const { gerarAnaliseFreteExcel } = require('./api/analiseFreteExcel');
 const { obterConfiguracaoEmailFrete, salvarConfiguracaoEmailFrete, verificarConexaoEmailFrete, enviarTesteEmailFrete } = require('./api/emailFrete');
 const { criarAutomacaoEmailFrete } = require('./api/emailFreteAutomacao');
@@ -2933,6 +2934,24 @@ router.get('/transporte/definicao-frete/:nunota/historico', exigirGerenciaOuDire
   } catch (err) {
     console.error('Erro no histórico da definição de frete:', err.message);
     res.status(502).json({ erro: 'Não foi possível consultar o histórico do cliente.' });
+  }
+});
+
+router.put('/transporte/definicao-frete/:nunota/transportadora', exigirGerenciaOuDiretoria, async (req, res) => {
+  const nunota = Number(req.params.nunota);
+  if (!Number.isSafeInteger(nunota) || nunota <= 0) return res.status(400).json({ erro: 'Nota inválida.' });
+  if (finalizacoesConferenciaEmAndamento.has(nunota)) return res.status(409).json({ erro: 'Aguarde a operação em andamento nesta nota.' });
+  finalizacoesConferenciaEmAndamento.add(nunota);
+  try {
+    res.json(await alterarTransportadoraDefinicaoFrete({ ...req.body, nunota }, {
+      executarConsulta: executeQuery, atualizarRegistro: atualizarRegistroApi, salvarRegistro: salvarRegistroApi
+    }));
+  } catch (err) {
+    if (err.statusCode === 400 || err.statusCode === 409) return res.status(err.statusCode).json({ erro: err.message });
+    console.error('Erro ao alterar transportadora da nota:', err.message);
+    res.status(502).json({ erro: 'Não foi possível concluir a alteração. Atualize a consulta antes de tentar novamente.' });
+  } finally {
+    finalizacoesConferenciaEmAndamento.delete(nunota);
   }
 });
 

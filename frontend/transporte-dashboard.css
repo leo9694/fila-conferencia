@@ -137,6 +137,8 @@
 .definicao-frete-grade .analise-frete-table td.definicao-frete-sugestao { color: #087f6d; font-weight: 600; }
 .definicao-frete-grade tbody[aria-busy="true"] { opacity: .55; }
 .definicao-frete-ordem { display: inline-flex; margin-inline-start: 6px; vertical-align: middle; color: #087f6d; }
+.definicao-frete-confirmacao { display: inline-flex; margin-inline-start: 6px; vertical-align: middle; color: #93600e; }
+.definicao-frete-confirmacao.is-confirmada { color: #087f6d; }
 .definicao-frete-nota-botao { padding: 0; border: 0; background: transparent; color: #076b5d; font: inherit; font-weight: 700; cursor: pointer; }
 .definicao-frete-nota-botao:focus-visible { outline: 2px solid #087f6d; outline-offset: 2px; }
 @media (max-width: 880px) {
@@ -196,7 +198,10 @@
 .definicao-frete-detalhes-grade th, .definicao-frete-detalhes-grade td { padding: 6px 10px; white-space: nowrap; }
 .definicao-frete-detalhes-grade :is(th, td):nth-child(n+3) { text-align: right; font-variant-numeric: tabular-nums; }
 .definicao-frete-sugestoes-grade :is(th, td):nth-child(-n+2) { white-space: normal; overflow-wrap: anywhere; }
-.definicao-frete-sugestoes-grade td:last-child { color: #076b5d; font-weight: 750; }
+.definicao-frete-sugestoes-grade td:nth-child(3) { color: #076b5d; font-weight: 750; }
+.definicao-frete-sugestoes-grade .definicao-frete-selecao-transportadora { text-align: left; }
+.definicao-frete-selecao-transportadora select, .definicao-frete-selecao-transportadora button { display: block; max-width: 215px; font: inherit; }
+.definicao-frete-selecao-transportadora button { margin-top: 4px; }
 #definicao-frete-historico-grade th[data-tabela] { min-width: 108px; max-width: 160px; white-space: normal; }
 #definicao-frete-historico-grade .transporte-table { width: max-content; min-width: 100%; }
 #definicao-frete-historico-grade :is(th, td):nth-child(3) { max-width: 180px; text-align: left; white-space: normal; overflow-wrap: anywhere; }

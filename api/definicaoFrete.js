@@ -3,6 +3,17 @@ const { sqlEscopoNotas } = require('./analiseFreteConsulta');
 const { validarPeriodoTransporte } = require('./transporteDashboard');
 
 const tamanhoPagina = 30;
+const statusNotas = "'A','P','L'";
+const alteracoesPorParceiro = new Set();
+
+function podeAlterarTransportadora(nota) {
+  return ['A', 'P'].includes(nota.STATUSNOTA) && !(Number(nota.ORDEMCARGA) > 0);
+}
+
+function sqlTransportadoras() {
+  return `JOIN TGFCFP CFP ON CFP.NUCFR=T.NUCFR
+    JOIN TGFPAR TRA ON TRA.CODPARC=CFP.CODPARC AND TRA.ATIVO='S' AND TRA.TRANSPORTADORA='S'`;
+}
 
 function filtrosDefinicaoFrete(query) {
   const cliente = String(query.cliente ?? '').trim();
@@ -19,7 +30,7 @@ function filtrosDefinicaoFrete(query) {
 function sqlNotas(filtros) {
   return `FROM TGFCAB CAB
     LEFT JOIN TGFPAR PAR ON PAR.CODPARC=CAB.CODPARC
-    WHERE CAB.TIPMOV='V' AND CAB.STATUSNOTA='L' AND CAB.CODTIPOPER IN (${TOPS_FATURAMENTO.join(',')})
+    WHERE CAB.TIPMOV='V' AND CAB.STATUSNOTA IN (${statusNotas}) AND CAB.CODTIPOPER IN (${TOPS_FATURAMENTO.join(',')})
       ${sqlEscopoNotas({ ...filtros, cliente: '' })}
       ${filtros.cliente ? sqlEscopoNotas(filtros) : ''}
       ${filtros.empresa ? `AND CAB.CODEMP=${filtros.empresa}` : ''}`;
@@ -29,7 +40,7 @@ async function consultarDefinicaoFrete(filtros, executarConsulta) {
   const { pagina } = filtros;
   const registros = await executarConsulta(`WITH NOTAS AS (
     SELECT CAB.NUNOTA, CAB.NUMNOTA, CAB.CODEMP, CAB.ORDEMCARGA, CAB.CODPARC, CAB.DTNEG, CAB.DTFATUR,
-      CAB.VLRNOTA, CAB.PESOBRUTO PESO, CAB.QTDVOL,
+      CAB.VLRNOTA, CAB.PESOBRUTO PESO, CAB.QTDVOL, CAB.STATUSNOTA, CAB.CODPARCTRANSP,
       COALESCE(PAR.NOMEPARC, PAR.RAZAOSOCIAL) CLIENTE, PAR.CODCID
     ${sqlNotas(filtros)}
     ORDER BY CAB.DTNEG DESC, CAB.NUNOTA DESC
@@ -38,11 +49,13 @@ async function consultarDefinicaoFrete(filtros, executarConsulta) {
   SELECT N.NUNOTA, N.NUMNOTA, N.ORDEMCARGA, N.CODPARC, N.CLIENTE, CID.NOMECID CIDADE, UF.UF,
     N.VLRNOTA, N.PESO, N.QTDVOL, TO_CHAR(N.DTNEG,'DD/MM/YYYY') DATA_NOTA,
     TO_CHAR(N.DTFATUR,'DD/MM/YYYY') DATA_FATURAMENTO,
+    N.STATUSNOTA, N.CODPARCTRANSP, COALESCE(TRN.NOMEPARC, TRN.RAZAOSOCIAL) TRANSPORTADORA_NOTA,
     COALESCE(TRA.NOMEPARC, TRA.RAZAOSOCIAL) TRANSPORTADORA_CARGA
   FROM NOTAS N LEFT JOIN TSICID CID ON CID.CODCID=N.CODCID
   LEFT JOIN TSIUFS UF ON UF.CODUF=CID.UF
   LEFT JOIN TGFORD ORD ON ORD.CODEMP=N.CODEMP AND ORD.ORDEMCARGA=N.ORDEMCARGA AND N.ORDEMCARGA>0
   LEFT JOIN TGFPAR TRA ON TRA.CODPARC=ORD.CODPARCTRANSP
+  LEFT JOIN TGFPAR TRN ON TRN.CODPARC=N.CODPARCTRANSP
   ORDER BY N.DTNEG DESC, N.NUNOTA DESC`);
   const notas = registros.slice(0, tamanhoPagina);
   if (!notas.length) return { pagina, temMais: false, colunas: [], linhas: [] };
@@ -68,7 +81,64 @@ async function consultarDefinicaoFrete(filtros, executarConsulta) {
     sugestoes: simularTabelas(rotasPorNota.get(Number(nota.NUNOTA)) || [])
       .map(({ codigo, valor, regiao }) => ({ codigo, valor, regiao }))
   }));
-  return { pagina, temMais: registros.length > tamanhoPagina, colunas, linhas };
+  const codigos = [...new Set(linhas.filter(podeAlterarTransportadora).flatMap((nota) =>
+    nota.sugestoes.filter((sugestao) => sugestao.valor != null).map((sugestao) => Number(sugestao.codigo))))];
+  const transportadoras = codigos.length ? await executarConsulta(`SELECT DISTINCT T.NUCFR, TRA.CODPARC,
+    COALESCE(TRA.NOMEPARC, TRA.RAZAOSOCIAL) TRANSPORTADORA
+    FROM TGFCFR T ${sqlTransportadoras()}
+    WHERE T.NUCFR IN (${codigos.join(',')}) ORDER BY T.NUCFR, TRA.CODPARC`) : [];
+  return { pagina, temMais: registros.length > tamanhoPagina, colunas, linhas, transportadoras };
+}
+
+async function alterarTransportadoraDefinicaoFrete(dados, { executarConsulta, atualizarRegistro, salvarRegistro }) {
+  const ids = [dados.nunota, dados.tabela, dados.transportadora].map(Number);
+  if (ids.some((id) => !Number.isSafeInteger(id) || id <= 0)) {
+    throw Object.assign(new Error('Nota, tabela ou transportadora inválida.'), { statusCode: 400 });
+  }
+  const [nunota, tabela, transportadora] = ids;
+  const consultarNota = async () => (await executarConsulta(`SELECT CAB.CODPARC, CAB.STATUSNOTA, CAB.ORDEMCARGA,
+    CAB.CODPARCTRANSP, CPL.CODPARC COMPLEMENTO, CPL.CODPARCTRANSP PREFERENCIAL
+    FROM TGFCAB CAB LEFT JOIN TGFCPL CPL ON CPL.CODPARC=CAB.CODPARC
+    WHERE CAB.NUNOTA=${nunota} AND CAB.TIPMOV='V' AND CAB.CODTIPOPER IN (${TOPS_FATURAMENTO.join(',')})`))[0];
+  const nota = await consultarNota();
+  if (!nota || !podeAlterarTransportadora(nota)) {
+    throw Object.assign(new Error('A nota precisa estar sem confirmação e sem ordem de carga.'), { statusCode: 409 });
+  }
+  const parceiro = Number(nota.CODPARC);
+  if (alteracoesPorParceiro.has(parceiro)) {
+    throw Object.assign(new Error('Já existe uma alteração de transportadora para este parceiro.'), { statusCode: 409 });
+  }
+  alteracoesPorParceiro.add(parceiro);
+  try {
+    const [rotas, opcoes] = await Promise.all([
+      executarConsulta(sqlSimulacoes([nunota], { porTransportadora: false })),
+      executarConsulta(`SELECT COALESCE(TRA.NOMEPARC, TRA.RAZAOSOCIAL) TRANSPORTADORA
+        FROM TGFCFR T ${sqlTransportadoras()} WHERE T.NUCFR=${tabela} AND TRA.CODPARC=${transportadora}`)
+    ]);
+    if (!opcoes.length || !simularTabelas(rotas).some((opcao) => Number(opcao.codigo) === tabela && opcao.valor != null)) {
+      throw Object.assign(new Error('A transportadora não está disponível para esta sugestão.'), { statusCode: 409 });
+    }
+    const atual = await consultarNota();
+    if (!atual || !podeAlterarTransportadora(atual) || Number(atual.CODPARC) !== parceiro) {
+      throw Object.assign(new Error('A nota mudou no Sankhya. Atualize a consulta.'), { statusCode: 409 });
+    }
+    const campos = { CODPARCTRANSP: transportadora };
+    if (Number(atual.CODPARCTRANSP) !== transportadora) {
+      await atualizarRegistro('CabecalhoNota', { NUNOTA: nunota }, campos);
+    }
+    try {
+      if (Number(atual.PREFERENCIAL) !== transportadora) {
+        if (atual.COMPLEMENTO != null) await atualizarRegistro('ComplementoParc', { CODPARC: parceiro }, campos);
+        else await salvarRegistro('ComplementoParc', { CODPARC: parceiro, ...campos });
+      }
+    } catch (erro) {
+      console.error('Erro ao salvar transportadora preferencial:', erro.message);
+      return { codigo: transportadora, nome: opcoes[0].TRANSPORTADORA, preferencialAtualizada: false };
+    }
+    return { codigo: transportadora, nome: opcoes[0].TRANSPORTADORA, preferencialAtualizada: true };
+  } finally {
+    alteracoesPorParceiro.delete(parceiro);
+  }
 }
 
 async function consultarTdePorCte(fretes, executarConsulta) {
@@ -108,7 +178,7 @@ async function consultarHistoricoDefinicaoFrete(nunota, executarConsulta) {
     TO_CHAR(CAB.DTNEG,'DD/MM/YYYY') DATA_NOTA
     FROM TGFCAB ATUAL JOIN TGFCAB CAB ON CAB.CODPARC=ATUAL.CODPARC
     LEFT JOIN TGFPAR TRA ON TRA.CODPARC=CAB.CODPARCTRANSP
-    WHERE ATUAL.NUNOTA=${nunota} AND ATUAL.TIPMOV='V' AND ATUAL.STATUSNOTA='L'
+    WHERE ATUAL.NUNOTA=${nunota} AND ATUAL.TIPMOV='V' AND ATUAL.STATUSNOTA IN (${statusNotas})
       AND ATUAL.CODTIPOPER IN (${TOPS_FATURAMENTO.join(',')})
       AND CAB.TIPMOV='V' AND CAB.STATUSNOTA='L' AND CAB.CODTIPOPER=35
       AND (CAB.DTNEG < ATUAL.DTNEG OR (CAB.DTNEG=ATUAL.DTNEG AND CAB.NUNOTA < ATUAL.NUNOTA))
@@ -139,4 +209,4 @@ async function consultarHistoricoDefinicaoFrete(nunota, executarConsulta) {
   });
 }
 
-module.exports = { filtrosDefinicaoFrete, consultarDefinicaoFrete, consultarHistoricoDefinicaoFrete };
+module.exports = { filtrosDefinicaoFrete, consultarDefinicaoFrete, consultarHistoricoDefinicaoFrete, alterarTransportadoraDefinicaoFrete };

@@ -53,15 +53,68 @@
     }
   }
 
-  async function abrirDetalhes(nota, campos, sugestoes, colunas) {
+  function mostrarTransportadora(nota) {
+    const transportadora = $('transportadora-carga');
+    const temCarga = Number(nota.ORDEMCARGA) > 0;
+    transportadora.hidden = false;
+    transportadora.textContent = temCarga
+      ? `Transportadora da carga · ${nota.TRANSPORTADORA_CARGA || 'Indisponível'}`
+      : `Transportadora da nota · ${nota.TRANSPORTADORA_NOTA || 'Não selecionada'}`;
+  }
+
+  function montarSelecaoTransportadora(celula, nota, tabela, opcoes, pedido) {
+    const seletor = document.createElement('select');
+    seletor.setAttribute('aria-label', `Transportadora para ${nomeTabela(tabela)}`);
+    seletor.append(new Option('Selecione', ''));
+    for (const opcao of opcoes) {
+      seletor.append(new Option(`${opcao.TRANSPORTADORA} (${opcao.CODPARC})`, opcao.CODPARC));
+    }
+    const botao = document.createElement('button');
+    botao.type = 'button';
+    botao.textContent = 'Aplicar na nota e no parceiro';
+    botao.disabled = true;
+    seletor.addEventListener('change', () => { botao.disabled = !seletor.value; });
+    botao.addEventListener('click', async () => {
+      const status = $('transportadora-status');
+      const controles = [...$('sugestoes-linhas').querySelectorAll('button, select')];
+      controles.forEach((controle) => { controle.disabled = true; });
+      status.hidden = false;
+      status.textContent = 'Salvando transportadora…';
+      try {
+        const resposta = await fetch(`/api/transporte/definicao-frete/${nota.NUNOTA}/transportadora`, {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tabela: tabela.codigo, transportadora: seletor.value })
+        });
+        const resultado = await resposta.json();
+        if (!resposta.ok) throw new Error(resultado.erro || 'Não foi possível salvar a transportadora.');
+        nota.TRANSPORTADORA_NOTA = resultado.nome;
+        if (requisicaoHistorico === pedido && dialogo.open) {
+          mostrarTransportadora(nota);
+          status.textContent = resultado.preferencialAtualizada
+            ? 'Transportadora atualizada na nota e no cadastro do parceiro.'
+            : 'Transportadora atualizada na nota. A preferência do parceiro não foi salva. Tente aplicar novamente.';
+        }
+      } catch (erro) {
+        if (requisicaoHistorico === pedido && dialogo.open) status.textContent = erro.message;
+      } finally {
+        controles.forEach((controle) => {
+          controle.disabled = controle.tagName === 'BUTTON' && !controle.previousElementSibling.value;
+        });
+      }
+    });
+    celula.append(seletor, botao);
+  }
+
+  async function abrirDetalhes(nota, campos, sugestoes, colunas, transportadoras) {
     requisicaoHistorico?.abort();
     const pedido = new AbortController();
     requisicaoHistorico = pedido;
     $('titulo').textContent = `Nota ${campos[0] === '—' ? nota.NUNOTA : campos[0]}`;
     $('cliente').textContent = campos[1];
-    const transportadora = $('transportadora-carga');
-    transportadora.hidden = !(Number(nota.ORDEMCARGA) > 0);
-    transportadora.textContent = transportadora.hidden ? '' : `Transportadora da carga · ${nota.TRANSPORTADORA_CARGA || 'Indisponível'}`;
+    mostrarTransportadora(nota);
+    const editavel = ['A', 'P'].includes(nota.STATUSNOTA) && !(Number(nota.ORDEMCARGA) > 0);
+    $('acao-transportadora').hidden = !editavel;
+    $('transportadora-status').hidden = true;
     const listaSugestoes = $('sugestoes-linhas');
     listaSugestoes.replaceChildren();
     for (const tabela of colunas) {
@@ -70,6 +123,13 @@
       const linha = listaSugestoes.insertRow();
       for (const texto of [nomeTabela(tabela), sugestao.regiao || '—', valorSugestao(sugestao)]) {
         linha.insertCell().textContent = texto;
+      }
+      if (editavel) {
+        const celula = linha.insertCell();
+        celula.className = 'definicao-frete-selecao-transportadora';
+        const opcoes = transportadoras.filter((opcao) => Number(opcao.NUCFR) === Number(tabela.codigo));
+        if (sugestao.valor != null && opcoes.length) montarSelecaoTransportadora(celula, nota, tabela, opcoes, pedido);
+        else celula.textContent = '—';
       }
     }
     $('sugestoes-grade').hidden = !listaSugestoes.rows.length;
@@ -161,7 +221,7 @@
       ];
       tr.className = 'analise-frete-nota-detalhavel';
       const sugestoes = new Map(nota.sugestoes.map((sugestao) => [String(sugestao.codigo), sugestao]));
-      tr.addEventListener('click', () => abrirDetalhes(nota, campos, sugestoes, dados.colunas));
+      tr.addEventListener('click', () => abrirDetalhes(nota, campos, sugestoes, dados.colunas, dados.transportadoras || []));
       campos.forEach((valor, indice) => {
         const td = tr.insertCell();
         td.textContent = valor || '—';
@@ -182,6 +242,16 @@
           icone.setAttribute('aria-label', icone.title);
           icone.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 4h14v13H1zM15 8h4l4 4v5h-8"/><circle cx="5.5" cy="18" r="2.5" fill="white"/><circle cx="18.5" cy="18" r="2.5" fill="white"/></svg>';
           td.append(icone);
+        }
+        if (indice === 0) {
+          const confirmada = nota.STATUSNOTA === 'L';
+          const status = document.createElement('span');
+          status.className = `definicao-frete-confirmacao ${confirmada ? 'is-confirmada' : ''}`;
+          status.title = confirmada ? 'Nota confirmada' : 'Nota não confirmada';
+          status.setAttribute('role', 'img');
+          status.setAttribute('aria-label', status.title);
+          status.innerHTML = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="${confirmada ? 'm8 12 3 3 5-6' : 'M12 7v5l3 2'}"/></svg>`;
+          td.append(status);
         }
         if (indice >= 4) td.className = 'analise-frete-numero';
       });

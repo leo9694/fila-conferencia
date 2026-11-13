@@ -1,8 +1,38 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { filtrosDefinicaoFrete, consultarDefinicaoFrete, consultarHistoricoDefinicaoFrete } = require('../api/definicaoFrete');
+const { filtrosDefinicaoFrete, consultarDefinicaoFrete, consultarHistoricoDefinicaoFrete,
+  alterarTransportadoraDefinicaoFrete } = require('../api/definicaoFrete');
 
 const periodo = { dataInicial: '2026-11-04', dataFinal: '2026-11-05' };
+
+test('salva a transportadora escolhida na nota pendente e no complemento do parceiro', async () => {
+  const gravacoes = [];
+  const dados = { nunota: 100, tabela: 3, transportadora: 770 };
+  let nota = { CODPARC: 9672, STATUSNOTA: 'A', COMPLEMENTO: 9672, PREFERENCIAL: 644 };
+  const deps = {
+    executarConsulta: async (sql) => {
+      if (sql.startsWith('SELECT CAB.CODPARC')) return [nota];
+      if (sql.startsWith('SELECT CAB.NUNOTA')) return [{ NUCFR: 3, CODEVENTO: 1, FORMULA: 'VALOR', VALOR: 27.5 }];
+      return [{ TRANSPORTADORA: 'A.L.T. TRANSPORTES' }];
+    },
+    atualizarRegistro: async (...args) => gravacoes.push(args),
+    salvarRegistro: async (...args) => gravacoes.push(args)
+  };
+  assert.deepEqual(await alterarTransportadoraDefinicaoFrete(dados, deps), {
+    codigo: 770, nome: 'A.L.T. TRANSPORTES', preferencialAtualizada: true
+  });
+  assert.deepEqual(gravacoes.splice(0), [
+    ['CabecalhoNota', { NUNOTA: 100 }, { CODPARCTRANSP: 770 }],
+    ['ComplementoParc', { CODPARC: 9672 }, { CODPARCTRANSP: 770 }]
+  ]);
+  nota = { ...nota, CODPARCTRANSP: 770, COMPLEMENTO: null, PREFERENCIAL: null };
+  await alterarTransportadoraDefinicaoFrete(dados, deps);
+  assert.deepEqual(gravacoes.splice(0), [['ComplementoParc', { CODPARC: 9672, CODPARCTRANSP: 770 }]]);
+  await assert.rejects(alterarTransportadoraDefinicaoFrete({ ...dados, tabela: 5 }, deps), /disponível para esta sugestão/);
+  nota = { ...nota, STATUSNOTA: 'L' };
+  await assert.rejects(alterarTransportadoraDefinicaoFrete(dados, deps), /sem confirmação/);
+  assert.deepEqual(gravacoes, []);
+});
 
 test('valida empresa, parceiro e período em conjunto', () => {
   assert.throws(() => filtrosDefinicaoFrete({ cliente: '410' }), /data inicial/);
@@ -18,6 +48,9 @@ test('consulta tabelas de toda a seleção e calcula apenas as rotas aplicáveis
   notas[0].DATA_FATURAMENTO = '05/11/2026';
   notas[0].TRANSPORTADORA_CARGA = 'Transportadora da ordem';
   notas[1].ORDEMCARGA = null;
+  notas[0].STATUSNOTA = 'L';
+  notas[1].STATUSNOTA = 'A';
+  notas[1].TRANSPORTADORA_NOTA = 'A.L.T. TRANSPORTES';
   const chamadas = [];
   const dados = await consultarDefinicaoFrete(filtros, async (sql) => {
     chamadas.push(sql);
@@ -26,10 +59,13 @@ test('consulta tabelas de toda a seleção e calcula apenas as rotas aplicáveis
       { NUCFR: 3, DESCRCALCFRET: 'ALT MT 2026' },
       { NUCFR: 5, DESCRCALCFRET: 'Tabela aplicável em outra página' }
     ];
-    return [{ NUNOTA: 100, NUCFR: 3, CODEVENTO: 1, FORMULA: 'VALOR', VALOR: 27.5, REGIAO: 'MT' }];
+    if (sql.startsWith('SELECT DISTINCT T.NUCFR')) return [{ NUCFR: 3, CODPARC: 770, TRANSPORTADORA: 'A.L.T. TRANSPORTES' }];
+    return [100, 101].map((NUNOTA) => ({ NUNOTA, NUCFR: 3, CODEVENTO: 1, FORMULA: 'VALOR', VALOR: 27.5, REGIAO: 'MT' }));
   });
   assert.match(chamadas[0], /CAB\.DTNEG >= TO_DATE\('2026-11-04'/);
   assert.match(chamadas[0], /CAB\.CODEMP=1/);
+  assert.match(chamadas[0], /CAB\.STATUSNOTA IN \('A','P','L'\)/);
+  assert.match(chamadas[0], /TRN\.CODPARC=N\.CODPARCTRANSP/);
   assert.match(chamadas[0], /CAB\.ORDEMCARGA/);
   assert.match(chamadas[0], /N\.ORDEMCARGA/);
   assert.match(chamadas[0], /TO_CHAR\(N\.DTFATUR,'DD\/MM\/YYYY'\) DATA_FATURAMENTO/);
@@ -39,7 +75,9 @@ test('consulta tabelas de toda a seleção e calcula apenas as rotas aplicáveis
   assert.match(chamadas[0], /OFFSET 30 ROWS FETCH NEXT 31 ROWS ONLY/);
   assert.match(chamadas[1], /SELECT DISTINCT CAB\.CODEMP, CAB\.CODPARC/);
   assert.match(chamadas[2], /CAB\.NUNOTA IN \(100,.*129\)/);
-  assert.ok(chamadas.every((sql) => !/TGFIXN|TGFCFP|CAB\.CODPARCTRANSP/.test(sql)));
+  assert.doesNotMatch(chamadas[2], /TGFIXN|TGFCFP|CAB\.CODPARCTRANSP/);
+  assert.match(chamadas[3], /CFP\.NUCFR=T\.NUCFR/);
+  assert.equal(dados.transportadoras[0].CODPARC, 770);
   assert.deepEqual(dados.colunas.map((tabela) => tabela.codigo), [3, 5]);
   assert.equal(dados.linhas[0].NUNOTA, 100);
   assert.equal(dados.linhas[0].ORDEMCARGA, 5679);
@@ -47,7 +85,8 @@ test('consulta tabelas de toda a seleção e calcula apenas as rotas aplicáveis
   assert.equal(dados.linhas[0].TRANSPORTADORA_CARGA, 'Transportadora da ordem');
   assert.equal(dados.linhas[1].ORDEMCARGA, null);
   assert.deepEqual(dados.linhas[0].sugestoes, [{ codigo: 3, valor: 27.5, regiao: 'MT' }]);
-  assert.deepEqual(dados.linhas[1].sugestoes, []);
+  assert.equal(dados.linhas[1].TRANSPORTADORA_NOTA, 'A.L.T. TRANSPORTES');
+  assert.deepEqual(dados.linhas[2].sugestoes, []);
   assert.equal(dados.linhas.length, 30);
   assert.equal(dados.temMais, true);
 });
