@@ -271,7 +271,9 @@
     linhas.append(fragmento);
     pagina = dados.pagina;
     temMais = dados.temMais;
-    $('status').textContent = dados.linhas.length ? `${dados.linhas.length} nota(s) nesta página` : 'Nenhuma nota encontrada para os filtros.';
+    $('status').textContent = dados.total
+      ? `${dados.total.toLocaleString('pt-BR')} ${dados.total === 1 ? 'nota encontrada' : 'notas encontradas'}`
+      : 'Nenhuma nota encontrada para os filtros.';
   }
 
   async function carregar(destino) {

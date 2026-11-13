@@ -72,6 +72,7 @@
     }
     tr.appendChild(td);
     const opcoes = { linhas };
+    celula(tr, [moeda(pedido.valorTde)], { ...opcoes, classe: 'analise-frete-numero' });
     celula(tr, [pedido.ctes.length ? moeda(pedido.real) : '—'], { ...opcoes, classe: 'analise-frete-numero' });
   }
 

@@ -1,3 +1,4 @@
+const { consultarTdePorCte } = require('./tdeCte');
 const { TOPS_FATURAMENTO, sqlRotasFrete, sqlSimulacoes, simularTabelas, sqlFretesReais, compararFrete } = require('./analiseFrete');
 const { sqlEscopoNotas } = require('./analiseFreteConsulta');
 const { validarPeriodoTransporte } = require('./transporteDashboard');
@@ -41,7 +42,7 @@ async function consultarDefinicaoFrete(filtros, executarConsulta) {
   const registros = await executarConsulta(`WITH NOTAS AS (
     SELECT CAB.NUNOTA, CAB.NUMNOTA, CAB.CODEMP, CAB.ORDEMCARGA, CAB.CODPARC, CAB.DTNEG, CAB.DTFATUR,
       CAB.VLRNOTA, CAB.PESOBRUTO PESO, CAB.QTDVOL, CAB.STATUSNOTA, CAB.CODPARCTRANSP,
-      COALESCE(PAR.NOMEPARC, PAR.RAZAOSOCIAL) CLIENTE, PAR.CODCID
+      COALESCE(PAR.NOMEPARC, PAR.RAZAOSOCIAL) CLIENTE, PAR.CODCID, COUNT(*) OVER () TOTAL_NOTAS
     ${sqlNotas(filtros)}
     ORDER BY CAB.DTNEG DESC, CAB.NUNOTA DESC
     OFFSET ${(pagina - 1) * tamanhoPagina} ROWS FETCH NEXT ${tamanhoPagina + 1} ROWS ONLY
@@ -49,7 +50,7 @@ async function consultarDefinicaoFrete(filtros, executarConsulta) {
   SELECT N.NUNOTA, N.NUMNOTA, N.ORDEMCARGA, N.CODPARC, N.CLIENTE, CID.NOMECID CIDADE, UF.UF,
     N.VLRNOTA, N.PESO, N.QTDVOL, TO_CHAR(N.DTNEG,'DD/MM/YYYY') DATA_NOTA,
     TO_CHAR(N.DTFATUR,'DD/MM/YYYY') DATA_FATURAMENTO,
-    N.STATUSNOTA, N.CODPARCTRANSP, COALESCE(TRN.NOMEPARC, TRN.RAZAOSOCIAL) TRANSPORTADORA_NOTA,
+    N.TOTAL_NOTAS, N.STATUSNOTA, N.CODPARCTRANSP, COALESCE(TRN.NOMEPARC, TRN.RAZAOSOCIAL) TRANSPORTADORA_NOTA,
     COALESCE(TRA.NOMEPARC, TRA.RAZAOSOCIAL) TRANSPORTADORA_CARGA
   FROM NOTAS N LEFT JOIN TSICID CID ON CID.CODCID=N.CODCID
   LEFT JOIN TSIUFS UF ON UF.CODUF=CID.UF
@@ -58,7 +59,11 @@ async function consultarDefinicaoFrete(filtros, executarConsulta) {
   LEFT JOIN TGFPAR TRN ON TRN.CODPARC=N.CODPARCTRANSP
   ORDER BY N.DTNEG DESC, N.NUNOTA DESC`);
   const notas = registros.slice(0, tamanhoPagina);
-  if (!notas.length) return { pagina, temMais: false, colunas: [], linhas: [] };
+  if (!notas.length) {
+    const totais = pagina > 1 ? await executarConsulta(`SELECT COUNT(*) TOTAL_NOTAS ${sqlNotas(filtros)}`) : [];
+    return { pagina, total: Number(totais[0]?.TOTAL_NOTAS || 0), temMais: false, colunas: [], linhas: [] };
+  }
+  const total = Number(notas[0].TOTAL_NOTAS);
 
   const [tabelas, rotas] = await Promise.all([
     executarConsulta(`WITH DESTINOS AS (
@@ -76,7 +81,7 @@ async function consultarDefinicaoFrete(filtros, executarConsulta) {
     rotasPorNota.get(id).push(rota);
   }
   const colunas = tabelas.map((tabela) => ({ codigo: tabela.NUCFR, nome: tabela.DESCRCALCFRET }));
-  const linhas = notas.map((nota) => ({
+  const linhas = notas.map(({ TOTAL_NOTAS, ...nota }) => ({
     ...nota,
     sugestoes: simularTabelas(rotasPorNota.get(Number(nota.NUNOTA)) || [])
       .map(({ codigo, valor, regiao }) => ({ codigo, valor, regiao }))
@@ -87,7 +92,7 @@ async function consultarDefinicaoFrete(filtros, executarConsulta) {
     COALESCE(TRA.NOMEPARC, TRA.RAZAOSOCIAL) TRANSPORTADORA
     FROM TGFCFR T ${sqlTransportadoras()}
     WHERE T.NUCFR IN (${codigos.join(',')}) ORDER BY T.NUCFR, TRA.CODPARC`) : [];
-  return { pagina, temMais: registros.length > tamanhoPagina, colunas, linhas, transportadoras };
+  return { pagina, total, temMais: registros.length > tamanhoPagina, colunas, linhas, transportadoras };
 }
 
 async function alterarTransportadoraDefinicaoFrete(dados, { executarConsulta, atualizarRegistro, salvarRegistro }) {
@@ -138,37 +143,6 @@ async function alterarTransportadoraDefinicaoFrete(dados, { executarConsulta, at
     return { codigo: transportadora, nome: opcoes[0].TRANSPORTADORA, preferencialAtualizada: true };
   } finally {
     alteracoesPorParceiro.delete(parceiro);
-  }
-}
-
-async function consultarTdePorCte(fretes, executarConsulta) {
-  const chaves = [...new Set(fretes.map((frete) => frete.CHAVEACESSO).filter((chave) => /^\d{44}$/.test(chave)))];
-  if (!chaves.length) return new Map();
-
-  try {
-    const valores = await executarConsulta(`WITH XML_CTE AS (
-      SELECT IX.CHAVEACESSO, IX.XML,
-        ROW_NUMBER() OVER(PARTITION BY IX.CHAVEACESSO
-          ORDER BY CASE WHEN IX.STATUS=2 THEN 0 ELSE 1 END, IX.NUARQUIVO DESC) RN
-      FROM TGFIXN IX
-      WHERE IX.TIPO='C' AND IX.XML IS NOT NULL
-        AND IX.CHAVEACESSO IN (${chaves.map((chave) => `'${chave}'`).join(',')})
-    )
-    SELECT C.CHAVEACESSO, SUM(CASE WHEN REGEXP_LIKE(UPPER(TRIM(X.NOME)),
-      '(^|[^A-Z0-9])T[.[:space:]-]*D[.[:space:]-]*E([^A-Z0-9]|$)|DIF(IC(ULDADE)?)?[.[:space:]]+(DE[[:space:]]+)?ENTR')
-      THEN TO_NUMBER(TRIM(X.VALOR) DEFAULT NULL ON CONVERSION ERROR,
-        '9999999999999D99', 'NLS_NUMERIC_CHARACTERS=''.,''') ELSE 0 END) VALOR_TDE
-    FROM XML_CTE C, XMLTABLE(
-      '(/*:cteProc/*:CTe | /*:CTe)/*:infCte/*:vPrest/*:Comp'
-      PASSING XMLTYPE(C.XML)
-      COLUMNS NOME VARCHAR2(60) PATH '*:xNome', VALOR VARCHAR2(30) PATH '*:vComp'
-    ) X WHERE C.RN=1
-    GROUP BY C.CHAVEACESSO`);
-    return new Map(valores.filter(({ VALOR_TDE }) => VALOR_TDE != null && Number.isFinite(Number(VALOR_TDE)))
-      .map(({ CHAVEACESSO, VALOR_TDE }) => [CHAVEACESSO, Math.round(Number(VALOR_TDE) * 100)]));
-  } catch (erro) {
-    console.warn('Não foi possível consultar a TDE nos XMLs do histórico de frete:', erro.message);
-    return new Map();
   }
 }
 

@@ -1,5 +1,6 @@
 const { randomUUID } = require('node:crypto');
 const { lerColunas, valoresColuna, compararColuna, simuladas } = require('./analiseFreteColunas');
+const { consultarTdePorCte } = require('./tdeCte');
 const caches = new WeakMap();
 const TAMANHO_PAGINA = 30;
 const normalizar = (v) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -130,6 +131,19 @@ async function carregarSimulacoes(grupos, cache, executeQuery, sqlSimulacoes) {
   }
 }
 
+async function carregarTde(grupos, cache, executeQuery) {
+  const chaves = [...new Set(grupos.map((grupo) => grupo.cte?.CHAVEACESSO)
+    .filter((chave) => /^\d{44}$/.test(chave) && !cache.has(chave)))];
+  for (let i = 0; i < chaves.length; i += 500) {
+    const lote = chaves.slice(i, i + 500);
+    const valores = await consultarTdePorCte(lote.map((CHAVEACESSO) => ({ CHAVEACESSO })), executeQuery);
+    for (const chave of lote) {
+      const centavos = valores.get(chave);
+      cache.set(chave, centavos > 0 ? centavos / 100 : null);
+    }
+  }
+}
+
 async function consultar(f, query, executeQuery, sqlSimulacoes, simularTabelas) {
   const { filtros, ordem, opcoes } = lerColunas(query);
   if (!caches.has(executeQuery)) caches.set(executeQuery, new Map());
@@ -142,7 +156,7 @@ async function consultar(f, query, executeQuery, sqlSimulacoes, simularTabelas) 
     throw new Error('Consulta expirada. Clique em Consultar para atualizar os dados.');
   }
   if (!entrada || (!query.consultaId && agora-entrada.criado > 60000)) {
-    entrada = { id: randomUUID(), criado: agora, simulacoes: new Map() };
+    entrada = { id: randomUUID(), criado: agora, simulacoes: new Map(), tdes: new Map() };
     entrada.promise = (async () => {
       const registros = [];
       for (let offset = 0; ; offset += 1000) {
@@ -164,6 +178,8 @@ async function consultar(f, query, executeQuery, sqlSimulacoes, simularTabelas) 
     .filter((g) => g.notas.length) : grupos;
   const base = filtrar(gruposEmpresa, f);
   const usados = opcoes ? [opcoes] : [...filtros.map(([coluna]) => coluna), ordem?.coluna];
+  const valorTde = (grupo) => entrada.tdes.get(grupo.cte?.CHAVEACESSO) ?? null;
+  if (usados.includes('tde')) await carregarTde(base, entrada.tdes, executeQuery);
   if (usados.some((coluna) => simuladas.has(coluna))) {
     await carregarSimulacoes(base, entrada.simulacoes, executeQuery, sqlSimulacoes);
   }
@@ -172,7 +188,8 @@ async function consultar(f, query, executeQuery, sqlSimulacoes, simularTabelas) 
     if (!consolidados.has(grupo)) consolidados.set(grupo, consolidar(grupo, entrada.simulacoes, simularTabelas));
     return consolidados.get(grupo);
   };
-  const valores = (grupo, coluna) => valoresColuna(grupo, coluna, obterConsolidado);
+  const valores = (grupo, coluna) => valoresColuna(grupo, coluna, obterConsolidado, valorTde);
+  const montarLinha = (grupo) => ({ ...obterConsolidado(grupo), valorTde: valorTde(grupo) });
   if (opcoes) {
     return { valores: [...new Set(base.flatMap((grupo) => valores(grupo, opcoes)))]
       .sort((a, b) => compararColuna(opcoes, a, b)) };
@@ -185,16 +202,22 @@ async function consultar(f, query, executeQuery, sqlSimulacoes, simularTabelas) 
       * (ordem.direcao === 'asc' ? 1 : -1));
   }
   if (query.exportar === true) {
-    await carregarSimulacoes(selecionados, entrada.simulacoes, executeQuery, sqlSimulacoes);
-    return { linhas: selecionados.map(obterConsolidado) };
+    await Promise.all([
+      carregarSimulacoes(selecionados, entrada.simulacoes, executeQuery, sqlSimulacoes),
+      carregarTde(selecionados, entrada.tdes, executeQuery)
+    ]);
+    return { linhas: selecionados.map(montarLinha) };
   }
   const pagina = Math.min(f.pagina,Math.max(1,Math.ceil(selecionados.length/TAMANHO_PAGINA)));
   const lote = selecionados.slice((pagina-1)*TAMANHO_PAGINA,pagina*TAMANHO_PAGINA);
-  await carregarSimulacoes(lote, entrada.simulacoes, executeQuery, sqlSimulacoes);
+  await Promise.all([
+    carregarSimulacoes(lote, entrada.simulacoes, executeQuery, sqlSimulacoes),
+    carregarTde(lote, entrada.tdes, executeQuery)
+  ]);
   const transportadoras = [...new Map(grupos.flatMap((g) => g.notas).filter((n) => n.CODPARCTRANSP)
     .map((n) => [n.CODPARCTRANSP,{ CODPARC:n.CODPARCTRANSP,NOMEPARC:n.TRANSPORTADORA }])).values()]
     .sort((a,b) => String(a.NOMEPARC).localeCompare(String(b.NOMEPARC)));
-  return { linhas:lote.map(obterConsolidado), transportadoras, empresas,
+  return { linhas:lote.map(montarLinha), transportadoras, empresas,
     total:selecionados.length,pagina,tamanhoPagina:TAMANHO_PAGINA,consultaId:entrada.id };
 }
 

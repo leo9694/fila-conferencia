@@ -223,7 +223,34 @@ test('opções, filtros e ordenação de coluna incluem notas além da primeira 
   const { gerarAnaliseFreteExcel } = require('../api/analiseFreteExcel');
   const xlsx = gerarAnaliseFreteExcel(exportada.linhas);
   assert.equal(xlsx.subarray(0, 2).toString(), 'PK');
-  assert.match(xlsx.toString('utf8'), /<autoFilter ref="A1:M65"/);
+  assert.match(xlsx.toString('utf8'), /<autoFilter ref="A1:N65"/);
   assert.doesNotMatch(xlsx.toString('utf8'), /Destino da última página/);
   assert.equal(bases, 1);
+});
+
+test('mostra e filtra a TDE pelo CT-e, inclusive fora da primeira página', async () => {
+  const q = { dataInicial: '2026-01-01', dataFinal: '2026-01-31' };
+  const chave = '1'.repeat(44);
+  const notas = Array.from({ length: 31 }, (_, i) => ({ NUNOTA: i + 1, NUMNOTA: i + 1 }));
+  Object.assign(notas[30], { CHAVEACESSO: chave, NUM_CTE: 123, FRETE_CTE_TOTAL: 300 });
+  let consultasXml = 0;
+  const executar = async (sql) => {
+    if (sql.startsWith('WITH NOTAS')) return notas;
+    if (!sql.startsWith('WITH XML_CTE')) return [];
+    consultasXml++;
+    assert.ok(sql.includes(chave));
+    return [{ CHAVEACESSO: chave, VALOR_TDE: 42.5 }];
+  };
+  const primeira = await carregarAnaliseFrete(q, executar);
+  assert.equal(consultasXml, 0);
+  assert.equal(primeira.linhas[0].valorTde, null);
+  const contexto = { ...q, consultaId: primeira.consultaId };
+  const { valores } = await carregarAnaliseFrete({ ...contexto, opcoesColuna: 'tde' }, executar);
+  assert.equal(valores.length, 2);
+  assert.equal(valores[0], '—');
+  const filtrada = await carregarAnaliseFrete({ ...contexto, filtrosColunas: { tde: [valores[1]] } }, executar);
+  assert.equal(filtrada.total, 1);
+  assert.equal(filtrada.linhas[0].valorTde, 42.5);
+  assert.equal(filtrada.linhas[0].real, 300);
+  assert.equal(consultasXml, 1);
 });

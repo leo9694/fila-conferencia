@@ -12,8 +12,8 @@ const camposNota = {
   volumes: (n) => numero(n.QTDVOL)
 };
 const simuladas = new Set(['regiao', 'sugerido', 'diferenca']);
-const colunas = new Set([...Object.keys(camposNota), ...simuladas, 'cte', 'real']);
-const numericas = new Set(['venda', 'peso', 'volumes', 'sugerido', 'real', 'diferenca']);
+const colunas = new Set([...Object.keys(camposNota), ...simuladas, 'cte', 'tde', 'real']);
+const numericas = new Set(['venda', 'peso', 'volumes', 'sugerido', 'tde', 'real', 'diferenca']);
 
 function lerColunas(query) {
   const filtros = Object.entries(query.filtrosColunas ?? {});
@@ -28,10 +28,11 @@ function lerColunas(query) {
   return { filtros: filtros.map(([coluna, valores]) => [coluna, new Set(valores)]), ordem, opcoes };
 }
 
-function valoresColuna(grupo, coluna, consolidar) {
+function valoresColuna(grupo, coluna, consolidar, valorTde) {
   if (Object.hasOwn(camposNota, coluna)) return grupo.notas.map(camposNota[coluna]).map(String);
   if (coluna === 'cte') return [grupo.cte ? String(grupo.cte.NUM_CTE || '—') : 'Sem CT-e emitido vinculado'];
   if (coluna === 'real') return [moeda(grupo.cte?.FRETE_CTE_TOTAL)];
+  if (coluna === 'tde') return [moeda(valorTde(grupo))];
   const nota = consolidar(grupo);
   if (coluna === 'diferenca' && nota.grupoIncompleto) return ['CT-e com notas fora do período'];
   if (!nota.simulacoes.length) return ['—'];

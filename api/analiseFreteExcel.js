@@ -32,10 +32,11 @@ function gerarAnaliseFreteExcel(grupos) {
       numerico(nota.VLRNOTA, 2), numerico(nota.PESO || 0, 3), numerico(nota.QTDVOL || 0, 4)
     ];
     // Como na grade, os valores compartilhados aparecem uma vez por CT-e.
-    return linha.concat(i > 0 ? Array.from({ length: 5 }, () => texto('')) : [
+    return linha.concat(i > 0 ? Array.from({ length: 6 }, () => texto('')) : [
       texto(grupo.simulacoes.map((s) => s.regiao || 'Rota direta').join('\n') || '—'),
       simulacoesMoeda(grupo.simulacoes, 'valor'),
       texto(grupo.ctes.length ? grupo.ctes.map((c) => c.NUM_CTE || '—').join('\n') : 'Sem CT-e emitido vinculado'),
+      numerico(grupo.valorTde, 2),
       numerico(grupo.real, 2),
       grupo.grupoIncompleto ? texto('CT-e com notas fora do período') : simulacoesMoeda(grupo.simulacoes, 'diferenca')
     ]);
@@ -43,8 +44,8 @@ function gerarAnaliseFreteExcel(grupos) {
   return gerarPlanilhaGrade({
     titulo: 'Análise de frete',
     cabecalhos: ['Nota', 'Data', 'Cliente', 'Destino', 'Transportadora', 'Valor da venda', 'Peso (kg)', 'Volumes',
-      'Região', 'Frete sugerido', 'CT-e', 'Frete real / rateio', 'Diferença'],
-    larguras: [12, 14, 45, 26, 32, 18, 14, 12, 28, 24, 30, 20, 25],
+      'Região', 'Frete sugerido', 'CT-e', 'TDE', 'Frete real / rateio', 'Diferença'],
+    larguras: [12, 14, 45, 26, 32, 18, 14, 12, 28, 24, 30, 15, 20, 25],
     linhas
   });
 }

@@ -43,7 +43,7 @@ test('valida empresa, parceiro e período em conjunto', () => {
 
 test('consulta tabelas de toda a seleção e calcula apenas as rotas aplicáveis às notas da página', async () => {
   const filtros = filtrosDefinicaoFrete({ ...periodo, empresa: '1', cliente: "D'Ávila_10%", pagina: '2' });
-  const notas = Array.from({ length: 31 }, (_, i) => ({ NUNOTA: 100 + i, NUMNOTA: 10 + i }));
+  const notas = Array.from({ length: 31 }, (_, i) => ({ NUNOTA: 100 + i, NUMNOTA: 10 + i, TOTAL_NOTAS: 125 }));
   notas[0].ORDEMCARGA = 5679;
   notas[0].DATA_FATURAMENTO = '05/11/2026';
   notas[0].TRANSPORTADORA_CARGA = 'Transportadora da ordem';
@@ -73,6 +73,7 @@ test('consulta tabelas de toda a seleção e calcula apenas as rotas aplicáveis
   assert.match(chamadas[0], /TRA\.CODPARC=ORD\.CODPARCTRANSP/);
   assert.match(chamadas[0], /D''Ávila\\_10\\%/);
   assert.match(chamadas[0], /OFFSET 30 ROWS FETCH NEXT 31 ROWS ONLY/);
+  assert.match(chamadas[0], /COUNT\(\*\) OVER \(\) TOTAL_NOTAS[\s\S]+OFFSET/);
   assert.match(chamadas[1], /SELECT DISTINCT CAB\.CODEMP, CAB\.CODPARC/);
   assert.match(chamadas[2], /CAB\.NUNOTA IN \(100,.*129\)/);
   assert.doesNotMatch(chamadas[2], /TGFIXN|TGFCFP|CAB\.CODPARCTRANSP/);
@@ -88,7 +89,19 @@ test('consulta tabelas de toda a seleção e calcula apenas as rotas aplicáveis
   assert.equal(dados.linhas[1].TRANSPORTADORA_NOTA, 'A.L.T. TRANSPORTES');
   assert.deepEqual(dados.linhas[2].sugestoes, []);
   assert.equal(dados.linhas.length, 30);
+  assert.equal(dados.total, 125);
+  assert.equal(dados.linhas[0].TOTAL_NOTAS, undefined);
   assert.equal(dados.temMais, true);
+});
+
+test('mantém o total dos filtros quando a página solicitada fica vazia', async () => {
+  const filtros = filtrosDefinicaoFrete({ ...periodo, empresa: '1', cliente: '410', pagina: '3' });
+  const dados = await consultarDefinicaoFrete(filtros, async (sql) => {
+    if (sql.startsWith('WITH NOTAS')) return [];
+    assert.match(sql, /SELECT COUNT\(\*\) TOTAL_NOTAS[\s\S]+CAB\.CODPARC = 410[\s\S]+CAB\.CODEMP=1/);
+    return [{ TOTAL_NOTAS: '31' }];
+  });
+  assert.deepEqual(dados, { pagina: 3, total: 31, temMais: false, colunas: [], linhas: [] });
 });
 
 test('simula todas as tabelas aplicáveis a cada venda anterior e preserva o frete real', async () => {
