@@ -1706,6 +1706,14 @@ body.has-global-sidebar .fila-screen:not(.conferencia-mode) .pedido-operacao-car
   box-shadow: inset 3px 0 0 var(--home-green);
 }
 
+body.has-global-sidebar .fila-screen:not(.conferencia-mode) .pedido-operacao-card.bonificacao {
+  background: #fff2e5;
+}
+
+body.has-global-sidebar .fila-screen:not(.conferencia-mode) .pedido-operacao-card.bonificacao:is(:hover, .active) {
+  background: #ffebd8;
+}
+
 body.has-global-sidebar .fila-screen:not(.conferencia-mode) .pedido-operacao-card > div,
 body.has-global-sidebar .fila-screen:not(.conferencia-mode) .pedido-operacao-card > strong {
   padding-block: 9px;
