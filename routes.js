@@ -2937,7 +2937,7 @@ router.get('/transporte/definicao-frete/:nunota/historico', async (req, res) => 
   }
 });
 
-router.put('/transporte/definicao-frete/:nunota/transportadora', exigirGerenciaOuDiretoria, async (req, res) => {
+router.put('/transporte/definicao-frete/:nunota/transportadora', async (req, res) => {
   const nunota = Number(req.params.nunota);
   if (!Number.isSafeInteger(nunota) || nunota <= 0) return res.status(400).json({ erro: 'Nota inválida.' });
   if (finalizacoesConferenciaEmAndamento.has(nunota)) return res.status(409).json({ erro: 'Aguarde a operação em andamento nesta nota.' });

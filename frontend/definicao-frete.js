@@ -116,8 +116,7 @@
     $('titulo').textContent = `Nota ${campos[0] === '—' ? nota.NUNOTA : campos[0]}`;
     $('cliente').textContent = campos[1];
     mostrarTransportadora(nota);
-    const editavel = window.transporteDashboardController?.permitido
-      && ['A', 'P'].includes(nota.STATUSNOTA) && !(Number(nota.ORDEMCARGA) > 0);
+    const editavel = ['A', 'P'].includes(nota.STATUSNOTA) && !(Number(nota.ORDEMCARGA) > 0);
     $('acao-transportadora').hidden = !editavel;
     $('transportadora-status').hidden = true;
     const listaSugestoes = $('sugestoes-linhas');
