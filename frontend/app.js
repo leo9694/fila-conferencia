@@ -8514,6 +8514,27 @@ function atualizarNotificacoesFila() {
   filaNotificationBadge.hidden = total === 0;
 }
 
+function aproximarBonificacoesDaVenda(pedidos) {
+  const vendas = new Map(pedidos.filter((pedido) => pedido.SAIDA_POR_NOTA && Number(pedido.CODTIPOPER) === 35)
+    .map((pedido) => [Number(pedido.NUNOTA), pedido]));
+  const grupos = new Map();
+  const vendaPorBonificacao = new Map();
+  for (const pedido of pedidos) {
+    const venda = vendas.get(Number(pedido.NOTA_VENDA_BONIFICACAO));
+    if (!venda || Number(venda.CODEMP) !== Number(pedido.CODEMP)) continue;
+    if (!grupos.has(venda)) grupos.set(venda, [venda]);
+    grupos.get(venda).push(pedido);
+    vendaPorBonificacao.set(pedido, venda);
+  }
+  const exibidos = new Set();
+  return pedidos.flatMap((pedido) => {
+    const venda = vendaPorBonificacao.get(pedido) || pedido;
+    if (exibidos.has(venda)) return [];
+    exibidos.add(venda);
+    return grupos.get(venda) || [pedido];
+  });
+}
+
 function renderizarPedidosFila() {
   filaPedidosLista.innerHTML = '';
   atualizarNotificacoesFila();
@@ -8526,7 +8547,7 @@ function renderizarPedidosFila() {
     conferido: 5
   };
   const statusSelecionado = filaFiltroStatus?.value || 'todos';
-  const pedidosFiltrados = filaPedidos
+  const pedidosFiltrados = aproximarBonificacoesDaVenda(filaPedidos
     .map((pedido, indiceOriginal) => ({
       pedido,
       indiceOriginal,
@@ -8549,7 +8570,7 @@ function renderizarPedidosFila() {
       }
       return a.indiceOriginal - b.indiceOriginal;
     })
-    .map(({ pedido }) => pedido);
+    .map(({ pedido }) => pedido));
   filaCountPedidos.textContent = pedidosFiltrados.length;
 
   if (pedidosFiltrados.length === 0) {

@@ -82,6 +82,7 @@ const { montarSqlEstimativaFrete, normalizarEstimativaFrete } = require('./api/e
 const { carregarAnaliseFrete } = require('./api/analiseFrete');
 const { filtrosDefinicaoFrete, consultarDefinicaoFrete, consultarHistoricoDefinicaoFrete,
   alterarTransportadoraDefinicaoFrete } = require('./api/definicaoFrete');
+const { consultarVendasDasBonificacoes } = require('./api/conferenciaBonificacoes');
 const { gerarAnaliseFreteExcel } = require('./api/analiseFreteExcel');
 const { obterConfiguracaoEmailFrete, salvarConfiguracaoEmailFrete, verificarConexaoEmailFrete, enviarTesteEmailFrete } = require('./api/emailFrete');
 const { criarAutomacaoEmailFrete } = require('./api/emailFreteAutomacao');
@@ -3435,6 +3436,7 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
         CAB.NUNOTA
     `);
 
+    const vendasDasBonificacoes = saidaPorNota ? await consultarVendasDasBonificacoes(rows, executeQuery) : new Map();
     res.json({
       dataInicial: intervalo.inicio,
       dataFinal: intervalo.fim,
@@ -3469,6 +3471,8 @@ router.get('/fila-conferencia/pedidos', async (req, res) => {
           NECESSITA_GUIA_FASE: modo === 'saida' && Number(row.NECESSITA_GUIA_FASE) === 1,
           FATURADO: notaSaida ? row.STATUSNOTA === 'L' && row.STATUS_CONF === 'F' : modo === 'saida' && Number(row.FATURADO) === 1,
           SAIDA_POR_NOTA: notaSaida,
+          ...(notaSaida && vendasDasBonificacoes.has(Number(row.NUNOTA))
+            ? { NOTA_VENDA_BONIFICACAO: vendasDasBonificacoes.get(Number(row.NUNOTA)) } : {}),
           HISTORICO_SAIDA: historicoSaida,
           GUIAS_FASE_QTD: modo === 'saida' ? guiaFaseStore.quantidade(row.NUNOTA) : 0,
           PEDIDO_IMPRESSO: Boolean(pedidoPrintStore.obter(row.NUNOTA)),

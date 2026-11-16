@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { confirmarNotaSaidaTeste, consultarNotaSaida, aplicarCortesNotaSaidaTeste, sqlHistoricoPedidosSaida } = require('../api/conferenciaSaidaNota');
+const { consultarVendasDasBonificacoes } = require('../api/conferenciaBonificacoes');
 const fonte = fs.readFileSync(path.join(__dirname, '../routes.js'), 'utf8');
 const frontend = fs.readFileSync(path.join(__dirname, '../frontend/app.js'), 'utf8');
 
@@ -179,6 +180,7 @@ test('fila em produção encontra nota 3885419 TOP 35 liberada, sem filtros come
   let handler;
   let sqlFila;
   Object.assign(ctx, { router: { get(_url, fn) { handler = fn; } },
+    consultarVendasDasBonificacoes,
     obterIntervaloDatas: () => ({ inicio: '2026-10-01', fim: '2026-10-13' }),
     obterFiltroEmpresa: () => 1, obterNumeroInteiro: (v) => Number(v) || null, sqlFiltroEmpresa: () => '',
     normalizarDataSankhya: (v) => v, normalizarInicioConferencia: (v) => v, normalizarFimConferencia: (v) => v,
@@ -208,6 +210,29 @@ test('fila em produção encontra nota 3885419 TOP 35 liberada, sem filtros come
   vm.runInContext(frontend.slice(frontend.indexOf('function pedidoPodeIniciarConferencia('), frontend.indexOf('function pedidoExigeConfirmacaoSemSeparacao(')), ui);
   assert.equal(ui.pedidoPodeIniciarConferencia(payload.itens[2]), false);
   assert.equal(ui.pedidoPodeIniciarConferencia(payload.itens[0]), true);
+});
+
+test('agrupa a venda e suas bonificações intercaladas sem mover notas de outra empresa', async () => {
+  const documentos = [
+    { NUNOTA: 10, CODEMP: 1, CODTIPOPER: 35, TIPMOV: 'V' },
+    { NUNOTA: 11, CODEMP: 1, CODTIPOPER: 35, TIPMOV: 'V' },
+    { NUNOTA: 12, CODEMP: 1, CODTIPOPER: 10, TIPMOV: 'V' },
+    { NUNOTA: 13, CODEMP: 6, CODTIPOPER: 10, TIPMOV: 'V' },
+    { NUNOTA: 14, CODEMP: 1, CODTIPOPER: 10, TIPMOV: 'V' }
+  ];
+  const vendas = await consultarVendasDasBonificacoes(documentos, async (sql) => {
+    assert.match(sql, /NUNOTA IN \(12, 13, 14\)/);
+    assert.match(sql, /C\.CODEMP=B\.CODEMP AND C\.CODPARC=B\.CODPARC/);
+    assert.match(sql, /C\.DTFATUR>=TRUNC\(B\.DTFATUR\)/);
+    assert.match(sql, /PRIORIDADE=MELHOR_PRIORIDADE[\s\S]+COUNT\(DISTINCT VENDA\)=1/);
+    return [{ BONIFICACAO: 12, VENDA: 10 }, { BONIFICACAO: 13, VENDA: 10 }, { BONIFICACAO: 14, VENDA: 10 }];
+  });
+  const pedidos = documentos.map((nota) => ({ ...nota, SAIDA_POR_NOTA: true, NOTA_VENDA_BONIFICACAO: vendas.get(nota.NUNOTA) }));
+  const ui = vm.createContext({ pedidos });
+  vm.runInContext(frontend.slice(frontend.indexOf('function aproximarBonificacoesDaVenda('),
+    frontend.indexOf('function renderizarPedidosFila(')), ui);
+  assert.equal(vm.runInContext('aproximarBonificacoesDaVenda(pedidos).map(n => n.NUNOTA).join()', ui), '10,12,14,11,13');
+  assert.equal(vm.runInContext('aproximarBonificacoesDaVenda(pedidos.slice(1)).map(n => n.NUNOTA).join()', ui), '11,12,13,14');
 });
 
 test('histórico mantém apenas pedidos antigos conferidos ou com separação registrada e valida IDs', () => {
