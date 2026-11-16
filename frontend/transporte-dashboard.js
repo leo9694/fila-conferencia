@@ -47,10 +47,19 @@
   function codigoUsuario(usuario) { return normalizarCodigoUsuario(usuario?.codUsu ?? usuario?.CODUSU ?? usuario); }
   function chaveUsuario(codigo) { return codigo === null ? null : `${CHAVE_SESSAO}:${codigo}`; }
   function permissaoConfirmada(usuario) { return Boolean(usuario?.gruposConfirmados && usuario?.permissoes?.transporte); }
+  function podeAbrir(hash) {
+    return codigoUsuarioAtual !== null && (permitido || hash === '#transporte/analise' || hash === '#transporte/definicao');
+  }
   function atualizarMenu() {
-    ['home-nav-transporte', 'home-nav-analise-frete', 'home-nav-definicao-frete', 'home-nav-email-frete'].forEach((id) => {
-      const menu = $(id); if (menu) menu.hidden = !permitido;
-    });
+    for (const [id, hash] of [
+      ['home-nav-transporte', '#transporte'],
+      ['home-nav-analise-frete', '#transporte/analise'],
+      ['home-nav-definicao-frete', '#transporte/definicao'],
+      ['home-nav-email-frete', '#transporte/email-frete']
+    ]) {
+      const menu = $(id);
+      if (menu) menu.hidden = !podeAbrir(hash);
+    }
   }
 
   async function verificarAcesso(usuarioOuCodigo = codigoUsuarioAtual) {
@@ -63,7 +72,10 @@
     if (codigo === null) { permitido = false; atualizarMenu(); return false; }
     if (permissaoConfirmada(usuario)) { permitido = true; sessionStorage.setItem(chave, '1'); atualizarMenu(); return true; }
     if ((mesmoUsuario && permitido) || sessionStorage.getItem(chave) === '1') { permitido = true; atualizarMenu(); return true; }
+    permitido = false;
+    atualizarMenu();
     const resposta = await fetch('/api/transporte/acesso', { credentials: 'same-origin' });
+    if (codigoUsuarioAtual !== codigo) return false;
     permitido = resposta.ok;
     if (permitido) sessionStorage.setItem(chave, '1');
     atualizarMenu();
@@ -332,7 +344,7 @@
   }
 
   async function preparar() {
-    if (!permitido) return;
+    if (!podeAbrir(window.location.hash)) return;
     const analise = window.location.hash === '#transporte/analise';
     const definicao = window.location.hash === '#transporte/definicao';
     const emailFrete = window.location.hash === '#transporte/email-frete';
@@ -450,7 +462,7 @@
   elementos.comparar?.addEventListener('change', renderComparacao);
 
   window.transporteDashboardController = {
-    get permitido() { return permitido; }, verificarAcesso, preparar,
+    get permitido() { return permitido; }, podeAbrir, verificarAcesso, preparar,
     limparSessao() {
       window.analiseFreteController?.limparSessao();
       window.definicaoFreteController?.limparSessao();

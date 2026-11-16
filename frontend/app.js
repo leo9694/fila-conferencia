@@ -1954,7 +1954,7 @@ function mostrarVendasGerais() {
 }
 
 function mostrarTransporte() {
-  if (!usuarioLogado || !window.transporteDashboardController?.permitido) {
+  if (!usuarioLogado || !window.transporteDashboardController?.podeAbrir(window.location.hash)) {
     mostrarHome();
     return;
   }
@@ -2013,9 +2013,12 @@ async function abrirChat(conversationId = null, { substituirHistorico = false } 
 async function abrirTransporte(hash) {
   const controller = window.transporteDashboardController;
   if (!controller) return;
-  if (!controller.permitido && !await controller.verificarAcesso()) {
-    fecharSidebarHome();
-    return;
+  if (!controller.podeAbrir(hash)) {
+    await controller.verificarAcesso();
+    if (!controller.podeAbrir(hash)) {
+      fecharSidebarHome();
+      return;
+    }
   }
 
   mostrarHomeESuspenderRefresh();
@@ -11144,7 +11147,7 @@ async function prepararSessaoAutenticada(usuario) {
   }
 
   if (atalhosTransporte[window.location.hash]) {
-    if (!window.transporteDashboardController?.permitido) {
+    if (!window.transporteDashboardController?.podeAbrir(window.location.hash)) {
       mostrarHome();
       history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);
       return;
@@ -12185,7 +12188,7 @@ window.addEventListener('popstate', (event) => {
   }
 
   if (state?.tela === 'transporte' || atalhosTransporte[window.location.hash]) {
-    if (!window.transporteDashboardController?.permitido) {
+    if (!window.transporteDashboardController?.podeAbrir(window.location.hash)) {
       mostrarHomeESuspenderRefresh();
       history.replaceState({ tela: 'home' }, '', window.location.pathname + window.location.search);
       return;

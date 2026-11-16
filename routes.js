@@ -2907,11 +2907,11 @@ async function responderAnaliseFrete(req, res) {
   }
 }
 
-router.get('/transporte/analise-frete', exigirGerenciaOuDiretoria, responderAnaliseFrete);
-router.post('/transporte/analise-frete', exigirGerenciaOuDiretoria, responderAnaliseFrete);
-router.post('/transporte/analise-frete/excel', exigirGerenciaOuDiretoria, responderAnaliseFrete);
+router.get('/transporte/analise-frete', responderAnaliseFrete);
+router.post('/transporte/analise-frete', responderAnaliseFrete);
+router.post('/transporte/analise-frete/excel', responderAnaliseFrete);
 
-router.get('/transporte/definicao-frete', exigirGerenciaOuDiretoria, async (req, res) => {
+router.get('/transporte/definicao-frete', async (req, res) => {
   let filtros;
   try {
     filtros = filtrosDefinicaoFrete(req.query);
@@ -2926,7 +2926,7 @@ router.get('/transporte/definicao-frete', exigirGerenciaOuDiretoria, async (req,
   }
 });
 
-router.get('/transporte/definicao-frete/:nunota/historico', exigirGerenciaOuDiretoria, async (req, res) => {
+router.get('/transporte/definicao-frete/:nunota/historico', async (req, res) => {
   const nunota = Number(req.params.nunota);
   if (!Number.isSafeInteger(nunota) || nunota <= 0) return res.status(400).json({ erro: 'Nota inválida.' });
   try {
@@ -2955,7 +2955,7 @@ router.put('/transporte/definicao-frete/:nunota/transportadora', exigirGerenciaO
   }
 });
 
-router.get('/transporte/analise-frete/ctes/:chaveAcesso/pdf', exigirGerenciaOuDiretoria, async (req, res) => {
+router.get('/transporte/analise-frete/ctes/:chaveAcesso/pdf', async (req, res) => {
   try {
     const documento = await gerarDacteSankhya(req.params.chaveAcesso);
     const numero = String(documento.numero || req.params.chaveAcesso).replace(/[^0-9]/g, '');
@@ -2973,7 +2973,7 @@ router.get('/transporte/analise-frete/ctes/:chaveAcesso/pdf', exigirGerenciaOuDi
   }
 });
 
-router.get('/transporte/analise-frete/ctes/:chaveAcesso/visualizar', exigirGerenciaOuDiretoria, (req, res) => {
+router.get('/transporte/analise-frete/ctes/:chaveAcesso/visualizar', (req, res) => {
   const chave = String(req.params.chaveAcesso || '').trim();
   if (!/^\d{44}$/.test(chave)) {
     res.status(400).json({ erro: 'Chave de acesso do CT-e inválida.' });
