@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { criarAutomacaoEmailFrete } = require('../api/emailFreteAutomacao');
+const { identificarDevolucao } = require('../api/emailFreteDevolucoes');
 
 const chave = '1'.repeat(44);
 const nota = {
@@ -14,7 +15,8 @@ const nota = {
 
 function montarAutomacao(t, {
   notasCarga = [nota], notasSemCarga = notasCarga, revalidar = () => notasCarga,
-  contatos = [], origens = [], datasFaturamento = [], transportadorasCargas = [], obterDanfe, enviar, ambienteTeste = false
+  contatos = [], origens = [], datasFaturamento = [], transportadorasCargas = [], obterDanfe, enviar, ambienteTeste = false,
+  consultarDevolucoes = null
 } = {}) {
   const baseAnterior = process.env.SANKHYA_API_BASE_URL;
   process.env.SANKHYA_API_BASE_URL = ambienteTeste
@@ -74,7 +76,7 @@ function montarAutomacao(t, {
   const enviarMock = t.mock.fn(enviar || (async () => ({ accepted: [nota.EMAILNFE] })));
   const verificar = t.mock.fn(async () => true);
   const opcoes = {
-    diretorio, query, enviar: enviarMock, verificar, obterDanfe, agora: () => tempo,
+    diretorio, query, enviar: enviarMock, verificar, obterDanfe, agora: () => tempo, consultarDevolucoes,
     obterConta: async () => ({ configurado: true, user: 'frete@example.com' })
   };
   return {
@@ -82,6 +84,56 @@ function montarAutomacao(t, {
     query, enviarMock, verificar, diretorio, avancar: (ms) => { tempo += ms; }
   };
 }
+
+test('identifica a devolução final pelo cabeçalho original e ignora aviso de atraso ou sem vínculo', () => {
+  const messageId = '<frete-3890001-27e8c643-69a8-418d-a8a4-c9c32ff344bb@example.com>';
+  const original = [`From: frete@example.com\r\nMessage-ID: ${messageId}\r\n\r\nMensagem original`];
+  const diagnostico = 'Diagnostic-Code: smtp; 452 4.2.2 The recipient inbox is out of storage space.';
+  assert.deepEqual(identificarDevolucao(`Action: failed\n${diagnostico}`, original), {
+    messageId, motivo: 'Caixa de e-mail cheia (452 4.2.2).'
+  });
+  assert.equal(identificarDevolucao(`Action: delayed\n${diagnostico}`, original), null);
+  assert.equal(identificarDevolucao(`Action: failed\n${diagnostico}`, []), null);
+});
+
+test('vincula devolução à tentativa certa, filtra e preserva a falha após reenviar para outro endereço', async (t) => {
+  const avisos = [];
+  const { automacao, reiniciar, enviarMock } = montarAutomacao(t, {
+    contatos: [{ CODPARC: 41, EMAIL: 'contato@example.com, FISCAL@example.com' }],
+    consultarDevolucoes: async ({ conhecidos }) => avisos.filter(({ chave }) => !conhecidos.has(chave))
+  });
+  await automacao.ativar(true);
+  await automacao.executar();
+  const filtrada = () => automacao.listar({ visao: 'historico', somenteNaoEnviadas: 'true' });
+  assert.equal((await filtrada()).itens.length, 0);
+  const [primeiro] = enviarMock.mock.calls[0].arguments;
+  const motivo = 'Caixa de e-mail cheia (452 4.2.2).';
+  avisos.push({ chave: 'aviso-1', data: '2026-11-05T16:11:00Z', messageId: primeiro.messageId, motivo });
+  await automacao.sincronizarDevolucoes();
+  const [devolvido] = (await filtrada()).itens;
+  assert.equal(devolvido.status, 'devolvido');
+  assert.equal(devolvido.destinatario, 'fiscal@example.com');
+  assert.equal(devolvido.motivo, motivo);
+  assert.deepEqual((await automacao.opcoesReenvio(nota.NUNOTA)).enderecos.map((email) => email.toLowerCase()),
+    ['fiscal@example.com', 'geral@example.com', 'contato@example.com']);
+  const envios = await Promise.allSettled([
+    automacao.reenviar(nota.NUNOTA, 'alternativo@example.com'),
+    automacao.reenviar(nota.NUNOTA, 'contato@example.com')
+  ]);
+  assert.equal(envios.filter(({ status }) => status === 'fulfilled').length, 1);
+  assert.equal(enviarMock.mock.callCount(), 2);
+  const [segundo] = enviarMock.mock.calls[1].arguments;
+  assert.notEqual(segundo.messageId, primeiro.messageId);
+  const novaInstancia = reiniciar();
+  avisos.push({ ...avisos[0], chave: 'aviso-repetido' });
+  await novaInstancia.sincronizarDevolucoes();
+  const [reenviado] = (await novaInstancia.listar({ visao: 'historico' })).itens;
+  assert.equal(reenviado.status, 'enviado');
+  assert.equal(reenviado.destinatario, segundo.to);
+  assert.equal(reenviado.falhasAnteriores[0].motivo, motivo);
+  assert.equal(reenviado.falhasAnteriores[0].destinatario, primeiro.to);
+  assert.equal((await filtrada()).itens.length, 0);
+});
 
 test('lista notas aguardando carga e envia uma vez após o vínculo, com modelo e destinatário registrados', async (t) => {
   const { automacao, reiniciar, query, enviarMock, verificar } = montarAutomacao(t);

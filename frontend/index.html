@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/home-dashboard.css?v=20261116-fundo-bonificacoes">
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261113-alinhamento-frete">
+  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261116-email-frete">
   <link rel="stylesheet" href="/chat.css?v=20261028-template-midia-1">
   <link rel="stylesheet" href="/chat-theme.css?v=20261002-3">
   <link rel="stylesheet" href="/rastreio-produto.css?v=20261005-5">
@@ -13197,6 +13197,7 @@
             <button class="analise-frete-download" type="button" id="email-frete-fila-historico" aria-pressed="false">Histórico</button>
           </div>
           <form class="email-frete-acoes email-frete-formulario" id="email-frete-fila-periodo" aria-label="Filtrar pela data de faturamento" method="post">
+            <label class="email-frete-filtro-envio" id="email-frete-fila-filtro-envio" hidden><input type="checkbox" id="email-frete-fila-nao-enviadas"> Somente não enviados</label>
             <label for="email-frete-fila-inicio"><span id="email-frete-fila-rotulo-inicio">Faturamento de</span><input type="date" id="email-frete-fila-inicio" required></label>
             <label for="email-frete-fila-fim">Até<input type="date" id="email-frete-fila-fim" required></label>
             <button class="analise-frete-download" type="submit">Consultar</button>
@@ -13204,10 +13205,23 @@
         </div>
         <div class="transporte-table-wrap email-frete-grade-rolagem" tabindex="0" role="region" aria-label="Planilha de notas e envios">
           <table class="transporte-table email-frete-tabela">
-            <thead><tr><th scope="col">Nota</th><th scope="col">Data de faturamento</th><th scope="col">Empresa</th><th scope="col">Cliente</th><th scope="col" id="email-frete-fila-coluna-transportadora">Transportadora prevista</th><th scope="col">E-mail</th><th scope="col">Status</th><th scope="col" data-email-frete-historico hidden>Ordem de carga</th><th scope="col" data-email-frete-historico hidden>Carga detectada em</th><th scope="col" data-email-frete-historico hidden>Enviado em</th></tr></thead>
+            <thead><tr><th scope="col">Nota</th><th scope="col">Data de faturamento</th><th scope="col">Empresa</th><th scope="col">Cliente</th><th scope="col" id="email-frete-fila-coluna-transportadora">Transportadora prevista</th><th scope="col">E-mail</th><th scope="col">Status</th><th scope="col" data-email-frete-historico hidden>Ordem de carga</th><th scope="col" data-email-frete-historico hidden>Carga detectada em</th><th scope="col" data-email-frete-historico hidden>Enviado em</th><th scope="col" data-email-frete-historico hidden>Ações</th></tr></thead>
             <tbody id="email-frete-fila-linhas"></tbody>
           </table>
         </div>
+        <dialog class="analise-frete-ordem-dialogo email-frete-dialogo" id="email-frete-reenvio-dialogo" aria-labelledby="email-frete-reenvio-titulo">
+          <h2 id="email-frete-reenvio-titulo">Reenviar e-mail de frete</h2>
+          <ul id="email-frete-reenvio-falhas"></ul>
+          <form class="email-frete-formulario" id="email-frete-reenvio-form">
+            <label>Endereços do cadastro<select id="email-frete-reenvio-opcoes"></select></label>
+            <label>Destinatário<input type="email" id="email-frete-reenvio-destinatario" maxlength="254" required></label>
+            <p class="transporte-status" id="email-frete-reenvio-status" role="status"></p>
+            <div class="email-frete-acoes">
+              <button class="transporte-refresh" id="email-frete-reenvio-enviar" type="submit">Reenviar</button>
+              <button class="analise-frete-download" id="email-frete-reenvio-fechar" type="button">Fechar</button>
+            </div>
+          </form>
+        </dialog>
         <div class="email-frete-cabecalho email-frete-grade-rodape">
           <p class="transporte-status" id="email-frete-fila-status" role="status"></p>
           <div class="analise-frete-pagination">
@@ -13877,7 +13891,7 @@
   <script src="asyncRefresh.js?v=20260601-2"></script>
   <script src="vendas-dashboard.js?v=20260820-1"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="email-frete-automacao.js?v=20261106-8"></script>
+  <script src="email-frete-automacao.js?v=20261116-1"></script>
   <script src="definicao-frete.js?v=20261116-edicao-transportadora"></script>
   <script src="transporte-dashboard.js?v=20261116-acesso-frete"></script>
   <script src="consulta-tabela.js?v=20261103-filtro-numerico"></script>

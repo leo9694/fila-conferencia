@@ -2823,6 +2823,10 @@ const errosEmailFrete = new Map([
   ['FRETE_MODELO_INVALIDO', [400, 'Preencha um assunto de até 180 caracteres e uma mensagem de até 8.000 caracteres.']],
   ['FRETE_MODELO_VARIAVEL', [400, 'Confira as variáveis do modelo. Use apenas as opções indicadas na tela.']],
   ['FRETE_AUTOMACAO_INVALIDA', [400, 'Parâmetros da automação inválidos.']],
+  ['FRETE_REENVIO_INDISPONIVEL', [409, 'Esta nota não tem uma tentativa com falha disponível para reenvio. Atualize o histórico.']],
+  ['FRETE_REENVIO_NOTA', [409, 'Confira a nota, a autorização da NF-e e o vínculo com a ordem de carga.']],
+  ['FRETE_DANFE_INDISPONIVEL', [502, 'O PDF do DANFE não está disponível no Sankhya.']],
+  ['FRETE_DANFE_TAMANHO', [409, 'O DANFE ultrapassa o limite de 8 MB.']],
   ['FRETE_HISTORICO_PERIODO_INVALIDO', [400, 'Informe datas válidas. A data inicial deve ser anterior ou igual à data final.']],
   ['FRETE_AUTOMACAO_OCUPADA', [409, 'Já existe uma alteração de status em andamento.']],
   ['FRETE_SMTP_NAO_CONFIGURADO', [409, 'Configure a caixa de e-mail antes de continuar.']],
@@ -2864,6 +2868,10 @@ router.get('/transporte/email-frete/automacao', exigirGerenciaOuDiretoria, respo
 router.put('/transporte/email-frete/automacao/modelo', exigirGerenciaOuDiretoria, responderEmailFrete(automacaoEmailFrete.salvarModelo));
 router.put('/transporte/email-frete/automacao/estado', exigirGerenciaOuDiretoria, responderEmailFrete(({ ativa }) => automacaoEmailFrete.ativar(ativa)));
 router.get('/transporte/email-frete/fila', exigirGerenciaOuDiretoria, responderEmailFrete((_, req) => automacaoEmailFrete.listar(req.query)));
+router.get('/transporte/email-frete/fila/:nunota/reenvio', exigirGerenciaOuDiretoria,
+  responderEmailFrete((_, req) => automacaoEmailFrete.opcoesReenvio(req.params.nunota)));
+router.post('/transporte/email-frete/fila/:nunota/reenvio', exigirGerenciaOuDiretoria,
+  responderEmailFrete(({ destinatario }, req) => automacaoEmailFrete.reenviar(req.params.nunota, destinatario)));
 
 router.get('/transporte/malhas/estados', exigirGerenciaOuDiretoria, async (req, res) => {
   try {

@@ -64,7 +64,12 @@
 .email-frete-tabela tbody tr:last-child td { border-bottom: 0; }
 .email-frete-tabela small { display: inline-block; max-width: 200px; margin-left: 3px; overflow: hidden; color: #46647b; text-overflow: ellipsis; vertical-align: bottom; white-space: nowrap; }
 .email-frete-tabela .is-enviado { color: #087f6d; }
-.email-frete-tabela .is-falha, .email-frete-tabela .is-revisar { color: #b42318; }
+.email-frete-tabela .is-falha, .email-frete-tabela .is-devolvido, .email-frete-tabela .is-revisar { color: #b42318; }
+.email-frete-formulario .email-frete-filtro-envio:not([hidden]) { display: flex; flex-direction: row; align-items: center; gap: 6px; align-self: end; min-height: 30px; }
+.email-frete-formulario .email-frete-filtro-envio input { width: auto; min-height: 0; margin: 0; }
+.email-frete-filtro-envio[hidden], #email-frete-reenvio-form [hidden] { display: none; }
+.email-frete-tabela button.analise-frete-download { min-height: 24px; padding: 2px 8px; }
+#email-frete-reenvio-falhas { color: #b42318; margin: 6px 0 10px; padding-left: 20px; overflow-wrap: anywhere; }
 .email-frete-grade-rodape { margin-top: 6px; }
 .email-frete-grade-rodape .analise-frete-pagination { margin-left: auto; padding: 0; border: 0; gap: 6px; }
 .email-frete-grade-rodape .analise-frete-pagination button { height: 30px; padding-inline: 8px; }

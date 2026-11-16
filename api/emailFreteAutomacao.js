@@ -3,6 +3,7 @@ const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const { ambienteSankhyaTeste, executeQuery } = require('./sankhyaApi');
 const { formatarMensagem } = require('./emailFreteFormato');
+const { consultarDevolucoesHostinger } = require('./emailFreteDevolucoes');
 const { enderecoValido, namespaceEmailFrete, obterConfiguracaoEmailFrete, enviarEmailFrete, verificarConexaoEmailFrete } = require('./emailFrete');
 const {
   TAMANHO_PAGINA, LOTE_DESCOBERTA, listarNotasSemCarga, consultarDatasFaturamento, consultarTransportadorasCargas, obterMarcoCargas,
@@ -10,6 +11,8 @@ const {
 } = require('./emailFreteAutomacaoConsulta');
 
 const INTERVALO = 60_000;
+const INTERVALO_DEVOLUCOES = 5 * INTERVALO;
+const statusReenvio = new Set(['falha', 'devolvido']);
 const limiteAnexoDanfe = 8 * 1024 * 1024;
 const fusoHorario = process.env.APP_TIMEZONE || 'America/Cuiaba';
 const dataLocal = new Intl.DateTimeFormat('sv-SE', { timeZone: fusoHorario });
@@ -71,13 +74,21 @@ function renderizarModelo(modelo, nota) {
   };
 }
 
-function primeiroEmail(...enderecos) {
+function emailsValidos(...enderecos) {
   return enderecos.flatMap((valor) => String(valor ?? '').split(/[;,\r\n]/))
-    .map((valor) => valor.trim()).find(enderecoValido);
+    .map((valor) => valor.trim()).filter(enderecoValido);
+}
+
+function primeiroEmail(...enderecos) {
+  return emailsValidos(...enderecos)[0];
+}
+
+function emailsParceiro(row) {
+  return emailsValidos(row.EMAILNFE, row.EMAIL, row.EMAILNOTIFENTREGA, row.EMAILDANFE, row.EMAILCTE, row.EMAILNFSE);
 }
 
 function resumirNota(row) {
-  const email = primeiroEmail(row.EMAILNFE, row.EMAIL, row.EMAILNOTIFENTREGA, row.EMAILDANFE, row.EMAILCTE, row.EMAILNFSE) || '';
+  const email = emailsParceiro(row)[0] || '';
   const ordem = Number(row.ORDEMCARGA) || null;
   return {
     nunota: Number(row.NUNOTA), nota: Number(row.NUMNOTA) || null, empresa: Number(row.CODEMP),
@@ -133,14 +144,17 @@ function criarAutomacaoEmailFrete({
   query = executeQuery, enviar = enviarEmailFrete, verificar = verificarConexaoEmailFrete,
   obterConta = obterConfiguracaoEmailFrete, obterDanfe,
   diretorio = path.join(process.cwd(), 'data', `email-frete-automacao-${namespaceEmailFrete()}`),
-  agora = Date.now
+  agora = Date.now,
+  consultarDevolucoes = process.env.FRETE_HOSTINGER_API_TOKEN ? consultarDevolucoesHostinger : null
 } = {}) {
   const arquivo = path.join(diretorio, 'estado.json');
   let executando = false;
   let alterandoAtivacao = false;
   let timer;
   let parando = false;
-  let emEnvio = null;
+  const emEnvio = new Set();
+  let sincronizandoDevolucoes = false;
+  let proximaSincronizacao = 0;
 
   function ler() {
     try {
@@ -194,7 +208,7 @@ function criarAutomacaoEmailFrete({
     }
   }
 
-  async function listar({ pagina: paginaRaw, visao, inicio: dataInicial, fim: dataFinal }) {
+  async function listar({ pagina: paginaRaw, visao, inicio: dataInicial, fim: dataFinal, somenteNaoEnviadas }) {
     const pagina = Number(paginaRaw || 1);
     if (!Number.isSafeInteger(pagina) || pagina < 1 || pagina > 100000 ||
         !['aguardando', 'historico'].includes(visao)) throw falha('FRETE_AUTOMACAO_INVALIDA');
@@ -205,9 +219,9 @@ function criarAutomacaoEmailFrete({
       const itens = (await resolverEmailsNotas(query, rows.slice(0, TAMANHO_PAGINA))).map(({ nota }) => nota);
       return { itens, pagina, temMais: rows.length > TAMANHO_PAGINA, intervalo };
     }
-    const itens = Object.values(ler().notas).filter(({ detectadaEm }) => {
+    const itens = Object.values(ler().notas).filter(({ detectadaEm, status }) => {
       const data = dataLocal.format(new Date(detectadaEm));
-      return data >= intervalo.inicio && data <= intervalo.fim;
+      return data >= intervalo.inicio && data <= intervalo.fim && (somenteNaoEnviadas !== 'true' || status !== 'enviado');
     }).sort((a, b) => b.detectadaEm.localeCompare(a.detectadaEm) || b.nunota - a.nunota);
     const notasPagina = itens.slice(inicio, inicio + TAMANHO_PAGINA);
     const idsSemData = notasPagina.filter((nota) => !Object.hasOwn(nota, 'dataFaturamento')).map((nota) => nota.nunota);
@@ -218,17 +232,63 @@ function criarAutomacaoEmailFrete({
     ]);
     const datasPorNota = new Map(datas.map((row) => [Number(row.NUNOTA), row.DATA_FATURAMENTO]));
     const transportadorasPorCarga = new Map(cargas.map((row) => [`${row.CODEMP}:${row.ORDEMCARGA}`, row.TRANSPORTADORA]));
-    const linhas = notasPagina.map(({ messageId, reverEm, ...nota }) => {
+    const linhas = notasPagina.map(({ messageId, reverEm, tentativas, ...nota }) => {
       if (!Object.hasOwn(nota, 'dataFaturamento')) nota.dataFaturamento = datasPorNota.get(nota.nunota) || null;
       if (nota.ordem && !Object.hasOwn(nota, 'codigoTransportadoraCarga')) {
         nota.transportadora = transportadorasPorCarga.get(`${nota.empresa}:${nota.ordem}`)?.trim() || '';
       }
-      if (nota.status === 'enviando' && nota.nunota !== emEnvio) {
+      nota.falhasAnteriores = (tentativas || []).filter((tentativa) => statusReenvio.has(tentativa.status))
+        .map(({ destinatario, motivo, devolvidoEm }) => ({ destinatario, motivo, devolvidoEm }));
+      if (nota.status === 'enviando' && !emEnvio.has(nota.nunota)) {
         return { ...nota, status: 'revisar', motivo: 'O resultado do envio não pôde ser confirmado.' };
       }
       return nota;
     });
     return { itens: linhas, pagina, temMais: itens.length > inicio + TAMANHO_PAGINA, intervalo, fusoHorario };
+  }
+
+  async function sincronizarDevolucoes() {
+    if (!consultarDevolucoes || sincronizandoDevolucoes || agora() < proximaSincronizacao) return;
+    sincronizandoDevolucoes = true;
+    proximaSincronizacao = agora() + INTERVALO_DEVOLUCOES;
+    try {
+      const { notas, auditoriaHostinger } = ler();
+      const dataPrimeiroEnvio = Object.values(notas).reduce((minimo, nota) => {
+        const data = nota.enviadoEm || nota.tentativaEm || nota.detectadaEm;
+        return nota.messageId && data && (!minimo || data < minimo) ? data : minimo;
+      }, null);
+      if (!dataPrimeiroEnvio) return;
+      const { user: caixa } = await obterConta();
+      if (!enderecoValido(caixa)) return;
+      const auditoria = auditoriaHostinger?.caixa === caixa ? auditoriaHostinger : {};
+      const margem = 3 * 86_400_000;
+      const desde = new Date(Date.parse(auditoria.consultadaEm || dataPrimeiroEnvio) - margem).toISOString().slice(0, 10);
+      const consultadaEm = new Date(agora()).toISOString();
+      const avisos = await consultarDevolucoes({ caixa, desde, conhecidos: new Set(Object.keys(auditoria.avisos || {})) });
+      atualizar((estado) => {
+        const chaves = {};
+        for (const [chave, data] of Object.entries(auditoria.avisos || {})) {
+          if (data.slice(0, 10) >= desde) chaves[chave] = data;
+        }
+        const porMessageId = new Map();
+        for (const nota of Object.values(estado.notas)) {
+          for (const envio of [nota, ...(nota.tentativas || [])]) {
+            if (envio.messageId) porMessageId.set(envio.messageId.toLowerCase(), envio);
+          }
+        }
+        for (const aviso of avisos) {
+          const envio = porMessageId.get(aviso.messageId);
+          if (envio?.status === 'enviando' && emEnvio.has(envio.nunota)) continue;
+          if (envio && ['enviado', 'revisar', 'enviando'].includes(envio.status)) {
+            Object.assign(envio, { status: 'devolvido', motivo: aviso.motivo, devolvidoEm: aviso.data });
+          }
+          if (aviso.chave && typeof aviso.data === 'string') chaves[aviso.chave] = aviso.data;
+        }
+        estado.auditoriaHostinger = { caixa, consultadaEm, avisos: chaves };
+      });
+    } finally {
+      sincronizandoDevolucoes = false;
+    }
   }
 
   async function descobrir(estado) {
@@ -266,9 +326,10 @@ function criarAutomacaoEmailFrete({
     if (novas.length) atualizar((atual) => incluirNotasPendentes(atual, novas));
   }
 
-  function reservar(nunota, messageId) {
+  function reservar(nunota, messageId, tentativaAnterior) {
+    const sufixo = tentativaAnterior === undefined ? '' : `-reenvio-${tentativaAnterior?.match(/[a-f0-9-]{36}/i)?.[0] || 'legado'}`;
     try {
-      fs.writeFileSync(path.join(diretorio, `envio-${nunota}.json`), JSON.stringify({ messageId }),
+      fs.writeFileSync(path.join(diretorio, `envio-${nunota}${sufixo}.json`), JSON.stringify({ messageId }),
         { flag: 'wx', mode: 0o600, flush: true });
       return true;
     } catch (erro) {
@@ -288,9 +349,14 @@ function criarAutomacaoEmailFrete({
     return { filename: `DANFE-${nota.nota || nota.nunota}.pdf`, content: pdf, contentType: 'application/pdf' };
   }
 
-  async function enviarNota(nota, dadosModelo, modelo, remetente, anexo) {
+  async function enviarNota(nota, dadosModelo, modelo, remetente, anexo, anterior) {
     const messageId = `<frete-${nota.nunota}-${randomUUID()}@${remetente.split('@').at(-1)}>`;
-    if (!reservar(nota.nunota, messageId)) {
+    if (anterior) {
+      const atual = ler().notas[nota.nunota];
+      if (!statusReenvio.has(atual?.status) || atual.messageId !== anterior.messageId) throw falha('FRETE_REENVIO_INDISPONIVEL');
+    }
+    if (!reservar(nota.nunota, messageId, anterior ? anterior.messageId || null : undefined)) {
+      if (anterior) throw falha('FRETE_REENVIO_INDISPONIVEL');
       atualizar((estado) => {
         const registro = estado.notas[nota.nunota];
         if (registro?.status === 'pendente') {
@@ -299,17 +365,27 @@ function criarAutomacaoEmailFrete({
       });
       return;
     }
-    emEnvio = nota.nunota;
+    emEnvio.add(nota.nunota);
     try {
-      registrar(nota.nunota, { ...nota, destinatario: nota.email, status: 'enviando', messageId, motivo: '' });
+      let historico;
+      if (anterior) {
+        const { destinatario, motivo, status, enviadoEm, devolvidoEm, tentativaEm, messageId: anteriorId } = anterior;
+        historico = { tentativas: [...(anterior.tentativas || []),
+          { destinatario, motivo, status, enviadoEm, devolvidoEm, tentativaEm, messageId: anteriorId }],
+        enviadoEm: null, devolvidoEm: null, danfeAnexado: false };
+      }
+      registrar(nota.nunota, { ...nota, ...historico, destinatario: nota.email, status: 'enviando', messageId,
+        motivo: '', tentativaEm: new Date(agora()).toISOString() });
       const resultado = await enviar({
         to: nota.email, ...renderizarModelo(modelo, { ...nota, ...dadosModelo }), messageId,
         ...(anexo && { attachments: [anexo] })
       }).catch((erro) => {
         const recusado = ['EAUTH', 'ENOAUTH', 'EENVELOPE'].includes(erro.code) || (erro.responseCode >= 400 && erro.responseCode < 600);
+        const codigo = Number(erro.responseCode);
         registrar(nota.nunota, {
           status: recusado ? 'falha' : 'revisar',
-          motivo: recusado ? 'O servidor SMTP recusou o envio.' : 'O resultado do envio não pôde ser confirmado.'
+          motivo: recusado ? `O servidor SMTP recusou o envio${codigo >= 400 && codigo < 600 ? ` (${codigo})` : ''}.`
+            : 'O resultado do envio não pôde ser confirmado.'
         });
         return null;
       });
@@ -318,8 +394,51 @@ function criarAutomacaoEmailFrete({
         status: 'enviado', enviadoEm: new Date(agora()).toISOString(), danfeAnexado: Boolean(anexo)
       } : { status: 'falha', motivo: 'O servidor SMTP não aceitou o destinatário.' });
     } finally {
-      emEnvio = null;
+      emEnvio.delete(nota.nunota);
     }
+  }
+
+  function obterNotaParaReenvio(id) {
+    const nunota = Number(id);
+    const estado = ler();
+    const anterior = Number.isSafeInteger(nunota) && nunota > 0 ? estado.notas[nunota] : null;
+    if (!statusReenvio.has(anterior?.status)) throw falha('FRETE_REENVIO_INDISPONIVEL');
+    return { nunota, estado, anterior };
+  }
+
+  async function opcoesReenvio(id) {
+    const { nunota, estado, anterior } = obterNotaParaReenvio(id);
+    const [row] = await consultarNotasParaEnvio(query, estado.cargas, [nunota], ambienteSankhyaTeste());
+    if (!row || Number(row.ORDEMCARGA) !== anterior.ordem) throw falha('FRETE_REENVIO_NOTA');
+    const contatos = await consultarEmailsContatos(query, [row.CODPARC]);
+    const enderecos = [...emailsParceiro(row), ...emailsValidos(...contatos.map((contato) => contato.EMAIL))];
+    return { enderecos: [...new Map(enderecos.map((email) => [email.toLowerCase(), email])).values()] };
+  }
+
+  async function reenviar(id, destinatario) {
+    destinatario = typeof destinatario === 'string' ? destinatario.trim() : '';
+    if (!enderecoValido(destinatario)) throw falha('FRETE_SMTP_DESTINATARIO_INVALIDO');
+    const { nunota, estado, anterior } = obterNotaParaReenvio(id);
+    const ambienteTeste = ambienteSankhyaTeste();
+    const [row] = await consultarNotasParaEnvio(query, estado.cargas, [nunota], ambienteTeste);
+    if (!row || Number(row.ORDEMCARGA) !== anterior.ordem) throw falha('FRETE_REENVIO_NOTA');
+    const [{ nota, emailTransportadora }] = await resolverEmailsNotas(query, [row], true);
+    const chaveValida = /^\d{44}$/.test(row.CHAVENFE || '');
+    if ((!ambienteTeste && !chaveValida) || !nota.cliente || !nota.transportadora) throw falha('FRETE_REENVIO_NOTA');
+    const conta = await obterConta();
+    if (!conta.configurado || !enderecoValido(conta.user)) throw falha('FRETE_SMTP_NAO_CONFIGURADO');
+    const { modelo } = estado;
+    const pedidos = /{{\s*numero_pedido\s*}}/.test(`${modelo.assunto}\n${modelo.mensagem}`)
+      ? (await resolverNumerosPedidos(query, [nunota])).get(nunota) : null;
+    const anexo = modelo.anexarDanfe && chaveValida && (!ambienteTeste || row.STATUSNFE === 'A')
+      ? await prepararAnexo(nota).catch((erro) => { if (!ambienteTeste) throw erro; }) : null;
+    await enviarNota({ ...nota, email: destinatario }, {
+      chave: chaveValida ? row.CHAVENFE : 'não disponível',
+      emailTransportadora: emailTransportadora || 'não disponível',
+      numeroPedido: [...(pedidos || [])].join(' / ') || 'não disponível'
+    }, modelo, conta.user, anexo, anterior);
+    const { status, motivo } = ler().notas[nunota];
+    return { status, motivo };
   }
 
   async function executar() {
@@ -395,6 +514,7 @@ function criarAutomacaoEmailFrete({
     parando = false;
     timer = setInterval(() => {
       executar().catch((erro) => console.error('Falha na automação de Email frete:', erro.code || erro.name));
+      sincronizarDevolucoes().catch((erro) => console.error('Falha na consulta de devoluções de Email frete:', erro.code || erro.name));
     }, INTERVALO);
     timer.unref();
   }
@@ -405,7 +525,8 @@ function criarAutomacaoEmailFrete({
     timer = null;
   }
 
-  return { configuracao, salvarModelo, ativar, listar, registrarCargaConfirmada, executar, iniciar, parar };
+  return { configuracao, salvarModelo, ativar, listar, registrarCargaConfirmada, executar, iniciar, parar,
+    sincronizarDevolucoes, opcoesReenvio, reenviar };
 }
 
 module.exports = { criarAutomacaoEmailFrete };

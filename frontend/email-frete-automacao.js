@@ -14,11 +14,17 @@
   const periodo = $('fila-periodo');
   const dataInicial = $('fila-inicio');
   const dataFinal = $('fila-fim');
+  const somenteNaoEnviadas = $('fila-nao-enviadas');
+  const dialogoReenvio = $('reenvio-dialogo');
+  const opcoesReenvio = $('reenvio-opcoes');
+  const destinatarioReenvio = $('reenvio-destinatario');
+  const botaoReenvio = $('reenvio-enviar');
+  const fecharReenvio = $('reenvio-fechar');
   const colunasHistorico = document.querySelectorAll('[data-email-frete-historico]');
   const intervalos = { aguardando: {}, historico: {} };
   const rotulos = {
     pendente: 'Aguardando envio', enviando: 'Enviando', enviado: 'Enviado',
-    falha: 'Falha no envio', revisar: 'Revisar envio'
+    falha: 'Falha no envio', devolvido: 'Devolvido', revisar: 'Revisar envio'
   };
   let sessao = new AbortController();
   let filaAtual = null;
@@ -28,6 +34,8 @@
   let visao = 'aguardando';
   let pagina = 1;
   let selecaoLink;
+  let notaReenvio;
+  let reenvioEmAndamento = false;
 
   function status(id, texto, erro = false) {
     const elemento = $(`${id}-status`);
@@ -71,11 +79,24 @@
       for (const valor of valores) linha.insertCell().textContent = valor || '—';
       const celulaStatus = linha.cells[6];
       if (nota.status) celulaStatus.classList.add(`is-${nota.status}`);
-      if (nota.motivo || nota.danfeAnexado) {
+      const falhas = listarFalhas(nota);
+      if (nota.motivo || falhas.length || nota.danfeAnexado) {
         const detalhe = document.createElement('small');
-        detalhe.textContent = ` · ${nota.motivo || 'DANFE anexado'}`;
-        celulaStatus.title = celulaStatus.textContent + detalhe.textContent;
+        detalhe.textContent = ` · ${nota.motivo || (falhas.length ? 'Falha anterior' : 'DANFE anexado')}`;
+        celulaStatus.title = [celulaStatus.textContent + detalhe.textContent, ...falhas].join('\n');
         celulaStatus.appendChild(detalhe);
+      }
+      if (visao === 'historico') {
+        const acoes = linha.insertCell();
+        const podeReenviar = ['falha', 'devolvido'].includes(nota.status);
+        if (podeReenviar || falhas.length) {
+          const botao = document.createElement('button');
+          botao.type = 'button';
+          botao.className = 'analise-frete-download';
+          botao.textContent = podeReenviar ? 'Reenviar' : 'Ver falhas';
+          botao.addEventListener('click', () => abrirReenvio(nota, podeReenviar));
+          acoes.appendChild(botao);
+        }
       }
     }
     pagina = dados.pagina;
@@ -85,11 +106,78 @@
     status('fila', dados.itens.length ? `${dados.itens.length} registro(s) nesta página` : 'Nenhuma nota nesta página.');
   }
 
+  function listarFalhas(nota) {
+    const falhas = [...(nota.falhasAnteriores || [])];
+    if (['falha', 'devolvido'].includes(nota.status)) falhas.push(nota);
+    return falhas.map(({ destinatario, motivo }) => `${destinatario || 'Endereço não registrado'} — ${motivo}`);
+  }
+
+  async function abrirReenvio(nota, podeReenviar) {
+    notaReenvio = nota;
+    $('reenvio-titulo').textContent = podeReenviar ? 'Reenviar e-mail de frete' : 'Falhas anteriores';
+    $('reenvio-falhas').replaceChildren(...listarFalhas(nota).map((falha) => {
+      const item = document.createElement('li');
+      item.textContent = falha;
+      return item;
+    }));
+    opcoesReenvio.parentElement.hidden = destinatarioReenvio.parentElement.hidden = botaoReenvio.hidden = !podeReenviar;
+    destinatarioReenvio.required = podeReenviar;
+    destinatarioReenvio.value = '';
+    botaoReenvio.disabled = !podeReenviar;
+    opcoesReenvio.replaceChildren(new Option('Digitar outro e-mail', ''));
+    status('reenvio', '');
+    dialogoReenvio.showModal();
+    if (!podeReenviar) return;
+    try {
+      const { enderecos } = await solicitar(`fila/${nota.nunota}/reenvio`);
+      if (notaReenvio !== nota || !dialogoReenvio.open) return;
+      const falharam = new Set([nota, ...(nota.falhasAnteriores || [])].map(({ destinatario }) => destinatario?.toLowerCase()));
+      for (const endereco of enderecos) {
+        opcoesReenvio.add(new Option(falharam.has(endereco.toLowerCase()) ? `${endereco} (falhou)` : endereco, endereco));
+      }
+    } catch (erro) {
+      if (notaReenvio === nota && dialogoReenvio.open) status('reenvio', erro.message, true);
+    }
+  }
+
+  opcoesReenvio.addEventListener('change', () => {
+    destinatarioReenvio.value = opcoesReenvio.value;
+    if (!opcoesReenvio.value) destinatarioReenvio.focus();
+  });
+  destinatarioReenvio.addEventListener('input', () => { opcoesReenvio.value = destinatarioReenvio.value; });
+  fecharReenvio.addEventListener('click', () => dialogoReenvio.close());
+  dialogoReenvio.addEventListener('cancel', (evento) => { if (reenvioEmAndamento) evento.preventDefault(); });
+  $('reenvio-form').addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    if (botaoReenvio.disabled || reenvioEmAndamento) return;
+    const nota = notaReenvio;
+    const signal = sessao.signal;
+    reenvioEmAndamento = true;
+    botaoReenvio.disabled = fecharReenvio.disabled = destinatarioReenvio.disabled = opcoesReenvio.disabled = true;
+    status('reenvio', 'Reenviando…');
+    try {
+      const dados = await solicitar(`fila/${nota.nunota}/reenvio`, {
+        method: 'POST', body: { destinatario: destinatarioReenvio.value.trim() }, signal
+      });
+      if (signal.aborted) return;
+      await carregarFila(pagina, true);
+      if (signal.aborted) return;
+      dialogoReenvio.close();
+      status('fila', dados.status === 'enviado' ? 'Reenvio aceito pelo servidor de e-mail.' : dados.motivo, dados.status !== 'enviado');
+    } catch (erro) {
+      if (!signal.aborted) status('reenvio', erro.message, true);
+    } finally {
+      reenvioEmAndamento = false;
+      botaoReenvio.disabled = fecharReenvio.disabled = destinatarioReenvio.disabled = opcoesReenvio.disabled = false;
+    }
+  });
+
   async function carregarFila(paginaSolicitada = pagina, silencioso = false) {
     filaAtual?.abort();
     const pedido = new AbortController();
     filaAtual = pedido;
     const consulta = new URLSearchParams({ visao, pagina: String(paginaSolicitada) });
+    if (visao === 'historico' && somenteNaoEnviadas.checked) consulta.set('somenteNaoEnviadas', 'true');
     const intervalo = intervalos[visao].aplicado;
     if (intervalo) {
       consulta.set('inicio', intervalo.inicio);
@@ -117,6 +205,7 @@
   function mostrarVisao(valor) {
     visao = valor;
     const historico = valor === 'historico';
+    $('fila-filtro-envio').hidden = !historico;
     $('fila-rotulo-inicio').textContent = historico ? 'Detectada de' : 'Faturamento de';
     $('fila-coluna-transportadora').textContent = historico ? 'Transportadora da carga' : 'Transportadora prevista';
     periodo.setAttribute('aria-label', historico ? 'Filtrar pela data de detecção da carga' : 'Filtrar pela data de faturamento');
@@ -260,6 +349,7 @@
   $('fila-aguardando').addEventListener('click', () => selecionarVisao('aguardando'));
   $('fila-historico').addEventListener('click', () => selecionarVisao('historico'));
   $('fila-atualizar').addEventListener('click', () => carregada ? carregarFila() : preparar());
+  somenteNaoEnviadas.addEventListener('change', () => carregarFila(1));
   periodo.addEventListener('submit', (event) => {
     event.preventDefault();
     if (dataInicial.value > dataFinal.value) {
@@ -295,6 +385,8 @@
     mensagem.value = '';
     anexarDanfe.checked = false;
     dialogoLink.close();
+    dialogoReenvio.close();
+    somenteNaoEnviadas.checked = false;
     $('editor').open = false;
     botaoSalvar.disabled = botaoAlternar.disabled = true;
     for (const id of ['automacao', 'modelo', 'fila']) status(id, '');
