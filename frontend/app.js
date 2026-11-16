@@ -8625,6 +8625,7 @@ function renderizarPedidosFila() {
       : (entrada ? 'Compra de produtos' : pedido.SAIDA_POR_NOTA ? 'Nota de venda' : 'Pedido de venda');
     const numeroNotaFiscal = Number(pedido.NUMNOTA || 0) > 0 ? String(pedido.NUMNOTA) : '-';
     card.className = `pedido-operacao-card ${estadoOperacional} ${transferenciaFiliais ? 'transferencia-entre-filiais' : ''} ${pedidoSelecionado?.NUNOTA === pedido.NUNOTA ? 'active' : ''}`;
+    if (!entrada && bonificacao) card.classList.add('bonificacao');
     card.innerHTML = `
       <div class="pedido-list-action">
         ${pedido.PEDIDO_IMPRESSO
