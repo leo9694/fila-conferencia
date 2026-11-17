@@ -447,6 +447,22 @@ function criarAutomacaoEmailFrete({
     return { enderecos: [...new Map(enderecos.map((email) => [email.toLowerCase(), email])).values()] };
   }
 
+  async function obterDocumentoCliente(id, visao) {
+    const nunota = Number(id);
+    if (!Number.isSafeInteger(nunota) || nunota < 1 || !['aguardando', 'historico'].includes(visao)) {
+      throw falha('FRETE_AUTOMACAO_INVALIDA');
+    }
+    const registro = visao === 'historico' ? ler().notas[nunota] : null;
+    if (visao === 'historico' && !registro) return { documento: null };
+    const [row] = visao === 'historico'
+      ? await consultarCadastroClienteDaNota(query, nunota)
+      : await consultarNotaSemCarga(query, nunota);
+    if ((registro?.codigoCliente && registro.codigoCliente !== Number(row?.CODPARC)) ||
+        (registro?.empresa && registro.empresa !== Number(row?.CODEMP))) return { documento: null };
+    const documento = String(row?.CGC_CPF ?? '').replace(/\D/g, '');
+    return { documento: /^(\d{11}|\d{14})$/.test(documento) ? documento : null };
+  }
+
   async function atualizarEmailCadastro(id, { visao, email }) {
     email = typeof email === 'string' ? email.trim() : '';
     if (!enderecoValido(email) || email.length > 80) throw falha('FRETE_CADASTRO_EMAIL_INVALIDO');
@@ -613,7 +629,7 @@ function criarAutomacaoEmailFrete({
   }
 
   return { configuracao, salvarModelo, ativar, listar, registrarCargaConfirmada, executar, iniciar, parar,
-    sincronizarDevolucoes, opcoesReenvio, reenviar, atualizarEmailCadastro };
+    sincronizarDevolucoes, opcoesReenvio, reenviar, atualizarEmailCadastro, obterDocumentoCliente };
 }
 
 module.exports = { criarAutomacaoEmailFrete };

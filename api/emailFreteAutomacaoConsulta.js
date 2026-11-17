@@ -36,14 +36,14 @@ async function listarNotasSemCarga(query, pagina, { inicio, fim }) {
 }
 
 async function consultarNotaSemCarga(query, nunota) {
-  return query(`SELECT ${camposNota}
+  return query(`SELECT ${camposNota}, PAR.CGC_CPF
     ${notasElegiveis}
     LEFT JOIN TGFPAR TRA ON TRA.CODPARC = CAB.CODPARCTRANSP
     WHERE ${filtroSemCarga} AND CAB.NUNOTA = ${inteiro(nunota)}`);
 }
 
 async function consultarCadastroClienteDaNota(query, nunota) {
-  return query(`SELECT CAB.CODPARC, CAB.CODEMP, ${camposEmailParceiro}
+  return query(`SELECT CAB.CODPARC, CAB.CODEMP, PAR.CGC_CPF, ${camposEmailParceiro}
     FROM TGFCAB CAB JOIN TGFPAR PAR ON PAR.CODPARC = CAB.CODPARC
     WHERE CAB.NUNOTA = ${inteiro(nunota)}`);
 }

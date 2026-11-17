@@ -528,6 +528,18 @@ test('filtra e ordena a coluna Status antes da paginação, incluindo envios int
   assert.deepEqual((await automacao.listar({ visao: 'historico', statusFiltro: '' })).itens, []);
 });
 
+test('consulta o documento do cliente da nota sem pontuação e preserva os zeros iniciais', async (t) => {
+  const cnpj = { ...nota, CGC_CPF: '00.123.456/0001-00' };
+  const cpf = { ...nota, CGC_CPF: '012.345.678-90' };
+  const { automacao, diretorio } = montarAutomacao(t, { notasSemCarga: [cnpj], notasCadastro: [cpf] });
+  fs.writeFileSync(path.join(diretorio, 'estado.json'), JSON.stringify({
+    notas: { [nota.NUNOTA]: { codigoCliente: nota.CODPARC, empresa: nota.CODEMP } }
+  }));
+  assert.deepEqual(await automacao.obterDocumentoCliente(nota.NUNOTA, 'aguardando'), { documento: '00123456000100' });
+  assert.deepEqual(await automacao.obterDocumentoCliente(nota.NUNOTA, 'historico'), { documento: '01234567890' });
+  assert.deepEqual(await automacao.obterDocumentoCliente(nota.NUNOTA + 1, 'historico'), { documento: null });
+});
+
 test('recupera a data de faturamento e o código do cliente dos registros antigos visíveis no histórico', async (t) => {
   const { automacao, diretorio, query } = montarAutomacao(t, {
     datasFaturamento: [

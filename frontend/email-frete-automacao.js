@@ -23,6 +23,8 @@
   const dialogoDetalhes = $('detalhes-dialogo');
   const detalhesReenviar = $('detalhes-reenviar');
   const detalhesFalhas = $('detalhes-falhas');
+  const documentoLinha = $('detalhes-documento-linha');
+  const documentoCliente = $('detalhes-documento');
   const dialogoCadastro = $('cadastro-dialogo');
   const emailCadastro = $('cadastro-email');
   const salvarCadastro = $('cadastro-salvar');
@@ -46,6 +48,7 @@
   let selecaoLink;
   let notaReenvio;
   let notaDetalhes;
+  let consultaDocumento;
   let reenvioEmAndamento = false;
 
   function status(id, texto, erro = false) {
@@ -94,6 +97,7 @@
         status('detalhes', '');
         renderizarDetalhes(nota, dados.fusoHorario);
         dialogoDetalhes.showModal();
+        carregarDocumentoCliente(nota.nunota);
       });
       if (botao.dataset.emailFreteNota === notaEmFoco) botao.focus({ preventScroll: true });
       const valores = [
@@ -116,6 +120,21 @@
     anterior.disabled = pagina <= 1;
     proxima.disabled = !dados.temMais;
     status('fila', dados.itens.length ? `${dados.itens.length} registro(s) nesta página` : 'Nenhuma nota nesta página.');
+  }
+
+  async function carregarDocumentoCliente(nunota) {
+    consultaDocumento?.abort();
+    const { signal } = consultaDocumento = new AbortController();
+    documentoLinha.hidden = true;
+    documentoCliente.textContent = '';
+    try {
+      const { documento } = await solicitar(`fila/${nunota}/documento-cliente?visao=${visao}`, { signal });
+      if (signal.aborted || !dialogoDetalhes.open || !documento) return;
+      documentoCliente.textContent = documento;
+      documentoLinha.hidden = false;
+    } catch {
+      if (!signal.aborted && dialogoDetalhes.open) status('detalhes', 'Não foi possível consultar o CPF/CNPJ.', true);
+    }
   }
 
   function formatarData(valor) {
@@ -178,6 +197,15 @@
   }
 
   $('detalhes-fechar').addEventListener('click', () => dialogoDetalhes.close());
+  $('detalhes-copiar-documento').addEventListener('click', async () => {
+    const documento = documentoCliente.textContent;
+    try {
+      await navigator.clipboard.writeText(documento);
+      if (documentoCliente.textContent === documento) status('detalhes', 'CPF/CNPJ copiado.');
+    } catch {
+      if (documentoCliente.textContent === documento) status('detalhes', 'Não foi possível copiar o CPF/CNPJ.', true);
+    }
+  });
   detalhesReenviar.addEventListener('click', () => abrirReenvio(notaDetalhes, true));
   detalhesFalhas.addEventListener('click', () => abrirReenvio(notaDetalhes, false));
   $('detalhes-atualizar-email').addEventListener('click', () => {
@@ -211,7 +239,11 @@
     }
   });
   dialogoDetalhes.addEventListener('close', () => {
-    if (!notaDetalhes || dialogoDetalhes.open) return;
+    if (dialogoDetalhes.open) return;
+    consultaDocumento?.abort();
+    documentoLinha.hidden = true;
+    documentoCliente.textContent = '';
+    if (!notaDetalhes) return;
     const botao = linhas.querySelector(`[data-email-frete-nota="${notaDetalhes.nunota}"]`);
     (botao || linhas.closest('.email-frete-grade-rolagem')).focus({ preventScroll: true });
     notaDetalhes = null;

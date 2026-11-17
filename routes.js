@@ -2873,6 +2873,8 @@ router.get('/transporte/email-frete/automacao', exigirGerenciaOuDiretoria, respo
 router.put('/transporte/email-frete/automacao/modelo', exigirGerenciaOuDiretoria, responderEmailFrete(automacaoEmailFrete.salvarModelo));
 router.put('/transporte/email-frete/automacao/estado', exigirGerenciaOuDiretoria, responderEmailFrete(({ ativa }) => automacaoEmailFrete.ativar(ativa)));
 router.get('/transporte/email-frete/fila', exigirGerenciaOuDiretoria, responderEmailFrete((_, req) => automacaoEmailFrete.listar(req.query)));
+router.get('/transporte/email-frete/fila/:nunota/documento-cliente', exigirGerenciaOuDiretoria,
+  responderEmailFrete((_, req) => automacaoEmailFrete.obterDocumentoCliente(req.params.nunota, req.query.visao)));
 router.get('/transporte/email-frete/fila/:nunota/reenvio', exigirGerenciaOuDiretoria,
   responderEmailFrete((_, req) => automacaoEmailFrete.opcoesReenvio(req.params.nunota)));
 router.post('/transporte/email-frete/fila/:nunota/reenvio', exigirGerenciaOuDiretoria,
