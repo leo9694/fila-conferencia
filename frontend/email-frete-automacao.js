@@ -20,7 +20,9 @@
   const destinatarioReenvio = $('reenvio-destinatario');
   const botaoReenvio = $('reenvio-enviar');
   const fecharReenvio = $('reenvio-fechar');
-  const colunasHistorico = document.querySelectorAll('[data-email-frete-historico]');
+  const dialogoDetalhes = $('detalhes-dialogo');
+  const detalhesReenviar = $('detalhes-reenviar');
+  const detalhesFalhas = $('detalhes-falhas');
   const intervalos = { aguardando: {}, historico: {} };
   const rotulos = {
     pendente: 'Aguardando envio', enviando: 'Enviando', enviado: 'Enviado',
@@ -35,6 +37,7 @@
   let pagina = 1;
   let selecaoLink;
   let notaReenvio;
+  let notaDetalhes;
   let reenvioEmAndamento = false;
 
   function status(id, texto, erro = false) {
@@ -66,38 +69,38 @@
       dataFinal.value = dados.intervalo.fim;
     }
     filtro.exibido = dados.intervalo;
-    const dataHora = (valor) => valor && new Date(valor).toLocaleString('pt-BR', { timeZone: dados.fusoHorario });
+    const notaEmFoco = document.activeElement?.dataset.emailFreteNota;
     linhas.replaceChildren();
     for (const nota of dados.itens) {
       const linha = linhas.insertRow();
+      const numero = nota.nota || `Nº único ${nota.nunota}`;
+      const botao = document.createElement('button');
+      botao.type = 'button';
+      botao.className = 'email-frete-nota-link';
+      botao.dataset.emailFreteNota = String(nota.nunota);
+      botao.textContent = numero;
+      botao.setAttribute('aria-label', `Ver detalhes da nota ${nota.nota || nota.nunota}`);
+      botao.setAttribute('aria-haspopup', 'dialog');
+      linha.insertCell().appendChild(botao);
+      linha.addEventListener('click', () => {
+        renderizarDetalhes(nota, dados.fusoHorario);
+        dialogoDetalhes.showModal();
+      });
+      if (botao.dataset.emailFreteNota === notaEmFoco) botao.focus({ preventScroll: true });
       const valores = [
-        nota.nota || `Nº único ${nota.nunota}`, nota.dataFaturamento?.split('-').reverse().join('/'), nota.empresa, nota.cliente,
+        formatarData(nota.dataFaturamento), nota.empresa, nota.cliente,
         nota.transportadora, nota.destinatario || nota.email,
-        rotulos[nota.status] || 'Aguardando ordem de carga'
+        rotuloNota(nota) + (nota.falhasAnteriores?.length && !podeReenviar(nota) ? ' · Falha anterior' : '')
       ];
-      if (visao === 'historico') valores.push(nota.ordem, dataHora(nota.detectadaEm), dataHora(nota.enviadoEm));
-      for (const valor of valores) linha.insertCell().textContent = valor || '—';
-      const celulaStatus = linha.cells[6];
+      for (const valor of valores) {
+        const celula = linha.insertCell();
+        celula.textContent = valor || '—';
+        if (valor) celula.title = valor;
+      }
+      const celulaStatus = linha.lastElementChild;
       if (nota.status) celulaStatus.classList.add(`is-${nota.status}`);
-      const falhas = listarFalhas(nota);
-      if (nota.motivo || falhas.length || nota.danfeAnexado) {
-        const detalhe = document.createElement('small');
-        detalhe.textContent = ` · ${nota.motivo || (falhas.length ? 'Falha anterior' : 'DANFE anexado')}`;
-        celulaStatus.title = [celulaStatus.textContent + detalhe.textContent, ...falhas].join('\n');
-        celulaStatus.appendChild(detalhe);
-      }
-      if (visao === 'historico') {
-        const acoes = linha.insertCell();
-        const podeReenviar = ['falha', 'devolvido'].includes(nota.status);
-        if (podeReenviar || falhas.length) {
-          const botao = document.createElement('button');
-          botao.type = 'button';
-          botao.className = 'analise-frete-download';
-          botao.textContent = podeReenviar ? 'Reenviar' : 'Ver falhas';
-          botao.addEventListener('click', () => abrirReenvio(nota, podeReenviar));
-          acoes.appendChild(botao);
-        }
-      }
+      if (nota.motivo) celulaStatus.title += ` · ${nota.motivo}`;
+      if (dialogoDetalhes.open && notaDetalhes?.nunota === nota.nunota) renderizarDetalhes(nota, dados.fusoHorario);
     }
     pagina = dados.pagina;
     $('fila-pagina').textContent = `Página ${pagina}`;
@@ -106,21 +109,85 @@
     status('fila', dados.itens.length ? `${dados.itens.length} registro(s) nesta página` : 'Nenhuma nota nesta página.');
   }
 
+  function formatarData(valor) {
+    return valor?.split('-').reverse().join('/');
+  }
+
+  function rotuloNota(nota) {
+    return rotulos[nota.status] || 'Aguardando ordem de carga';
+  }
+
+  function preencherDetalhes(id, campos) {
+    $(id).replaceChildren(...campos.map(([rotulo, valor]) => {
+      const grupo = document.createElement('div');
+      const termo = document.createElement('dt');
+      const dado = document.createElement('dd');
+      termo.textContent = rotulo;
+      dado.textContent = valor || '—';
+      grupo.append(termo, dado);
+      return grupo;
+    }));
+  }
+
+  function renderizarDetalhes(nota, fusoHorario) {
+    notaDetalhes = nota;
+    const dataHora = (valor) => valor && new Date(valor).toLocaleString('pt-BR', { timeZone: fusoHorario });
+    $('detalhes-titulo').textContent = nota.nota ? `Nota ${nota.nota}` : `Nº único ${nota.nunota}`;
+    $('detalhes-cliente').textContent = nota.cliente;
+    const situacao = $('detalhes-situacao');
+    situacao.textContent = rotuloNota(nota);
+    situacao.className = `analise-frete-detalhes-status is-${nota.status || 'pendente'}`;
+    preencherDetalhes('detalhes-nota', [
+      ['Número único', nota.nunota], ['Empresa', nota.empresa],
+      ['Data da nota', formatarData(nota.data)], ['Data de faturamento', formatarData(nota.dataFaturamento)],
+      [nota.ordem ? 'Transportadora da carga' : 'Transportadora prevista', nota.transportadora],
+      ['Ordem de carga', nota.ordem], ['Carga detectada em', dataHora(nota.detectadaEm)]
+    ]);
+    preencherDetalhes('detalhes-envio', [
+      ['Destinatário', nota.destinatario || nota.email], ['Última tentativa', dataHora(nota.tentativaEm)],
+      ['Enviado em', dataHora(nota.enviadoEm)], ['Devolvido em', dataHora(nota.devolvidoEm)],
+      ['DANFE', nota.enviadoEm ? (nota.danfeAnexado ? 'Anexado' : 'Sem anexo') : '—'],
+      ...(nota.motivo ? [['Motivo', nota.motivo]] : [])
+    ]);
+    detalhesReenviar.hidden = !podeReenviar(nota);
+    detalhesFalhas.hidden = !listarFalhas(nota).length;
+  }
+
+  function podeReenviar(nota) {
+    return ['falha', 'devolvido'].includes(nota.status);
+  }
+
   function listarFalhas(nota) {
     const falhas = [...(nota.falhasAnteriores || [])];
-    if (['falha', 'devolvido'].includes(nota.status)) falhas.push(nota);
-    return falhas.map(({ destinatario, motivo }) => `${destinatario || 'Endereço não registrado'} — ${motivo}`);
+    if (podeReenviar(nota)) falhas.push(nota);
+    return falhas;
   }
+
+  $('detalhes-fechar').addEventListener('click', () => dialogoDetalhes.close());
+  detalhesReenviar.addEventListener('click', () => abrirReenvio(notaDetalhes, true));
+  detalhesFalhas.addEventListener('click', () => abrirReenvio(notaDetalhes, false));
+  dialogoDetalhes.addEventListener('close', () => {
+    if (!notaDetalhes || dialogoDetalhes.open) return;
+    const botao = linhas.querySelector(`[data-email-frete-nota="${notaDetalhes.nunota}"]`);
+    (botao || linhas.closest('.email-frete-grade-rolagem')).focus({ preventScroll: true });
+    notaDetalhes = null;
+  });
 
   async function abrirReenvio(nota, podeReenviar) {
     notaReenvio = nota;
-    $('reenvio-titulo').textContent = podeReenviar ? 'Reenviar e-mail de frete' : 'Falhas anteriores';
-    $('reenvio-falhas').replaceChildren(...listarFalhas(nota).map((falha) => {
+    $('reenvio-titulo').textContent = podeReenviar ? 'Reenviar e-mail de frete' : 'Falhas de envio';
+    const identificacao = nota.nota ? `Nota ${nota.nota}` : `Nº único ${nota.nunota}`;
+    $('reenvio-nota').textContent = [identificacao, nota.cliente].filter(Boolean).join(' · ');
+    $('reenvio-falhas').replaceChildren(...listarFalhas(nota).map(({ destinatario, motivo }) => {
       const item = document.createElement('li');
-      item.textContent = falha;
+      const endereco = document.createElement('strong');
+      const detalhe = document.createElement('p');
+      endereco.textContent = destinatario || 'Endereço não registrado';
+      detalhe.textContent = motivo || 'Motivo não informado';
+      item.append(endereco, detalhe);
       return item;
     }));
-    opcoesReenvio.parentElement.hidden = destinatarioReenvio.parentElement.hidden = botaoReenvio.hidden = !podeReenviar;
+    $('reenvio-form').hidden = botaoReenvio.hidden = !podeReenviar;
     destinatarioReenvio.required = podeReenviar;
     destinatarioReenvio.value = '';
     botaoReenvio.disabled = !podeReenviar;
@@ -163,6 +230,7 @@
       await carregarFila(pagina, true);
       if (signal.aborted) return;
       dialogoReenvio.close();
+      dialogoDetalhes.close();
       status('fila', dados.status === 'enviado' ? 'Reenvio aceito pelo servidor de e-mail.' : dados.motivo, dados.status !== 'enviado');
     } catch (erro) {
       if (!signal.aborted) status('reenvio', erro.message, true);
@@ -212,8 +280,6 @@
     const filtro = intervalos[visao].exibido;
     dataInicial.value = filtro?.inicio || '';
     dataFinal.value = filtro?.fim || '';
-    linhas.closest('table').classList.toggle('is-historico', historico);
-    colunasHistorico.forEach((coluna) => { coluna.hidden = !historico; });
     for (const opcao of ['aguardando', 'historico']) {
       $(`fila-${opcao}`).setAttribute('aria-pressed', String(opcao === valor));
     }
@@ -386,6 +452,8 @@
     anexarDanfe.checked = false;
     dialogoLink.close();
     dialogoReenvio.close();
+    notaDetalhes = null;
+    dialogoDetalhes.close();
     somenteNaoEnviadas.checked = false;
     $('editor').open = false;
     botaoSalvar.disabled = botaoAlternar.disabled = true;

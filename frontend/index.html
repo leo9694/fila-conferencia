@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/home-dashboard.css?v=20261116-fundo-bonificacoes">
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261116-email-frete">
+  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261117-email-frete-2">
   <link rel="stylesheet" href="/chat.css?v=20261028-template-midia-1">
   <link rel="stylesheet" href="/chat-theme.css?v=20261002-3">
   <link rel="stylesheet" href="/rastreio-produto.css?v=20261005-5">
@@ -13205,20 +13205,49 @@
         </div>
         <div class="transporte-table-wrap email-frete-grade-rolagem" tabindex="0" role="region" aria-label="Planilha de notas e envios">
           <table class="transporte-table email-frete-tabela">
-            <thead><tr><th scope="col">Nota</th><th scope="col">Data de faturamento</th><th scope="col">Empresa</th><th scope="col">Cliente</th><th scope="col" id="email-frete-fila-coluna-transportadora">Transportadora prevista</th><th scope="col">E-mail</th><th scope="col">Status</th><th scope="col" data-email-frete-historico hidden>Ordem de carga</th><th scope="col" data-email-frete-historico hidden>Carga detectada em</th><th scope="col" data-email-frete-historico hidden>Enviado em</th><th scope="col" data-email-frete-historico hidden>Ações</th></tr></thead>
+            <thead><tr><th scope="col">Nota</th><th scope="col">Data de faturamento</th><th scope="col">Empresa</th><th scope="col">Cliente</th><th scope="col" id="email-frete-fila-coluna-transportadora">Transportadora prevista</th><th scope="col">E-mail</th><th scope="col">Status</th></tr></thead>
             <tbody id="email-frete-fila-linhas"></tbody>
           </table>
         </div>
-        <dialog class="analise-frete-ordem-dialogo email-frete-dialogo" id="email-frete-reenvio-dialogo" aria-labelledby="email-frete-reenvio-titulo">
-          <h2 id="email-frete-reenvio-titulo">Reenviar e-mail de frete</h2>
-          <ul id="email-frete-reenvio-falhas"></ul>
+        <dialog class="analise-frete-ordem-dialogo analise-frete-detalhes-dialogo email-frete-detalhes" id="email-frete-detalhes-dialogo" aria-labelledby="email-frete-detalhes-titulo">
+          <header>
+            <div class="analise-frete-detalhes-identificacao">
+              <h2 id="email-frete-detalhes-titulo"></h2>
+              <p id="email-frete-detalhes-cliente"></p>
+            </div>
+            <span class="analise-frete-detalhes-status" id="email-frete-detalhes-situacao"></span>
+            <button id="email-frete-detalhes-fechar" type="button" autofocus>Fechar</button>
+          </header>
+          <section>
+            <header><h3>Nota e transporte</h3></header>
+            <dl id="email-frete-detalhes-nota"></dl>
+          </section>
+          <section>
+            <header><h3>E-mail de frete</h3></header>
+            <dl id="email-frete-detalhes-envio"></dl>
+          </section>
+          <div class="email-frete-acoes email-frete-detalhes-acoes">
+            <button class="transporte-refresh" id="email-frete-detalhes-reenviar" type="button" hidden>Reenviar</button>
+            <button class="analise-frete-download" id="email-frete-detalhes-falhas" type="button" hidden>Ver falhas</button>
+          </div>
+        </dialog>
+        <dialog class="analise-frete-ordem-dialogo analise-frete-detalhes-dialogo email-frete-dialogo email-frete-reenvio" id="email-frete-reenvio-dialogo" aria-labelledby="email-frete-reenvio-titulo">
+          <header>
+            <div class="analise-frete-detalhes-identificacao">
+              <h2 id="email-frete-reenvio-titulo">Reenviar e-mail de frete</h2>
+              <p id="email-frete-reenvio-nota"></p>
+            </div>
+            <button id="email-frete-reenvio-fechar" type="button" autofocus>Fechar</button>
+          </header>
+          <ul class="email-frete-falhas-lista" id="email-frete-reenvio-falhas"></ul>
           <form class="email-frete-formulario" id="email-frete-reenvio-form">
-            <label>Endereços do cadastro<select id="email-frete-reenvio-opcoes"></select></label>
-            <label>Destinatário<input type="email" id="email-frete-reenvio-destinatario" maxlength="254" required></label>
+            <div class="email-frete-reenvio-destino">
+              <label>Endereços do cadastro<select id="email-frete-reenvio-opcoes"></select></label>
+              <label>Destinatário<input type="email" id="email-frete-reenvio-destinatario" maxlength="254" placeholder="nome@empresa.com.br" required></label>
+            </div>
             <p class="transporte-status" id="email-frete-reenvio-status" role="status"></p>
             <div class="email-frete-acoes">
               <button class="transporte-refresh" id="email-frete-reenvio-enviar" type="submit">Reenviar</button>
-              <button class="analise-frete-download" id="email-frete-reenvio-fechar" type="button">Fechar</button>
             </div>
           </form>
         </dialog>
@@ -13891,7 +13920,7 @@
   <script src="asyncRefresh.js?v=20260601-2"></script>
   <script src="vendas-dashboard.js?v=20260820-1"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="email-frete-automacao.js?v=20261116-1"></script>
+  <script src="email-frete-automacao.js?v=20261117-2"></script>
   <script src="definicao-frete.js?v=20261116-edicao-transportadora"></script>
   <script src="transporte-dashboard.js?v=20261116-acesso-frete"></script>
   <script src="consulta-tabela.js?v=20261103-filtro-numerico"></script>
