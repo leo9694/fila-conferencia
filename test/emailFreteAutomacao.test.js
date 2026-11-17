@@ -16,7 +16,7 @@ const nota = {
 function montarAutomacao(t, {
   notasCarga = [nota], notasSemCarga = notasCarga, revalidar = () => notasCarga,
   contatos = [], origens = [], datasFaturamento = [], transportadorasCargas = [], obterDanfe, enviar, ambienteTeste = false,
-  consultarDevolucoes = null, atualizarParceiro
+  consultarDevolucoes = null, atualizarParceiro, notasCadastro = notasCarga
 } = {}) {
   const baseAnterior = process.env.SANKHYA_API_BASE_URL;
   process.env.SANKHYA_API_BASE_URL = ambienteTeste
@@ -35,6 +35,11 @@ function montarAutomacao(t, {
     }
     if (sql.includes('SOBREPOSICAO')) return [{ ATE: '20261105120900', SOBREPOSICAO: '20261105120400' }];
     if (sql.includes('FROM TGFCAB CAB WHERE CAB.NUNOTA IN')) return datasFaturamento;
+    if (sql.includes('FROM TGFCAB CAB JOIN TGFPAR PAR')) {
+      assert.doesNotMatch(sql, /TGFORD|TGFCON2|TGFNFE/);
+      const id = Number(sql.match(/WHERE CAB\.NUNOTA = (\d+)/)[1]);
+      return notasCadastro.filter(({ NUNOTA }) => NUNOTA === id);
+    }
     if (sql.includes('WHERE (ORD.CODEMP, ORD.ORDEMCARGA) IN')) {
       assert.match(sql, /TRA\.CODPARC = ORD\.CODPARCTRANSP/);
       return transportadorasCargas;
@@ -458,7 +463,7 @@ test('corrige o e-mail que falhou no campo do parceiro e preserva os outros ende
   assert.equal(enviarMock.mock.callCount(), 1);
 });
 
-test('cadastra e-mail geral apenas se faltar endereço válido e ignora nota que já tem contato', async (t) => {
+test('cadastra e-mail geral para notas sem envio, inclusive quando já há um contato', async (t) => {
   const atualizarParceiro = t.mock.fn(async () => {});
   const semEmail = { ...nota, EMAILNFE: '', EMAIL: '' };
   const comContato = { ...semEmail, NUNOTA: nota.NUNOTA + 1, CODPARC: 99 };
@@ -468,10 +473,42 @@ test('cadastra e-mail geral apenas se faltar endereço válido e ignora nota que
   });
   await automacao.atualizarEmailCadastro(nota.NUNOTA, { visao: 'aguardando', email: 'novo@example.com' });
   assert.deepEqual(atualizarParceiro.mock.calls[0].arguments, [nota.CODPARC, { EMAIL: 'novo@example.com' }]);
-  await assert.rejects(automacao.atualizarEmailCadastro(comContato.NUNOTA, { visao: 'aguardando', email: 'novo@example.com' }),
-    { code: 'FRETE_CADASTRO_EMAIL_INDISPONIVEL' });
-  assert.equal(atualizarParceiro.mock.callCount(), 1);
+  await automacao.atualizarEmailCadastro(comContato.NUNOTA, { visao: 'aguardando', email: 'novo@example.com' });
+  assert.deepEqual(atualizarParceiro.mock.calls[1].arguments, [99, { EMAIL: 'novo@example.com' }]);
+  assert.equal(atualizarParceiro.mock.callCount(), 2);
   assert.equal(enviarMock.mock.callCount(), 0);
+});
+
+test('permite editar um envio devolvido após mudança de carga e um envio pendente com e-mail válido', async (t) => {
+  const atualizarParceiro = t.mock.fn(async () => {});
+  const mudancaCarga = { ...nota, ORDEMCARGA: 5993 };
+  const pendente = { ...nota, NUNOTA: nota.NUNOTA + 1, CODPARC: 42 };
+  const enviado = { ...nota, NUNOTA: nota.NUNOTA + 2, CODPARC: 43 };
+  const { automacao, diretorio } = montarAutomacao(t, { notasCadastro: [mudancaCarga, pendente, enviado], atualizarParceiro });
+  const registro = (row, status) => ({
+    nunota: row.NUNOTA, empresa: row.CODEMP, codigoCliente: row.CODPARC,
+    ordem: 5990, codigoTransportadoraCarga: 52, dataFaturamento: row.DATA_FATURAMENTO,
+    status, detectadaEm: '2026-11-05T15:00:00Z', email: row.EMAILNFE
+  });
+  const notas = [
+    { ...registro(nota, 'devolvido'), destinatario: nota.EMAILNFE, motivo: 'Caixa cheia (452 4.2.2).' },
+    registro(pendente, 'pendente'), registro(enviado, 'enviado')
+  ];
+  fs.writeFileSync(path.join(diretorio, 'estado.json'), JSON.stringify({
+    notas: Object.fromEntries(notas.map((item) => [item.nunota, item]))
+  }));
+  const lista = () => automacao.listar({ visao: 'historico' });
+  const { itens } = await lista();
+  assert.deepEqual(itens.map(({ podeAtualizarEmail }) => podeAtualizarEmail), [false, true, true]);
+  await automacao.atualizarEmailCadastro(nota.NUNOTA, { visao: 'historico', email: 'novo@example.com' });
+  await automacao.atualizarEmailCadastro(pendente.NUNOTA, { visao: 'historico', email: 'novo@example.com' });
+  await assert.rejects(automacao.atualizarEmailCadastro(enviado.NUNOTA, { visao: 'historico', email: 'novo@example.com' }),
+    { code: 'FRETE_CADASTRO_EMAIL_INDISPONIVEL' });
+  assert.deepEqual(atualizarParceiro.mock.calls.map(({ arguments: args }) => args),
+    [[41, { EMAILNFE: 'novo@example.com' }], [42, { EMAILNFE: 'novo@example.com' }]]);
+  const devolvido = (await lista()).itens.find(({ status }) => status === 'devolvido');
+  assert.equal(devolvido.destinatario, nota.EMAILNFE);
+  assert.match(devolvido.motivo, /452/);
 });
 
 test('filtra e ordena a coluna Status antes da paginação, incluindo envios interrompidos em Revisar', async (t) => {

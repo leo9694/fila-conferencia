@@ -164,9 +164,7 @@
     ]);
     detalhesReenviar.hidden = !podeReenviar(nota);
     detalhesFalhas.hidden = !listarFalhas(nota).length;
-    $('detalhes-atualizar-email').hidden = !nota.codigoCliente ||
-      !(nota.status === 'revisar' || listarFalhas(nota).length ||
-        ((!nota.status || nota.status === 'pendente') && !nota.email));
+    $('detalhes-atualizar-email').hidden = !nota.podeAtualizarEmail;
   }
 
   function podeReenviar(nota) {

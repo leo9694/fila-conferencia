@@ -8,11 +8,12 @@ const dataSql = (valor) => {
   return `TO_DATE('${valor}', '${formatoData}')`;
 };
 
+const camposEmailParceiro = 'PAR.EMAILNFE, PAR.EMAIL, PAR.EMAILNOTIFENTREGA, PAR.EMAILDANFE, PAR.EMAILCTE, PAR.EMAILNFSE';
 const camposNota = `CAB.NUNOTA, CAB.NUMNOTA, CAB.CODEMP, CAB.ORDEMCARGA, CAB.CODPARC,
   TO_CHAR(CAB.DTNEG, 'YYYY-MM-DD') DATA_NOTA,
   TO_CHAR(CAB.DTFATUR, 'YYYY-MM-DD') DATA_FATURAMENTO,
   COALESCE(PAR.RAZAOSOCIAL, PAR.NOMEPARC) CLIENTE,
-  PAR.EMAILNFE, PAR.EMAIL, PAR.EMAILNOTIFENTREGA, PAR.EMAILDANFE, PAR.EMAILCTE, PAR.EMAILNFSE,
+  ${camposEmailParceiro},
   TRA.NOMEPARC TRANSPORTADORA`;
 const notasElegiveis = `FROM TGFCAB CAB
   JOIN TGFCON2 CONF ON CONF.NUCONF = CAB.NUCONFATUAL AND CONF.STATUS = 'F'
@@ -39,6 +40,12 @@ async function consultarNotaSemCarga(query, nunota) {
     ${notasElegiveis}
     LEFT JOIN TGFPAR TRA ON TRA.CODPARC = CAB.CODPARCTRANSP
     WHERE ${filtroSemCarga} AND CAB.NUNOTA = ${inteiro(nunota)}`);
+}
+
+async function consultarCadastroClienteDaNota(query, nunota) {
+  return query(`SELECT CAB.CODPARC, CAB.CODEMP, ${camposEmailParceiro}
+    FROM TGFCAB CAB JOIN TGFPAR PAR ON PAR.CODPARC = CAB.CODPARC
+    WHERE CAB.NUNOTA = ${inteiro(nunota)}`);
 }
 
 async function consultarTransportadorasCargas(query, notas) {
@@ -142,5 +149,5 @@ async function consultarEmailsContatos(query, codigos) {
 module.exports = {
   TAMANHO_PAGINA, LOTE_DESCOBERTA, listarNotasSemCarga, consultarDadosNotasHistorico, consultarTransportadorasCargas, obterMarcoCargas,
   obterJanelaCargas, descobrirNotasComCarga, consultarNotasParaEnvio, consultarEmailsContatos, consultarPedidosOrigemNotas,
-  consultarNotaSemCarga
+  consultarNotaSemCarga, consultarCadastroClienteDaNota
 };

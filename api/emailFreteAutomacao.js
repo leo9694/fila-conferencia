@@ -8,7 +8,7 @@ const { enderecoValido, namespaceEmailFrete, obterConfiguracaoEmailFrete, enviar
 const {
   TAMANHO_PAGINA, LOTE_DESCOBERTA, listarNotasSemCarga, consultarDadosNotasHistorico, consultarTransportadorasCargas, obterMarcoCargas,
   obterJanelaCargas, descobrirNotasComCarga, consultarNotasParaEnvio, consultarEmailsContatos, consultarPedidosOrigemNotas,
-  consultarNotaSemCarga
+  consultarNotaSemCarga, consultarCadastroClienteDaNota
 } = require('./emailFreteAutomacaoConsulta');
 
 const INTERVALO = 60_000;
@@ -91,6 +91,11 @@ function primeiroEmail(...enderecos) {
 
 function emailsParceiro(row) {
   return emailsValidos(...camposEmailCliente.map((campo) => row[campo]));
+}
+
+function permiteAtualizarEmail(nota) {
+  return Boolean(nota && (nota.status !== 'enviado' ||
+    nota.tentativas?.some((tentativa) => statusReenvio.has(tentativa.status))));
 }
 
 function resumirNota(row) {
@@ -233,7 +238,8 @@ function criarAutomacaoEmailFrete({
     if (visao === 'aguardando') {
       if (!aceitaStatus('aguardando_carga')) return { itens: [], pagina, temMais: false, intervalo };
       const rows = await listarNotasSemCarga(query, pagina, intervalo);
-      const itens = (await resolverEmailsNotas(query, rows.slice(0, TAMANHO_PAGINA))).map(({ nota }) => nota);
+      const itens = (await resolverEmailsNotas(query, rows.slice(0, TAMANHO_PAGINA)))
+        .map(({ nota }) => ({ ...nota, podeAtualizarEmail: Boolean(nota.codigoCliente) }));
       return { itens, pagina, temMais: rows.length > TAMANHO_PAGINA, intervalo };
     }
     const itens = Object.values(ler().notas).filter((nota) => {
@@ -264,6 +270,7 @@ function criarAutomacaoEmailFrete({
       }
       nota.falhasAnteriores = (tentativas || []).filter((tentativa) => statusReenvio.has(tentativa.status))
         .map(({ destinatario, motivo, devolvidoEm }) => ({ destinatario, motivo, devolvidoEm }));
+      nota.podeAtualizarEmail = Boolean(nota.codigoCliente && permiteAtualizarEmail({ ...nota, tentativas }));
       if (nota.status === 'enviando' && !emEnvio.has(nota.nunota)) {
         return { ...nota, status: 'revisar', motivo: 'O resultado do envio não pôde ser confirmado.' };
       }
@@ -448,31 +455,33 @@ function criarAutomacaoEmailFrete({
       throw falha('FRETE_AUTOMACAO_INVALIDA');
     }
 
-    const estado = ler();
-    const anterior = estado.notas[nunota];
+    if (visao === 'historico' && !permiteAtualizarEmail(ler().notas[nunota])) {
+      throw falha('FRETE_CADASTRO_EMAIL_INDISPONIVEL');
+    }
     const [row] = visao === 'aguardando'
       ? await consultarNotaSemCarga(query, nunota)
-      : anterior ? await consultarNotasParaEnvio(query, estado.cargas, [nunota], ambienteSankhyaTeste()) : [];
+      : await consultarCadastroClienteDaNota(query, nunota);
     const codigoCliente = Number(row?.CODPARC);
-    if (!Number.isSafeInteger(codigoCliente) || codigoCliente < 1 ||
-        (visao === 'historico' && Number(row.ORDEMCARGA) !== anterior.ordem)) throw falha('FRETE_CADASTRO_EMAIL_INDISPONIVEL');
-
-    const [{ nota }] = await resolverEmailsNotas(query, [row]);
     const atual = ler().notas[nunota];
+    const cadastroConfere = Number.isSafeInteger(codigoCliente) && codigoCliente > 0 &&
+      (!atual?.codigoCliente || atual.codigoCliente === codigoCliente) &&
+      (!atual?.empresa || atual.empresa === Number(row.CODEMP));
+    if (!cadastroConfere || ((visao === 'historico' || atual) && !permiteAtualizarEmail(atual))) {
+      throw falha('FRETE_CADASTRO_EMAIL_INDISPONIVEL');
+    }
+
     const ultimaFalha = atual?.tentativas?.findLast((tentativa) => statusReenvio.has(tentativa.status));
     const falhaEnvio = atual && statusComErro.has(statusExibido(atual)) ? atual : ultimaFalha;
-    const semEmail = !nota.email && (visao === 'aguardando' || atual?.status === 'pendente');
-    if (!semEmail && (visao !== 'historico' || !falhaEnvio)) throw falha('FRETE_CADASTRO_EMAIL_INDISPONIVEL');
-
-    const enderecoFalho = (falhaEnvio?.destinatario || falhaEnvio?.email)?.trim().toLowerCase();
-    const campoDaFalha = camposEmailCliente.find((nome) =>
-      emailsValidos(row[nome]).some((endereco) => endereco.toLowerCase() === enderecoFalho));
-    if (!campoDaFalha && emailsParceiro(row).some((endereco) => endereco.toLowerCase() === email.toLowerCase())) return { email };
-    const campo = campoDaFalha || 'EMAIL';
+    const emails = emailsParceiro(row);
+    const enderecoAnterior = (falhaEnvio ? (falhaEnvio.destinatario || falhaEnvio.email) : emails[0])?.trim().toLowerCase();
+    const campoAnterior = camposEmailCliente.find((nome) =>
+      emailsValidos(row[nome]).some((endereco) => endereco.toLowerCase() === enderecoAnterior));
+    if (!campoAnterior && emails.some((endereco) => endereco.toLowerCase() === email.toLowerCase())) return { email };
+    const campo = campoAnterior || 'EMAIL';
     const enderecos = String(row[campo] ?? '').split(/[;,\r\n]/).map((valor) => valor.trim()).filter(Boolean);
-    const revisados = campoDaFalha
-      ? enderecos.map((endereco) => endereco.toLowerCase() === enderecoFalho ? email : endereco)
-      : [email, ...(semEmail ? [] : enderecos)];
+    const revisados = campoAnterior
+      ? enderecos.map((endereco) => endereco.toLowerCase() === enderecoAnterior ? email : endereco)
+      : [email, ...(emails.length ? enderecos : [])];
     const valor = [...new Map(revisados.map((endereco) => [endereco.toLowerCase(), endereco])).values()].join('; ');
     if (valor.length > 80) throw falha('FRETE_CADASTRO_EMAIL_LIMITE');
     try {

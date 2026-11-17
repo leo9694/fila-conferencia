@@ -2827,7 +2827,7 @@ const errosEmailFrete = new Map([
   ['FRETE_REENVIO_INDISPONIVEL', [409, 'Esta nota não tem uma tentativa com falha disponível para reenvio. Atualize o histórico.']],
   ['FRETE_REENVIO_NOTA', [409, 'Confira a nota, a autorização da NF-e e o vínculo com a ordem de carga.']],
   ['FRETE_CADASTRO_EMAIL_INVALIDO', [400, 'Informe um único endereço de e-mail válido de até 80 caracteres.']],
-  ['FRETE_CADASTRO_EMAIL_INDISPONIVEL', [409, 'O cadastro pode ser atualizado pelo painel quando o cliente está sem e-mail ou há falha no envio. Atualize a lista.']],
+  ['FRETE_CADASTRO_EMAIL_INDISPONIVEL', [409, 'A nota não está mais disponível para atualizar o e-mail do cliente pelo painel. Atualize a lista.']],
   ['FRETE_CADASTRO_EMAIL_LIMITE', [409, 'O novo endereço e os demais e-mails do campo ultrapassam o limite do cadastro. Revise os endereços no Sankhya.']],
   ['FRETE_CADASTRO_EMAIL_SANKHYA', [502, 'O Sankhya não confirmou a atualização do e-mail do cliente.']],
   ['FRETE_DANFE_INDISPONIVEL', [502, 'O PDF do DANFE não está disponível no Sankhya.']],
