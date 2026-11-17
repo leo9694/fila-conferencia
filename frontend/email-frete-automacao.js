@@ -88,7 +88,7 @@
       });
       if (botao.dataset.emailFreteNota === notaEmFoco) botao.focus({ preventScroll: true });
       const valores = [
-        formatarData(nota.dataFaturamento), nota.empresa, nota.cliente,
+        formatarData(nota.dataFaturamento), nota.empresa, formatarCliente(nota),
         nota.transportadora, nota.destinatario || nota.email,
         rotuloNota(nota) + (nota.falhasAnteriores?.length && !podeReenviar(nota) ? ' · Falha anterior' : '')
       ];
@@ -117,6 +117,10 @@
     return rotulos[nota.status] || 'Aguardando ordem de carga';
   }
 
+  function formatarCliente({ codigoCliente, cliente }) {
+    return [codigoCliente, cliente].filter(Boolean).join(' - ');
+  }
+
   function preencherDetalhes(id, campos) {
     $(id).replaceChildren(...campos.map(([rotulo, valor]) => {
       const grupo = document.createElement('div');
@@ -133,7 +137,7 @@
     notaDetalhes = nota;
     const dataHora = (valor) => valor && new Date(valor).toLocaleString('pt-BR', { timeZone: fusoHorario });
     $('detalhes-titulo').textContent = nota.nota ? `Nota ${nota.nota}` : `Nº único ${nota.nunota}`;
-    $('detalhes-cliente').textContent = nota.cliente;
+    $('detalhes-cliente').textContent = formatarCliente(nota);
     const situacao = $('detalhes-situacao');
     situacao.textContent = rotuloNota(nota);
     situacao.className = `analise-frete-detalhes-status is-${nota.status || 'pendente'}`;
@@ -177,7 +181,7 @@
     notaReenvio = nota;
     $('reenvio-titulo').textContent = podeReenviar ? 'Reenviar e-mail de frete' : 'Falhas de envio';
     const identificacao = nota.nota ? `Nota ${nota.nota}` : `Nº único ${nota.nunota}`;
-    $('reenvio-nota').textContent = [identificacao, nota.cliente].filter(Boolean).join(' · ');
+    $('reenvio-nota').textContent = [identificacao, formatarCliente(nota)].filter(Boolean).join(' · ');
     $('reenvio-falhas').replaceChildren(...listarFalhas(nota).map(({ destinatario, motivo }) => {
       const item = document.createElement('li');
       const endereco = document.createElement('strong');

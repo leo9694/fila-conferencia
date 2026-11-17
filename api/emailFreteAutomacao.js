@@ -6,7 +6,7 @@ const { formatarMensagem } = require('./emailFreteFormato');
 const { consultarDevolucoesHostinger } = require('./emailFreteDevolucoes');
 const { enderecoValido, namespaceEmailFrete, obterConfiguracaoEmailFrete, enviarEmailFrete, verificarConexaoEmailFrete } = require('./emailFrete');
 const {
-  TAMANHO_PAGINA, LOTE_DESCOBERTA, listarNotasSemCarga, consultarDatasFaturamento, consultarTransportadorasCargas, obterMarcoCargas,
+  TAMANHO_PAGINA, LOTE_DESCOBERTA, listarNotasSemCarga, consultarDadosNotasHistorico, consultarTransportadorasCargas, obterMarcoCargas,
   obterJanelaCargas, descobrirNotasComCarga, consultarNotasParaEnvio, consultarEmailsContatos, consultarPedidosOrigemNotas
 } = require('./emailFreteAutomacaoConsulta');
 
@@ -94,6 +94,7 @@ function resumirNota(row) {
     nunota: Number(row.NUNOTA), nota: Number(row.NUMNOTA) || null, empresa: Number(row.CODEMP),
     data: row.DATA_NOTA, dataFaturamento: row.DATA_FATURAMENTO || null, ordem,
     ...(ordem && { codigoTransportadoraCarga: Number(row.CODPARCTRANSP) || null }),
+    codigoCliente: Number(row.CODPARC) || null,
     cliente: row.CLIENTE?.trim() || '', transportadora: row.TRANSPORTADORA?.trim() || '', email
   };
 }
@@ -224,16 +225,19 @@ function criarAutomacaoEmailFrete({
       return data >= intervalo.inicio && data <= intervalo.fim && (somenteNaoEnviadas !== 'true' || status !== 'enviado');
     }).sort((a, b) => b.detectadaEm.localeCompare(a.detectadaEm) || b.nunota - a.nunota);
     const notasPagina = itens.slice(inicio, inicio + TAMANHO_PAGINA);
-    const idsSemData = notasPagina.filter((nota) => !Object.hasOwn(nota, 'dataFaturamento')).map((nota) => nota.nunota);
+    const idsSemDados = notasPagina.filter((nota) =>
+      !Object.hasOwn(nota, 'dataFaturamento') || !Object.hasOwn(nota, 'codigoCliente')).map((nota) => nota.nunota);
     const notasLegadas = notasPagina.filter((nota) => nota.ordem && !Object.hasOwn(nota, 'codigoTransportadoraCarga'));
-    const [datas, cargas] = await Promise.all([
-      consultarDatasFaturamento(query, idsSemData).catch(() => []),
+    const [dados, cargas] = await Promise.all([
+      consultarDadosNotasHistorico(query, idsSemDados).catch(() => []),
       consultarTransportadorasCargas(query, notasLegadas).catch(() => [])
     ]);
-    const datasPorNota = new Map(datas.map((row) => [Number(row.NUNOTA), row.DATA_FATURAMENTO]));
+    const dadosPorNota = new Map(dados.map((row) => [Number(row.NUNOTA), row]));
     const transportadorasPorCarga = new Map(cargas.map((row) => [`${row.CODEMP}:${row.ORDEMCARGA}`, row.TRANSPORTADORA]));
     const linhas = notasPagina.map(({ messageId, reverEm, tentativas, ...nota }) => {
-      if (!Object.hasOwn(nota, 'dataFaturamento')) nota.dataFaturamento = datasPorNota.get(nota.nunota) || null;
+      const dadosNota = dadosPorNota.get(nota.nunota);
+      if (!Object.hasOwn(nota, 'dataFaturamento')) nota.dataFaturamento = dadosNota?.DATA_FATURAMENTO || null;
+      if (!Object.hasOwn(nota, 'codigoCliente')) nota.codigoCliente = Number(dadosNota?.CODPARC) || null;
       if (nota.ordem && !Object.hasOwn(nota, 'codigoTransportadoraCarga')) {
         nota.transportadora = transportadorasPorCarga.get(`${nota.empresa}:${nota.ordem}`)?.trim() || '';
       }

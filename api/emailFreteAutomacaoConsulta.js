@@ -46,10 +46,10 @@ async function consultarTransportadorasCargas(query, notas) {
     WHERE (ORD.CODEMP, ORD.ORDEMCARGA) IN (${[...cargas].join(', ')})`);
 }
 
-async function consultarDatasFaturamento(query, ids) {
+async function consultarDadosNotasHistorico(query, ids) {
   const notas = [...new Set(ids.map(inteiro).filter(Boolean))];
   if (!notas.length) return [];
-  return query(`SELECT CAB.NUNOTA, TO_CHAR(CAB.DTFATUR, 'YYYY-MM-DD') DATA_FATURAMENTO
+  return query(`SELECT CAB.NUNOTA, CAB.CODPARC, TO_CHAR(CAB.DTFATUR, 'YYYY-MM-DD') DATA_FATURAMENTO
     FROM TGFCAB CAB WHERE CAB.NUNOTA IN (${notas.join(', ')})`);
 }
 
@@ -132,6 +132,6 @@ async function consultarEmailsContatos(query, codigos) {
 }
 
 module.exports = {
-  TAMANHO_PAGINA, LOTE_DESCOBERTA, listarNotasSemCarga, consultarDatasFaturamento, consultarTransportadorasCargas, obterMarcoCargas,
+  TAMANHO_PAGINA, LOTE_DESCOBERTA, listarNotasSemCarga, consultarDadosNotasHistorico, consultarTransportadorasCargas, obterMarcoCargas,
   obterJanelaCargas, descobrirNotasComCarga, consultarNotasParaEnvio, consultarEmailsContatos, consultarPedidosOrigemNotas
 };

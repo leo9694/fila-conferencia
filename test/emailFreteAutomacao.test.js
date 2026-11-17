@@ -142,6 +142,7 @@ test('lista notas aguardando carga e envia uma vez após o vínculo, com modelo 
   assert.equal(query.mock.callCount(), 0);
   const espera = await automacao.listar({ visao: 'aguardando' });
   assert.equal(espera.itens[0].ordem, null);
+  assert.equal(espera.itens[0].codigoCliente, nota.CODPARC);
   assert.equal(enviarMock.mock.callCount(), 0);
   automacao.salvarModelo({
     assunto: 'Saiu para entrega, {{nome_cliente}}',
@@ -160,6 +161,7 @@ test('lista notas aguardando carga e envia uma vez após o vínculo, com modelo 
   const [historico] = (await reiniciada.listar({ visao: 'historico' })).itens;
   assert.equal(historico.ordem, 5953);
   assert.equal(historico.status, 'enviado');
+  assert.equal(historico.codigoCliente, nota.CODPARC);
   assert.equal(historico.destinatario, 'fiscal@example.com');
   assert.ok(historico.enviadoEm);
 });
@@ -270,7 +272,8 @@ test('corrige a transportadora das cargas antigas no histórico pelo par empresa
   }));
   const historico = await automacao.listar({ visao: 'historico' });
   assert.deepEqual(historico.itens.map((item) => item.transportadora), ['Transportadora empresa 6', 'Transportadora empresa 1']);
-  assert.match(query.mock.calls[0].arguments[0], /IN \(\(6, 5953\), \(1, 5953\)\)/);
+  const consultaCargas = query.mock.calls.find(({ arguments: [sql] }) => sql.includes('FROM TGFORD ORD'));
+  assert.match(consultaCargas.arguments[0], /IN \(\(6, 5953\), \(1, 5953\)\)/);
 });
 
 test('anexa o PDF da nota e inclui os números dos pedidos de origem no modelo', async (t) => {
@@ -437,9 +440,12 @@ test('filtra a fila de TOPs 10 e 35 pela data de faturamento e usa hoje e ontem 
   await assert.rejects(automacao.listar({ visao: 'aguardando', inicio: '2026-11-03' }), { code: 'FRETE_HISTORICO_PERIODO_INVALIDO' });
 });
 
-test('recupera a data de faturamento dos registros antigos visíveis no histórico', async (t) => {
+test('recupera a data de faturamento e o código do cliente dos registros antigos visíveis no histórico', async (t) => {
   const { automacao, diretorio, query } = montarAutomacao(t, {
-    datasFaturamento: [{ NUNOTA: 1, DATA_FATURAMENTO: '2026-11-03' }]
+    datasFaturamento: [
+      { NUNOTA: 1, CODPARC: 41, DATA_FATURAMENTO: '2026-11-03' },
+      { NUNOTA: 2, CODPARC: 42, DATA_FATURAMENTO: '2026-11-05' }
+    ]
   });
   fs.writeFileSync(path.join(diretorio, 'estado.json'), JSON.stringify({
     notas: {
@@ -450,7 +456,8 @@ test('recupera a data de faturamento dos registros antigos visíveis no históri
   }));
   const historico = await automacao.listar({ visao: 'historico' });
   assert.deepEqual(historico.itens.map((item) => item.dataFaturamento), ['2026-11-03', '2026-11-04']);
-  assert.match(query.mock.calls[0].arguments[0], /WHERE CAB\.NUNOTA IN \(1\)/);
+  assert.deepEqual(historico.itens.map((item) => item.codigoCliente), [41, 42]);
+  assert.match(query.mock.calls[0].arguments[0], /WHERE CAB\.NUNOTA IN \(1, 2\)/);
 });
 
 test('expõe envio ambíguo para revisão e não reenvia automaticamente após reiniciar', async (t) => {
