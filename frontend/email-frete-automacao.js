@@ -130,6 +130,7 @@
     try {
       const { documento } = await solicitar(`fila/${nunota}/documento-cliente?visao=${visao}`, { signal });
       if (signal.aborted || !dialogoDetalhes.open || !documento) return;
+      $('detalhes-documento-tipo').textContent = documento.length === 14 ? 'CNPJ:' : 'CPF:';
       documentoCliente.textContent = documento;
       documentoLinha.hidden = false;
     } catch {

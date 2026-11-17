@@ -196,7 +196,8 @@
 .analise-frete-detalhes-dialogo dd { margin: 2px 0 0; font-size: .82rem; line-height: 1.25; font-weight: 650; overflow-wrap: anywhere; }
 .email-frete-detalhes { width: min(650px, calc(100% - 24px)); }
 .email-frete-documento:not([hidden]) { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 5px; }
-.email-frete-documento .analise-frete-download { min-height: 22px; padding: 2px 6px; font-size: .7rem; }
+.email-frete-documento .analise-frete-download { display: inline-grid; place-items: center; inline-size: 24px; block-size: 24px; padding: 0; }
+.email-frete-documento .analise-frete-download svg { width: 13px; height: 13px; }
 .email-frete-detalhes dl { grid-template-columns: repeat(auto-fit, minmax(min(155px, 100%), 1fr)); }
 .email-frete-detalhes dl > div { border-right: 0; }
 .email-frete-detalhes-acoes { margin-top: 10px; justify-content: flex-end; }
