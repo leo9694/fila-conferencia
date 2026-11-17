@@ -59,6 +59,7 @@
 .email-frete-tabela th:nth-child(1) { width: 105px; }
 .email-frete-tabela th:nth-child(2) { width: 120px; }
 .email-frete-tabela th:nth-child(3) { width: 66px; }
+.email-frete-tabela .email-frete-coluna-transportadora { width: clamp(156px, 16vw, 216px); }
 .email-frete-tabela th:nth-child(7) { width: 148px; }
 .email-frete-grade .email-frete-tabela th { background: #e9f2f0; }
 .email-frete-grade .email-frete-tabela tr > :last-child { border-right: 0; }
@@ -207,6 +208,8 @@
 .email-frete-falhas-lista strong { color: #862f26; font-size: .83rem; }
 .email-frete-falhas-lista p { margin: 2px 0 0; color: #684744; font-size: .8rem; line-height: 1.35; }
 #email-frete-reenvio-form { margin-top: 12px; }
+.email-frete-cadastro-form { margin-top: 12px; }
+.email-frete-cadastro-form .email-frete-acoes { justify-content: flex-end; }
 .email-frete-reenvio-destino { display: grid; gap: 8px; padding: 10px; border: 1px solid #dce9e6; border-radius: 8px; background: #f4faf8; }
 .email-frete-reenvio-destino :is(input, select) { min-height: 36px; }
 .email-frete-reenvio-destino :is(input, select):focus-visible { outline: 2px solid #087f6d; outline-offset: 1px; }

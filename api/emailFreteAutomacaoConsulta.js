@@ -20,6 +20,7 @@ const notasElegiveis = `FROM TGFCAB CAB
 const ordemComTransportadora = `JOIN TGFORD ORD ON ORD.CODEMP = CAB.CODEMP AND ORD.ORDEMCARGA = CAB.ORDEMCARGA
   LEFT JOIN TGFPAR TRA ON TRA.CODPARC = ORD.CODPARCTRANSP`;
 const filtroNota = `CAB.CODTIPOPER IN (35, 10) AND CAB.TIPMOV = 'V' AND CAB.STATUSNOTA = 'L'`;
+const filtroSemCarga = `${filtroNota} AND NVL(CAB.ORDEMCARGA, 0) = 0`;
 
 async function listarNotasSemCarga(query, pagina, { inicio, fim }) {
   const offset = (pagina - 1) * TAMANHO_PAGINA;
@@ -27,10 +28,17 @@ async function listarNotasSemCarga(query, pagina, { inicio, fim }) {
   return query(`SELECT ${camposNota}, CAB.CODPARCTRANSP
     ${notasElegiveis}
     LEFT JOIN TGFPAR TRA ON TRA.CODPARC = CAB.CODPARCTRANSP
-    WHERE ${filtroNota} AND NVL(CAB.ORDEMCARGA, 0) = 0
+    WHERE ${filtroSemCarga}
       AND CAB.DTFATUR >= ${dataFaturamento(inicio)} AND CAB.DTFATUR < ${dataFaturamento(fim)} + 1
     ORDER BY CAB.DTFATUR DESC, CAB.NUNOTA DESC
     OFFSET ${offset} ROWS FETCH NEXT ${TAMANHO_PAGINA + 1} ROWS ONLY`);
+}
+
+async function consultarNotaSemCarga(query, nunota) {
+  return query(`SELECT ${camposNota}
+    ${notasElegiveis}
+    LEFT JOIN TGFPAR TRA ON TRA.CODPARC = CAB.CODPARCTRANSP
+    WHERE ${filtroSemCarga} AND CAB.NUNOTA = ${inteiro(nunota)}`);
 }
 
 async function consultarTransportadorasCargas(query, notas) {
@@ -133,5 +141,6 @@ async function consultarEmailsContatos(query, codigos) {
 
 module.exports = {
   TAMANHO_PAGINA, LOTE_DESCOBERTA, listarNotasSemCarga, consultarDadosNotasHistorico, consultarTransportadorasCargas, obterMarcoCargas,
-  obterJanelaCargas, descobrirNotasComCarga, consultarNotasParaEnvio, consultarEmailsContatos, consultarPedidosOrigemNotas
+  obterJanelaCargas, descobrirNotasComCarga, consultarNotasParaEnvio, consultarEmailsContatos, consultarPedidosOrigemNotas,
+  consultarNotaSemCarga
 };

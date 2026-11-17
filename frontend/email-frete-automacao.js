@@ -23,10 +23,18 @@
   const dialogoDetalhes = $('detalhes-dialogo');
   const detalhesReenviar = $('detalhes-reenviar');
   const detalhesFalhas = $('detalhes-falhas');
+  const dialogoCadastro = $('cadastro-dialogo');
+  const emailCadastro = $('cadastro-email');
+  const salvarCadastro = $('cadastro-salvar');
+  const fecharCadastro = $('cadastro-fechar');
+  const filtroStatus = $('status-filtro');
+  const ordenarStatus = $('status-ordenar');
   const intervalos = { aguardando: {}, historico: {} };
+  const filtrosStatus = { aguardando: {}, historico: {} };
   const rotulos = {
     pendente: 'Aguardando envio', enviando: 'Enviando', enviado: 'Enviado',
-    falha: 'Falha no envio', devolvido: 'Devolvido', revisar: 'Revisar envio'
+    falha: 'Falha no envio', devolvido: 'Devolvido', revisar: 'Revisar envio',
+    aguardando_carga: 'Aguardando ordem de carga'
   };
   let sessao = new AbortController();
   let filaAtual = null;
@@ -83,6 +91,7 @@
       botao.setAttribute('aria-haspopup', 'dialog');
       linha.insertCell().appendChild(botao);
       linha.addEventListener('click', () => {
+        status('detalhes', '');
         renderizarDetalhes(nota, dados.fusoHorario);
         dialogoDetalhes.showModal();
       });
@@ -114,7 +123,7 @@
   }
 
   function rotuloNota(nota) {
-    return rotulos[nota.status] || 'Aguardando ordem de carga';
+    return rotulos[nota.status] || rotulos.aguardando_carga;
   }
 
   function formatarCliente({ codigoCliente, cliente }) {
@@ -155,6 +164,9 @@
     ]);
     detalhesReenviar.hidden = !podeReenviar(nota);
     detalhesFalhas.hidden = !listarFalhas(nota).length;
+    $('detalhes-atualizar-email').hidden = !nota.codigoCliente ||
+      !(nota.status === 'revisar' || listarFalhas(nota).length ||
+        ((!nota.status || nota.status === 'pendente') && !nota.email));
   }
 
   function podeReenviar(nota) {
@@ -170,6 +182,36 @@
   $('detalhes-fechar').addEventListener('click', () => dialogoDetalhes.close());
   detalhesReenviar.addEventListener('click', () => abrirReenvio(notaDetalhes, true));
   detalhesFalhas.addEventListener('click', () => abrirReenvio(notaDetalhes, false));
+  $('detalhes-atualizar-email').addEventListener('click', () => {
+    $('cadastro-cliente').textContent = formatarCliente(notaDetalhes);
+    emailCadastro.value = '';
+    status('cadastro', '');
+    dialogoCadastro.showModal();
+  });
+  fecharCadastro.addEventListener('click', () => dialogoCadastro.close());
+  dialogoCadastro.addEventListener('cancel', (evento) => { if (salvarCadastro.disabled) evento.preventDefault(); });
+  $('cadastro-form').addEventListener('submit', async (evento) => {
+    evento.preventDefault();
+    if (salvarCadastro.disabled) return;
+    const signal = sessao.signal;
+    const email = emailCadastro.value.trim();
+    const nunota = notaDetalhes.nunota;
+    salvarCadastro.disabled = fecharCadastro.disabled = emailCadastro.disabled = true;
+    status('cadastro', 'Salvando no Sankhya…');
+    try {
+      const salvo = await solicitar(`fila/${nunota}/email-cliente`, {
+        method: 'PUT', body: { visao, email }, signal
+      });
+      if (signal.aborted) return;
+      dialogoCadastro.close();
+      status('detalhes', `E-mail salvo no cadastro do cliente: ${salvo.email}`);
+      await carregarFila(pagina, true);
+    } catch (erro) {
+      if (!signal.aborted) status('cadastro', erro.message, true);
+    } finally {
+      salvarCadastro.disabled = fecharCadastro.disabled = emailCadastro.disabled = false;
+    }
+  });
   dialogoDetalhes.addEventListener('close', () => {
     if (!notaDetalhes || dialogoDetalhes.open) return;
     const botao = linhas.querySelector(`[data-email-frete-nota="${notaDetalhes.nunota}"]`);
@@ -249,6 +291,9 @@
     const pedido = new AbortController();
     filaAtual = pedido;
     const consulta = new URLSearchParams({ visao, pagina: String(paginaSolicitada) });
+    const { valores, ordem } = filtrosStatus[visao];
+    if (valores) consulta.set('statusFiltro', [...valores].join(','));
+    if (ordem) consulta.set('statusOrdem', ordem);
     if (visao === 'historico' && somenteNaoEnviadas.checked) consulta.set('somenteNaoEnviadas', 'true');
     const intervalo = intervalos[visao].aplicado;
     if (intervalo) {
@@ -275,11 +320,12 @@
   }
 
   function mostrarVisao(valor) {
+    ConsultaTabela.fecharMenu();
     visao = valor;
+    renderizarFiltroStatus();
     const historico = valor === 'historico';
     $('fila-filtro-envio').hidden = !historico;
     $('fila-rotulo-inicio').textContent = historico ? 'Detectada de' : 'Faturamento de';
-    $('fila-coluna-transportadora').textContent = historico ? 'Transportadora da carga' : 'Transportadora prevista';
     periodo.setAttribute('aria-label', historico ? 'Filtrar pela data de detecção da carga' : 'Filtrar pela data de faturamento');
     const filtro = intervalos[visao].exibido;
     dataInicial.value = filtro?.inicio || '';
@@ -289,6 +335,42 @@
     }
     limparGrade();
   }
+
+  function renderizarFiltroStatus() {
+    const { valores, ordem } = filtrosStatus[visao];
+    ordenarStatus.textContent = ordem ? `Status ${ordem === 'asc' ? '↑' : '↓'}` : 'Status';
+    $('status-coluna').setAttribute('aria-sort', ordem ? (ordem === 'asc' ? 'ascending' : 'descending') : 'none');
+    filtroStatus.classList.toggle('ativo', Boolean(valores));
+  }
+
+  function aplicarFiltroStatus() {
+    ConsultaTabela.fecharMenu();
+    renderizarFiltroStatus();
+    carregarFila(1);
+  }
+
+  function ordenarPorStatus(ordem) {
+    filtrosStatus[visao].ordem = ordem;
+    aplicarFiltroStatus();
+  }
+
+  ordenarStatus.addEventListener('click', () => ordenarPorStatus(filtrosStatus[visao].ordem === 'asc' ? 'desc' : 'asc'));
+  filtroStatus.addEventListener('click', () => {
+    const opcoes = Object.entries(rotulos).filter(([codigo]) => (codigo === 'aguardando_carga') === (visao === 'aguardando'));
+    const { valores } = filtrosStatus[visao];
+    ConsultaTabela.abrirMenuColuna(filtroStatus, {
+      titulo: 'Status',
+      valores: opcoes.map(([, rotulo]) => rotulo).sort((a, b) => a.localeCompare(b, 'pt-BR')),
+      filtro: valores && new Set([...valores].map((codigo) => rotulos[codigo])),
+      ordenar: ordenarPorStatus,
+      filtrar: (marcados) => {
+        filtrosStatus[visao].valores = marcados && new Set(opcoes.filter(([, rotulo]) => marcados.includes(rotulo)).map(([codigo]) => codigo));
+        aplicarFiltroStatus();
+        filtroStatus.focus();
+      },
+      restaurarFoco: () => filtroStatus.focus()
+    });
+  });
 
   function selecionarVisao(valor) {
     mostrarVisao(valor);
@@ -450,12 +532,15 @@
     mostrarEstado(false);
     intervalos.aguardando = {};
     intervalos.historico = {};
+    filtrosStatus.aguardando = {};
+    filtrosStatus.historico = {};
     mostrarVisao('aguardando');
     assunto.value = '';
     mensagem.value = '';
     anexarDanfe.checked = false;
     dialogoLink.close();
     dialogoReenvio.close();
+    dialogoCadastro.close();
     notaDetalhes = null;
     dialogoDetalhes.close();
     somenteNaoEnviadas.checked = false;

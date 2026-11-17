@@ -7,12 +7,18 @@ const { consultarDevolucoesHostinger } = require('./emailFreteDevolucoes');
 const { enderecoValido, namespaceEmailFrete, obterConfiguracaoEmailFrete, enviarEmailFrete, verificarConexaoEmailFrete } = require('./emailFrete');
 const {
   TAMANHO_PAGINA, LOTE_DESCOBERTA, listarNotasSemCarga, consultarDadosNotasHistorico, consultarTransportadorasCargas, obterMarcoCargas,
-  obterJanelaCargas, descobrirNotasComCarga, consultarNotasParaEnvio, consultarEmailsContatos, consultarPedidosOrigemNotas
+  obterJanelaCargas, descobrirNotasComCarga, consultarNotasParaEnvio, consultarEmailsContatos, consultarPedidosOrigemNotas,
+  consultarNotaSemCarga
 } = require('./emailFreteAutomacaoConsulta');
 
 const INTERVALO = 60_000;
 const INTERVALO_DEVOLUCOES = 5 * INTERVALO;
 const statusReenvio = new Set(['falha', 'devolvido']);
+const statusComErro = new Set([...statusReenvio, 'revisar']);
+// Ordem alfabética dos rótulos exibidos na coluna Status.
+const ordemStatus = ['pendente', 'aguardando_carga', 'devolvido', 'enviando', 'enviado', 'falha', 'revisar'];
+const camposEmailCliente = ['EMAILNFE', 'EMAIL', 'EMAILNOTIFENTREGA', 'EMAILDANFE', 'EMAILCTE', 'EMAILNFSE'];
+const motivoSemEmail = 'Cliente sem e-mail válido no cadastro ou nos contatos ativos.';
 const limiteAnexoDanfe = 8 * 1024 * 1024;
 const fusoHorario = process.env.APP_TIMEZONE || 'America/Cuiaba';
 const dataLocal = new Intl.DateTimeFormat('sv-SE', { timeZone: fusoHorario });
@@ -84,7 +90,7 @@ function primeiroEmail(...enderecos) {
 }
 
 function emailsParceiro(row) {
-  return emailsValidos(row.EMAILNFE, row.EMAIL, row.EMAILNOTIFENTREGA, row.EMAILDANFE, row.EMAILCTE, row.EMAILNFSE);
+  return emailsValidos(...camposEmailCliente.map((campo) => row[campo]));
 }
 
 function resumirNota(row) {
@@ -143,7 +149,7 @@ async function resolverNumerosPedidos(query, ids) {
 
 function criarAutomacaoEmailFrete({
   query = executeQuery, enviar = enviarEmailFrete, verificar = verificarConexaoEmailFrete,
-  obterConta = obterConfiguracaoEmailFrete, obterDanfe,
+  obterConta = obterConfiguracaoEmailFrete, obterDanfe, atualizarParceiro,
   diretorio = path.join(process.cwd(), 'data', `email-frete-automacao-${namespaceEmailFrete()}`),
   agora = Date.now,
   consultarDevolucoes = process.env.FRETE_HOSTINGER_API_TOKEN ? consultarDevolucoesHostinger : null
@@ -209,21 +215,36 @@ function criarAutomacaoEmailFrete({
     }
   }
 
-  async function listar({ pagina: paginaRaw, visao, inicio: dataInicial, fim: dataFinal, somenteNaoEnviadas }) {
+  function statusExibido(nota) {
+    return nota.status === 'enviando' && !emEnvio.has(nota.nunota) ? 'revisar' : nota.status;
+  }
+
+  async function listar({ pagina: paginaRaw, visao, inicio: dataInicial, fim: dataFinal, somenteNaoEnviadas, statusFiltro, statusOrdem }) {
     const pagina = Number(paginaRaw || 1);
     if (!Number.isSafeInteger(pagina) || pagina < 1 || pagina > 100000 ||
         !['aguardando', 'historico'].includes(visao)) throw falha('FRETE_AUTOMACAO_INVALIDA');
+    const selecionados = typeof statusFiltro === 'string' ? statusFiltro.split(',').filter(Boolean) : [];
+    if ((statusFiltro !== undefined && typeof statusFiltro !== 'string') ||
+        selecionados.some((status) => !ordemStatus.includes(status)) ||
+        (statusOrdem !== undefined && !['asc', 'desc'].includes(statusOrdem))) throw falha('FRETE_AUTOMACAO_INVALIDA');
+    const aceitaStatus = (status) => statusFiltro === undefined || selecionados.includes(status);
     const intervalo = intervaloConsulta({ inicio: dataInicial, fim: dataFinal }, agora);
     const inicio = (pagina - 1) * TAMANHO_PAGINA;
     if (visao === 'aguardando') {
+      if (!aceitaStatus('aguardando_carga')) return { itens: [], pagina, temMais: false, intervalo };
       const rows = await listarNotasSemCarga(query, pagina, intervalo);
       const itens = (await resolverEmailsNotas(query, rows.slice(0, TAMANHO_PAGINA))).map(({ nota }) => nota);
       return { itens, pagina, temMais: rows.length > TAMANHO_PAGINA, intervalo };
     }
-    const itens = Object.values(ler().notas).filter(({ detectadaEm, status }) => {
-      const data = dataLocal.format(new Date(detectadaEm));
-      return data >= intervalo.inicio && data <= intervalo.fim && (somenteNaoEnviadas !== 'true' || status !== 'enviado');
-    }).sort((a, b) => b.detectadaEm.localeCompare(a.detectadaEm) || b.nunota - a.nunota);
+    const itens = Object.values(ler().notas).filter((nota) => {
+      const data = dataLocal.format(new Date(nota.detectadaEm));
+      const status = statusExibido(nota);
+      return data >= intervalo.inicio && data <= intervalo.fim && aceitaStatus(status) &&
+        (somenteNaoEnviadas !== 'true' || status !== 'enviado');
+    }).sort((a, b) => {
+      const ordem = statusOrdem ? ordemStatus.indexOf(statusExibido(a)) - ordemStatus.indexOf(statusExibido(b)) : 0;
+      return (statusOrdem === 'desc' ? -ordem : ordem) || b.detectadaEm.localeCompare(a.detectadaEm) || b.nunota - a.nunota;
+    });
     const notasPagina = itens.slice(inicio, inicio + TAMANHO_PAGINA);
     const idsSemDados = notasPagina.filter((nota) =>
       !Object.hasOwn(nota, 'dataFaturamento') || !Object.hasOwn(nota, 'codigoCliente')).map((nota) => nota.nunota);
@@ -419,6 +440,59 @@ function criarAutomacaoEmailFrete({
     return { enderecos: [...new Map(enderecos.map((email) => [email.toLowerCase(), email])).values()] };
   }
 
+  async function atualizarEmailCadastro(id, { visao, email }) {
+    email = typeof email === 'string' ? email.trim() : '';
+    if (!enderecoValido(email) || email.length > 80) throw falha('FRETE_CADASTRO_EMAIL_INVALIDO');
+    const nunota = Number(id);
+    if (!Number.isSafeInteger(nunota) || nunota < 1 || !['aguardando', 'historico'].includes(visao)) {
+      throw falha('FRETE_AUTOMACAO_INVALIDA');
+    }
+
+    const estado = ler();
+    const anterior = estado.notas[nunota];
+    const [row] = visao === 'aguardando'
+      ? await consultarNotaSemCarga(query, nunota)
+      : anterior ? await consultarNotasParaEnvio(query, estado.cargas, [nunota], ambienteSankhyaTeste()) : [];
+    const codigoCliente = Number(row?.CODPARC);
+    if (!Number.isSafeInteger(codigoCliente) || codigoCliente < 1 ||
+        (visao === 'historico' && Number(row.ORDEMCARGA) !== anterior.ordem)) throw falha('FRETE_CADASTRO_EMAIL_INDISPONIVEL');
+
+    const [{ nota }] = await resolverEmailsNotas(query, [row]);
+    const atual = ler().notas[nunota];
+    const ultimaFalha = atual?.tentativas?.findLast((tentativa) => statusReenvio.has(tentativa.status));
+    const falhaEnvio = atual && statusComErro.has(statusExibido(atual)) ? atual : ultimaFalha;
+    const semEmail = !nota.email && (visao === 'aguardando' || atual?.status === 'pendente');
+    if (!semEmail && (visao !== 'historico' || !falhaEnvio)) throw falha('FRETE_CADASTRO_EMAIL_INDISPONIVEL');
+
+    const enderecoFalho = (falhaEnvio?.destinatario || falhaEnvio?.email)?.trim().toLowerCase();
+    const campoDaFalha = camposEmailCliente.find((nome) =>
+      emailsValidos(row[nome]).some((endereco) => endereco.toLowerCase() === enderecoFalho));
+    if (!campoDaFalha && emailsParceiro(row).some((endereco) => endereco.toLowerCase() === email.toLowerCase())) return { email };
+    const campo = campoDaFalha || 'EMAIL';
+    const enderecos = String(row[campo] ?? '').split(/[;,\r\n]/).map((valor) => valor.trim()).filter(Boolean);
+    const revisados = campoDaFalha
+      ? enderecos.map((endereco) => endereco.toLowerCase() === enderecoFalho ? email : endereco)
+      : [email, ...(semEmail ? [] : enderecos)];
+    const valor = [...new Map(revisados.map((endereco) => [endereco.toLowerCase(), endereco])).values()].join('; ');
+    if (valor.length > 80) throw falha('FRETE_CADASTRO_EMAIL_LIMITE');
+    try {
+      await atualizarParceiro(codigoCliente, { [campo]: valor });
+    } catch {
+      throw falha('FRETE_CADASTRO_EMAIL_SANKHYA');
+    }
+    if (ler().notas[nunota]?.status === 'pendente') {
+      atualizar((registro) => {
+        const pendente = registro.notas[nunota];
+        if (pendente?.status === 'pendente') {
+          pendente.email = email;
+          pendente.reverEm = 0;
+          if (pendente.motivo === motivoSemEmail) pendente.motivo = '';
+        }
+      });
+    }
+    return { email };
+  }
+
   async function reenviar(id, destinatario) {
     destinatario = typeof destinatario === 'string' ? destinatario.trim() : '';
     if (!enderecoValido(destinatario)) throw falha('FRETE_SMTP_DESTINATARIO_INVALIDO');
@@ -474,7 +548,7 @@ function criarAutomacaoEmailFrete({
         const chaveValida = /^\d{44}$/.test(row?.CHAVENFE || '');
         const motivo = !row ? 'Nota sem vínculo ativo com a carga.'
           : !ambienteTeste && !chaveValida ? motivoNfe
-            : !nota.email ? 'Cliente sem e-mail válido no cadastro ou nos contatos ativos.'
+            : !nota.email ? motivoSemEmail
               : !nota.cliente || !nota.transportadora ? 'Cliente ou transportadora sem nome no cadastro.' : '';
         if (motivo) {
           registrar(nota.nunota, { ...nota, motivo, reverEm: agora() + 10 * INTERVALO });
@@ -530,7 +604,7 @@ function criarAutomacaoEmailFrete({
   }
 
   return { configuracao, salvarModelo, ativar, listar, registrarCargaConfirmada, executar, iniciar, parar,
-    sincronizarDevolucoes, opcoesReenvio, reenviar };
+    sincronizarDevolucoes, opcoesReenvio, reenviar, atualizarEmailCadastro };
 }
 
 module.exports = { criarAutomacaoEmailFrete };

@@ -16,7 +16,7 @@ const nota = {
 function montarAutomacao(t, {
   notasCarga = [nota], notasSemCarga = notasCarga, revalidar = () => notasCarga,
   contatos = [], origens = [], datasFaturamento = [], transportadorasCargas = [], obterDanfe, enviar, ambienteTeste = false,
-  consultarDevolucoes = null
+  consultarDevolucoes = null, atualizarParceiro
 } = {}) {
   const baseAnterior = process.env.SANKHYA_API_BASE_URL;
   process.env.SANKHYA_API_BASE_URL = ambienteTeste
@@ -55,6 +55,8 @@ function montarAutomacao(t, {
     if (sql.includes('NVL(CAB.ORDEMCARGA, 0) = 0')) {
       assert.match(sql, /TRA\.CODPARC = CAB\.CODPARCTRANSP/);
       assert.match(sql, /CAB\.CODTIPOPER IN \(35, 10\)/);
+      const id = sql.match(/AND CAB\.NUNOTA = (\d+)/);
+      if (id) return notasSemCarga.filter((item) => item.NUNOTA === Number(id[1])).map((item) => ({ ...item, ORDEMCARGA: 0 }));
       assert.match(sql, /ORDER BY CAB\.DTFATUR DESC/);
       const [, inicio, fim] = sql.match(/CAB\.DTFATUR >= TO_DATE\('(\d{8})000000'[^)]+\) AND CAB\.DTFATUR < TO_DATE\('(\d{8})000000'[^)]+\) \+ 1/);
       return notasSemCarga.filter((item) => {
@@ -76,7 +78,7 @@ function montarAutomacao(t, {
   const enviarMock = t.mock.fn(enviar || (async () => ({ accepted: [nota.EMAILNFE] })));
   const verificar = t.mock.fn(async () => true);
   const opcoes = {
-    diretorio, query, enviar: enviarMock, verificar, obterDanfe, agora: () => tempo, consultarDevolucoes,
+    diretorio, query, enviar: enviarMock, verificar, obterDanfe, agora: () => tempo, consultarDevolucoes, atualizarParceiro,
     obterConta: async () => ({ configurado: true, user: 'frete@example.com' })
   };
   return {
@@ -438,6 +440,55 @@ test('filtra a fila de TOPs 10 e 35 pela data de faturamento e usa hoje e ontem 
   const personalizado = await automacao.listar({ visao: 'aguardando', inicio: '2026-11-03', fim: '2026-11-03' });
   assert.deepEqual(personalizado.itens.map((item) => [item.nunota, item.dataFaturamento]), [[3890002, '2026-11-03']]);
   await assert.rejects(automacao.listar({ visao: 'aguardando', inicio: '2026-11-03' }), { code: 'FRETE_HISTORICO_PERIODO_INVALIDO' });
+});
+
+test('corrige o e-mail que falhou no campo do parceiro e preserva os outros endereços e a tentativa', async (t) => {
+  const atualizarParceiro = t.mock.fn(async () => {});
+  const row = { ...nota, EMAILNFE: 'fiscal@example.com; outro@example.com' };
+  const { automacao, enviarMock } = montarAutomacao(t, {
+    notasCarga: [row], enviar: async () => ({ accepted: [] }), atualizarParceiro
+  });
+  await automacao.ativar(true);
+  await automacao.executar();
+  await automacao.atualizarEmailCadastro(nota.NUNOTA, { visao: 'historico', email: 'novo@example.com' });
+  assert.deepEqual(atualizarParceiro.mock.calls[0].arguments, [nota.CODPARC, { EMAILNFE: 'novo@example.com; outro@example.com' }]);
+  const [registro] = (await automacao.listar({ visao: 'historico' })).itens;
+  assert.equal(registro.status, 'falha');
+  assert.equal(registro.destinatario, 'fiscal@example.com');
+  assert.equal(enviarMock.mock.callCount(), 1);
+});
+
+test('cadastra e-mail geral apenas se faltar endereço válido e ignora nota que já tem contato', async (t) => {
+  const atualizarParceiro = t.mock.fn(async () => {});
+  const semEmail = { ...nota, EMAILNFE: '', EMAIL: '' };
+  const comContato = { ...semEmail, NUNOTA: nota.NUNOTA + 1, CODPARC: 99 };
+  const { automacao, enviarMock } = montarAutomacao(t, {
+    notasSemCarga: [semEmail, comContato], atualizarParceiro,
+    contatos: [{ CODPARC: 99, EMAIL: 'contato@example.com' }]
+  });
+  await automacao.atualizarEmailCadastro(nota.NUNOTA, { visao: 'aguardando', email: 'novo@example.com' });
+  assert.deepEqual(atualizarParceiro.mock.calls[0].arguments, [nota.CODPARC, { EMAIL: 'novo@example.com' }]);
+  await assert.rejects(automacao.atualizarEmailCadastro(comContato.NUNOTA, { visao: 'aguardando', email: 'novo@example.com' }),
+    { code: 'FRETE_CADASTRO_EMAIL_INDISPONIVEL' });
+  assert.equal(atualizarParceiro.mock.callCount(), 1);
+  assert.equal(enviarMock.mock.callCount(), 0);
+});
+
+test('filtra e ordena a coluna Status antes da paginação, incluindo envios interrompidos em Revisar', async (t) => {
+  const { automacao, diretorio } = montarAutomacao(t);
+  const registro = (nunota, status) => ({ nunota, status, detectadaEm: '2026-11-05T15:00:00Z' });
+  const notas = [registro(1, 'falha'), registro(2, 'enviando'), ...Array.from({ length: 35 }, (_, indice) =>
+    registro(indice + 3, 'enviado'))];
+  fs.writeFileSync(path.join(diretorio, 'estado.json'), JSON.stringify({
+    notas: Object.fromEntries(notas.map((nota) => [nota.nunota, nota]))
+  }));
+  const filtrados = await automacao.listar({ visao: 'historico', statusFiltro: 'revisar,falha', statusOrdem: 'asc' });
+  assert.deepEqual(filtrados.itens.map(({ status }) => status), ['falha', 'revisar']);
+  assert.equal(filtrados.temMais, false);
+  const ordenados = await automacao.listar({ visao: 'historico', statusOrdem: 'desc' });
+  assert.deepEqual(ordenados.itens.slice(0, 2).map(({ status }) => status), ['revisar', 'falha']);
+  assert.equal(ordenados.temMais, true);
+  assert.deepEqual((await automacao.listar({ visao: 'historico', statusFiltro: '' })).itens, []);
 });
 
 test('recupera a data de faturamento e o código do cliente dos registros antigos visíveis no histórico', async (t) => {

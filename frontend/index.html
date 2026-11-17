@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="/home-dashboard.css?v=20261116-fundo-bonificacoes">
   <link rel="stylesheet" href="/vendas-dashboard.css?v=20260803-1">
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261117-email-frete-2">
+  <link rel="stylesheet" href="/transporte-dashboard.css?v=20261117-email-frete-4">
   <link rel="stylesheet" href="/chat.css?v=20261028-template-midia-1">
   <link rel="stylesheet" href="/chat-theme.css?v=20261002-3">
   <link rel="stylesheet" href="/rastreio-produto.css?v=20261005-5">
@@ -13205,7 +13205,13 @@
         </div>
         <div class="transporte-table-wrap email-frete-grade-rolagem" tabindex="0" role="region" aria-label="Planilha de notas e envios">
           <table class="transporte-table email-frete-tabela">
-            <thead><tr><th scope="col">Nota</th><th scope="col">Data de faturamento</th><th scope="col">Empresa</th><th scope="col">Cliente</th><th scope="col" id="email-frete-fila-coluna-transportadora">Transportadora prevista</th><th scope="col">E-mail</th><th scope="col">Status</th></tr></thead>
+            <thead><tr><th scope="col">Nota</th><th scope="col">Data de faturamento</th><th scope="col">Empresa</th><th scope="col">Cliente</th><th scope="col" class="email-frete-coluna-transportadora">Transportadora</th><th scope="col">E-mail</th>
+              <th scope="col" id="email-frete-status-coluna" aria-sort="none">
+                <div class="consulta-coluna-cabecalho">
+                  <button class="consulta-coluna-nome" id="email-frete-status-ordenar" type="button">Status</button>
+                  <button class="consulta-coluna-filtro" id="email-frete-status-filtro" type="button" aria-label="Filtrar ou ordenar Status" aria-expanded="false">☷</button>
+                </div>
+              </th></tr></thead>
             <tbody id="email-frete-fila-linhas"></tbody>
           </table>
         </div>
@@ -13226,10 +13232,28 @@
             <header><h3>E-mail de frete</h3></header>
             <dl id="email-frete-detalhes-envio"></dl>
           </section>
+          <p class="transporte-status" id="email-frete-detalhes-status" role="status"></p>
           <div class="email-frete-acoes email-frete-detalhes-acoes">
+            <button class="analise-frete-download" id="email-frete-detalhes-atualizar-email" type="button" hidden>Atualizar e-mail no Sankhya</button>
             <button class="transporte-refresh" id="email-frete-detalhes-reenviar" type="button" hidden>Reenviar</button>
             <button class="analise-frete-download" id="email-frete-detalhes-falhas" type="button" hidden>Ver falhas</button>
           </div>
+        </dialog>
+        <dialog class="analise-frete-ordem-dialogo analise-frete-detalhes-dialogo email-frete-dialogo email-frete-reenvio" id="email-frete-cadastro-dialogo" aria-labelledby="email-frete-cadastro-titulo">
+          <header>
+            <div class="analise-frete-detalhes-identificacao">
+              <h2 id="email-frete-cadastro-titulo">Atualizar e-mail no Sankhya</h2>
+              <p id="email-frete-cadastro-cliente"></p>
+            </div>
+            <button id="email-frete-cadastro-fechar" type="button">Fechar</button>
+          </header>
+          <form class="email-frete-formulario email-frete-cadastro-form" id="email-frete-cadastro-form">
+            <label>Novo e-mail do cliente<input id="email-frete-cadastro-email" type="email" maxlength="80" autocomplete="off" required autofocus></label>
+            <p class="transporte-status" id="email-frete-cadastro-status" role="status"></p>
+            <div class="email-frete-acoes">
+              <button class="transporte-refresh" id="email-frete-cadastro-salvar" type="submit">Salvar no Sankhya</button>
+            </div>
+          </form>
         </dialog>
         <dialog class="analise-frete-ordem-dialogo analise-frete-detalhes-dialogo email-frete-dialogo email-frete-reenvio" id="email-frete-reenvio-dialogo" aria-labelledby="email-frete-reenvio-titulo">
           <header>
@@ -13920,10 +13944,10 @@
   <script src="asyncRefresh.js?v=20260601-2"></script>
   <script src="vendas-dashboard.js?v=20260820-1"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="email-frete-automacao.js?v=20261117-3"></script>
   <script src="definicao-frete.js?v=20261116-edicao-transportadora"></script>
   <script src="transporte-dashboard.js?v=20261116-acesso-frete"></script>
   <script src="consulta-tabela.js?v=20261103-filtro-numerico"></script>
+  <script src="email-frete-automacao.js?v=20261117-5"></script>
   <script src="analise-frete.js?v=20261113-tde"></script>
   <script src="chat-core.js?v=20261022-navegacao-1"></script>
   <script src="whatsapp-call-core.js?v=20260909-1"></script>

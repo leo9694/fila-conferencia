@@ -2817,7 +2817,8 @@ router.get('/transporte/acesso', exigirGerenciaOuDiretoria, (req, res) => {
 });
 
 const automacaoEmailFrete = criarAutomacaoEmailFrete({
-  obterDanfe: (nunota) => gerarDocumentoFiscalSankhya(nunota, 'danfe')
+  obterDanfe: (nunota) => gerarDocumentoFiscalSankhya(nunota, 'danfe'),
+  atualizarParceiro: (codigo, campos) => atualizarRegistroApi('Parceiro', { CODPARC: codigo }, campos)
 });
 const errosEmailFrete = new Map([
   ['FRETE_MODELO_INVALIDO', [400, 'Preencha um assunto de até 180 caracteres e uma mensagem de até 8.000 caracteres.']],
@@ -2825,6 +2826,10 @@ const errosEmailFrete = new Map([
   ['FRETE_AUTOMACAO_INVALIDA', [400, 'Parâmetros da automação inválidos.']],
   ['FRETE_REENVIO_INDISPONIVEL', [409, 'Esta nota não tem uma tentativa com falha disponível para reenvio. Atualize o histórico.']],
   ['FRETE_REENVIO_NOTA', [409, 'Confira a nota, a autorização da NF-e e o vínculo com a ordem de carga.']],
+  ['FRETE_CADASTRO_EMAIL_INVALIDO', [400, 'Informe um único endereço de e-mail válido de até 80 caracteres.']],
+  ['FRETE_CADASTRO_EMAIL_INDISPONIVEL', [409, 'O cadastro pode ser atualizado pelo painel quando o cliente está sem e-mail ou há falha no envio. Atualize a lista.']],
+  ['FRETE_CADASTRO_EMAIL_LIMITE', [409, 'O novo endereço e os demais e-mails do campo ultrapassam o limite do cadastro. Revise os endereços no Sankhya.']],
+  ['FRETE_CADASTRO_EMAIL_SANKHYA', [502, 'O Sankhya não confirmou a atualização do e-mail do cliente.']],
   ['FRETE_DANFE_INDISPONIVEL', [502, 'O PDF do DANFE não está disponível no Sankhya.']],
   ['FRETE_DANFE_TAMANHO', [409, 'O DANFE ultrapassa o limite de 8 MB.']],
   ['FRETE_HISTORICO_PERIODO_INVALIDO', [400, 'Informe datas válidas. A data inicial deve ser anterior ou igual à data final.']],
@@ -2872,6 +2877,8 @@ router.get('/transporte/email-frete/fila/:nunota/reenvio', exigirGerenciaOuDiret
   responderEmailFrete((_, req) => automacaoEmailFrete.opcoesReenvio(req.params.nunota)));
 router.post('/transporte/email-frete/fila/:nunota/reenvio', exigirGerenciaOuDiretoria,
   responderEmailFrete(({ destinatario }, req) => automacaoEmailFrete.reenviar(req.params.nunota, destinatario)));
+router.put('/transporte/email-frete/fila/:nunota/email-cliente', exigirGerenciaOuDiretoria,
+  responderEmailFrete((body, req) => automacaoEmailFrete.atualizarEmailCadastro(req.params.nunota, body)));
 
 router.get('/transporte/malhas/estados', exigirGerenciaOuDiretoria, async (req, res) => {
   try {
