@@ -235,6 +235,10 @@
 .chat-message-failure div { min-width:0; display:flex; flex-direction:column; gap:1px; }
 .chat-message-failure strong { font-size:.66rem; }
 .chat-message-failure small { font-size:.61rem; font-weight:600; overflow-wrap:anywhere; }
+.chat-media-error { display:grid; gap:2px; margin-top:5px; padding:5px 7px; border-radius:5px; background:#fff1f2; color:#b42318; font-size:.65rem; line-height:1.35; overflow-wrap:anywhere; }
+.chat-theme-dark .chat-screen .chat-media-error { background:#3a2426; color:#ffb4ad; }
+.chat-media-retry { display:flex; align-items:center; gap:6px; padding:4px 0; border:0; background:transparent; color:inherit; font:inherit; font-size:.75rem; cursor:pointer; }
+.chat-media-retry svg { width:15px; height:15px; }
 
 /* Atendimento por agente, fila sem atendente e administração de acesso. */
 .chat-list-agent { display:block; margin-top:3px; overflow:hidden; color:#087f6d; font-size:.58rem; font-weight:700; text-overflow:ellipsis; white-space:nowrap; }
@@ -365,6 +369,9 @@
 .chat-conversation-context-menu { position:fixed; z-index:1700; width:190px; padding:5px; border:1px solid #d7e5e2; border-radius:10px; background:#fff; box-shadow:0 14px 34px rgba(18,49,60,.2); }
 .chat-conversation-context-menu button { width:100%; min-height:36px; display:flex; align-items:center; gap:8px; padding:0 9px; border:0; border-radius:7px; background:transparent; color:#294753; cursor:pointer; font:700 .7rem Inter,sans-serif; text-align:left; }
 .chat-conversation-context-menu button:hover { background:#edf7f4; }.chat-conversation-context-menu button.is-danger { color:#bd2a23; }.chat-conversation-context-menu button.is-danger:hover { background:#fff0ef; }.chat-conversation-context-menu svg { width:15px; height:15px; }
+.chat-conversation-context-menu button:disabled { opacity:.6; cursor:wait; }
+.chat-conversation-menu-error { margin:4px 8px; color:#b42318; font-size:.67rem; overflow-wrap:anywhere; }
+.chat-theme-dark .chat-conversation-menu-error { color:#ffb4ad; }
 .chat-delete-modal { position:fixed; inset:0; z-index:1800; display:grid; place-items:center; padding:18px; background:rgba(12,34,42,.58); backdrop-filter:blur(3px); }
 .chat-delete-dialog { width:min(390px,100%); padding:22px; border:1px solid #d8e5e2; border-radius:16px; background:#fff; box-shadow:0 24px 58px rgba(10,30,38,.28); }
 .chat-delete-icon { width:42px; height:42px; display:grid; place-items:center; border-radius:12px; background:#fff0ee; color:#c5372d; }.chat-delete-icon svg { width:21px; height:21px; }

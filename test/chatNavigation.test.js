@@ -17,6 +17,40 @@ const conversa = (id, channel = 1, userId = null) => ({ id, channel: { id: chann
   lastMessageAt: '2026-10-20T12:00:00Z', lastMessage: { text: `Chat ${id}` }, unreadCount: 1 });
 const payload = (data, totalPages = 1) => ({ data, pagination: { total: data.length, totalPages } });
 
+test('exibe o total no título e destaca novas não lidas em segundo plano por tempo limitado', () => {
+  const document = { title: 'Fila de Conferência', visibilityState: 'visible' };
+  let agora = 0;
+  let callback;
+  const ctx = vm.createContext({
+    document, BASE_TAB_TITLE: document.title, TAB_ALERT_DURATION_MS: 8000, TAB_ALERT_INTERVAL_MS: 1000,
+    tabUnreadCount: 0, tabAlertTimer: null, tabAlertEndsAt: 0, tabAlertHighlighted: false,
+    Date: { now: () => agora },
+    setInterval(fn) { callback = fn; return 1; },
+    clearInterval() { callback = null; }
+  });
+  vm.runInContext(trecho('  function renderChatTabTitle(', '  function chatIsVisible('), ctx);
+  ctx.updateChatTabUnread(2);
+  assert.equal(document.title, '(2) Fila de Conferência');
+  assert.equal(callback, null);
+
+  document.visibilityState = 'hidden';
+  ctx.updateChatTabUnread(3);
+  assert.equal(document.title, '(3) 🔔 Mensagens não visualizadas');
+  callback();
+  assert.equal(document.title, '(3) Fila de Conferência');
+  agora += 8000;
+  callback();
+  assert.equal(callback, null);
+
+  ctx.updateChatTabUnread(4);
+  document.visibilityState = 'visible';
+  ctx.stopChatTabAlert();
+  assert.equal(document.title, '(4) Fila de Conferência');
+  assert.equal(callback, null);
+  ctx.updateChatTabUnread(0);
+  assert.equal(document.title, 'Fila de Conferência');
+});
+
 function ambienteLista(api) {
   const renders = [];
   const frames = [];

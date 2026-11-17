@@ -381,6 +381,26 @@ test('marca todos os registros relacionados da conversa como lidos', async () =>
   assert.deepEqual(new Set(calls), new Set([171, 172]));
 });
 
+test('só a diretoria pode marcar manualmente uma conversa como lida, mesmo sem atendente', async (t) => {
+  const { route } = chatRouter.stack.find((layer) => layer.route?.path === '/conversations/:id/read/manual');
+  const marcar = t.mock.method(whatsappApi, 'markConversationRead', async () => ({ success: true }));
+  const handlers = route.stack.map(({ handle }) => handle);
+  const executar = async (grupos) => {
+    const req = { params: { id: '861' }, usuario: { grupos }, conversaAutorizada: { id: 861, assignment: null } };
+    const resposta = { codigo: 200, status(codigo) { this.codigo = codigo; return this; }, json(dados) { this.dados = dados; } };
+    let operacao;
+    handlers[0](req, resposta, () => { operacao = handlers[1](req, resposta); });
+    await operacao;
+    return resposta;
+  };
+  assert.equal((await executar(['VENDAS'])).codigo, 403);
+  assert.equal(marcar.mock.callCount(), 0);
+  const resposta = await executar(['DIRETORIA']);
+  assert.equal(resposta.codigo, 200);
+  assert.deepEqual(resposta.dados, { success: true });
+  assert.deepEqual(marcar.mock.calls[0].arguments, [861]);
+});
+
 test('escapa texto usado nas buscas de parceiros', () => {
   assert.equal(chatRouter._internals.textoSql("D'ÁVILA"), "D''ÁVILA");
 });

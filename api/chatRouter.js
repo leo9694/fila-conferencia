@@ -1992,6 +1992,10 @@ router.post('/conversations/:id/read', asyncRoute(async (req, res) => {
   res.json(await marcarGrupoConversaComoLida(conversationId));
 }));
 
+router.post('/conversations/:id/read/manual', exigirDiretoria, asyncRoute(async (req, res) => {
+  res.json(await marcarGrupoConversaComoLida(id(req.params.id)));
+}));
+
 router.post('/conversations/:id/typing', asyncRoute(async (req, res) => {
   const conversationId = id(req.params.id);
   const conversation = await obterConversaConsolidada(conversationId);

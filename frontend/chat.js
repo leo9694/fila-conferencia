@@ -13,6 +13,9 @@
   const CHANNEL_FILTER_KEY = 'fila-conferencia.chat.channel-filter';
   const NOTIFICATION_SOUND_URLS = ['/chat-message-notification-07.mp3'];
   const SENT_MESSAGE_SOUND_URL = '/chat-message-sent.mp3';
+  const BASE_TAB_TITLE = document.title;
+  const TAB_ALERT_DURATION_MS = 8000;
+  const TAB_ALERT_INTERVAL_MS = 1000;
   const UI_CACHE_TTL = 10 * 60 * 1000;
   const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
   const MORE_REACTIONS = ['👏', '🔥', '🎉', '✅', '😊', '😍', '🤔', '😅', '🤝', '👀', '💯', '🙌', '👎', '😡', '🤩', '🥳'];
@@ -91,7 +94,7 @@
     conversations: [], conversation: null, conversationId: null, page: 1, totalPages: 1, channels: [], selectedChannelId: '',
     status: '', search: '', messages: [], calls: [], messagePage: 1, messageTotalPages: 1,
     loading: false, loadingOlder: false, sending: false, initialized: false, eventSource: null,
-    mediaUrls: new Map(), mediaRequests: new Map(), templates: [], selectedTemplate: null,
+    mediaUrls: new Map(), mediaRequests: new Map(), mediaErrors: new Map(), templates: [], selectedTemplate: null,
     autoMediaQueue: [], autoMediaActive: 0,
     recorder: null, recordingStream: null, recordingChunks: [], recordingBlob: null,
     recordingStartedAt: 0, recordingTimer: null, pendingUpload: null, loadToken: 0, activeLoadToken: 0,
@@ -122,6 +125,10 @@
   const CACHED_MESSAGES_LIMIT = 80;
 
   let viewportSyncTimer = null;
+  let tabUnreadCount = 0;
+  let tabAlertTimer = null;
+  let tabAlertEndsAt = 0;
+  let tabAlertHighlighted = false;
   const AUTO_MEDIA_CONCURRENCY = 4;
   const boundMessageElements = new Map();
   const boundConversationElements = new WeakSet();
@@ -142,7 +149,7 @@
       delete element?.dataset.mediaQueued;
       if (!element?.isConnected || element.dataset.loading === 'true') continue;
       state.autoMediaActive += 1;
-      activateMedia(element, false, true)
+      activateMedia(element, false)
         .finally(() => {
           state.autoMediaActive -= 1;
           drainAutoMediaQueue();
@@ -199,10 +206,52 @@
     return String(Core.channel(item)?.id ?? item.channelId ?? item.phoneNumberId ?? '');
   }
 
+  function renderChatTabTitle() {
+    const count = tabUnreadCount > 999 ? '999+' : tabUnreadCount;
+    const title = tabAlertHighlighted ? '🔔 Mensagens não visualizadas' : BASE_TAB_TITLE;
+    document.title = count ? `(${count}) ${title}` : BASE_TAB_TITLE;
+  }
+
+  function stopChatTabAlert() {
+    clearInterval(tabAlertTimer);
+    tabAlertTimer = null;
+    tabAlertHighlighted = false;
+    renderChatTabTitle();
+  }
+
+  function updateChatTabUnread(total) {
+    const hasNewUnread = total > tabUnreadCount;
+    tabUnreadCount = total;
+    if (!total || document.visibilityState !== 'hidden') {
+      stopChatTabAlert();
+      return;
+    }
+    if (hasNewUnread) {
+      tabAlertEndsAt = Date.now() + TAB_ALERT_DURATION_MS;
+      tabAlertHighlighted = true;
+      if (tabAlertTimer === null) {
+        tabAlertTimer = setInterval(() => {
+          if (Date.now() >= tabAlertEndsAt || document.visibilityState !== 'hidden') {
+            stopChatTabAlert();
+            return;
+          }
+          tabAlertHighlighted = !tabAlertHighlighted;
+          renderChatTabTitle();
+        }, TAB_ALERT_INTERVAL_MS);
+      }
+    }
+    renderChatTabTitle();
+  }
+
+  function chatIsVisible() {
+    return document.visibilityState === 'visible' && refs.screen.classList.contains('active');
+  }
+
   function renderUnreadAlert() {
-    if (!refs.unreadAlert || !refs.unreadTotal) return;
     const total = [...state.unreadConversations.values()]
       .reduce((sum, item) => sum + Math.max(0, Number(item.count || 0)), 0);
+    updateChatTabUnread(state.access?.permitido ? total : 0);
+    if (!refs.unreadAlert || !refs.unreadTotal) return;
     refs.unreadTotal.textContent = total > 999 ? '999+' : String(total);
     refs.unreadAlert.classList.toggle('has-unread', total > 0);
     refs.unreadAlert.classList.toggle('is-active', state.unreadOnly);
@@ -387,7 +436,7 @@
 
     const beingViewed = String(state.conversationId) === String(conversationId)
       && ownsConversation(conversation)
-      && document.visibilityState === 'visible';
+      && chatIsVisible();
     if (beingViewed) {
       state.unreadConversations.delete(String(conversationId));
     } else if (Number(conversation.unreadCount || 0) > 0) {
@@ -412,6 +461,10 @@
         if (index >= 0) state.conversations[index] = Core.mergeConversationSnapshot(state.conversations[index], conversation);
         if (String(state.conversationId) === id) {
           state.conversation = Core.mergeConversationSnapshot(state.conversation || {}, conversation);
+          if (chatIsVisible() && ownsConversation() && Number(conversation.unreadCount || 0) > 0) {
+            markRead(id);
+            return;
+          }
         }
         syncUnreadConversation(conversation, { render: false });
         renderUnreadAlert();
@@ -966,8 +1019,7 @@
   function showConversationMenu(button, clientX, clientY) {
     closeConversationMenu();
     const conversationId = button.dataset.conversationId;
-    const conversation = state.conversations.find((item) => String(item.id) === String(conversationId));
-    const canMarkRead = ownsConversation(conversation);
+    const canMarkRead = state.access?.diretor === true;
     const menu = document.createElement('div');
     menu.className = 'chat-conversation-context-menu';
     menu.innerHTML = `${canMarkRead ? '<button type="button" data-chat-menu-read><i data-lucide="check-check"></i>Marcar como lida</button>' : ''}<button type="button" class="is-danger" data-chat-menu-delete><i data-lucide="trash-2"></i>Excluir chat</button><button type="button" data-chat-menu-rename><i data-lucide="pencil"></i>Renomear</button>`;
@@ -976,9 +1028,25 @@
     const height = menu.offsetHeight || 84;
     menu.style.left = `${Math.max(8, Math.min(clientX, window.innerWidth - width - 8))}px`;
     menu.style.top = `${Math.max(8, Math.min(clientY, window.innerHeight - height - 8))}px`;
-    menu.querySelector('[data-chat-menu-read]')?.addEventListener('click', async () => {
-      closeConversationMenu();
-      await markRead(conversationId);
+    const readButton = menu.querySelector('[data-chat-menu-read]');
+    readButton?.addEventListener('click', async () => {
+      readButton.disabled = true;
+      menu.querySelector('.chat-conversation-menu-error')?.remove();
+      try {
+        await api(`/conversations/${encodeURIComponent(conversationId)}/read/manual`, { method: 'POST' });
+        if (menu.isConnected) closeConversationMenu();
+        conversationListCache.clear();
+        clearConversationUnread(conversationId);
+      } catch (error) {
+        if (!menu.isConnected) return;
+        const alert = document.createElement('p');
+        alert.className = 'chat-conversation-menu-error';
+        alert.setAttribute('role', 'alert');
+        alert.textContent = error.message;
+        menu.append(alert);
+      } finally {
+        readButton.disabled = false;
+      }
     });
     menu.querySelector('[data-chat-menu-delete]').addEventListener('click', async () => {
       closeConversationMenu();
@@ -1152,6 +1220,10 @@
     return message.media?.mediaId || message.mediaId || '';
   }
 
+  function mediaErrorKey(messageId, id) {
+    return JSON.stringify([String(messageId), String(id)]);
+  }
+
   function cachedMediaMarkup(type, id) {
     const url = state.mediaUrls.get(id);
     if (!url) return '';
@@ -1180,6 +1252,10 @@
       const rawId = String(mediaId(message));
       const id = escapeHtml(rawId);
       const caption = escapeHtml(message.caption || message.media?.caption || '');
+      const kind = type === 'sticker' ? 'image' : type;
+      if (state.mediaErrors.has(mediaErrorKey(message.id, rawId))) {
+        return `<button class="chat-media-retry" type="button" data-chat-media="${kind}" data-media-id="${id}" data-media-retry data-filename="${escapeHtml(message.filename || message.media?.filename || 'documento')}"><i data-lucide="rotate-cw" aria-hidden="true"></i>Tentar carregar novamente</button>${caption ? `<p>${caption}</p>` : ''}`;
+      }
       if (type === 'audio') return cachedMediaMarkup(type, rawId)
         || `<div class="chat-media-shell is-audio" data-chat-media="audio" data-media-id="${id}" aria-label="Preparando áudio"><i data-lucide="audio-lines"></i><span></span></div>`;
       if (type === 'video') return `${cachedMediaMarkup(type, rawId)
@@ -1338,8 +1414,12 @@
       const failureAlert = outbound && status.failed
         ? `<div class="chat-message-failure" role="alert"><span aria-hidden="true">!</span><div><strong>Falha no envio</strong><small>${failureReason.code ? `Erro ${escapeHtml(failureReason.code)}: ` : ''}${escapeHtml(failureReason.text)}</small></div></div>`
         : '';
+      const mediaError = state.mediaErrors.get(mediaErrorKey(message.id, mediaId(message)));
+      const mediaAlert = mediaError
+        ? `<div class="chat-media-error" role="alert"><strong>Falha ao carregar mídia</strong><span>${escapeHtml(mediaError)}</span></div>`
+        : '';
       return `<article class="chat-message ${outbound ? 'is-outbound' : 'is-inbound'}" data-message-id="${escapeHtml(message.id)}">
-        <div class="chat-bubble${reactions.length ? ' has-reaction' : ''}">${renderReplyContext(message)}${renderMessageContent(message)}<footer><time>${escapeHtml(messageTime(message))}</time>${outbound && status.symbol ? `<span class="chat-message-status${statusClass}" title="${escapeHtml(status.label)}" aria-label="${escapeHtml(status.label)}">${status.symbol}</span>` : ''}</footer>${failureAlert}${reactionBadge}${renderReactionActions(message)}</div>
+        <div class="chat-bubble${reactions.length ? ' has-reaction' : ''}">${renderReplyContext(message)}${renderMessageContent(message)}<footer><time>${escapeHtml(messageTime(message))}</time>${outbound && status.symbol ? `<span class="chat-message-status${statusClass}" title="${escapeHtml(status.label)}" aria-label="${escapeHtml(status.label)}">${status.symbol}</span>` : ''}</footer>${mediaAlert}${failureAlert}${reactionBadge}${renderReactionActions(message)}</div>
       </article>`;
     }).join('')}`);
     if (changed === false) {
@@ -1351,7 +1431,7 @@
       const mediaKind = element.dataset.chatMedia;
       const shouldLoadAutomatically = ['audio', 'video'].includes(mediaKind)
         || (mediaKind === 'image' && element.classList.contains('chat-image-placeholder'));
-      if (!shouldLoadAutomatically) return;
+      if (!shouldLoadAutomatically || element.hasAttribute('data-media-retry')) return;
       if (mediaPreviewObserver) mediaPreviewObserver.observe(element);
       else queueAutomaticMedia(element);
     });
@@ -1534,12 +1614,15 @@
     }
   }
 
-  async function activateMedia(element, openModal = true, automatic = false) {
+  async function activateMedia(element, openModal = true) {
     if (element.dataset.loading === 'true') return;
+    const { mediaId: id, chatMedia: kind } = element.dataset;
+    const messageId = element.closest('.chat-message')?.dataset.messageId;
+    const key = mediaErrorKey(messageId, id);
     element.dataset.loading = 'true';
     try {
-      const url = await getMediaUrl(element.dataset.mediaId);
-      const kind = element.dataset.chatMedia;
+      const url = await getMediaUrl(id);
+      if (!element.isConnected || element.dataset.mediaId !== id) return;
       if (kind === 'audio') element.outerHTML = `<audio class="chat-audio" controls preload="metadata" src="${url}"></audio>`;
       else if (kind === 'video' && !openModal) element.outerHTML = `<video class="chat-video" controls preload="metadata" src="${url}"></video>`;
       else if (kind === 'image' && !openModal) {
@@ -1554,10 +1637,13 @@
         else refs.mediaPreview.innerHTML = `<video controls autoplay src="${url}"></video>`;
         refs.mediaModal.hidden = false;
       }
+      if (state.mediaErrors.delete(key)) renderMessages({ preserveScroll: true });
     } catch (error) {
-      element.innerHTML = '<i data-lucide="circle-alert"></i> Toque para tentar novamente';
-      window.lucide?.createIcons();
-      setFeedback(error.message, true);
+      if (!element.isConnected || element.dataset.mediaId !== id) return;
+      state.mediaErrors.delete(key);
+      state.mediaErrors.set(key, error.message || 'Não foi possível carregar a mídia.');
+      if (state.mediaErrors.size > 80) state.mediaErrors.delete(state.mediaErrors.keys().next().value);
+      renderMessages({ preserveScroll: true });
     } finally {
       delete element.dataset.loading;
     }
@@ -1566,6 +1652,7 @@
   function clearMediaUrls() {
     state.mediaUrls.forEach((url) => URL.revokeObjectURL(url));
     state.mediaUrls.clear();
+    state.mediaErrors.clear();
     state.mediaRequests.clear();
     state.autoMediaQueue = [];
     state.autoMediaActive = 0;
@@ -1725,7 +1812,7 @@
       void refreshActiveCalls(requestedId);
       cacheActiveConversation();
       const listItem = state.conversations.find((item) => String(item.id) === requestedId);
-      if (ownsConversation(conversation) && Number(listItem?.unreadCount || conversation?.unreadCount || 0) > 0) {
+      if (chatIsVisible() && ownsConversation(conversation) && Number(listItem?.unreadCount || conversation?.unreadCount || 0) > 0) {
         markRead(requestedId);
       }
       updateConversationHistory(requestedId, historyMode);
@@ -1778,7 +1865,7 @@
     }
   }
 
-  async function markRead(id) {
+  function clearConversationUnread(id) {
     const item = state.conversations.find((conversation) => String(conversation.id) === String(id));
     if (item) item.unreadCount = 0;
     if (String(state.conversationId) === String(id) && state.conversation) {
@@ -1791,6 +1878,10 @@
       state.conversations = state.conversations.filter((conversation) => String(conversation.id) !== String(id));
     }
     renderConversations();
+  }
+
+  async function markRead(id) {
+    clearConversationUnread(id);
     try { await api(`/conversations/${encodeURIComponent(id)}/read`, { method: 'POST' }); } catch {}
   }
 
@@ -2215,14 +2306,14 @@
           state.processedRealtimeMessageIds.delete(state.processedRealtimeMessageIds.values().next().value);
         }
       }
-      const viewedByCurrentAgent = id === String(state.conversationId) && ownsConversation();
+      const viewedByCurrentAgent = id === String(state.conversationId) && ownsConversation() && chatIsVisible();
       if (inbound && !viewedByCurrentAgent) scheduleUnreadReconciliation(id);
       notifyIncomingMessage(payload, id);
       if (id === String(state.conversationId)) {
         const shouldScroll = nearBottom();
         state.messages = Core.mergeOptimisticMessage(state.messages, payload.message); scheduleMessagesRender({ preserveScroll: !shouldScroll });
         if (!shouldScroll) refs.newMessage.hidden = false;
-        if (ownsConversation() && inbound) {
+        if (viewedByCurrentAgent && inbound) {
           markRead(id);
           refreshActiveConversation(id);
         }
@@ -3496,6 +3587,9 @@
     window.addEventListener('pagehide', persistUiCache);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') persistUiCache();
+      else stopChatTabAlert();
+      const id = String(state.conversationId || '');
+      if (id && chatIsVisible() && ownsConversation() && state.unreadConversations.has(id)) markRead(id);
     });
     refs.form.addEventListener('submit', sendText); refs.input.addEventListener('input', updateTypingIndicator);
     refs.input.addEventListener('paste', pasteImage);
